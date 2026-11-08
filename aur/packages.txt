@@ -1,6 +1,7 @@
 # AUR packages AgrOS builds into its own repo ([agros]), with the AUR packages they need. Only ones that may be passed
 # on: VMware Workstation isn't here (its license forbids it; agros-welcome --system builds it on your machine).
-quickshell-git
+# (aur/: CachyOS's noctalia-qs claims to be quickshell-git, and would be taken instead of building the real one)
+aur/quickshell-git
 caelestia-cli
 caelestia-shell
 ttf-rubik-vf
