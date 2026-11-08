@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/agros-logo-white.svg">
+    <img src="docs/agros-logo.svg" alt="AgrOS logo" width="160">
+  </picture>
+</p>
+
 # AgrOS: Hyprland + Caelestia, as a CachyOS-based distro
 
 AgrOS is a whole desktop installed in one go, on top of CachyOS. You get Hyprland (Lua config) with the
@@ -9,7 +16,9 @@ both. The files are laid out like `$HOME`; `packages/` turns them into pacman pa
 
 **What's not in this repo:** your personal data, meaning logins, keys, your browser profile and bookmarks (they travel
 encrypted on your pen drive, see below), and copyrighted wallpapers. The default wallpaper
-(`Pictures/Wallpapers/wallpaper.jpg`) is original artwork made for AgrOS.
+(`Pictures/Wallpapers/wallpaper.jpg`) is original artwork made for AgrOS. The logo, three leaves drawn in one line
+width, is in `docs/`: `agros-logo.svg` (black) and `agros-logo-white.svg` (for dark backgrounds); the README shows
+the one that fits GitHub's theme. `docs/` isn't packaged.
 
 Laptop settings and lighting are in a separate repo: **legion-control-linux**.
 
