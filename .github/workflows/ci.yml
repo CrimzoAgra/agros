@@ -8,6 +8,11 @@ on:
     - cron: '17 3 * * *'
   workflow_dispatch:
 
+# A newer run replaces an older one: otherwise whichever finishes last publishes, even an older commit
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
