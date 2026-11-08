@@ -57,10 +57,17 @@ if [[ -z ${AGROS_SKIP_AUR:-} ]]; then
     mapfile -t aur < <(grep -v '^\s*\(#\|$\)' "$root/aur/packages.txt")
     # PipeWire's JACK for what needs a "jack" (never jack2, which AgrOS doesn't install either)
     pacman -S --needed --noconfirm pipewire-jack >/dev/null
+    # (spicetify-cli's build runs node, which its AUR package doesn't list)
+    pacman -S --needed --noconfirm nodejs >/dev/null
+    # The keys AUR sources are signed with (papirus-folders' author)
+    asb gpg --batch --keyserver hkps://keyserver.ubuntu.com --recv-keys AB6D54C1C16D2507 ||
+        echo "!! papirus-folders' signing key not fetched: it won't build"
     asb mkdir -p /home/builder/.config/paru
     printf '[options]\nLocalRepo = agros\nSkipReview\nNoCheck\n[bin]\nMFlags = %s\n' "${sign[*]:-}" |
         asb tee /home/builder/.config/paru/paru.conf >/dev/null
-    asb paru -S --noconfirm --needed --localrepo=agros "${aur[@]}"
+    # (twice: a download that drops, GitHub's now and then, fails only its package; the second pass builds what's left)
+    asb paru -S --noconfirm --needed --localrepo=agros "${aur[@]}" ||
+        asb paru -S --noconfirm --needed --localrepo=agros "${aur[@]}"
 fi
 
 # 2. AgrOS's own packages (no dependencies installed to build them: they're files and settings), keyring first
