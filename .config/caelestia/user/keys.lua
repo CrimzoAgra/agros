@@ -90,3 +90,17 @@ dots.bind("restart_shell", hl.dsp.exec_cmd("~/.local/bin/caelestia-restart"), { 
 hl.define_submap("dots-capture", function()
     hl.bind("Escape", hl.dsp.submap("reset"), { non_consuming = true })
 end)
+
+-- A VMware window focused: every key reaches the VM (a submap with no other binds), so its desktop's shortcuts (Super
+-- ones too) work there; back to these once another window has focus, or Ctrl+Alt+Esc (none of the VM's) right away
+hl.define_submap("vm", function()
+    hl.bind("CTRL + ALT + Escape", hl.dsp.submap("reset"))
+end)
+hl.on("window.active", function(win)
+    local vm, current = win ~= nil and (win.class or ""):lower() == "vmware", hl.get_current_submap()
+    if vm and current ~= "vm" and current ~= "dots-capture" then
+        hl.dispatch(hl.dsp.submap("vm"))
+    elseif not vm and current == "vm" then
+        hl.dispatch(hl.dsp.submap("reset"))
+    end
+end)
