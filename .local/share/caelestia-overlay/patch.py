@@ -1048,7 +1048,7 @@ def window_peek():
     if not os.path.exists(os.path.join(dst, menu)) and not os.path.exists(os.path.join(dst, ws)):
         raise LookupError("no window previews (the bar dock and workspace previews are off)")
     if os.path.exists(os.path.join(dst, menu)):
-        m = insert(read(menu), "        ScreencopyView {\n            id: preview\n\n", hover(12, "root.target?.win") + "\n",
+        m = insert(read(menu), "            ScreencopyView {\n                id: preview\n\n", hover(16, "previewBox.modelData") + "\n",
                    before=False)
         m = insert(m, "                        captureSource: root.shows(tile.modelData) ? tile.modelData.wayland : null // qmllint disable unresolved-type\n",
                    hover(24, "tile.modelData"), before=False)
