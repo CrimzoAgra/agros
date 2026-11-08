@@ -36,6 +36,14 @@ ColumnLayout {
         return Quickshell.iconPath(`steam_icon_${game[1]}`, true) ? `steam_icon_${game[1]}` : "steam";
     }
 
+    // A window's preview size, fitted in w x h as the preview fits it: known before its first frame arrives (until then
+    // the preview was an empty w x h box, and the menu jumped to the window's shape a frame later, on every open)
+    function fit(win: var, w: real, h: real): size {
+        const s = win?.lastIpcObject?.size ?? [w, h];
+        const k = Math.min(w / Math.max(1, s[0]), h / Math.max(1, s[1]));
+        return Qt.size(Math.round(s[0] * k), Math.round(s[1] * k));
+    }
+
     function shows(win: var): bool {
         return !!win && !(dock?.closing ?? []).includes(win.address);
     }
@@ -96,6 +104,10 @@ ColumnLayout {
         color: "transparent"
         radius: Tokens.rounding.medium
         Layout.alignment: Qt.AlignHCenter
+        Layout.preferredWidth: size.width
+        Layout.preferredHeight: size.height
+
+        readonly property size size: root.fit(root.target?.win, root.width, root.width)
 
         ScreencopyView {
             id: preview
@@ -150,6 +162,10 @@ ColumnLayout {
                     color: "transparent"
                     radius: Tokens.rounding.small
                     Layout.alignment: Qt.AlignHCenter
+                    Layout.preferredWidth: size.width
+                    Layout.preferredHeight: size.height
+
+                    readonly property size size: root.fit(tile.modelData, tile.tileWidth, tile.tileWidth * 0.6)
 
                     ScreencopyView {
                         captureSource: root.shows(tile.modelData) ? tile.modelData.wayland : null // qmllint disable unresolved-type
