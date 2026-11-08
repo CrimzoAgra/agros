@@ -1,5 +1,5 @@
 <p align="center">
-  <img src=".local/share/icons/hicolor/scalable/apps/agros-logo.svg" alt="AgrOS logo" width="140">
+  <img src="docs/images/agros-banner.svg" alt="AgrOS" width="420">
 </p>
 
 # AgrOS
