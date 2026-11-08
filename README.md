@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/agros-logo-white.svg">
-    <img src="docs/agros-logo.svg" alt="AgrOS logo" width="160">
+    <source media="(prefers-color-scheme: dark)" srcset=".local/share/icons/hicolor/scalable/apps/agros-logo-white.svg">
+    <img src=".local/share/icons/hicolor/scalable/apps/agros-logo.svg" alt="AgrOS logo" width="160">
   </picture>
 </p>
 
@@ -16,9 +16,9 @@ both. The files are laid out like `$HOME`; `packages/` turns them into pacman pa
 
 **What's not in this repo:** your personal data, meaning logins, keys, your browser profile and bookmarks (they travel
 encrypted on your pen drive, see below), and copyrighted wallpapers. The default wallpaper
-(`Pictures/Wallpapers/wallpaper.jpg`) is original artwork made for AgrOS. The logo, three leaves drawn in one line
-width, is in `docs/`: `agros-logo.svg` (black) and `agros-logo-white.svg` (for dark backgrounds); the README shows
-the one that fits GitHub's theme. `docs/` isn't packaged.
+(`Pictures/Wallpapers/wallpaper.jpg`) is original artwork made for AgrOS. The logo, three leaves drawn in one line width,
+is `agros-logo` (black) and `agros-logo-white` (for dark backgrounds), in `.local/share/icons/hicolor/scalable/apps`,
+installed with the icons in `/usr/share/icons`, so every install has it.
 
 Laptop settings and lighting are in a separate repo: **legion-control-linux**.
 
