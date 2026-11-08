@@ -43,6 +43,9 @@ grep -q '^\[agros\]' /etc/pacman.conf ||
     printf '\n[agros]\nSigLevel = Optional TrustAll\nServer = file://%s\n' "$out" >>/etc/pacman.conf
 pacman -Sy --noconfirm >/dev/null
 
+# No separate debug packages (Arch's makepkg makes them by default)
+sed -i 's/^\(OPTIONS=(.*\) debug/\1 !debug/' /etc/makepkg.conf
+
 # 1. The AUR packages, with paru (it builds the AUR dependencies too, in order, and adds them all to the repo)
 if [[ -z ${AGROS_SKIP_AUR:-} ]]; then
     command -v paru >/dev/null || pacman -S --needed --noconfirm paru 2>/dev/null || {
