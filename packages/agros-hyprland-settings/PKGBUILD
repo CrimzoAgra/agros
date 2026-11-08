@@ -50,7 +50,7 @@ package() {
     for f in .local/bin/*; do
         [[ -f $f ]] && ln -s "/usr/lib/agros/bin/${f##*/}" "$skel/.local/bin/${f##*/}"
     done
-    for d in caelestia-overlay lutris-overlay lutris-library dots-settings github-release hyprbars camera-switch \
+    for d in caelestia-overlay lutris-overlay dots-settings github-release hyprbars camera-switch \
         caelestia-greeter; do
         ln -s "/usr/lib/agros/share/$d" "$skel/.local/share/$d"
     done

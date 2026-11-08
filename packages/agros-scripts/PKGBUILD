@@ -11,7 +11,7 @@ license=('GPL-3.0-or-later')
 depends=('bash' 'python' 'python-gobject' 'jq' 'libnotify' 'git' 'curl' 'util-linux')
 _root=$(realpath "${startdir}/../..")
 # The data folders that are code (the rest of ~/.local/share is settings: agros-hyprland-settings)
-_share=(caelestia-overlay lutris-overlay lutris-library dots-settings github-release hyprbars camera-switch
+_share=(caelestia-overlay lutris-overlay dots-settings github-release hyprbars camera-switch
     caelestia-greeter)
 
 pkgver() {
