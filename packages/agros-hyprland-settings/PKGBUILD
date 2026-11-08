@@ -42,7 +42,8 @@ package() {
     cp -r --no-preserve=ownership .config/. "$skel/.config/"
     rm -f "$skel/.config/autostart/cachyos-hello.desktop"  # (CachyOS Hello isn't installed)
     install -d "$skel/.local/share"
-    cp -r --no-preserve=ownership .local/share/applications .local/share/firefox "$skel/.local/share/"
+    cp -r --no-preserve=ownership .local/share/applications .local/share/firefox .local/share/lutris "$skel/.local/share/"
+    # (lutris: the Rockstar Games Launcher's cover and banner, which Lutris has none of)
     install -Dm644 Pictures/Wallpapers/wallpaper.jpg "$skel/Pictures/Wallpapers/wallpaper.jpg"
     install -Dm644 Pictures/Wallpapers/wallpaper.jpg "$pkgdir/usr/share/backgrounds/agros/wallpaper.jpg"
     # 3. The links to AgrOS's programs and their data (agros-scripts; agros-links adds later ones at login)

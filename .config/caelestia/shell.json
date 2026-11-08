@@ -50,6 +50,7 @@
         }
     },
     "general": {
+        "logo": "agros-logo",
         "idle": {
             "inhibitWhenAudio": true,
             "inhibitWhenCharging": false,
