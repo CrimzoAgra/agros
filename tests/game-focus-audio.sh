@@ -6,6 +6,8 @@ set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 cleanup() { kill $(cat "$t"/{helper,sound,windowless,browser,game} 2>/dev/null) 2>/dev/null || true; pkill -P $$ 2>/dev/null || true; kill -KILL $(cat "$t/unshare" 2>/dev/null) 2>/dev/null || true; rm -rf "$t"; }  # (grandchildren too)
 trap cleanup EXIT
+# (the Flatpak case runs a sandbox of its own: user namespaces, which containers like CI's don't allow)
+unshare -Urpf true 2>/dev/null || { echo "skip game-focus-audio (no user namespaces)"; exit 0; }
 export T=$t
 # The game (from Steam's games folder), its own sound process, and the browser it started with that browser's sound helper
 SteamGameId=4242 bash -c 'exec -a "/s/steamapps/common/G/game" bash -c '\''
