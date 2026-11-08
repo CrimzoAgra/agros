@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Claude Code's Stop hook (~/.claude/settings.json, set by setup's desktop step): a desktop notification when it
+# finishes an answer, titled with the project folder, the answer's start as the body (none while Capri's chat is open:
+# you're reading it there)
+in=$(cat)
+# Not while her chat is open: it has the keyboard then, so her window is the focused one
+[[ $(hyprctl -i 0 activewindow -j 2>/dev/null | jq -r .class) == "Capri Desktop" ]] && exit 0
+dir=$(jq -r '.cwd // empty' <<<"$in")
+# The answer: last_assistant_message (Claude Code's Stop input); a version without it: the last text of an answer in
+# the conversation's file (transcript_path, one JSON object a line), which may lag behind; neither: "Done"
+text=$(jq -r '.last_assistant_message // empty' <<<"$in")
+if [[ -z $text ]]; then
+    transcript=$(jq -r '.transcript_path // empty' <<<"$in")
+    [[ -f $transcript ]] && text=$(tail -n 200 "$transcript" | jq -rn '[inputs | select(.type == "assistant")
+        | .message.content[]? | select(.type == "text") | .text] | last // empty' 2>/dev/null)
+fi
+# (cut in jq, by character whatever the locale: under LANG=C, cut -c split an accented letter at the 200th byte)
+msg=$(jq -Rrs 'gsub("\\s+"; " ") | gsub("^ | $"; "") | .[:200]' <<<"$text")
+# (--: an answer starting with a "- " list was taken for options, and nothing was shown)
+notify-send -a Capri -i capri -- "Capri: ${dir##*/}" "${msg:-Done}"

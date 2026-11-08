@@ -1,0 +1,20 @@
+# Template: setup.sh fills in @USER@ and @HOME@ and installs it as /etc/pacman.d/hooks/hyprbars-prebuild.hook
+# A Hyprland update (or one of the libraries its plugins' ABI hangs on) builds my hyprbars for it straight away, so the
+# next login loads it at once instead of the AUR one for a minute while it builds (hyprbars-build --prebuild; it does
+# nothing when it's already built for it, and a failure leaves the build at login as before)
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = hyprland
+Target = hyprland-git
+Target = aquamarine
+Target = hyprutils
+Target = hyprgraphics
+Target = hyprcursor
+Target = hyprlang
+
+[Action]
+Description = Building your hyprbars for the new Hyprland (hyprbars-build --prebuild)...
+When = PostTransaction
+Exec = /usr/bin/runuser -u @USER@ -- "@HOME@/.local/bin/hyprbars-build" --prebuild

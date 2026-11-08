@@ -1,0 +1,131 @@
+#!/usr/bin/env bash
+# Updates the Flatpaks installed from a downloaded .flatpak file (e.g. ArtCraft Launcher), which have no Flatpak repo
+# to update from, from the GitHub releases their metadata links to (update-apps and the boot-time auto-update run it).
+#   flatpak-bundle-update           update them
+#   flatpak-bundle-update --check   only list the ones with a newer version ("<app id>: update available (<old> -> <new>)")
+#   flatpak-bundle-update --install <owner/repo>   install one for the user from its latest release (setup.sh)
+#   flatpak-bundle-update --fetch <dir>              only download the updates' files into dir (listed in dir/fetched)
+#   flatpak-bundle-update --install-fetched <dir>    reinstall from those (the boot's update: it holds sleep and power
+#                                                    off as root around this step alone, logind refusing it to a user
+#                                                    outside a session)
+# Takes the latest release's Linux x86_64 .flatpak, checked against the release's SHA256SUMS when it has one.
+set -uo pipefail
+check=false fetch=
+[[ ${1:-} == --check ]] && check=true
+[[ ${1:-} == --fetch ]] && fetch=${2:?--fetch <dir>}
+status=0
+source "$(dirname "$(readlink -f "$0")")/../share/github-release/lib.sh"
+
+# newer <new> <old>: new is a later version. sort -V puts 0.1.33-alpha after 0.1.33: a release over the pre-release
+# with the same number counts as newer
+newer() {
+    [[ $1 == "$2" ]] && return 1
+    local nb=${1%%-*} ob=${2%%-*}
+    if [[ $nb == "$ob" && ($1 == *-* || $2 == *-*) && ! ($1 == *-* && $2 == *-*) ]]; then
+        [[ $1 != *-* ]]
+        return
+    fi
+    [[ $(printf '%s\n' "$1" "$2" | sort -V | tail -1) == "$1" ]]
+}
+
+# fetch_from <release JSON> <dir>: download its Linux x86_64 .flatpak into dir, verified; prints its path
+fetch_from() {
+    local url want
+    url=$(asset_url "$1" flatpak)
+    [[ -n $url ]] || { echo "no Linux .flatpak in the latest release" >&2; return 1; }
+    want=$(checksum "$1" "${url##*/}" "$2") && download "$url" "$2" "$want" >&2 || return 1
+    echo "$2/${url##*/}"
+}
+
+# reinstall <user|system> <file>: the app reinstalled from that file: the app's own data (~/.var/app) stays. The old one
+# is taken out first, so sleep and power off are held off while that runs (cut off there, the app was left
+# uninstalled): only here, not for the file's download before it. Usually seconds; a runtime the new version needs and
+# doesn't have yet is downloaded in it from Flathub too (the boot's update gives it 30 min). In a desktop session it
+# takes that hold itself; the boot's update, outside any session (logind refuses it there), takes it as root around
+# --install-fetched instead
+reinstall() {
+    # Its runtime (GNOME, KDE...) comes from Flathub in the same installation: for the user, that remote must exist too
+    flatpak remote-add --"$1" --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo </dev/null
+    local hold=()
+    [[ -n ${FLATPAK_BUNDLE_HELD:-} ]] ||
+        ! systemd-inhibit --what=sleep:shutdown --mode=block --who="Flatpak update" --why="Reinstalling an app" true 2>/dev/null ||
+        hold=(systemd-inhibit --what=sleep:shutdown --mode=block --who="Flatpak update" --why="Reinstalling ${2##*/}")
+    # (no stdin: --install-fetched reads its list there, and an app after this one was lost to it)
+    "${hold[@]}" flatpak install --"$1" -y --noninteractive --reinstall --bundle "$2" </dev/null
+}
+
+# install_from <release JSON> <user|system>: download its Linux x86_64 .flatpak, verify it, install it (over an older one)
+install_from() {
+    local tmp file ok=0
+    tmp=$(mktemp -d)
+    file=$(fetch_from "$1" "$tmp") && reinstall "$2" "$file" || ok=1
+    rm -rf "${tmp:?}"
+    return $ok
+}
+
+if [[ ${1:-} == --install-fetched ]]; then
+    # (each "<user|system>\t<file>\t<app id>\t<version>", as --fetch listed them)
+    while IFS=$'\t' read -r inst file app new; do
+        # (its caller holds sleep and power off: the boot's update, as root)
+        if FLATPAK_BUNDLE_HELD=1 reinstall "$inst" "$file"; then echo "$app: updated to $new"; else status=1; fi
+    done <"${2:?--install-fetched <dir>}/fetched"
+    exit $status
+fi
+
+if [[ ${1:-} == --install ]]; then
+    # Already installed (from a file: its metainfo names this repo, as the update below finds it): updates do the rest
+    if grep -qsi "github\.com/${2:?owner/repo}" ~/.local/share/flatpak/app/*/current/active/files/share/metainfo/*.xml \
+        /var/lib/flatpak/app/*/current/active/files/share/metainfo/*.xml; then
+        echo "$2: already installed"
+        exit 0
+    fi
+    api=$(latest_release "$2") || { echo "$2: can't reach GitHub"; exit 1; }
+    install_from "$api" user && echo "$2: installed $(jq -r .tag_name <<<"$api")"
+    exit
+fi
+
+while IFS=$'\t' read -r app origin inst; do
+    [[ $origin == *-origin ]] || continue # installed from a file: Flatpak names its remote "<name>-origin"
+    loc=$(flatpak info --"$inst" --show-location "$app" 2>/dev/null) || continue
+    # Its repo: the app's own metainfo (<id>.metainfo.xml, else any), its source or home page link first; any other
+    # github.com link (a library's, a translator's) only when it has neither
+    meta=("$loc"/files/share/metainfo/"$app".{metainfo,appdata}.xml)
+    [[ -e ${meta[0]} || -e ${meta[1]} ]] || meta=("$loc"/files/share/metainfo/*.xml)
+    repo=
+    for type in vcs-browser homepage ''; do
+        repo=$(grep -ohE "${type:+<url type=\"$type\">https?://}github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+" "${meta[@]}" \
+            2>/dev/null | head -1 | sed -E 's|.*github\.com/||; s|\.git$||')
+        [[ -n $repo ]] && break
+    done
+    [[ -n $repo ]] || continue
+    old=$(LC_ALL=C flatpak info --"$inst" "$app" | sed -n 's/^ *Version: //p')
+    # No version to compare: any release would look newer, reinstalled on every run
+    [[ -n $old ]] || { echo "$app: no version, skipped"; continue; }
+    api=$(latest_release "$repo") || { echo "$app: can't reach GitHub"; status=1; continue; }
+    new=$(jq -r '.tag_name' <<<"$api")
+    new=${new#v}
+    if ! newer "$new" "$old"; then
+        echo "$app: up to date ($old)"
+        continue
+    fi
+    # (its files still uploading, or none for Linux: not announced as an update that then fails to install)
+    [[ -n $(asset_url "$api" flatpak) ]] || { echo "$app: no Linux .flatpak in the latest release ($new)"; status=1; continue; }
+    if $check; then
+        echo "$app: update available ($old -> $new)"
+        continue
+    fi
+    if [[ -n $fetch ]]; then
+        mkdir -p "$fetch/$app"
+        if file=$(fetch_from "$api" "$fetch/$app"); then
+            printf '%s\t%s\t%s\t%s\n' "$inst" "$file" "$app" "$new" >>"$fetch/fetched"
+            echo "$app: $new downloaded"
+        else
+            status=1
+        fi
+    elif install_from "$api" "$inst"; then
+        echo "$app: updated to $new"
+    else
+        status=1
+    fi
+done < <(flatpak list --app --columns=application,origin,installation)
+exit $status

@@ -1,0 +1,292 @@
+#!/usr/bin/env bash
+# Installs and updates Capri, the Edgerunners 2 desktop companion: my fork (CrimzoAgra/capri-overlay: CapriDesktop with
+# her brain on Claude Code, on Hyprland, her intro and new text box) merged with the original's latest release
+# (nunezValen/CapriDesktop, its v* tags: not every commit to its main).
+#   capri-update          install her, or update her when either repo has moved on (update-apps: the Updates app, when
+#                         you start it, as AUR apps: the merged code is built and checked, so not unseen at boot)
+#   capri-update --check  only fetch and say whether an update is waiting ("capri: update available (<version>)":
+#                         update-apps' list; auto-update runs this at boot)
+# Built in ~/.local/share/capri/<build>/ and switched to only once it passes check_build (built, Electron there, her
+# types checked, her tests); ~/.local/share/capri/current points at the build ~/.local/bin/capri starts. If my changes
+# no longer merge with a new release, or its check fails, it's said once (notification, dotfiles-check), that
+# combination isn't tried again (her packages not downloading is tried again next time; failing so three runs in a row,
+# or with a lockfile that doesn't match, it's that combination's own), and she gets my fork as it is,
+# with the release it has merged in itself (so my own changes still come, and a first install still has her). A
+# running Capri carries on with her build until she's next started.
+set -uo pipefail
+dir="${XDG_DATA_HOME:-$HOME/.local/share}/capri"
+src="$dir/src"
+fork=${CAPRI_FORK:-https://github.com/CrimzoAgra/capri-overlay.git}
+upstream=${CAPRI_UPSTREAM:-https://github.com/nunezValen/CapriDesktop.git}
+failed="${XDG_STATE_HOME:-$HOME/.local/state}/capri-update-failed"  # the combinations that failed (;), then why
+check=false
+[[ ${1:-} == --check ]] && check=true
+# At boot it runs from the system's update, outside the desktop: its notifications go to your session's bus
+export DBUS_SESSION_BUS_ADDRESS=${DBUS_SESSION_BUS_ADDRESS:-unix:path=/run/user/$(id -u)/bus}
+# The private fork with no GitHub login (gh auth login) fails rather than asking for one in the terminal: setup --yes
+# waited on that prompt
+export GIT_TERMINAL_PROMPT=0
+# A stalled download given up on (as hyprbars-build's: one hung for minutes at a login), not waited on: at boot the
+# update holds shutdown off until it's done, and the update check (update-apps --check) would never finish
+export GIT_HTTP_LOW_SPEED_LIMIT=1000 GIT_HTTP_LOW_SPEED_TIME=30
+# What a build has to pass before she's switched to it (in its folder): a merge can go through clean and still be
+# broken. Her build there (electron-vite's out/: what Electron starts), Electron starting, no conflict marker left, her
+# TypeScript's types (npm run typecheck: a function renamed upstream on one side only) and her tests (my fork's; the
+# original has none, --if-present)
+check_build() {
+    [[ -f out/main/index.js ]] || { echo "not built: no out/main/index.js"; return 1; }
+    node_modules/.bin/electron --version || return 1
+    grep -rlE '^(<<<<<<<|>>>>>>>) ' src package.json && { echo "conflict markers left"; return 1; }
+    npm run -s typecheck && npm run -s test --if-present
+}
+warn() { notify-send -a Capri -i dialog-warning "$1" "$2" 2>/dev/null; echo "capri: $1: $2" >&2; }
+# (versionsort.suffix: a pre-release, v1.1.0-beta, before its release; git's version order otherwise puts it after
+# v1.1.0, kept for good). LC_ALL=C: its messages read below ("would clobber", "unrelated histories") in English, not
+# translated (a pt_PT session)
+git() { LC_ALL=C command git -C "$src" -c user.name=capri-update -c user.email=capri-update@localhost -c advice.detachedHead=false \
+    -c versionsort.suffix=- "$@"; }
+# One at a time in her folder: a --check (the update check, the Updates app's list) fetching while an update merged
+# there failed it on git's own lock. A --check finding one running says nothing (that one says how it went); an update
+# waits for the other to finish. (Not installed: nothing to look for, and no lock left in a home without her)
+$check && [[ ! -d $src/.git ]] && exit 0
+lock="${XDG_STATE_HOME:-$HOME/.local/state}/capri-update.lock"
+mkdir -p "${lock%/*}"
+exec 9>"$lock"
+if $check; then
+    flock -n 9 || exit 0
+elif ! flock -n 9; then
+    echo "capri: waiting for the other capri-update to finish..."
+    flock 9
+fi
+
+# Her folder from before the new Capri, a clone of the old one (capri-overlay on mochiiwuff/capri-desktop: another
+# app): cloned again. Its build stays only while it's running; she's on the new one from her next start
+if [[ -d $src/.git && $(git remote get-url upstream 2>/dev/null) != "$upstream" ]]; then
+    $check && { echo "capri: update available (the new Capri)"; exit 0; }
+    rm -rf "$src"
+    replaced=true
+fi
+if [[ ! -d $src/.git ]]; then
+    mkdir -p "$dir"
+    # (--no-tags, and fetched so: the release tags are only the original's, a tag of my fork named as one of them never
+    # taken for it, or said "moved" for good)
+    LC_ALL=C command git clone -q --no-tags --origin origin "$fork" "$src" ||
+        { echo "capri: can't clone $fork (it's private: gh auth login first)"; exit 1; }
+    git remote add upstream "$upstream"
+fi
+# (from where $CAPRI_FORK says, by default GitHub: set back after a test's run from a copy of it)
+git remote set-url origin "$fork"
+# The fork may be unreachable at boot (it's private: the GitHub login isn't there for the boot's check): its last copy is
+# merged then. Expected there, so not a warning
+git fetch -q --no-tags origin main 2>/dev/null ||
+    echo "capri: $fork not fetched (private: no GitHub login here, as at boot), its last copy used"
+# Without --force: a release tag moved upstream (the same v* on other code) is refused and said (dotfiles-check too), not
+# taken as it now is. Release tags deleted upstream go here too (--prune, its v* only)
+if ! out=$(git fetch --prune upstream 'refs/tags/v*:refs/tags/v*' 2>&1); then
+    moved=$(grep -oP '\[rejected\]\s+\K\S+(?=\s+->\s+\S+\s+\(would clobber existing tag\))' <<<"$out" | paste -sd' ')
+    [[ -n $moved ]] || { echo "capri: can't reach $upstream"; exit 1; }
+    why="The original's release tag $moved was moved to other code: not taken. Check it, then: git -C $src tag -d $moved"
+    mkdir -p "${failed%/*}"
+    # (added to what's written down, as "moved <tags>" and its why: the combinations that failed are kept)
+    { head -1 "$failed" 2>/dev/null | tr ';' '\n' | grep -v '^moved ' | sed '/^$/d'; echo "moved $moved"; } |
+        paste -sd';' >"$failed.new"
+    { tail -n +2 "$failed" 2>/dev/null | grep -v "^The original's release tag "; echo "$why"; } >>"$failed.new"
+    mv "$failed.new" "$failed"
+    if $check; then echo "capri: $why"; else warn "Capri not updated" "$why"; fi
+    exit 1
+fi
+# (fetched again after that tag was taken out: said no more; what else is written down stays)
+if head -1 "$failed" 2>/dev/null | tr ';' '\n' | grep -q '^moved '; then
+    rest=$(head -1 "$failed" | tr ';' '\n' | grep -v '^moved ' | sed '/^$/d' | paste -sd';')
+    if [[ -z $rest ]]; then
+        rm -f "$failed"
+    else
+        { echo "$rest"; tail -n +2 "$failed" | grep -v "^The original's release tag "; } >"$failed.new" && mv "$failed.new" "$failed"
+    fi
+fi
+# The newest release, not a pre-release (v2.0.0-beta isn't taken over v1.1.0; with only pre-releases, the newest of them)
+newest=$(git tag -l 'v*' --sort=-v:refname | grep -v -- - | head -1)
+[[ -n $newest ]] || newest=$(git tag -l 'v*' --sort=-v:refname | head -1)
+[[ -n $newest ]] || { echo "capri: no release in $upstream"; exit 1; }
+fork_at=$(git rev-parse origin/main)
+have=$(cat "$dir/current/.capri-build" 2>/dev/null)
+# Which release she gets with my changes: the newest. That one failed (they don't merge, it doesn't build or pass her
+# checks): the release she's on, with my fork as it is now; else my fork alone, with the release it has merged in itself
+# (always merges: it's in it). So my own changes still come, and a first install still has her
+on=$(git tag -l 'v*' --points-at "${have#* }" 2>/dev/null | head -1)
+[[ -n $on ]] && git merge-base --is-ancestor "$on" origin/main && on=  # (in my fork already: that's the last one)
+base=$(git describe --tags --abbrev=0 --match 'v*' origin/main 2>/dev/null)
+# failed_before <fork release>: that combination failed (fail writes them down, ";" between, then why)
+failed_before() { head -1 "$failed" 2>/dev/null | tr ';' '\n' | grep -qxF "$1"; }
+# pick: sets tag and want (the commits of my fork and the release: what her build is marked with) to the first of them
+# that didn't fail
+pick() {
+    local c r
+    tag='' want=''
+    for c in "$newest" "$on" "$base"; do
+        [[ -n $c ]] || continue
+        r=$(git rev-parse -q --verify "$c^{commit}") || continue
+        failed_before "$fork_at $r" && continue
+        tag=$c want="$fork_at $r"
+        return 0
+    done
+    return 1
+}
+# (run again by fail, on another release: said as not updated when it's done)
+rc=0
+[[ -n ${CAPRI_UPDATE_FELL_BACK:-} ]] && rc=1
+unset CAPRI_UPDATE_FELL_BACK
+if ! pick; then
+    $check || echo "capri: this version failed before, not tried again: $(tail -n +2 "$failed")"
+    exit "$rc"
+fi
+if [[ $want == "$have" ]]; then
+    $check || echo "capri: up to date ($tag)$([[ $tag != "$newest" ]] && echo "; not on $newest: $(tail -n +2 "$failed")")"
+    exit "$rc"
+fi
+if $check; then
+    echo "capri: update available ($tag)"
+    exit 0
+fi
+
+# fail <why> [again]: keeps the build she has, says why once, and doesn't try this combination again; with "again" it's
+# tried next time (what can go by itself: a download cut off, a full disk). Another release left to try with my changes
+# (pick): that one at once, run again
+fail() {
+    local prev failed_tag=$tag
+    if [[ ${2:-} != again ]]; then
+        mkdir -p "${failed%/*}"
+        # (with the ones that failed before with my fork as it is: not tried again either)
+        prev=$(head -1 "$failed" 2>/dev/null | tr ';' '\n' | grep -F "$fork_at " | paste -sd';')
+        { echo "${prev:+$prev;}$want"; [[ -z $prev ]] || tail -n +2 "$failed"; echo "$1"; } >"$failed.new" &&
+            mv "$failed.new" "$failed"
+    fi
+    rm -rf "${new:-}"
+    if [[ ${2:-} != again ]] && pick; then
+        warn "Capri not on $failed_tag" "$1 She gets my changes with $tag instead."
+        CAPRI_UPDATE_FELL_BACK=1 exec "$0"
+    fi
+    if [[ -n $have ]]; then warn "Capri not updated" "$1 She stays on the version she has."
+    else warn "Capri not installed" "$1"; fi
+    exit 1
+}
+# flaky <why>: what may go by itself (a download cut off) is tried again next time, as fail's "again"; failing the same
+# way a third run in a row with the same combination, it's that combination's own (fail: not tried again, another
+# release tried), not left failing for good with no other release tried
+retries="${failed}-retries"  # <combination><TAB><runs in a row it failed so>
+flaky() {
+    local n=0
+    [[ $(cut -f1 "$retries" 2>/dev/null) == "$want" ]] && n=$(cut -f2 "$retries")
+    n=$((n + 1))
+    if ((n >= 3)); then
+        rm -f "$retries"
+        fail "$1 (the same, $n runs in a row)"
+    fi
+    mkdir -p "${retries%/*}"
+    printf '%s\t%s\n' "$want" "$n" >"$retries"
+    fail "$1" again
+}
+# (-f: drops what a run cut off mid-merge left, which the merge would refuse to go over)
+git checkout -q -f --detach origin/main || fail "Git couldn't check out my fork in $src." again
+if ! merged=$(git merge -q --no-edit "$tag" 2>&1); then
+    # Conflicts with a rule of their own, settled (her build and checks catch what that leaves wrong): a file my fork
+    # deleted and the release changed stays deleted; her lines (src/shared/lines/*.json, kept by position, my fork's
+    # own) stay mine, the release's new ones in English until they're translated there. Any other: merged by hand
+    while IFS= read -r -d '' e; do
+        case ${e:0:2} in
+            DU) git rm -q -- "${e:3}" ;;
+            UU | AA) [[ ${e:3} == src/shared/lines/*.json ]] && git checkout -q --ours -- "${e:3}" && git add -- "${e:3}" ;;
+        esac
+    done < <(git status --porcelain -z)
+    files=$(git diff --name-only --diff-filter=U | paste -sd' ')
+    if [[ -n $files ]] || ! git rev-parse -q --verify MERGE_HEAD >/dev/null || ! git commit -q --no-edit >/dev/null 2>&1; then
+        git merge --abort 2>/dev/null
+        # (no merge started at all: the original's history rewritten, nothing in common with my fork; else maybe a
+        # passing problem, its third time in a row this combination's own)
+        [[ -n $files || $merged != *"unrelated histories"* ]] ||
+            fail "My fork and $tag have no history in common (the original's history rewritten?): merge it in the fork by hand."
+        [[ -n $files ]] || flaky "Git couldn't merge $tag in $src: $(tail -1 <<<"$merged")"
+        fail "My changes no longer merge with $tag (conflicts in: $files): merge it in the fork by hand."
+    fi
+fi
+build=$(git rev-parse --short HEAD)
+new="$dir/$build"
+# The same code as a build already here (a release the fork already has merged in): that one, not built again
+if [[ ! -f $new/.capri-build ]]; then
+    rm -rf "$new"
+    mkdir -p "$new"
+    git archive HEAD | tar -x -C "$new"
+    # Pinned by her lockfile, with no install scripts (npm may refuse those it wasn't told to allow): Electron's
+    # download (its binary) is the only one she needs, run here. (esbuild's, for her build, only checks its binary:
+    # its package for this system is found without it). Electron's download given up on after 15 min (a stalled one has
+    # no timeout of its own: the Updates app waited on it for good); npm's own downloads have theirs
+    # A lockfile that doesn't match package.json (a merge took one side's of each) or names a version the registry
+    # doesn't have fails the same every time: that combination's own. Anything else (the network) is tried again (npm
+    # in English: its messages are read)
+    if ! ( cd "$new" && LC_ALL=C npm ci --ignore-scripts --no-audit --no-fund --loglevel=error ) >"$dir/build.log" 2>&1; then
+        grep -qE 'EUSAGE|in sync|from lock file|Invalid: lock file|ETARGET|E404' "$dir/build.log" &&
+            fail "Her packages don't install with $tag: package.json and package-lock.json don't match ($dir/build.log)."
+        flaky "Her packages didn't install ($dir/build.log)."
+    fi
+    ( cd "$new" && timeout 15m node node_modules/electron/install.js ) >>"$dir/build.log" 2>&1 ||
+        fail "Electron didn't download ($dir/build.log)." again
+    ( cd "$new" && npm run -s build && check_build ) >>"$dir/build.log" 2>&1 || fail "Her build failed on $tag ($dir/build.log)."
+fi
+# (not written, a full disk: not switched to. Unmarked, the next run took it for one cut off mid-build and removed it,
+# her current one; left for that run to remove or finish, as it may be the one she's on)
+echo "$want" >"$new/.capri-build" || { new=; fail "Her build couldn't be finished (is the disk full?)." again; }
+old=$(readlink "$dir/current" 2>/dev/null)
+# (not switched, a full disk: said, not "installed" with her still on the old one; tried again next time)
+if ! { ln -sfn "$build" "$dir/current.new" && mv -T "$dir/current.new" "$dir/current"; }; then
+    new=
+    fail "She couldn't be switched to her new build (is the disk full?)." again
+fi
+# (on an older release: the newest's failure stays written down, said by dotfiles-check, not tried again)
+[[ $tag != "$newest" ]] || rm -f "$failed"
+rm -f "$retries"
+# The build before kept, but not the old Capri's (replaced): another app, not one to go back to
+keep=$old
+${replaced:-false} && keep=
+# The old Capri's hooks (Claude Code's, Codex's, Antigravity's: turned on from her menu) ran her script from this
+# folder, gone with her: said, as each would now fail (taken out by hand; the new one has no hooks)
+for f in "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json" "${CODEX_HOME:-$HOME/.codex}/hooks.json" \
+    "${AGY_CONFIG_DIR:-$HOME/.gemini/config}/hooks.json"; do
+    grep -qF "$dir/" "$f" 2>/dev/null && grep -qF "/hooks/capri-hook" "$f" &&
+        warn "The old Capri's hooks are still on" "$f runs her hook script, gone with her: take its capri-hook lines out."
+done
+# The build before stays, and any a Capri is still running from (~/.local/bin/capri starts her in it: two updates
+# without her restarted); older ones go, and any a run cut off mid-build left (a merge is a new build each time: never
+# finished, never reused)
+running=$(for p in /proc/[0-9]*/cwd; do readlink "$p"; done 2>/dev/null)
+for b in "$dir"/*/; do
+    b=${b%/}
+    [[ -L $b || $b == "$src" || ${b##*/} == "$build" || ${b##*/} == "$keep" ]] || grep -qxF "$(readlink -f "$b")" <<<"$running" ||
+        rm -rf "$b"
+done
+
+# Her launcher entry (Super menu) and icon, made here so they're only there once she's installed
+apps="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+icon="${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/256x256/apps/capri.png"
+mkdir -p "$apps" "${icon%/*}"
+cp "$new/assets/icon.png" "$icon"
+# (no StartupWMClass: her windows' own entry, capri-desktop-windows.desktop, hidden, is written by her)
+cat >"$apps/capri.desktop" <<EOF
+[Desktop Entry]
+Name=Capri
+GenericName=Desktop companion
+Comment=Project Capricorn's construct, on your desktop: chat, game commentary, voice macros, a coding agent
+Exec=$HOME/.local/bin/capri
+Icon=capri
+Type=Application
+StartupNotify=false
+Categories=Utility;
+Keywords=capri;claude;edgerunners;cyberpunk;companion;
+EOF
+# Her key is bound only once she's installed (user/apps.lua): the desktop's config loaded again on her first install,
+# so it works now, not from the next login (./setup.sh --only capri from the desktop). After any game, as the Settings
+# app's (a reload takes a game out of fullscreen); after-games beside this file (setup runs it before the files step).
+# Hyprland named, as after-games does: from an SSH login or a text console the reload failed with nothing said.
+# (without the lock: waiting through a game it held off every capri-update)
+[[ -n $old ]] || setsid -f sh -c '"$1/after-games"; hyprctl -i "${HYPRLAND_INSTANCE_SIGNATURE:-0}" reload' _ "${0%/*}" >/dev/null 2>&1 9>&-
+echo "capri: $tag installed (with my changes: $build)"
+exit "$rc"  # (1: on another release than the newest, which failed: said above)

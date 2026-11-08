@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# Spotify like Proton VPN: opening it from the app launcher / dock brings its window back from its tray icon
+# (launching it again wouldn't).
+#   spotify-tray          start Spotify minimised to the tray (tray-keeper, after Caelestia restarts)
+#   spotify-tray --show   show Spotify, starting it if it isn't running
+#   spotify-tray --show spotify:track:...   the same, opening that link (a link clicked in the browser)
+APP=(flatpak run --user com.spotify.Client)
+# The user install, so spicetify can change it (setup.sh: spotify_path in ~/.config/spicetify/config-xpui.ini)
+SPOTIFY_DIR="$HOME/.local/share/flatpak/app/com.spotify.Client/current/active/files/extra/share/spotify"
+
+# Spicetify (Caelestia's theme, marketplace): a Spotify update brings back the unchanged app (its xpui.spa),
+# so put spicetify back before starting it. Only then, and not before Spotify first ran (no prefs file yet)
+spicetify_apply() {
+    command -v spicetify >/dev/null && [[ -f $SPOTIFY_DIR/Apps/xpui.spa && -f $HOME/.var/app/com.spotify.Client/config/spotify/prefs ]] || return 0
+    spicetify -q backup apply -n >/dev/null 2>&1 || true
+}
+start() { spicetify_apply; setsid "${APP[@]}" "$@" >/dev/null 2>&1; }  # [link]
+
+# Spotify's tray icon: "<bus name>/<path>" as registered with the tray
+item() {
+    busctl --user get-property org.kde.StatusNotifierWatcher /StatusNotifierWatcher \
+        org.kde.StatusNotifierWatcher RegisteredStatusNotifierItems 2>/dev/null |
+        grep -oE '"[^"]*spotify_client[^"]*"' | head -1 | tr -d '"'
+}
+
+# Click a tray menu entry by its label
+click() {
+    local it svc path menu id
+    it=$(item) || return 1
+    [[ -n $it ]] || return 1
+    svc=${it%%/*} path=/${it#*/}
+    menu=$(busctl --user get-property "$svc" "$path" org.kde.StatusNotifierItem Menu | awk '{print $2}' | tr -d '"')
+    for id in $(seq 1 20); do
+        if busctl --user call "$svc" "$menu" com.canonical.dbusmenu GetProperty is "$id" label 2>/dev/null | grep -qF "\"$1\""; then
+            busctl --user call "$svc" "$menu" com.canonical.dbusmenu Event isvu "$id" clicked s "" 0
+            return 0
+        fi
+    done
+    return 1
+}
+
+if [[ ${1:-} == --show ]]; then
+    if [[ -n ${2:-} ]]; then
+        # Spotify hands the link to the copy already running (or starts with it); one in its tray is shown too
+        click "Show Spotify" >/dev/null 2>&1
+        start "$2" &
+    else
+        click "Show Spotify" || start &
+    fi
+    exit 0
+fi
+
+# Login: start it with its window kept off screen (the silent rules in user/apps.lua), then minimise
+# it to the tray as soon as its icon shows up
+silent() { hyprctl eval "dots.spotify_silent_set($1)" >/dev/null; }
+silent true
+# However it ends: the rules off, and if it didn't get to its tray, its window back where you can see it (the rules
+# put it on a hidden workspace)
+done=false
+trap 'silent false; $done || hyprctl eval "dots.spotify_show()" >/dev/null' EXIT
+[[ -n $(item) ]] || start &
+for _ in $(seq 60); do
+    sleep 0.5
+    if [[ -n $(item) ]] && hyprctl clients -j | jq -e 'any(.[]; .class | ascii_downcase == "spotify")' >/dev/null; then
+        sleep 0.5
+        click "Minimize to Tray" && done=true
+        exit 0
+    fi
+done

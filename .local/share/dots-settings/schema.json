@@ -1,0 +1,365 @@
+{
+  "pages": [
+    {
+      "id": "windows",
+      "title": "Windows",
+      "icon": "select_window",
+      "groups": [
+        {
+          "title": "Behaviour",
+          "settings": [
+            {
+              "key": "windows.mode",
+              "label": "Window mode",
+              "description": "Floating: windows open in the middle and overlap, like Windows. Tiling: they share the screen side by side. Switches every open window too (also Super+Alt+Space, or the bar's right-click menu).",
+              "type": "choice",
+              "options": [
+                {
+                  "value": "floating",
+                  "label": "Floating"
+                },
+                {
+                  "value": "tiling",
+                  "label": "Tiling"
+                }
+              ],
+              "default": "floating",
+              "get": "cat ~/.local/state/window-mode 2>/dev/null || echo floating",
+              "set": "[ \"$(cat ~/.local/state/window-mode 2>/dev/null || echo floating)\" = \"$VALUE\" ] || hyprctl eval 'dots.toggle_window_mode()'"
+            },
+            {
+              "key": "windows.focus",
+              "label": "Focus in floating mode",
+              "description": "Click: a window takes focus when you click it, as on Windows. Hover: when the pointer moves onto it. (Tiling mode always focuses on hover.)",
+              "type": "choice",
+              "options": [
+                {
+                  "value": "click",
+                  "label": "Click"
+                },
+                {
+                  "value": "hover",
+                  "label": "Hover"
+                }
+              ],
+              "default": "click",
+              "apply": "hypr"
+            },
+            {
+              "key": "windows.cascade",
+              "label": "Cascade new windows",
+              "description": "Each window opened in floating mode goes a step down and right of the one before, so none hides another. Off: all open in the middle.",
+              "type": "bool",
+              "default": true,
+              "apply": "hypr"
+            },
+            {
+              "key": "windows.titlebars",
+              "label": "Title bars",
+              "description": "Title bars with minimise, maximise and close buttons on floating windows.",
+              "type": "bool",
+              "default": true,
+              "apply": "hypr"
+            }
+          ]
+        },
+        {
+          "title": "Mouse",
+          "settings": [
+            {
+              "key": "input.mouse_dpi",
+              "label": "Mouse DPI",
+              "description": "The mouse's own DPI (Logitech mice, through Solaar): the desktop and games both follow. Lower is slower. Own: whatever the mouse's own profile sets.",
+              "type": "choice",
+              "options": [
+                {
+                  "value": "",
+                  "label": "Own"
+                },
+                {
+                  "value": "400",
+                  "label": "400"
+                },
+                {
+                  "value": "600",
+                  "label": "600"
+                },
+                {
+                  "value": "800",
+                  "label": "800"
+                },
+                {
+                  "value": "1000",
+                  "label": "1000"
+                },
+                {
+                  "value": "1200",
+                  "label": "1200"
+                },
+                {
+                  "value": "1600",
+                  "label": "1600"
+                }
+              ],
+              "default": "",
+              "apply": "mouse-dpi"
+            },
+            {
+              "key": "input.mouse_accel",
+              "label": "Mouse acceleration",
+              "description": "Off (the default): the pointer moves exactly as far as the hand, as in games. On: faster movements move it further (libinput's own default, feels floaty).",
+              "type": "bool",
+              "default": false,
+              "apply": "hypr"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "features",
+      "title": "Features",
+      "icon": "extension",
+      "groups": [
+        {
+          "title": "Games",
+          "settings": [
+            {
+              "key": "games.low_latency",
+              "label": "Low input lag in games",
+              "description": "A game's frames reach the screen as soon as they're drawn (tearing allowed, for games only). Works with the game's own V-Sync off.",
+              "type": "bool",
+              "default": true,
+              "apply": "hypr"
+            },
+            {
+              "key": "games.audio_focus",
+              "label": "Game sound only while focused",
+              "description": "A game is muted while you're in another window or workspace, and unmuted when you go back.",
+              "type": "bool",
+              "default": true,
+              "apply": "hypr"
+            },
+            {
+              "key": "games.attention",
+              "label": "Notify when a game wants attention",
+              "description": "A notification when a game flashes for attention (a match found, your turn...); clicking it takes you there.",
+              "type": "bool",
+              "default": true,
+              "apply": "hypr"
+            },
+            {
+              "key": "games.free_workspace",
+              "label": "Fullscreen games get a workspace of their own",
+              "description": "In tiling mode, a game that goes fullscreen next to other windows moves to the first free workspace, and you with it.",
+              "type": "bool",
+              "default": true,
+              "apply": "hypr"
+            },
+            {
+              "key": "games.close_clients",
+              "label": "Closing a game closes its client",
+              "description": "The store launcher (EA App, Ubisoft Connect, Epic...) closes a minute after the game, Steam 15 s after it when it's only in its tray (however it was started). One with its window open stays. What still runs of a closed Proton game two minutes on (one that doesn't exit) is ended too.",
+              "type": "bool",
+              "default": true,
+              "apply": "hypr"
+            },
+            {
+              "key": "games.launchers_minimised",
+              "label": "Store launchers start minimised",
+              "description": "EA App, Ubisoft Connect and Epic, when a game starts them, open minimised in the dock.",
+              "type": "bool",
+              "default": true,
+              "apply": "hypr"
+            }
+          ]
+        },
+        {
+          "title": "Lutris (applies the next time Lutris starts)",
+          "from": "lutris"
+        },
+        {
+          "title": "Shell (Caelestia)",
+          "from": "caelestia"
+        }
+      ]
+    },
+    {
+      "id": "startup",
+      "title": "Startup",
+      "icon": "rocket_launch",
+      "groups": [
+        {
+          "title": "Started by the desktop (from the next login)",
+          "settings": [
+            {
+              "key": "startup.lutris",
+              "label": "Lutris",
+              "description": "In its tray, no window: your games library, ready for the bar and launcher.",
+              "type": "bool",
+              "default": true
+            },
+            {
+              "key": "startup.protonvpn",
+              "label": "Proton VPN",
+              "description": "In its tray.",
+              "type": "bool",
+              "default": true
+            },
+            {
+              "key": "startup.solaar",
+              "label": "Solaar",
+              "description": "In its tray (your mouse's battery): puts the mouse DPI back when the mouse reconnects.",
+              "type": "bool",
+              "default": false
+            },
+            {
+              "key": "startup.artcraft",
+              "label": "ArtCraft Launcher",
+              "description": "In its tray, no window (also when it restarts after updating itself).",
+              "type": "bool",
+              "default": false
+            },
+            {
+              "key": "startup.capri",
+              "label": "Capri",
+              "description": "Put away, only her tray icon (it or her key, Shift+Space by default, brings her out), when she's installed.",
+              "type": "bool",
+              "default": true
+            }
+          ]
+        },
+        {
+          "title": "Autostart entries",
+          "from": "autostart"
+        }
+      ]
+    },
+    {
+      "id": "keys",
+      "title": "Keyboard",
+      "icon": "keyboard",
+      "groups": [
+        {
+          "title": "Desktop",
+          "settings": [
+            {
+              "key": "keys.windows_next",
+              "label": "Window switcher",
+              "type": "keys",
+              "default": [
+                "ALT + Tab"
+              ],
+              "apply": "hypr",
+              "description": "Hold the modifier and press again to move on; releasing Super or Alt picks."
+            },
+            {
+              "key": "keys.windows_prev",
+              "label": "Window switcher, backwards",
+              "type": "keys",
+              "default": [
+                "ALT + SHIFT + Tab"
+              ],
+              "apply": "hypr"
+            },
+            {
+              "key": "keys.switcher_next",
+              "label": "Workspace switcher",
+              "type": "keys",
+              "default": [
+                "SUPER + Tab"
+              ],
+              "apply": "hypr",
+              "description": "Releasing Super or Alt picks."
+            },
+            {
+              "key": "keys.switcher_prev",
+              "label": "Workspace switcher, backwards",
+              "type": "keys",
+              "default": [
+                "SUPER + SHIFT + Tab"
+              ],
+              "apply": "hypr"
+            },
+            {
+              "key": "keys.minimise",
+              "label": "Minimise the window",
+              "type": "keys",
+              "default": [
+                "SUPER + M"
+              ],
+              "apply": "hypr"
+            },
+            {
+              "key": "keys.restore",
+              "label": "Bring back the last minimised window",
+              "type": "keys",
+              "default": [
+                "SUPER + ALT + M"
+              ],
+              "apply": "hypr"
+            },
+            {
+              "key": "keys.maximise",
+              "label": "Maximise the window",
+              "type": "keys",
+              "default": [
+                "SUPER + ALT + F"
+              ],
+              "apply": "hypr"
+            },
+            {
+              "key": "keys.window_mode",
+              "label": "Switch between floating and tiling",
+              "type": "keys",
+              "default": [
+                "SUPER + ALT + Space"
+              ],
+              "apply": "hypr"
+            },
+            {
+              "key": "keys.task_manager",
+              "label": "Task Manager (btop)",
+              "type": "keys",
+              "default": [
+                "CTRL + SHIFT + Escape"
+              ],
+              "apply": "hypr"
+            },
+            {
+              "key": "keys.screenshot",
+              "label": "Screenshot of an area",
+              "type": "keys",
+              "default": [
+                "Print"
+              ],
+              "apply": "hypr"
+            },
+            {
+              "key": "keys.restart_shell",
+              "label": "Restart the shell (Caelestia)",
+              "type": "keys",
+              "default": [
+                "CTRL + SUPER + ALT + R"
+              ],
+              "apply": "hypr"
+            },
+            {
+              "key": "keys.capri",
+              "label": "Put Capri away / bring her back",
+              "type": "keys",
+              "default": [
+                "SHIFT + Space"
+              ],
+              "apply": "hypr"
+            }
+          ]
+        },
+        {
+          "title": "Caelestia",
+          "from": "caelestia-keys"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Restart Caelestia (from the overlay in ~/.config/quickshell/caelestia) with a clean desktop
+# environment: your login shell as $SHELL, none of the editor/Claude variables of whatever started this.
+# shellcheck disable=SC2046  # one variable name per word on purpose
+# Run from outside the desktop (an SSH login, a text console: dots-settings set there), Hyprland runs it instead (its
+# first one, -i 0), with the desktop's environment: from here the shell was killed and the new one couldn't start
+if [[ -z ${HYPRLAND_INSTANCE_SIGNATURE:-} || -z ${WAYLAND_DISPLAY:-} ]]; then
+    exec hyprctl -i "${HYPRLAND_INSTANCE_SIGNATURE:-0}" dispatch 'hl.dsp.exec_cmd("~/.local/bin/caelestia-restart")'
+fi
+unset $(env | grep -oE "^(CLAUDE[A-Z_]*|CLAUDECODE|ANTHROPIC[A-Z_]*|NODE_OPTIONS|VSCODE[A-Z_]*|ELECTRON[A-Z_]*|QS_APP_ID)=" | tr -d =)
+SHELL=$(getent passwd "$USER" | cut -d: -f7)  # your login shell, not the one this was started from
+export SHELL
+# Spotify shows its window the moment the tray goes away: if it's hidden in the tray, have that window open
+# out of sight (the silent rules in ~/.config/caelestia/user/apps.lua; tray-keeper minimises it and turns them off)
+if pgrep -f com.spotify.Client >/dev/null && ! hyprctl clients -j | jq -e 'any(.[]; .class | ascii_downcase == "spotify")' >/dev/null; then
+    hyprctl eval 'dots.spotify_silent_set(true)' >/dev/null
+fi
+qs -c caelestia kill >/dev/null 2>&1
+# Until it's gone (at most 5 s): one still closing makes the new one (-n) not start at all
+for _ in $(seq 50); do qs list --all 2>/dev/null | grep -q "/quickshell/caelestia/shell.qml" || break; sleep 0.1; done
+# From home: apps opened from the launcher and dock start in Caelestia's folder (Thunar opens there)
+cd "$HOME" || exit 1
+# In a systemd scope of its own: started from an app's terminal (VS Code...), it would otherwise be in that app's
+# scope, and closing or force-quitting the app would take the shell down with it
+systemd-run --user --scope --quiet --collect --unit="caelestia-$(date +%s)" setsid qs -c caelestia -n -d >/dev/null 2>&1
+# Tray icons of apps that don't re-add them, and Spotify's window: ~/.local/bin/tray-keeper

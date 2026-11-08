@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Claude Code in the terminal: the CLI inside the editor's extension (its newest installed version, VSCodium's in
+# ~/.vscode-oss or VS Code's in ~/.vscode), so commands the extension doesn't have (/plugin...) work too. No extension:
+# the next claude on PATH (another install of it: npm's, the native installer's), not this one again
+bin=$(for b in "$HOME"/.vscode{-oss,}/extensions/anthropic.claude-code-*/resources/native-binary/claude; do
+    [[ -x $b ]] && echo "${b##*/anthropic.claude-code-} $b"; done | sort -V | tail -1 | cut -d' ' -f2-)
+if [[ ! -x $bin ]]; then
+    self=$(readlink -f "$0")
+    bin=$(type -ap claude | while read -r b; do [[ $(readlink -f "$b") != "$self" ]] && { echo "$b"; break; }; done)
+fi
+[[ -x $bin ]] || { echo "Claude Code isn't installed (neither its editor extension nor another claude on PATH)" >&2; exit 1; }
+exec "$bin" "$@"

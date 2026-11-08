@@ -1,0 +1,799 @@
+#!/usr/bin/env python3
+"""Game audio only while the game has focus, and a notification when a game asks for attention.
+
+- Audio: a game's sound is muted while its window isn't the focused one (another workspace, another
+  window, another screen) and unmuted when you go back to it. Only streams this muted are unmuted,
+  so a game you muted yourself (while it runs) stays muted. Its streams are found by SteamGameId, which every
+  process of the game has (Proton's helpers too), so audio from a child process is caught as well. A game's stream
+  that starts out muted counts as muted by this: WirePlumber remembers each app's mute and puts it back, so a game
+  closed while muted here started muted, and stayed silent.
+- Workspace (tiling mode only): a game that goes fullscreen next to other windows moves to the first free workspace,
+  and you with it. In floating mode it stays: Alt+Tab minimises it (user/windows.lua).
+- Attention: when a game flags itself urgent (what flashes its taskbar button orange on Windows:
+  a match found, a turn, a download done...), a notification shows. Proton games ask the window manager for
+  "demands attention", which Hyprland ignores (no "urgent" event), so those requests are caught on X too. It stays until you clear it or
+  go to the game (switching to it yourself clears it too); clicking it goes to the game, bringing it back if minimised.
+A game is any window started by Steam (Proton games are "steam_app_<id>"; native ones carry SteamGameId and run from
+Steam's games folder). Runs as a
+systemd user service (game-focus.service), started from ~/.config/caelestia/user/apps.lua.
+- Clients: closing a game closes its store launcher (EA app, Ubisoft Connect...) a minute later, and Steam if it was
+  only in its tray 15 s later; one with its window open stays. What still runs of a Proton game two minutes after its last
+  window closed (a game that doesn't exit, its crash reporter) is closed too, once it's idle (not while it reads or
+  writes the disk; CPU alone for 10 minutes: hung, closed).
+Each of these can be turned off in the Settings app (games.* settings: read at start and again on every Hyprland
+config reload, which a change makes).
+"""
+import json
+import re
+import os
+import shutil
+import signal
+import socket
+import subprocess
+import sys
+import threading
+import time
+import traceback
+
+steam_ids: dict[int, tuple[str, bool]] = {}  # pid -> (SteamGameId or "", whether it runs from Steam's games folder)
+muted: set[int] = set()  # sink inputs this muted
+seen: set[int] = set()  # sink inputs already looked at (a new one may start muted: see the top)
+hosts: dict[int, int] = {}  # sink input -> its Flatpak game process (host pid; -1: none), looked up once
+alerts: dict[str, int] = {}  # game window address -> id of its notification still showing
+placed: set[str] = set()  # fullscreen game windows already given a workspace of their own (or alone on one)
+waiting: dict[str, float] = {}  # game windows that asked for attention while focused: until when leaving them alerts
+left: dict[str, float] = {}  # window address -> when it last lost focus
+update_lock = threading.Lock()
+
+
+def setting(key: str) -> bool:
+    # Read again when the Settings app saved a change: a game setting changed during a game counts at once (the config
+    # reload that also reads them waits until the game closes, dots-settings)
+    global settings_seen
+    try:
+        seen = os.stat(SETTINGS_FILE).st_mtime_ns
+    except OSError:
+        seen = 0
+    if seen != settings_seen:
+        settings_seen = seen
+        load_settings()
+    return SETTINGS.get(key) is not False
+
+
+def load_settings() -> None:
+    global SETTINGS
+    try:
+        SETTINGS = json.loads(subprocess.run([os.path.expanduser("~/.local/bin/dots-settings"), "values"],
+                                             capture_output=True, text=True).stdout)
+    except (OSError, ValueError):
+        SETTINGS = {}
+
+
+SETTINGS: dict = {}
+SETTINGS_FILE = os.path.expanduser("~/.config/dots/settings.json")
+settings_seen = -1  # its mtime when last read (-1: not yet; the first setting() reads it)
+
+
+def logged(fn):
+    """An error (e.g. Hyprland renaming a field after an update) is logged and skipped, not fatal: one event goes
+    unhandled instead of the service crash-looping. dotfiles-check reports logged errors."""
+    def run(*args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except Exception:
+            traceback.print_exc()
+    return run
+
+
+def hypr(*args: str) -> str:
+    return subprocess.run(["hyprctl", *args], capture_output=True, text=True).stdout
+
+
+def pactl(kind: str) -> str:
+    try:
+        return subprocess.run(["pactl", "-f", "json", "list", kind], capture_output=True, text=True).stdout or "[]"
+    except OSError:  # no pactl (no PipeWire/Pulse client): no streams, not an error logged on every event
+        return "[]"
+
+
+def steam_id(pid: int, window: bool = False) -> str:
+    """The process's Steam game id, "" if none. Any process of the game counts for its audio (Proton's helpers too); a
+    window only if its program is from Steam's games folder: one a game started (a browser opening a link) inherits the
+    id too"""
+    if pid not in steam_ids:
+        try:
+            env = open(f"/proc/{pid}/environ", "rb").read().split(b"\0")
+        except OSError:
+            env = []
+        ids = [e[12:].decode() for e in env if e.startswith(b"SteamGameId=")]
+        gid = ids[0] if ids and ids[0] != "0" else ""
+        # From the folder by its command line (Proton's with Windows "\"), or by its file (a native one run as ./Game)
+        try:
+            game = bool(gid) and (bool(re.search(rb"steamapps[/\\]common[/\\]", open(f"/proc/{pid}/cmdline", "rb").read()))
+                                  or "/steamapps/common/" in os.readlink(f"/proc/{pid}/exe"))
+        except OSError:
+            game = False
+        steam_ids[pid] = (gid, game)
+    gid, game = steam_ids[pid]
+    return gid if game or not window else ""
+
+
+def sandbox(props: dict) -> str | None:
+    """A Flatpak stream's PID namespace ("pid:[n]", as /proc/<pid>/ns/pid reads), from its sandbox's bwrapinfo.json"""
+    run = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
+    try:
+        with open(f"{run}/.flatpak/{props['pipewire.access.portal.instance_id']}/bwrapinfo.json") as f:
+            return f"pid:[{json.load(f)['pid-namespace']}]"
+    except (KeyError, OSError, ValueError):
+        return None
+
+
+def host_pid(pid: int, ns: str | None = None) -> int:
+    """The host's pid of a Flatpak game process its sound knows by its own PID namespace's pid (only in namespace ns,
+    when known); -1 if no game process has that pid there, or processes of more than one game do (each namespace has
+    its own pid 2, 3...)"""
+    found = {}
+    for d in filter(str.isdigit, os.listdir("/proc")):
+        try:
+            if ns and os.readlink(f"/proc/{d}/ns/pid") != ns:
+                continue
+            ns_pids = next(l.split()[1:] for l in open(f"/proc/{d}/status") if l.startswith("NSpid:"))
+        except (OSError, StopIteration):
+            continue
+        if len(ns_pids) > 1 and ns_pids[-1] == str(pid) and (gid := steam_id(int(d))):
+            found.setdefault(gid, int(d))
+    return next(iter(found.values())) if len(found) == 1 else -1
+
+
+def game_id(client: dict) -> str:
+    """The window's Steam game id, or "" if it isn't a game."""
+    cls = client.get("class", "")
+    if cls.startswith("steam_app_") and cls[10:].isdigit():
+        return cls[10:]
+    return steam_id(client.get("pid", -1), window=True)
+
+
+def column(ws: int) -> int:
+    """Workspace id -> its column, as in user/workspaces.lua's synced workspaces (1-10 on every screen; 0: special)."""
+    return (ws - 1) % 10 + 1 if ws > 0 else 0
+
+
+window_mode = ""
+
+
+def place_games(clients: list, active: str = "") -> None:
+    """A game that goes fullscreen (or borderless over the whole screen) while sharing its workspace moves to the
+    first free one (a column empty on every screen), and you follow it. Once per window: move it back and it stays.
+    Tiling mode only: in floating mode (the window mode file user/windows.lua writes) Alt+Tab minimises a fullscreen
+    game instead, so it can stay where it opened. Switching to tiling places a game you're on again"""
+    global window_mode
+    try:
+        with open(os.path.expanduser("~/.local/state/window-mode")) as f:
+            mode = f.read().strip()
+    except OSError:
+        mode = "floating"  # no file: the default
+    if mode != window_mode:
+        window_mode = mode
+        placed.clear()  # games left where they were in floating mode get their turn now
+    if mode != "tiling":
+        return
+    monitors = None
+    for c in clients:
+        if c["address"] in placed or not game_id(c) or c["workspace"].get("id", 0) <= 0:
+            continue
+        if monitors is None:
+            try:
+                monitors = {m["id"]: m for m in json.loads(hypr("monitors", "-j") or "[]")}
+            except json.JSONDecodeError:
+                return
+        m = monitors.get(c["monitor"])
+        # (a rotated screen: its width and height swapped)
+        w, h = (m["height"], m["width"]) if m and m.get("transform", 0) % 2 else (m and m["width"], m and m["height"])
+        covers = m and c["size"][0] >= w / m["scale"] - 1 and c["size"][1] >= h / m["scale"] - 1
+        if (c.get("fullscreen") or 0) < 2 and not covers:  # (1 is maximised: a window among others)
+            continue  # its launcher, or still starting
+        # Only the game you're on: Hyprland says nothing when a window resizes, so one that grew to cover the screen
+        # while you were elsewhere would be found later (on your next Alt+Tab) and pull you back to it
+        if c["address"] != active:
+            continue
+        placed.add(c["address"])
+        ws = c["workspace"].get("id", 0)
+        # (a pinned window, Capri, shows on every workspace: Hyprland lists it on the one its screen shows, and it
+        # neither shares the game's nor takes one, as in user/workspaces.lua)
+        others = [o for o in clients if not o.get("pinned")]
+        if not any(o["workspace"].get("id", 0) == ws and o["address"] != c["address"] for o in others):
+            continue  # already alone
+        # (a minimised window counts for its own workspace, special:minimised-N: it comes back there, as the dock shows)
+        used = {column(int(m.group(1))) if (m := re.match(r"special:minimised-(\d+)$", o["workspace"].get("name", "")))
+                else column(o["workspace"].get("id", 0)) for o in others}
+        free = next((i for i in range(1, 11) if i not in used), None)
+        if free is None:
+            continue
+        target = (ws - 1) // 10 * 10 + free  # the same screen's workspace in that column
+        hypr("dispatch", f'hl.dsp.window.move({{ window = "address:{c["address"]}", workspace = {target}, follow = false }})')
+        hypr("eval", f"dots.goto_workspace({free})")
+        hypr("eval", f'dots.focus_window("{c["address"]}")')
+
+
+# Closing a game closes the clients started for it --------------------------------------------------------------------
+
+# Store launchers that run under Wine next to their games (in the game's prefix)
+LAUNCHERS = re.compile(rb"(eadesktop|ealauncher|eabackgroundservice|upc|ubisoftconnect|epicgameslauncher|battle\.net|"
+                       rb"galaxyclient|rockstarlauncher|launcher_patcher)\.exe", re.I)
+games_open: dict[str, dict] = {}  # game window address -> {"prefix": its Wine prefix or "", "steam": a Steam game}
+
+
+def environ(pid: int) -> dict:
+    try:
+        return dict(e.split(b"=", 1) for e in open(f"/proc/{pid}/environ", "rb").read().split(b"\0") if b"=" in e)
+    except OSError:
+        return {}
+
+
+def prefix_of(env: dict) -> bytes:
+    p = env.get(b"WINEPREFIX", b"")
+    return os.path.realpath(p) if p else b""
+
+
+def cmdline(pid: int) -> bytes:
+    try:
+        return open(f"/proc/{pid}/cmdline", "rb").read()
+    except OSError:
+        return b""
+
+
+def is_game(c: dict) -> bool:
+    """A game window: a Steam game, or one Caelestia (or user/apps.lua) tags "game" (Lutris's Wine games, gamescope).
+    Not a store launcher's: under Proton its windows get the games' class (steam_app_default, steam_app_<id>) too"""
+    return (bool(game_id(c)) or any(t in ("game", "game*") for t in c.get("tags", []))) \
+        and not LAUNCHERS.search(cmdline(c.get("pid", -1)))
+
+
+def game_icon(gid: str) -> None:
+    """A Steam game with no icon of its own (Steam makes it only with the game's shortcut: none on a new system): its
+    small icon from Steam's library cache, as steam_icon_<id> (what the dock and the switcher look for)"""
+    icons = os.path.expanduser("~/.local/share/icons/hicolor")
+    if not gid.isdigit() or any(os.path.exists(f"{icons}/{d}/apps/steam_icon_{gid}.png") for d in
+                                (os.listdir(icons) if os.path.isdir(icons) else [])):
+        return
+    cache = os.path.expanduser(f"~/.local/share/Steam/appcache/librarycache/{gid}")
+    # the icon is the one named by its hash (the others: header.jpg, library_*.jpg)
+    src = [f for f in (os.listdir(cache) if os.path.isdir(cache) else []) if re.fullmatch(r"[0-9a-f]{40}\.jpg", f)]
+    if not src:
+        return
+    import gi
+    gi.require_version("GdkPixbuf", "2.0")
+    from gi.repository import GdkPixbuf
+    os.makedirs(f"{icons}/32x32/apps", exist_ok=True)
+    GdkPixbuf.Pixbuf.new_from_file(f"{cache}/{src[0]}").savev(f"{icons}/32x32/apps/steam_icon_{gid}.png", "png", [], [])
+    # an icon cache older than the new file would hide it
+    if os.path.exists(f"{icons}/icon-theme.cache"):
+        subprocess.run(["gtk-update-icon-cache", "-q", "-f", "-t", icons], check=False)
+
+
+def remember_games(clients: list) -> None:
+    present = {c["address"] for c in clients}
+    for a in [a for a in list(games_open) if a not in present]:  # (a copy: the main thread pops a closed game meanwhile)
+        game_closed(a)  # closed while this wasn't listening (a reconnect)
+    for c in clients:
+        if c["address"] not in games_open and is_game(c):
+            games_open[c["address"]] = {"prefix": prefix_of(environ(c.get("pid", -1))), "steam": bool(game_id(c)),
+                                        "gid": game_id(c), "proton": c.get("class", "").startswith("steam_app_")}
+            try:
+                game_icon(game_id(c))
+            except Exception:  # (no icon: the dock shows Steam's; the game's audio and the rest go on)
+                traceback.print_exc()
+
+
+@logged
+def close_launcher(game: dict) -> None:
+    """A game closed a minute ago (time for one that restarts itself or goes from its own launcher to the game, and for
+    the launcher's cloud save upload) and no other game runs in its prefix: its store launcher closes, with what's left
+    of the prefix, unless something of the prefix has a window on a workspace (the launcher open, a mod manager...)"""
+    if not setting("games.close_clients"):
+        return
+    with update_lock:  # (steam_ids, read by both)
+        clients = json.loads(hypr("clients", "-j") or "[]")
+        if not game["prefix"] or any(is_game(c) and prefix_of(environ(c.get("pid", -1))) == game["prefix"] for c in clients):
+            return
+        procs = [(int(d), cmdline(int(d))) for d in os.listdir("/proc")
+                 if d.isdigit() and int(d) != os.getpid() and prefix_of(environ(int(d))) == game["prefix"]]
+        # (minimised counts too for anything but the launcher: a mod manager waiting in the dock)
+        shown = {c.get("pid") for c in clients
+                 if c["workspace"].get("id", 0) > 0 or not LAUNCHERS.search(cmdline(c.get("pid", -1)))}
+        if any(LAUNCHERS.search(cmd) for _, cmd in procs) and not any(pid in shown for pid, _ in procs):
+            for pid, _ in procs:  # the launcher and what's left of the prefix (its helpers, Wine's services)
+                try:
+                    os.kill(pid, signal.SIGTERM)
+                except OSError:
+                    pass
+
+
+def steam_game_running() -> bool:
+    """A game Steam runs, window or not (still loading, compiling shaders): Steam starts each under reaper SteamLaunch"""
+    return any(b"SteamLaunch" in cmdline(int(d)) for d in os.listdir("/proc") if d.isdigit())
+
+
+def steam_running() -> bool:
+    return subprocess.run(["pgrep", "-u", str(os.getuid()), "-x", "steam"], stdout=subprocess.DEVNULL).returncode == 0
+
+
+@logged
+def close_steam(game: dict) -> None:
+    """15 s after a Steam game closed: Steam, however it was started, if it's only in its tray (its window isn't open)
+    and no Steam game is running or starting"""
+    if not setting("games.close_clients"):
+        return
+    with update_lock:
+        # Running (steam -shutdown with no Steam would start it); another window of the game may have closed it already
+        if not steam_running():
+            return
+        clients = json.loads(hypr("clients", "-j") or "[]")
+        if any(game_id(c) for c in clients) or any(
+                c.get("class") == "steam" and (c["workspace"].get("id", 0) > 0
+                                           or c["workspace"].get("name", "").startswith("special:minimised-"))
+                and not any(t.startswith("xwl_popup") for t in c.get("tags", [])) for c in clients):
+            return
+        if steam_game_running():
+            return
+        # (the system's Steam, else Flathub's: the same process name, but no steam command)
+        steam = ["steam"] if shutil.which("steam") else ["flatpak", "run", "com.valvesoftware.Steam"]
+        subprocess.Popen([*steam, "-shutdown"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         start_new_session=True)
+
+
+def descendants(root: int) -> list[int]:
+    children: dict[int, list[int]] = {}
+    for d in filter(str.isdigit, os.listdir("/proc")):
+        try:
+            ppid = int(open(f"/proc/{d}/stat").read().rsplit(")", 1)[1].split()[1])
+        except (OSError, IndexError, ValueError):
+            continue
+        children.setdefault(ppid, []).append(int(d))
+    out, todo = [], [root]
+    while todo:
+        for c in children.get(todo.pop(), []):
+            out.append(c)
+            todo.append(c)
+    return out
+
+
+def own_app(pid: int, windows: dict) -> bool:
+    """The process, or the nearest of its parents with a window (a browser's sound comes from a helper of it), is an app
+    of its own: a window that isn't a game's. Only parents with the same game id: not Steam's own window above the game.
+    windows: each window's process -> its game id"""
+    gid = steam_id(pid)
+    for _ in range(32):
+        if pid in windows:
+            return not windows[pid]
+        try:
+            pid = int(open(f"/proc/{pid}/stat").read().rsplit(")", 1)[1].split()[1])
+        except (OSError, IndexError, ValueError):
+            return False
+        if pid <= 1 or steam_id(pid) != gid:
+            return False
+    return False
+
+
+LEFTOVER_WAIT = 120  # seconds after a game's last window closed: time for it to save, and for a slow launcher->game
+last_closed: dict[str, float] = {}  # game id -> when its last window closed
+BUSY_SAMPLE = 5  # seconds what's left is watched for at each look
+BUSY_CPU = 0.05  # of one core over that time: more is CPU used (working, or spinning hung)
+BUSY_IO = 1 << 20  # bytes read from or written to disk over that time (a save, an update): more is still working.
+# Disk only: pipes and sockets (rchar/wchar) also count a process hung spinning on wineserver, and the network has no
+# count per process
+HUNG_LOOKS = 5  # looks in a row (LEFTOVER_WAIT apart: ~10 min) with CPU used but nothing read or written: hung, closed
+leftover_games: dict[str, dict] = {}  # game id -> the run end_leftovers looks at (its last window's): one look at a time
+cpu_only: dict[str, int] = {}  # game id -> looks in a row its leftovers used CPU with no I/O
+
+
+def activity(pids: list[int]) -> tuple[float, int]:
+    """CPU seconds and bytes read from and written to disk so far by these processes (one gone or unreadable counts 0)"""
+    tick = os.sysconf("SC_CLK_TCK")
+    cpu, io = 0.0, 0
+    for p in pids:
+        try:
+            f = open(f"/proc/{p}/stat").read().rsplit(")", 1)[1].split()
+            cpu += (int(f[11]) + int(f[12])) / tick  # utime, stime
+            io += sum(int(line.split()[1]) for line in open(f"/proc/{p}/io")
+                      if line.startswith(("read_bytes", "write_bytes")))
+        except (OSError, IndexError, ValueError):
+            pass
+    return cpu, io
+
+
+def doing(pids: list[int]) -> str:
+    """What they do over BUSY_SAMPLE seconds: "io" (reading or writing the disk: still working), "cpu" (CPU alone:
+    working, or a thread spinning hung) or "" (idle: stuck)"""
+    cpu, io = activity(pids)
+    time.sleep(BUSY_SAMPLE)
+    cpu2, io2 = activity(pids)
+    return "io" if io2 - io > BUSY_IO else "cpu" if cpu2 - cpu > BUSY_CPU * BUSY_SAMPLE else ""
+
+
+def reapers_of(gid: str) -> list[int]:
+    mark = f"SteamLaunch AppId={gid} ".encode()
+    return [int(d) for d in os.listdir("/proc") if d.isdigit() and mark in cmdline(int(d)).replace(b"\0", b" ")]
+
+
+@logged
+def end_leftovers(game: dict) -> None:
+    """Two minutes after a Proton game's last window closed, with no window of it left: what still runs of that run of
+    it (a game that doesn't exit, its crash reporter) is closed, so Steam doesn't count it as running; then Steam's turn
+    again. Only the Steam runs there were when it closed (a copy started again since isn't touched), and not when a
+    store launcher runs in it (close_launcher's, after its cloud save). Nor while it's still working with no window (a
+    long save or update, playing on from its tray: reading or writing): looked at again two minutes later, until it's
+    idle (stuck) or gone. CPU used with nothing read or written HUNG_LOOKS looks in a row: a thread spinning hung,
+    closed. One look per game at a time (game_closed starts it once), on its last window's run"""
+    gid = game["gid"]
+    game = leftover_games.get(gid, game)
+    again = None
+    try:
+        again = _end_leftovers(game)
+    finally:
+        if again is None:
+            leftover_games.pop(gid, None)
+            cpu_only.pop(gid, None)
+        else:
+            later(again, end_leftovers, game)
+
+
+def _end_leftovers(game: dict) -> float | None:
+    """end_leftovers' look: in how many seconds to look again (None: done)"""
+    gid = game["gid"]
+    if not setting("games.close_clients"):
+        return None
+    wait = LEFTOVER_WAIT - (time.monotonic() - last_closed.get(gid, 0))
+    if wait > 1:
+        return wait  # another of its windows closed later: its two minutes
+    with update_lock:
+        clients = json.loads(hypr("clients", "-j") or "[]")
+        if any(game_id(c) == gid for c in clients):
+            return None
+        mark = f"SteamLaunch AppId={gid} ".encode()
+        reapers = [r for r in game["reapers"] if mark in cmdline(r).replace(b"\0", b" ")]  # still those (pids reused)
+        pids = [p for r in reapers for p in descendants(r)]
+        shown = {c.get("pid") for c in clients}
+        # (nothing left to close: still Steam's turn, its 15 s look may have come while the run was ending)
+        if any(p in shown for p in pids) or any(LAUNCHERS.search(cmdline(p)) for p in pids):
+            return None
+    # (outside the lock: a process slow to die, or the look at what it's doing, doesn't hold up the rest)
+    what = doing(pids) if pids else ""
+    if what == "io":
+        cpu_only[gid] = 0
+    elif what == "cpu":
+        cpu_only[gid] = cpu_only.get(gid, 0) + 1
+    if what == "io" or what == "cpu" and cpu_only[gid] < HUNG_LOOKS:
+        print(f"game {gid}: still working with no window, looked at again in {LEFTOVER_WAIT} s", flush=True)
+        return LEFTOVER_WAIT
+    if what == "cpu":
+        print(f"game {gid}: CPU with nothing read or written for {HUNG_LOOKS} looks: hung, closed", flush=True)
+    for sig in (signal.SIGTERM, signal.SIGKILL):
+        for pid in pids:
+            try:
+                os.kill(pid, sig)
+            except OSError:
+                pass
+        for _ in range(100):
+            if not any(os.path.exists(f"/proc/{p}") for p in pids):
+                break
+            time.sleep(0.1)
+        else:
+            continue
+        break
+    later(15, close_steam, game)
+    return None
+
+
+def later(delay: float, fn, game: dict) -> None:
+    t = threading.Timer(delay, fn, (game,))
+    t.daemon = True
+    t.start()
+
+
+def game_closed(address: str) -> None:
+    game = games_open.pop(address, None)
+    if game and setting("games.close_clients"):
+        if game["gid"]:
+            last_closed[game["gid"]] = time.monotonic()
+            game["reapers"] = reapers_of(game["gid"])  # this run's, not one started after
+        for delay, fn, wanted in ((60, close_launcher, game["prefix"]), (15, close_steam, game["steam"])):
+            if wanted:
+                later(delay, fn, game)
+        # (one look at its leftovers at a time: a game closing several windows started one each, all looking on)
+        if game["gid"] and game["proton"]:
+            first = game["gid"] not in leftover_games
+            leftover_games[game["gid"]] = game
+            if first:
+                later(LEFTOVER_WAIT, end_leftovers, game)
+
+
+@logged
+def update() -> bool:
+    """Mutes the streams of games that aren't focused, unmutes the focused one's. True if a game is running."""
+    with update_lock:  # from Hyprland's events and from new sound streams (watch_audio)
+        return _update()
+
+
+def _update() -> bool:
+    try:
+        clients = json.loads(hypr("clients", "-j") or "[]")
+        active = json.loads(hypr("activewindow", "-j") or "{}")
+    except json.JSONDecodeError:
+        return False
+    games = {game_id(c) for c in clients} - {""}
+    remember_games(clients)
+    if games and setting("games.free_workspace"):
+        place_games(clients, active.get("address", ""))
+    placed.intersection_update(c["address"] for c in clients)
+    alive = {c["pid"] for c in clients}
+    for pid in [p for p in steam_ids if p not in alive and not os.path.exists(f"/proc/{p}")]:
+        del steam_ids[pid]
+    if not games and not muted:
+        return False
+    focused = game_id(active) if active.get("address") else ""
+    try:
+        streams = json.loads(pactl("sink-inputs"))
+        # Proton (Wine) streams carry no process id: it's on their client
+        client_props = {str(c["index"]): c["properties"] for c in json.loads(pactl("clients"))}
+    except json.JSONDecodeError:
+        return bool(games)
+    windows = {c["pid"]: game_id(c) for c in clients}
+    present = set()
+    mine = []  # (stream, its game's id): the games' streams, decided once all are known
+    for s in streams:
+        idx = s["index"]
+        present.add(idx)
+        cp = client_props.get(str(s["client"]), {})
+        try:
+            pid = int(s["properties"].get("application.process.id") or cp.get("application.process.id")
+                      or cp.get("pipewire.sec.pid") or -1)
+        except ValueError:
+            continue
+        # A Flatpak's (a Flathub game's) reports its sandbox's pid: the host's looked up, in that sandbox only, once per
+        # stream. Only for those: a host app's pid can be some sandbox's too
+        props = {**cp, **s["properties"]}
+        if "flatpak" in (props.get("pipewire.access"), props.get("pipewire.client.access")):  # (native PipeWire: the first only)
+            if idx not in hosts:
+                hosts[idx] = host_pid(pid, sandbox(props)) if pid > 0 else -1
+            pid = hosts[idx]
+        gid = steam_id(pid) if pid > 0 else ""
+        # An app the game started with a window of its own that's no game (a browser opening a link): it inherits the
+        # game's id, but its sound is its own
+        if not gid or own_app(pid, windows):
+            continue
+        if idx not in seen:
+            seen.add(idx)
+            if s["mute"]:
+                muted.add(idx)  # WirePlumber's remembered mute: this one's own, or the game would stay silent for good
+        mine.append((s, gid))
+    # A game's streams share WirePlumber's remembered mute (by the app's name): muting one can mute its others behind
+    # this script's back. A game this muted gets every muted stream of its back, or part of its sound stayed off
+    ours = {gid for s, gid in mine if s["index"] in muted}
+    for s, gid in mine:
+        idx = s["index"]
+        # Only while a window still carries that game's id: a launcher the game started (EA app, Epic) inherits it and
+        # would stay muted after the game is gone, and WirePlumber would remember that mute for its next start
+        want = gid != focused and gid in games and setting("games.audio_focus")
+        if want and not s["mute"]:
+            subprocess.run(["pactl", "set-sink-input-mute", str(idx), "1"])
+            muted.add(idx)
+        elif not want and (idx in muted or (s["mute"] and gid in ours)):
+            if s["mute"]:
+                subprocess.run(["pactl", "set-sink-input-mute", str(idx), "0"])
+            muted.discard(idx)
+    muted.intersection_update(present)
+    seen.intersection_update(present)
+    for idx in set(hosts) - present:
+        del hosts[idx]
+    return bool(games)
+
+
+def unmute_all(*_) -> None:
+    for idx in list(muted):  # the audio thread may be changing it
+        subprocess.run(["pactl", "set-sink-input-mute", str(idx), "0"])
+    sys.exit(0)
+
+
+@logged
+def alert(address: str, just_left: bool = False) -> None:
+    """Notification for a game window that flagged itself urgent; clicking it focuses the game. just_left: you left it
+    within 2 s of it asking while you were in it (the main loop saw you go)."""
+    if not setting("games.attention"):
+        return
+    try:
+        client = next((c for c in json.loads(hypr("clients", "-j") or "[]") if c["address"] == "0x" + address), None)
+    except json.JSONDecodeError:
+        return
+    if not client:
+        return
+    with update_lock:  # steam_ids, which _update prunes on another thread
+        gid = game_id(client)
+    if not gid:
+        return
+    if not just_left and time.monotonic() - left.get(address, 0) < 1:
+        print(f"attention {address}: skipped, asked as it lost focus", flush=True)
+        return  # Overwatch asks for attention the moment it loses focus: that's not news
+    try:
+        focused = json.loads(hypr("activewindow", "-j") or "{}").get("address") == client["address"]
+    except json.JSONDecodeError:
+        focused = False
+    if focused:
+        # You're in the game: nothing to tell you, unless you leave it in the next 2 s (the match popped just as you
+        # Alt+Tabbed away, or with the switcher still open): the main loop alerts then
+        waiting[address] = time.monotonic() + 2
+        print(f"attention {address}: you're in the game, told only if you leave it within 2 s", flush=True)
+        return
+    if address in alerts:  # games flash again and again: one notification until it's dealt with
+        print(f"attention {address}: its notification is still up", flush=True)
+        return
+    print(f"attention {address}: notified", flush=True)
+    alerts[address] = 0
+    name = client.get("title") or client.get("class") or "Your game"
+    # Steam installs an icon per game with a desktop shortcut; others get Steam's
+    icon = f"steam_icon_{gid}"
+    if not any(os.path.exists(f"{d}/icons/hicolor/32x32/apps/{icon}.png")
+               for d in (os.path.expanduser("~/.local/share"), "/usr/share")):
+        icon = "steam"
+
+    def show() -> None:
+        # Normal urgency: Caelestia draws critical ones on its red error colour.
+        # A day's timeout keeps it up until you clear it or go to the game (clear_alert closes it then). "--": a title
+        # starting with "-" isn't taken for an option (notify-send refused it)
+        p = subprocess.Popen([os.path.expanduser("~/.local/bin/notify-wait"), "-a", name, "-i", icon, "-t", "86400000", "-p",
+                              "-A", "default=Go to game", "--", name, "This game requires your attention"],
+                             stdout=subprocess.PIPE, text=True)
+        try:
+            nid = int(p.stdout.readline())
+        except ValueError:
+            nid = 0
+        if alerts.get(address) == -1:  # cleared meanwhile (you went straight back to the game): closed now its id is known
+            close_notification(nid)
+        else:
+            alerts[address] = nid
+        clicked = p.stdout.read().strip() == "default"
+        p.wait()
+        alerts.pop(address, None)
+        if clicked:  # dots.focus_window (user/windows.lua): also to the front if it floats, and back if minimised
+            hypr("eval", f'dots.focus_window("0x{address}")')
+
+    threading.Thread(target=show, daemon=True).start()
+
+
+@logged
+def close_notification(nid: int) -> None:
+    if nid:
+        subprocess.run(["gdbus", "call", "--session", "--dest", "org.freedesktop.Notifications",
+                        "--object-path", "/org/freedesktop/Notifications",
+                        "--method", "org.freedesktop.Notifications.CloseNotification", str(nid)],
+                       capture_output=True)
+
+
+def clear_alert(address: str) -> None:
+    """Closes a game's notification: you went to the game, or it closed."""
+    nid = alerts.get(address)
+    if nid:
+        close_notification(nid)
+    elif nid == 0:
+        alerts[address] = -1  # its id isn't known yet (notify-send starting): closed as soon as it is
+
+
+def watch_audio() -> None:
+    """A game can start a new sound stream while it's in the background: PipeWire says so as it happens."""
+    while True:
+        try:
+            with subprocess.Popen(["pactl", "subscribe"], stdout=subprocess.PIPE, text=True) as p:
+                for line in p.stdout:
+                    if "'new' on sink-input" in line:
+                        update()
+        except OSError:
+            return  # no pactl: no sound to follow
+        time.sleep(5)  # PipeWire restarted
+
+
+def watch_x() -> None:
+    """Proton games (X11 windows) flag themselves with a _NET_WM_STATE_DEMANDS_ATTENTION request, which Hyprland
+    doesn't act on. Such requests are sent to the root window for any client to see, so this catches them too."""
+    try:
+        from Xlib import X, display
+    except ImportError:
+        return  # no python-xlib: only Hyprland's urgent event alerts
+    while True:
+        try:
+            d = display.Display()
+            root = d.screen().root
+            root.change_attributes(event_mask=X.SubstructureNotifyMask)
+            wm_state = d.intern_atom("_NET_WM_STATE")
+            attention = d.intern_atom("_NET_WM_STATE_DEMANDS_ATTENTION")
+            wm_pid = d.intern_atom("_NET_WM_PID")
+            while True:
+                ev = d.next_event()
+                if ev.type != X.ClientMessage or ev.client_type != wm_state:
+                    continue
+                action, first, second = ev.data[1][:3]
+                if action == 0 or attention not in (first, second):  # action 0: remove the flag
+                    continue
+                try:
+                    prop = ev.window.get_full_property(wm_pid, X.AnyPropertyType)
+                    pid = prop.value[0] if prop else -1
+                    cls = (ev.window.get_wm_class() or ("", ""))[1]
+                    clients = json.loads(hypr("clients", "-j") or "[]")
+                except Exception:  # the window went away
+                    continue
+                # Its Hyprland window: same process, else same class (steam_app_<id>)
+                c = next((c for c in clients if c.get("xwayland") and c.get("pid") == pid), None) \
+                    or next((c for c in clients if c.get("xwayland") and c.get("class") == cls), None)
+                if c:
+                    alert(c["address"][2:])
+        except Exception:
+            pass  # XWayland not up yet, or restarted
+        time.sleep(5)
+
+
+def main() -> None:
+    signal.signal(signal.SIGTERM, unmute_all)
+    signal.signal(signal.SIGINT, unmute_all)
+    threading.Thread(target=watch_x, daemon=True).start()
+    threading.Thread(target=watch_audio, daemon=True).start()
+    sock_path = f"{os.environ['XDG_RUNTIME_DIR']}/hypr/{os.environ['HYPRLAND_INSTANCE_SIGNATURE']}/.socket2.sock"
+    # Old and v2 names both, where there are two (Hyprland drops old ones first); one update per batch of events
+    events = {"activewindowv2", "workspace", "workspacev2", "focusedmon", "focusedmonv2", "activespecial",
+              "activespecialv2", "openwindow", "closewindow", "movewindow", "movewindowv2", "fullscreen", "monitoradded",
+              "monitoraddedv2", "configreloaded", "changefloatingmode"}  # the last: the floating/tiling switch
+    while True:
+        try:
+            with socket.socket(socket.AF_UNIX) as s:
+                s.connect(sock_path)
+                update()
+                active = ""
+                buf = b""
+                due = 0.0  # when an event that needs an update came in (0: none): done once the burst is over
+                while True:
+                    # Hyprland sends one change (an Alt+Tab) as several bursts: wait 50 ms for the rest, then update once
+                    # (at most 0.25 s after the first, however many events keep coming)
+                    left_s = due + 0.25 - time.monotonic()
+                    if due and left_s <= 0:
+                        due = 0.0
+                        update()
+                        continue
+                    s.settimeout(min(0.05, left_s) if due else None)
+                    try:
+                        data = s.recv(4096)
+                    except TimeoutError:
+                        due = 0.0
+                        update()
+                        continue
+                    if not data:
+                        break
+                    buf += data
+                    *lines, buf = buf.split(b"\n")
+                    for line in lines:
+                        name, _, arg = line.decode(errors="replace").partition(">>")
+                        if name == "urgent":
+                            alert(arg)
+                        elif name in ("activewindowv2", "closewindow"):
+                            clear_alert(arg)
+                        if name == "closewindow":
+                            left.pop(arg, None)
+                            waiting.pop(arg, None)
+                            game_closed("0x" + arg)
+                        if name == "configreloaded":
+                            load_settings()  # a change in the Settings app reloads the config
+                        if name == "activewindowv2":
+                            if arg == active:
+                                continue  # the same window again (only its title changed: a browser tab)
+                            if time.monotonic() < waiting.pop(active, 0):
+                                alert(active, just_left=True)
+                            left[active] = time.monotonic()
+                            active = arg
+                        if not due and name in events:
+                            due = time.monotonic()
+        except OSError:
+            pass
+        if not os.path.exists(sock_path):
+            return  # Hyprland is gone
+        time.sleep(2)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Open Proton VPN. It starts minimised to the tray, and launching it again doesn't bring the
+# window back, so if it's already running, press "Show" in its tray menu instead.
+item=$(busctl --user list --no-legend 2>/dev/null | awk '/^org\.kde\.StatusNotifierItem-proton\.vpn\.app\.gtk-/ {print $1; exit}')
+if [[ -n $item ]]; then
+    # Find the "Show" entry in the tray menu and click it
+    id=$(busctl --user call "$item" /MenuBar com.canonical.dbusmenu GetLayout iias 0 -- -1 0 2>/dev/null |
+        grep -oE '\(ia\{sv\}a\(ia\{sv\}av\)\) [0-9]+ [0-9]+ "type" s "standard" "label" s "Show"' | awk '{print $2}')
+    if [[ -n $id ]]; then
+        busctl --user call "$item" /MenuBar com.canonical.dbusmenu Event isvu "$id" clicked s "" 0
+        exit
+    fi
+fi
+exec protonvpn-app "$@"

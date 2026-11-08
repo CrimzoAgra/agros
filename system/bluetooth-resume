@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# systemd sleep hook (installed to /usr/lib/systemd/system-sleep/ by system/bluetooth-setup.sh).
+# Waking from sleep resets the USB controllers: the Bluetooth adapter comes back as a new device, switched off.
+# Before sleep: note whether Bluetooth was on. After waking: if it was, switch it back on once the adapter is back.
+state=/run/bluetooth-was-powered
+# (the kernel's adapters: $BT_SYSFS elsewhere, for the tests)
+sysfs=${BT_SYSFS:-/sys/class/bluetooth}
+# bluetoothctl with a time limit: with bluetoothd stopped or stuck it waits for it forever, and sleep waited on this
+bt() { timeout 3 bluetoothctl "$@"; }
+# adapters: each adapter the kernel has, by its entry's inode: a reset makes the adapter anew, and its entry with it
+# (a new inode, even under the same name)
+adapters() { stat -L -c '%n %i' "$sysfs"/hci* 2>/dev/null; }
+case $1 in
+pre)
+    # (Bluetooth's service not running: nothing to ask, nothing to switch back on). Noted with the adapters as they
+    # are, to tell after waking whether one was reset
+    if systemctl is-active -q bluetooth.service && bt show 2>/dev/null | grep -q "Powered: yes"; then
+        { adapters; echo on; } >"$state"
+    else
+        rm -f "$state"
+    fi
+    ;;
+post)
+    [[ -e $state ]] || exit 0
+    was=$(grep -v '^on$' "$state")
+    rm -f "$state"
+    # Its links kept through the sleep (an adapter not reset on waking): left alone, not dropped by switching it off and
+    # on. Told by the kernel's adapter being the same one as before (not made anew), on, with devices still connected:
+    # bluetoothd's own answer alone ("Powered: yes") can be BlueZ's AutoEnable having switched the reset one on, or its
+    # view from before the reset. Asked after a second, for a reset still under way to show. Anything else: as before
+    sleep 1
+    if [[ -n $was && $(adapters) == "$was" ]] && bt show 2>/dev/null | grep -q "Powered: yes" &&
+        bt devices Connected 2>/dev/null | grep -q '^Device '; then
+        logger -t bluetooth-resume "Bluetooth kept its connections through the sleep: left as it is"
+        exit 0
+    fi
+    # The adapter reset on waking is listed again before that's finished: a "power on" sent meanwhile is lost
+    # and it comes up off. So: ask again until it says it's on (up to 15 s). Not in the background: systemd ends the
+    # sleep service's leftover processes when this returns. The desktop is already awake meanwhile
+    # (and given up on after those 15 s even when bluetoothctl's answers take their whole time limit)
+    for try in $(seq 30); do
+        ((SECONDS < 15)) || break
+        rfkill unblock bluetooth
+        bt power on >/dev/null 2>&1
+        if bt show 2>/dev/null | grep -q "Powered: yes"; then
+            # Caelestia's bar misses the reset adapter coming back and keeps showing it off: switched off and on
+            # once, which it does see. Before any device has reconnected. shortcut: a workaround for the shell
+            # (Quickshell's Bluetooth service); drop it once the bar shows the right state after waking by itself
+            sleep 1
+            bt power off >/dev/null 2>&1
+            bt power on >/dev/null 2>&1
+            logger -t bluetooth-resume "Bluetooth back on after waking (try $try)"
+            exit 0
+        fi
+        sleep 0.5
+    done
+    logger -t bluetooth-resume "Bluetooth still off 15 s after waking"
+    ;;
+esac
+exit 0

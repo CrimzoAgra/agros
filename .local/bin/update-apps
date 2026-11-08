@@ -1,0 +1,192 @@
+#!/usr/bin/env bash
+# Updates everything now, in a terminal you can watch: the system and AUR apps (Equibop, Boxflat...), Flatpaks
+# (Spotify, Nuvio, ArtCraft) and any AppImages you've installed. The same as the boot-time auto-update.
+#   update-apps           update everything (the Updates app runs this and shows its output)
+#   update-apps --list    what's waiting, one per line: kind<TAB>name<TAB>old<TAB>new
+#                         (kind: system, aur, flatpak, appimage or capri; offline when the package servers can't be reached)
+#   update-apps --check   if updates are waiting, a notification whose "Update now" opens the Updates app and starts
+#                         (update-check.timer); the same updates aren't announced twice
+#   update-apps --check-now   check and always say the result in a notification; clicking it opens the Updates app.
+#                         Returns as soon as the check is done (the Super menu's button spins until then)
+#   update-apps --qt-mark / --qt-rebuild   for setup, around its own pacman -Syu: the Qt Quickshell and Caelestia
+#                         were built for written down (when it isn't yet), then they're rebuilt if Qt changed since
+#   update-apps --qt-stale   whether Qt changed since they were built (exit 0: it did; dotfiles-check's)
+set -uo pipefail
+capri_current="${XDG_DATA_HOME:-$HOME/.local/share}/capri/current"
+
+# Repo packages (checkupdates: a copy of the database, no root), AUR, Flatpaks, AppImages
+# (checkupdates fails with 1, "none" is 2: offline, an "offline" line instead of an empty list that reads as up to date)
+list_updates() {
+    local repo rc=0
+    repo=$(checkupdates 2>/dev/null) || rc=$?
+    if ((rc == 1)); then
+        printf 'offline\t\t\t\n'
+        return
+    fi
+    [[ -n $repo ]] && while read -r name old _ new; do
+        printf 'system\t%s\t%s\t%s\n' "$name" "$old" "$new"
+    done <<<"$repo"
+    # (in English: paru translates "[ignored]", and under another language the ignored ones were listed as waiting)
+    LC_ALL=C paru -Qua 2>/dev/null | grep -v '\[ignored\]' | while read -r name old _ new _; do
+        printf 'aur\t%s\t%s\t%s\n' "$name" "$old" "$new"
+    done
+    flatpak remote-ls --updates --columns=application,version 2>/dev/null | while IFS=$'\t' read -r name new; do
+        old=$(LC_ALL=C flatpak info "$name" 2>/dev/null | sed -n 's/^ *Version: //p' | head -1)
+        printf 'flatpak\t%s\t%s\t%s\n' "$name" "$old" "$new"
+    done
+    # Flatpaks installed from a downloaded file (no repo): their GitHub releases
+    "$HOME/.local/bin/flatpak-bundle-update" --check 2>/dev/null |
+        sed -n 's/^\(.*\): update available (\(.*\) -> \(.*\))$/flatpak\t\1\t\2\t\3/p'
+    # Capri, when she's installed (capri-update's build): her fork or the original's release moved on
+    [[ -e $capri_current ]] && "$HOME/.local/bin/capri-update" --check 2>/dev/null |
+        sed -n 's/^capri: update available (\(.*\))$/capri\tcapri\t\t\1/p'
+    "$HOME/.local/bin/appimage-update" --check 2>/dev/null | sed -n 's/^\(.*\): update available (\(.*\))$/appimage\t\1\t\t\2/p'
+}
+
+# Your password once, from a dialog when there's no terminal (the Updates app); sudo keeps it for the whole run
+# AUR build scripts shown for review when run in a terminal; the Updates app has no input to page through them with
+# (its log is all it shows), so from there AUR updates are built WITHOUT that review (--skipreview: paru would wait on a
+# pager no one sees). Which ones it builds is said first, in that log
+paru=(paru --sudoloop)
+[[ -t 0 ]] || { export SUDO_ASKPASS=$HOME/.local/bin/askpass; paru+=(--sudoflags -A --skipreview); }
+
+# Quickshell, Caelestia's own library and qtengine use Qt's private parts, which hold only for the exact Qt version
+# they were built with: a new Qt (qt6-base or qt6-declarative; a package rebuild of the same version doesn't count) can
+# stop the shells (Caelestia, the login screen) from starting. The Qt they were built for is written down
+# (~/.local/state/quickshell-qt; at the first run, the one now, as it works), and they're rebuilt when it changes.
+# setup does the same around its own pacman -Syu (--qt-mark before, --qt-rebuild after)
+# (each one's version without its package release, "none" when it isn't installed: a fresh Arch, an edition without
+# qt6-declarative. One missing failed pacman -Q under pipefail, and setup with it)
+qt_now() {
+    local p v
+    for p in qt6-base qt6-declarative; do
+        v=$(pacman -Q "$p" 2>/dev/null | awk '{ sub(/-[^-]*$/, "", $2); print $2 }')
+        printf '%s %s ' "$p" "${v:-none}"
+    done
+}
+qt_stamp="${XDG_STATE_HOME:-$HOME/.local/state}/quickshell-qt"
+# (its folder made first: not there, the stamp was never written and every run rebuilt them). Written again while it
+# names a Qt package that wasn't installed then ("none": a plain Arch before setup's packages): what's built since was
+# built for the Qt there is now, not one to rebuild for (setup marks again once Quickshell and Caelestia are in)
+qt_mark() { mkdir -p "${qt_stamp%/*}" && { [[ -s $qt_stamp && $(cat "$qt_stamp") != *" none "* ]] || qt_now >"$qt_stamp"; }; }
+qt_rebuild() {
+    [[ $(cat "$qt_stamp" 2>/dev/null) != "$(qt_now)" ]] || return 0
+    # Only those installed (none yet, a first setup: what's built from now on is built for this Qt)
+    local p pkgs=()
+    for p in quickshell-git caelestia-shell qtengine; do
+        pacman -Q "$p" >/dev/null 2>&1 || continue
+        if [[ $p == qtengine ]]; then pkgs+=("$p"); else pkgs+=("aur/$p"); fi
+    done
+    if ((${#pkgs[@]})); then
+        command -v paru >/dev/null || { echo "!! Qt was updated, but there's no paru to rebuild Quickshell and Caelestia with"; return 1; }
+        echo "Qt was updated: rebuilding Quickshell, Caelestia and qtengine for it"
+        "${paru[@]}" -S --rebuild --noconfirm "${pkgs[@]}" || return 1
+    fi
+    qt_now >"$qt_stamp"
+}
+case ${1:-} in
+    # (never failing setup: no stamp written, the next run writes it)
+    --qt-mark) qt_mark || echo "!! The Qt Quickshell was built for couldn't be written down ($qt_stamp)"; exit 0 ;;
+    # dotfiles-check's: Qt changed since Quickshell and Caelestia were built (exit 0), else 1
+    --qt-stale) [[ -s $qt_stamp && $(cat "$qt_stamp") != "$(qt_now)" ]]; exit ;;
+    --qt-rebuild) qt_rebuild; exit ;;
+esac
+
+if [[ ${1:-} == --list ]]; then
+    list_updates
+    exit 0
+fi
+
+# summary <list>: sets title ("3 updates available") and names (a few of them, so it's clear what's waiting)
+summary() {
+    local n
+    n=$(wc -l <<<"$1")
+    title="$n update$( ((n > 1)) && echo s) available"
+    names=$(head -4 <<<"$1" | sed 's/^com\.spotify\.Client$/Spotify/; s|^.*/||' | paste -sd, | sed 's/,/, /g')
+    ((n > 4)) && names+=", ..."
+}
+
+if [[ ${1:-} == --check-now ]]; then
+    all=$(list_updates)
+    list=$(grep -v '^offline' <<<"$all" | cut -f2 | sed '/^$/d' | sort -u)
+    if grep -q '^offline' <<<"$all"; then
+        title="Couldn't check for updates"
+        names="No connection to the package servers"
+    elif [[ -n $list ]]; then
+        summary "$list"
+    else
+        title="Everything is up to date"
+        names="System, AUR apps, Flatpaks and AppImages"
+    fi
+    # The notification waits on its own, so this returns now (sh's own $1/$2, not this script's)
+    # shellcheck disable=SC2016
+    setsid sh -c 'a=$(timeout 1h "$HOME/.local/bin/notify-wait" -a Updates -i system-software-update -A "default=Open Updates" "$1" "$2")
+        [ "$a" = default ] && exec "$HOME/.local/bin/app-launch" "$HOME/.local/bin/updates"' sh "$title" "$names" >/dev/null 2>&1 &
+    exit 0
+fi
+
+if [[ ${1:-} == --check ]]; then
+    list=$(list_updates | grep -v '^offline' | cut -f2 | sort -u)
+    [[ -n $list ]] || exit 0
+    seen="${XDG_CACHE_HOME:-$HOME/.cache}/update-apps-notified"
+    [[ $list == "$(cat "$seen" 2>/dev/null)" ]] && exit 0
+    summary "$list"
+    # Noted as announced once the notification was there (not if Caelestia restarted under it: offered again next time).
+    # Until the next check at most: a notification no one clicks never says it's gone, and this check would wait (its
+    # unit "starting") through the ones after it, so updates that came since went unannounced
+    # (124: that time ran out, the notification there all along: not offered again for the same updates)
+    action=$(timeout 5h50m "$HOME/.local/bin/notify-wait" -a "Updates" -i system-software-update -A "default=Update now" "$title" "$names")
+    rc=$?
+    ((rc == 0 || rc == 124)) && printf '%s\n' "$list" >"$seen"
+    # In a unit of its own, as from the launcher: closing the window (this service ending) doesn't stop the update
+    [[ $action == default ]] && exec "$HOME/.local/bin/app-launch" env UPDATES_START=1 "$HOME/.local/bin/updates"
+    exit 0
+fi
+
+status=0 # 1 if any step failed (the Updates app says "Finished, with problems")
+echo "== System and AUR apps"
+# The boot's own download first (both fetching the same package into the cache at once would corrupt it)
+systemctl is-active -q auto-update 2>/dev/null && echo "Waiting for the update started at boot to finish downloading..."
+while systemctl is-active -q auto-update 2>/dev/null; do sleep 5; done
+qt_mark
+if [[ ! -t 0 ]]; then
+    # (paru -Qua: "<name> <old> -> <new>" each, exit 1 when none; failing (the AUR not reached), its error instead)
+    qua=$(LC_ALL=C paru -Qua 2>&1)
+    qua_rc=$?
+    aur=$(grep -F ' -> ' <<<"$qua" | grep -v '\[ignored\]' | awk '{print $1}' | paste -sd' ')
+    if ((qua_rc)) && [[ -n $qua ]] && grep -qvF ' -> ' <<<"$qua"; then
+        echo "The AUR apps about to be built, their build scripts not reviewed, couldn't be listed (paru -Qua: $(grep -vF ' -> ' <<<"$qua" | head -1))"
+    elif [[ -n $aur ]]; then
+        echo "AUR apps built now, their build scripts not reviewed (update-apps in a terminal shows them first): $aur"
+    fi
+fi
+# Power off and sleep held off while pacman installs (and the AUR apps build): killed by shutdown, pacman leaves its
+# lock behind, and every install after it fails on that. Held by a process of its own, ended after (or with this)
+inhibitor=
+if systemd-inhibit --what=sleep:shutdown --mode=block --who=Updates --why="Installing updates" true 2>/dev/null; then
+    systemd-inhibit --what=sleep:shutdown --mode=block --who=Updates --why="Installing system and AUR updates" \
+        tail --pid=$$ -f /dev/null </dev/null >/dev/null 2>&1 &
+    inhibitor=$!
+fi
+"${paru[@]}" -Syu --noconfirm || status=1
+qt_rebuild || status=1
+[[ -z $inhibitor ]] || kill "$inhibitor" 2>/dev/null
+echo
+echo "== Flatpaks"
+if command -v flatpak >/dev/null; then  # (none on this machine: nothing to update, not a problem)
+    flatpak update -y || status=1
+    "$HOME/.local/bin/flatpak-bundle-update" || status=1 # the ones installed from a downloaded file
+fi
+echo
+echo "== AppImages"
+"$HOME/.local/bin/appimage-update" || status=1
+if [[ -e $capri_current ]]; then
+    echo
+    echo "== Capri"
+    "$HOME/.local/bin/capri-update" || status=1
+fi
+rm -f "${XDG_CACHE_HOME:-$HOME/.cache}/update-apps-notified"
+echo
+# In a terminal: wait, so the output can be read (the Updates app shows it itself)
+[[ -t 0 ]] && read -rsn1 -p "Done. Press any key to close."
+exit $status

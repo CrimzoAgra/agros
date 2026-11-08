@@ -1,0 +1,129 @@
+#!/usr/bin/env python3
+"""Exports your LibreWolf bookmarks (toolbar, menu, other) to a bookmarks.html file (Firefox's format)
+that LibreWolf can import. Works while LibreWolf is open (it reads a copy of the database).
+
+  firefox-bookmarks-export [output]   default: <the dotfiles repo>/.local/share/firefox/bookmarks.html
+  firefox-bookmarks-export --profile  only print the LibreWolf profile's folder (setup and dotfiles-sync use it)
+
+setup.sh imports that file into LibreWolf on a new machine.
+"""
+import configparser
+import html
+import os
+import shutil
+import sqlite3
+import sys
+import tempfile
+import time
+
+HOME = os.path.expanduser("~")
+# The repo setup ran from (it records it, used while it's still a repo), unless DOTFILES_DIR says otherwise
+try:
+    REPO = open(f"{HOME}/.local/state/dotfiles-repo").read().strip()
+except OSError:
+    REPO = ""
+if not os.path.exists(f"{REPO}/.git"):  # (a file in a worktree)
+    REPO = f"{HOME}/Projects/dotfiles"
+REPO = os.environ.get("DOTFILES_DIR") or REPO
+OUT = sys.argv[1] if len(sys.argv) > 1 else f"{REPO}/.local/share/firefox/bookmarks.html"
+# Firefox's own default links, not worth keeping
+SKIP_FOLDERS = {"Mozilla Firefox"}
+
+
+def profile_dir() -> str:
+    for base in (f"{HOME}/.config/librewolf/librewolf", f"{HOME}/.librewolf"):
+        ini = configparser.ConfigParser()
+        if not ini.read(f"{base}/profiles.ini"):
+            continue
+        # The profile this LibreWolf install uses ([Install...] Default=), else the one marked Default=1
+        # (join: a profile kept elsewhere, IsRelative=0, is named by its full path)
+        for sec in ini.sections():
+            if sec.startswith("Install") and ini[sec].get("Default"):
+                return os.path.join(base, ini[sec]["Default"])
+        for sec in ini.sections():
+            if ini[sec].get("Default") == "1" and ini[sec].get("Path"):
+                return os.path.join(base, ini[sec]["Path"])
+    sys.exit("No LibreWolf profile found")
+
+
+def main() -> None:
+    prof = profile_dir()
+    if not os.path.exists(f"{prof}/places.sqlite"):
+        sys.exit(f"No bookmarks database in {prof}")
+    with tempfile.TemporaryDirectory() as tmp:
+        # The database and its WAL copied as one moment: LibreWolf writing either in between (a checkpoint) pairs an old
+        # one with a new one ("malformed", or recent bookmarks missing), so copied again until neither changed meanwhile
+        def stamp():
+            return [(os.stat(p).st_mtime_ns, os.stat(p).st_size) if os.path.exists(p) else None
+                    for p in (f"{prof}/places.sqlite", f"{prof}/places.sqlite-wal")]
+        for _ in range(10):
+            before = stamp()
+            for f in ("places.sqlite", "places.sqlite-wal"):
+                if os.path.exists(f"{tmp}/{f}"):
+                    os.remove(f"{tmp}/{f}")
+                if os.path.exists(f"{prof}/{f}"):
+                    shutil.copy(f"{prof}/{f}", f"{tmp}/{f}")
+            if stamp() == before:
+                break
+            time.sleep(0.2)
+        else:
+            sys.exit("LibreWolf kept writing its bookmarks database: not exported")
+        db = sqlite3.connect(f"{tmp}/places.sqlite")
+        rows = db.execute(
+            "SELECT b.id, b.parent, b.type, b.title, p.url, b.dateAdded, b.lastModified "
+            "FROM moz_bookmarks b LEFT JOIN moz_places p ON p.id = b.fk ORDER BY b.parent, b.position"
+        ).fetchall()
+        roots = dict(db.execute("SELECT guid, id FROM moz_bookmarks WHERE guid IN "
+                                "('menu________','toolbar_____','unfiled_____')").fetchall())
+        db.close()
+
+    children: dict[int, list] = {}
+    for r in rows:
+        children.setdefault(r[1], []).append(r)
+
+    def esc(s) -> str:
+        return html.escape(s or "", quote=True)
+
+    def write(parent: int, depth: int, out: list) -> None:
+        pad = "    " * depth
+        out.append(f"{pad}<DL><p>")
+        for _id, _p, kind, title, url, added, _modified in children.get(parent, []):
+            if kind == 1 and url:
+                out.append(f'{pad}    <DT><A HREF="{esc(url)}" ADD_DATE="{(added or 0) // 1000000}">{esc(title)}</A>')
+            elif kind == 2 and title not in SKIP_FOLDERS:
+                out.append(f'{pad}    <DT><H3 ADD_DATE="{(added or 0) // 1000000}">{esc(title)}</H3>')
+                write(_id, depth + 1, out)
+        out.append(f"{pad}</DL><p>")
+
+    out = ["<!DOCTYPE NETSCAPE-Bookmark-file-1>",
+           '<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=UTF-8">',
+           "<TITLE>Bookmarks</TITLE>", "<H1>Bookmarks Menu</H1>", ""]
+    # The menu's contents sit at the top level; toolbar and "other" are special folders
+    menu = []
+    write(roots["menu________"], 0, menu)
+    out += menu[:-1]
+    out.append('    <DT><H3 PERSONAL_TOOLBAR_FOLDER="true">Bookmarks Toolbar</H3>')
+    write(roots["toolbar_____"], 1, out)
+    if children.get(roots["unfiled_____"]):
+        out.append('    <DT><H3 UNFILED_BOOKMARKS_FOLDER="true">Other Bookmarks</H3>')
+        write(roots["unfiled_____"], 1, out)
+    out.append(menu[-1])
+
+    count = sum(line.lstrip().startswith("<DT><A ") for line in out)
+    # None: a new or empty profile, not a reason to replace the saved bookmarks
+    if not count:
+        sys.exit(f"No bookmarks in {prof}: {OUT} left as it is")
+    os.makedirs(os.path.dirname(OUT) or ".", exist_ok=True)
+    with open(OUT + ".tmp", "w", encoding="utf-8") as f:  # (as its META says, whatever the locale)
+        f.write("\n".join(out) + "\n")
+    os.replace(OUT + ".tmp", OUT)
+    print(f"Exported {count} bookmarks from {prof} to {OUT}")
+
+
+if __name__ == "__main__":
+    if OUT in ("-h", "--help"):
+        sys.exit(__doc__)
+    if OUT == "--profile":
+        print(profile_dir())
+    else:
+        main()

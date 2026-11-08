@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# notify-send -w (same arguments, -w implied) that gives up when the notification server restarts: Caelestia numbers
+# its notifications from 1 again then, and a click on a new one with this one's number would count as a click here
+# (update-apps, game-focus)
+notify-send -w "$@" &
+n=$!
+# Told by D-Bus the moment the notification server goes away (nothing runs meanwhile). Its output is kept away from
+# ours: the click's answer comes out the moment notify-send ends
+gdbus monitor --session --dest org.freedesktop.Notifications 2>/dev/null \
+    > >(grep -qm1 "does not have an owner" && kill "$n" 2>/dev/null >/dev/null 2>&1) &
+m=$!
+# Stopped itself: the notification's sender too, or it would keep waiting on a notification nothing answers for
+trap 'kill "$n" "$m" 2>/dev/null; exit 143' TERM INT HUP
+wait "$n"
+status=$?
+kill "$m" 2>/dev/null
+exit $status

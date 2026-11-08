@@ -1,0 +1,241 @@
+#!/usr/bin/env bash
+# Health check of the dotfiles' pieces that a Hyprland or Caelestia update can break. Hyprland runs it a little
+# after login (~/.config/caelestia/user/desktop.lua): an update takes effect at the next login, so that's when breakage shows.
+#   dotfiles-check            list what's wrong (nothing printed and exit 0 when all is well; a note, such as Caelestia's
+#                             Hyprland config having an update, printed with exit 0)
+#   dotfiles-check --notify   the same, as one notification (none when all is well)
+problems=()
+# Hyprland named (its first one when run from an SSH login or a text console: there hyprctl didn't know it, so config
+# errors went unseen and the title bar plugin was said not to be loaded)
+hyprctl() { command hyprctl -i "${HYPRLAND_INSTANCE_SIGNATURE:-0}" "$@"; }
+
+# Hyprland: config errors, settings an update made outdated. The config checked here, as Hyprland loads it from disk
+# (hypr-config-check: Hyprland --verify-config, its errors in its file), not by hyprctl configerrors alone: every
+# hyprctl eval (Capri, the switcher, game-focus) clears that list, and one that fails leaves its own error there. Its
+# lines naming a config file only (<file>.lua:<line>:, where an eval's start with its code), when the check found
+# nothing (it can't see what fails only in the running session)
+hc="${XDG_STATE_HOME:-$HOME/.local/state}/hypr-config-check"
+"${0%/*}/hypr-config-check" >/dev/null 2>&1
+if [[ -s $hc ]]; then
+    problems+=("Hyprland config errors: $(head -3 "$hc") (hypr-config-check)")
+else
+    errors=$(hyprctl configerrors 2>/dev/null | grep -E '^[^:;]*\.(lua|conf):[0-9]+')
+    [[ -n $errors ]] && problems+=("Hyprland config errors: $errors")
+fi
+deprecated=$(hyprctl deprecated-config 2>/dev/null)
+[[ -n $deprecated && $deprecated != "all good!" ]] && problems+=("Hyprland outdated settings: $deprecated")
+
+# Title bars on floating windows (user/titlebars.lua): the plugin, loaded by hyprbars-build --login at login
+hyprctl plugin list -j 2>/dev/null | jq -e 'any(.[]; .name == "hyprbars")' >/dev/null ||
+    problems+=("Title bar plugin not loaded (see ~/.cache/hyprbars-build.log, or run hyprbars-build)")
+
+# Caelestia patches that no longer fit (caelestia-overlay writes them down)
+skipped="${XDG_STATE_HOME:-$HOME/.local/state}/caelestia-overlay-skipped"
+[[ -s $skipped ]] && problems+=("Caelestia changes that are off: $(paste -sd';' "$skipped")")
+
+# Capri's update that failed (capri-update writes down why; she stays on the version she has)
+capri_failed="${XDG_STATE_HOME:-$HOME/.local/state}/capri-update-failed"
+[[ -s $capri_failed ]] && problems+=("Capri not updated: $(tail -n +2 "$capri_failed")")
+
+# My QML in Caelestia (the overlay's files) failing to load: a Caelestia update renamed something it uses. It still
+# patches in, so caelestia-overlay can't see this; Caelestia's log can
+# (the files the overlay changed or added: the real files in its folder, the rest are links to Caelestia's)
+# By path, as the log names them (@modules/bar/Bar.qml[12:3]): Caelestia has other files of the same names
+changed=$(find ~/.config/quickshell/caelestia -type f -name '*.qml' -printf '%P\n' 2>/dev/null | paste -sd'|')
+qml=$([[ -n $changed ]] && timeout 5 qs log -c caelestia 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' |
+    grep -E "@(${changed//./\\.})\[" |
+    grep -iE 'error|unavailable|not a type|not defined|TypeError|ReferenceError' |
+    grep -v 'of null$' | head -3)  # "... of null": a list item read as it goes away (Caelestia's own too), not a rename
+[[ -n $qml ]] && problems+=("Caelestia changes failing to load (overlay QML): $qml")
+
+# Caelestia internals my config relies on, which it could rename (then that part stops working without an error):
+# the game tag user/apps.lua gives native games and matches its rules on, the tags it undoes, the restart key user/keys.lua takes over, the shortcut that refreshes Caps/Num Lock
+for want in 'rules.lua:"game"' 'rules.lua:"music_player"' 'rules.lua:"communication_app"' 'rules.lua:"todo_app"' \
+            'rules.lua:"system_monitor"' 'keybinds.lua:"CTRL + SUPER + ALT + R"'; do
+    grep -qF "${want#*:}" ~/.config/hypr/hyprland/"${want%%:*}" 2>/dev/null ||
+        problems+=("Caelestia's ${want%%:*} no longer has ${want#*:} (user/apps.lua, user/keys.lua rely on it)")
+done
+grep -rqF 'name: "refreshDevices"' /etc/xdg/quickshell/caelestia 2>/dev/null ||
+    problems+=("Caelestia no longer has its refreshDevices shortcut: the Caps/Num Lock badges won't refresh (user/keys.lua)")
+# Quickshell uses Qt's private parts: a Qt version it wasn't rebuilt for can stop the shells from starting (the Qt it
+# was built for: written down by update-apps, which rebuilds it)
+# (update-apps compares them, as it writes them)
+"${0%/*}/update-apps" --qt-stale &&
+    problems+=("Qt was updated after Quickshell: run Updates (it rebuilds Quickshell and Caelestia for it)")
+# (both folders named by the tests only)
+au=${AUTO_UPDATE_DIR:-/var/lib/auto-update}
+pacdb=${PACMAN_DB_DIR:-/var/lib/pacman}
+# a Qt update the boot's install held back for that (auto-update): Updates does it with the rebuild
+# (its lines "<package> <old> -> <new>", as pacman -Qu said them: said only while one isn't installed yet. Updates
+# installs them, but only the next shutdown's install takes the file away)
+held_waiting() {
+    local name new have
+    while read -r name _ _ new; do
+        [[ -n $new ]] || continue
+        have=$(pacman -Q "$name" 2>/dev/null | awk '{print $2}')
+        [[ -n $have && $(vercmp "$have" "$new") -ge 0 ]] || return 0
+    done <"$au/held"
+    return 1
+}
+[[ -s $au/held ]] && held_waiting &&
+    problems+=("The automatic update was held back (a new Qt needs Quickshell rebuilt with it): run Updates")
+# the install at shutdown failed (auto-update --install writes down how it went: "failed <date> <why>"); tried again
+# at the next shutdown, but it fails the same way until it's looked at
+read -r how when at why 2>/dev/null <"$au/install-result"
+[[ ${how:-} == failed ]] &&
+    problems+=("The automatic update failed to install at shutdown ($when $at${why:+: $why}): see /var/log/auto-update.log, or run Updates")
+# nothing installed at shutdown several times in a row (its boot download never finishing: a short session, a download
+# that fails every boot; something else using pacman still running): "<shutdowns> <since> <the last one's why>",
+# written down beside how the last real install went
+read -r skips since skipwhy 2>/dev/null <"$au/skipped"
+[[ ${skips:-} =~ ^[0-9]+$ ]] && ((skips >= 3)) &&
+    problems+=("The automatic update hasn't installed for $skips shutdowns in a row (since $since; the last: ${skipwhy:-the boot download unfinished}): see /var/log/auto-update.log, or run Updates")
+# a lock the boot's download left (shutdown cut it off): the next boot's download takes it out, but meanwhile nothing
+# was downloaded (not while that download is running: it's its own)
+[[ -e $au/db/db.lck ]] && ! systemctl is-active -q auto-update 2>/dev/null &&
+    problems+=("The automatic update's download left a lock ($au/db/db.lck): it's removed at the next boot")
+# pacman's own lock with nothing running that takes it (one cut off: a crash, a power cut): every install and update
+# fails on it, the one at shutdown too. What takes it: pacman (paru, yay and the shutdown install run it) and the
+# programs built on its library (pamac's daemon, PackageKit's). pacman-key and paccache don't. (The one list of them,
+# and lock_holder: system/auto-update-setup.sh writes both into the boot's update too)
+pacman_holders='pacman|paru|yay|pamac|pamac-daemon|packagekitd|octopi-helper'
+# lock_holder: one of them running that may hold pacman's lock ("<pid> <its command>"; exit 1: none). Not pacman on
+# other lists (--dbpath elsewhere: checkupdates', the boot's download) nor one only querying (-Q..., paru -Qua)
+lock_holder() {
+    local p args dbpath=' --dbpath[ =]([^ ]+)' query=' (-Q[A-Za-z]*|--query) '
+    for p in $(pgrep -x "$pacman_holders"); do
+        args=" $(tr '\0' ' ' <"/proc/$p/cmdline" 2>/dev/null)"
+        [[ $args =~ $dbpath && ${BASH_REMATCH[1]%/} != "$pacdb" ]] && continue
+        [[ $args =~ $query ]] && continue
+        echo "$p${args% }"
+        return 0
+    done
+    return 1
+}
+[[ -e $pacdb/db.lck ]] && ! lock_holder >/dev/null &&
+    problems+=("pacman's lock was left behind ($pacdb/db.lck): nothing installs until it's removed (sudo rm $pacdb/db.lck, with no update running)")
+
+# Caelestia's own Hyprland config (~/.config/hypr, what `caelestia install` put there): nothing refreshes it, so an
+# upstream fix (a setting Hyprland deprecated) never got here. A newer version upstream (Caelestia's clone fetched, 10 s
+# at most): a note, not a problem (it changes about weekly), pointing to caelestia-hypr-refresh, which refreshes those
+# files alone. Never `caelestia update`: its own system update goes past Updates' Qt rebuild, and a new Qt left
+# Quickshell unable to start. As a notification: once per new version, low urgency
+notes=()
+if hypr_new=$(FETCH_TIMEOUT=10 "${0%/*}/caelestia-hypr-refresh" --check 2>/dev/null); then
+    notes+=("Caelestia's Hyprland config (~/.config/hypr) has an update: run caelestia-hypr-refresh (those files only; one you've edited is kept, its new version written beside it as .new)")
+fi
+
+# The shells and services
+running=$(qs list --all 2>/dev/null)
+for c in caelestia switcher widgets; do
+    # By the configs Quickshell says are running (one its crash handler restarted shows no -c in ps)
+    grep -q "/quickshell/$c/shell.qml" <<<"$running" || problems+=("Not running: qs -c $c")
+done
+for s in game-focus tray-keeper; do
+    systemctl --user is-active -q "$s" || problems+=("Not running: $s ($(systemctl --user is-active "$s"))")
+done
+failed=$(systemctl --user list-units --failed --plain --no-legend 2>/dev/null | awk '{print $1}' | paste -sd' ')
+[[ -n $failed ]] && problems+=("Failed services: $failed")
+
+# Errors the services logged and carried on from (e.g. a field Hyprland renamed), since they last started: a fix and
+# a restart clears them
+for s in game-focus tray-keeper; do
+    log=$(journalctl --user -u "$s" _SYSTEMD_INVOCATION_ID="$(systemctl --user show -p InvocationID --value "$s")" \
+        -o cat --no-pager 2>/dev/null)
+    n=$(grep -c '^Traceback' <<<"$log")
+    ((n > 0)) && problems+=("$s logged $n error(s) since it started: $(grep -E '^[A-Za-z]*Error' <<<"$log" | tail -1)")
+done
+
+# System files setup installed that aren't the repo's any more (the repo changed since): that step run again. Each
+# compared by content with what the step would write now, rendered as it does (system/render.sh), so a fresh clone or
+# checkout of the same files says nothing. Only those that are installed (each is a choice in setup, or hardware
+# there); pacman's hooks also when one of them is missing. ($root: a stand-in for / in the tests)
+# Where setup ran from (it records it), while that is still a repo
+rec=$(cat "$HOME/.local/state/dotfiles-repo" 2>/dev/null) && [[ -e $rec/.git ]] || rec=$HOME/Projects/dotfiles
+repo=${DOTFILES_DIR:-$rec}
+root=${DOTFILES_CHECK_ROOT:-}
+stale=() steps=()
+# old <name> <step>: that one isn't the repo's
+old() { stale+=("$1"); [[ " ${steps[*]} " == *" $2 "* ]] || steps+=("$2"); }
+# differs <installed> <command...>: the file isn't what the command writes
+differs() { local f=$1; shift; ! "$@" 2>/dev/null | cmp -s - "$f"; }
+me=$(id -un)
+hooks=$root/etc/pacman.d/hooks
+# Whose they are: setup is for one user per machine, and writes pacman's hooks and the boot's update for the account
+# that ran it (from that account's repo). Another account's login says nothing about them: running setup there would
+# only move them to it, and the first account would then be told. Read from what's installed (the hooks' runuser, else
+# the boot's update's sudo -u); nothing found, compared as this account's
+owner=$(sed -n 's|^Exec = /usr/bin/runuser -u \([^ ]*\) -- .*|\1|p' "$hooks"/*.hook 2>/dev/null | head -1)
+[[ -n $owner ]] || owner=$(sed -n 's|.* sudo -u "\([^"]*\)" -H .*|\1|p' "$root/usr/local/bin/auto-update" 2>/dev/null | head -1)
+# (no repo there, e.g. cloned elsewhere without DOTFILES_DIR: nothing to compare with, not everything "older")
+if [[ -f $repo/system/render.sh && ${owner:-$me} == "$me" ]]; then
+    # shellcheck source=/dev/null  # (system/render.sh)
+    source "$repo/system/render.sh"
+    myhome=$(getent passwd "$me" | cut -d: -f6)
+    [[ -d $root/etc/ananicy.d && -e $repo/system/ananicy/dotfiles.rules ]] &&
+        ! cmp -s "$repo/system/ananicy/dotfiles.rules" "$root/etc/ananicy.d/99-dotfiles/dotfiles.rules" && old ananicy system
+    b=$root/usr/local/lib/boot-video-mode
+    [[ -e $b/boot-video-mode ]] && { ! cmp -s "$repo/system/boot-video-mode" "$b/boot-video-mode" ||
+        ! cmp -s "$repo/.local/share/caelestia-greeter/screenmode.py" "$b/screenmode.py"; } && old boot-video-mode system
+    # The login screen: its run script, login-reset, its PAM hook (written by install.sh) and the files it copies; its
+    # PAM service as greetd-pam would make it now from the system's (the keyring's lines aside): one the hook didn't
+    # make again after the system's changed, or that can't be made any more
+    g=$root/etc/greetd/caelestia-greeter i=$repo/.local/share/caelestia-greeter
+    # shellcheck disable=SC2016  # (install.sh's own target, as written there)
+    [[ -e $g/run ]] && { differs "$g/run" heredoc "$i/install.sh" '"$dst/run.new"' ||
+        differs "$root/usr/local/bin/login-reset" heredoc "$i/install.sh" /usr/local/bin/login-reset.new ||
+        differs "$root/etc/pacman.d/hooks/caelestia-greeter-pam.hook" heredoc "$i/install.sh" /etc/pacman.d/hooks/caelestia-greeter-pam.hook ||
+        ! cmp -s <(grep -v pam_gnome_keyring "$root/etc/pam.d/greetd" 2>/dev/null) \
+            <(PAM_DIR=$root/etc/pam.d GREETD_PAM_TEMPLATE=$i/greetd.pam "$i/greetd-pam" --print 2>/dev/null) ||
+        for f in shell.qml best-mode make-theme.sh screenmode.py greetd-pam greetd.pam; do ! cmp -s "$i/$f" "$g/$f" && break; false; done; } &&
+        old login-screen system
+    [[ -e $root/usr/lib/systemd/system-sleep/bluetooth-resume ]] &&
+        ! cmp -s "$repo/system/bluetooth-resume" "$root/usr/lib/systemd/system-sleep/bluetooth-resume" && old bluetooth system
+    # (the script and its two units: the boot's download, the install at shutdown)
+    a=$repo/system/auto-update-setup.sh u=$root/etc/systemd/system
+    [[ -e $root/usr/local/bin/auto-update ]] && { differs "$root/usr/local/bin/auto-update" render_auto_update "$repo" "$me" "$myhome" ||
+        differs "$u/auto-update.service" heredoc "$a" /etc/systemd/system/auto-update.service ||
+        differs "$u/auto-update-install.service" heredoc "$a" /etc/systemd/system/auto-update-install.service; } &&
+        old auto-update system
+    # pacman's hooks: once the system step put one in, every template's, as it renders them (a hook added since: missing)
+    if compgen -G "$hooks/*.hook" >/dev/null; then
+        for in in "$repo"/system/pacman-hooks/*.hook.in; do
+            h=$hooks/$(basename "$in" .in)
+            if [[ ! -e $h ]] || differs "$h" render_hook "$in" "$me" "$myhome"; then old pacman-hooks system; break; fi
+        done
+    fi
+    [[ -e $hooks/grub-quiet.hook ]] && differs "$hooks/grub-quiet.hook" grub_quiet_hook && old boot-menu system
+    # The keyring unlocked at login (greetd's PAM) and its password changed with yours (passwd's): the second came later
+    [[ -f $root/etc/pam.d/passwd ]] && grep -qs pam_gnome_keyring "$root/etc/pam.d/greetd" &&
+        ! grep -qs pam_gnome_keyring "$root/etc/pam.d/passwd" && old keyring system
+    # Only where they apply: installed with an NVIDIA driver, on the Legion with its camera switch
+    n=$root/etc/mkinitcpio.conf.d/90-nvidia-early.conf
+    [[ -e $n ]] && differs "$n" heredoc "$repo/system/nvidia-early.sh" /etc/mkinitcpio.conf.d/90-nvidia-early.conf &&
+        old nvidia-early system
+    c=$repo/.local/share/camera-switch
+    [[ -e $root/usr/local/bin/camera-switchd ]] && { ! cmp -s "$c/camera-switchd" "$root/usr/local/bin/camera-switchd" ||
+        differs "$root/etc/systemd/system/camera-switch.service" heredoc "$c/install.sh" /etc/systemd/system/camera-switch.service ||
+        differs "$root/etc/udev/rules.d/90-camera-switch.rules" heredoc "$c/install.sh" /etc/udev/rules.d/90-camera-switch.rules; } &&
+        old camera-switch hardware
+fi
+((${#stale[@]})) &&
+    problems+=("System files not the repo's any more (${stale[*]}): run ./setup.sh --only ${steps[*]} in $repo")
+
+# Notes (not problems: exit 0 all the same); as a notification, low urgency, each new version once
+if ((${#notes[@]})); then
+    printf '%s\n' "${notes[@]}"
+    seen="${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles-check-hypr-notified"
+    if [[ ${1:-} == --notify && $(cat "$seen" 2>/dev/null) != "$hypr_new" ]]; then
+        notify-send -u low -a Dotfiles -i system-software-update "Caelestia's Hyprland config has an update" \
+            "Run caelestia-hypr-refresh: those files only (no system update); one you've edited is kept, its new version beside it as .new" &&
+            { mkdir -p "${seen%/*}"; echo "$hypr_new" >"$seen"; }
+    fi
+fi
+((${#problems[@]})) || exit 0
+printf '%s\n' "${problems[@]}"
+if [[ ${1:-} == --notify ]]; then
+    notify-send -u critical -a Dotfiles -i dialog-warning "Something in your setup needs a look" \
+        "$(printf '• %s\n' "${problems[@]}")
+(probably after a Hyprland or Caelestia update; run dotfiles-check for the list)"
+fi
+exit 1

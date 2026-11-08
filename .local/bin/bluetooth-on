@@ -1,0 +1,8 @@
+#!/bin/sh
+# Bluetooth always unblocked and powered on at login (the adapter can come up off; system/bluetooth-setup.sh covers boot
+# and waking from sleep)
+# No adapter (or no bluetoothd): nothing to do; bluetoothctl would wait for bluetoothd forever
+ls /sys/class/bluetooth/hci* >/dev/null 2>&1 || exit 0
+rfkill unblock bluetooth
+sleep 2
+timeout 10 bluetoothctl power on >/dev/null

@@ -1,0 +1,14 @@
+[Unit]
+Description=AgrOS: finish the setup steps the install left undone (no network then)
+Wants=network-online.target
+After=network-online.target
+ConditionPathExists=/var/lib/agros/pending
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/agros/agros-install --resume
+# Package builds and downloads: as long as they take
+TimeoutStartSec=infinity
+
+[Install]
+WantedBy=multi-user.target

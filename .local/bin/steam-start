@@ -1,0 +1,16 @@
+#!/bin/sh
+# Steam minimised to its tray icon (-silent: no window): how Lutris starts Steam games (its Steam runner, set in
+# ~/.local/bin/lutris). Arguments (steam://rungameid/<id>) go to Steam, so a game launched while Steam is closed starts
+# it in the tray, not its window. (Steam doesn't start at login: only when a game needs it.)
+# First, nvidia-shader-fix adds its workaround to the launch options of games this GPU/driver crashes in (Cyberpunk
+# 2077 on Turing). Steam runs in a systemd scope named after its launcher entry (app-steam-<n>.scope), so it's listed
+# as an app with its games inside. game-focus closes it again once its games are closed, if it's only in its tray
+# Flathub's Steam instead of the system's: started as it is (its own sandbox and scope; the shader fix is for the system's)
+if ! command -v steam >/dev/null; then
+    flatpak info com.valvesoftware.Steam >/dev/null 2>&1 && exec flatpak run com.valvesoftware.Steam -silent "$@"
+    exit 0
+fi
+# Already running: it takes the arguments (and the shader fix needs Steam closed)
+pgrep -u "$(id -u)" -x steam >/dev/null && exec steam -silent "$@"
+"$HOME/.local/bin/nvidia-shader-fix" --install
+exec systemd-run --user --scope --quiet --collect --unit="app-steam-$$" steam -silent "$@"

@@ -1,0 +1,9 @@
+# Started by Hyprland at login (user/desktop.lua), which also runs the first check 15 minutes in; then every 6 hours after
+# the last one. (Not OnActiveSec/OnStartupSec: any daemon-reload restarts the first; the second ran at once after a quick
+# log out and in)
+[Unit]
+Description=Check for updates every 6 hours
+PartOf=graphical-session.target
+
+[Timer]
+OnUnitActiveSec=6h

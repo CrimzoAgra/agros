@@ -1,0 +1,9 @@
+# Started by Hyprland at login (user/apps.lua): store games Lutris syncs join its library (~/.local/bin/lutris-library)
+[Unit]
+Description=Add uninstalled store games to the Lutris library
+PartOf=graphical-session.target
+
+[Path]
+PathChanged=%h/.local/share/lutris/pga.db
+# Not stopped by bursts of writes either (the service waits them out)
+TriggerLimitIntervalSec=0

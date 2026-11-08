@@ -1,0 +1,175 @@
+#!/usr/bin/env python3
+"""Keeps the kernel console in each screen's best mode, so there's no "no video" between the login screen and the
+desktop (the screen doesn't resync when Hyprland takes over). Runs at every boot (boot-video-mode.service, installed
+by system/boot-video-mode.sh): reads the connected screens' modes from their EDID, picks the highest resolution and
+then its highest refresh rate (screenmode.py, shared with the login screen's best-mode), and sets video=<screen>:<W>x<H>@<Hz>
+in the kernel options (Limine or GRUB) when they changed. The kernel picks its mode before this can run, so a newly
+connected screen gets its mode from the boot after.
+  boot-video-mode           update the kernel options if the screens changed
+  boot-video-mode --check   only print the options for the screens connected now (none: said, exit 3)
+  boot-video-mode --current the video= options the boot config has now (what a boot with no screen found keeps; no
+                            Limine or GRUB settings: exit 4)
+"""
+import glob
+import os
+import re
+import shutil
+import subprocess
+import sys
+
+# screenmode.py: next to this script once installed, in the login screen's folder in the repo
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../.local/share/caelestia-greeter"))
+from screenmode import rank
+
+MODE = re.compile(r"\b(\d+)x(\d+)\s+([\d.]+) Hz")  # edid-decode's mode lines (interlaced ones read "1920x1080i")
+
+
+def best_mode(edid_text):
+    modes = [(int(w), int(h), float(hz)) for w, h, hz in MODE.findall(edid_text)]
+    # At the screen's own resolution (its first detailed timing), as the login screen picks and Hyprland's "preferred":
+    # a TV's EDID also lists modes above it it only takes in (4096x2160 on a 3840x2160 panel)
+    native = re.search(r"DTD 1:\s+(\d+)x(\d+)", edid_text)
+    if native:
+        modes = [m for m in modes if (m[0], m[1]) == (int(native[1]), int(native[2]))] or modes
+    return max(modes, key=lambda m: rank(*m)) if modes else None
+
+
+def screens():
+    video = []
+    for status in sorted(glob.glob("/sys/class/drm/card*-*/status")):
+        conn = os.path.dirname(status)
+        with open(status) as f:
+            if f.read().strip() != "connected":
+                continue
+        # edid-decode exits non-zero over EDID conformance nits but still lists the modes
+        try:
+            out = subprocess.run(["edid-decode", f"{conn}/edid"], check=False, capture_output=True, text=True).stdout
+        except FileNotFoundError:  # v4l-utils removed since: no modes, not a crash at every boot
+            print("No edid-decode (v4l-utils): screen modes not read", file=sys.stderr)
+            return []
+        mode = best_mode(out)
+        if mode:
+            name = os.path.basename(conn).split("-", 1)[1]  # card1-HDMI-A-1 -> HDMI-A-1
+            video.append(f"video={name}:{mode[0]}x{mode[1]}@{round(mode[2])}")
+    return video
+
+
+def with_video(line, video):
+    """The options line with the new video= entries in place of the old ones for the same screens, before its closing
+    quote (" or '). An old entry for a connector not seen now (a DisplayPort screen asleep reads "disconnected") stays:
+    the kernel ignores it while the screen is away, and the boot config isn't rewritten twice (without it, then with it
+    again at the next boot)."""
+    connector = lambda v: v.split("=", 1)[1].split(":", 1)[0]  # noqa: E731
+    now = {connector(v) for v in video}
+    # Whole options only (after a space or the quote): not the end of another one's name, like "foo.video=1"
+    kept = [v for v in re.findall(r'(?<![^\s"\'])video=[^ "\']*', line) if connector(v) not in now]
+    entries = kept + video
+    # A value with no quotes (KERNEL_CMDLINE[default]+=quiet, GRUB_CMDLINE_LINUX_DEFAULT=quiet: one word, as the shell
+    # reads it): quoted, so the options can go in
+    bare = re.match(r'^([A-Za-z_][\w\[\]]*\+?=)([^\s"\']*)\s*$', line)
+    if bare:
+        line = f'{bare.group(1)}"{bare.group(2)}"'
+    if not re.search(r'["\']\s*$', line):
+        print(f"No closing quote on the kernel options line, screen modes not set: {line.strip()}", file=sys.stderr)
+        return line
+    line = re.sub(r' ?(?<![^\s"\'])video=[^ "\']*', "", line)
+    return re.sub(r'(["\'])\s*$', lambda m: (" " + " ".join(entries) if entries else "") + m.group(1), line)
+
+
+ETC = os.environ.get("BOOT_VIDEO_MODE_ETC", "/etc")  # (another folder in the tests)
+
+
+def boot_config():
+    """The boot loader's settings this keeps the options in: (file, its kernel options line's start, the command that
+    makes the boot entries from it), or None. Limine's where there, else GRUB's (its settings left by a removed GRUB:
+    not it)"""
+    if os.path.isfile(f"{ETC}/default/limine"):
+        return f"{ETC}/default/limine", r"KERNEL_CMDLINE\[default\]\+?=", ["limine-update"]
+    if os.path.isfile(f"{ETC}/default/grub") and shutil.which("grub-mkconfig"):
+        return f"{ETC}/default/grub", r"GRUB_CMDLINE_LINUX_DEFAULT=", ["grub-mkconfig", "-o", "/boot/grub/grub.cfg"]
+    return None
+
+
+def current_video():
+    """The video= options of that kernel options line now (its first, not a commented one, as main rewrites it)"""
+    found = boot_config()
+    if not found:
+        return []
+    with open(found[0]) as f:
+        for line in f:
+            if re.match(found[1], line):
+                return re.findall(r'(?<![^\s"\'])video=[^ "\'\n]*', line)
+    return []
+
+
+def main():
+    if "--current" in sys.argv:
+        print(" ".join(current_video()))
+        return 0 if boot_config() else 4  # (4: no Limine or GRUB settings, nothing it sets)
+    video = screens()
+    if "--check" in sys.argv:
+        print(" ".join(video) or "no screens with EDID found")
+        return 0 if video else 3
+    # None found (a DisplayPort screen asleep at boot reads "disconnected"): the last ones kept, not the boot config
+    # rewritten twice (without, then with them again at the next boot)
+    if not video:
+        return 0
+    found = boot_config()
+    if not found:
+        print("No Limine or GRUB settings found: nothing to do")
+        return 0
+    conf, key, update = found
+    with open(conf) as f:
+        lines = f.read().split("\n")
+    for i, line in enumerate(lines):
+        if re.match(key, line):
+            new = with_video(line, video)
+            if new == line:
+                # Same screens as last time; or a line it couldn't put them in (said by with_video): a failure, not
+                # "done" with nothing set
+                return 0 if set(video) <= set(re.findall(r'(?<![^\s"\'])video=[^ "\'\n]*', line)) else 1
+            lines[i] = new
+            break
+    else:
+        print(f"No kernel options line in {conf}")
+        return 1
+    # Written beside it and renamed over it, with its owner and mode: a power cut mid-write leaves the old or the new
+    # file, never a half one the boot loader's next update would read
+    st = os.stat(conf)
+    tmp = conf + ".boot-video-mode-new"
+    with open(tmp, "w") as f:
+        f.write("\n".join(lines))
+        f.flush()
+        os.fsync(f.fileno())
+    os.chown(tmp, st.st_uid, st.st_gid)
+    os.chmod(tmp, st.st_mode & 0o7777)
+    os.replace(tmp, conf)
+    print(f"Kernel console mode: {' '.join(video)}")
+    try:
+        return subprocess.run(update, check=False).returncode
+    except FileNotFoundError:
+        print(f"No {update[0]}: the boot entries are made again at the next kernel update", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    if "--test" in sys.argv:
+        assert best_mode("DTD 1:  3840x2160   60.000000 Hz\n  VIC 102:  4096x2160   60.000000 Hz\n") == (3840, 2160, 60.0)
+        assert best_mode("DTD 1:  1920x1080   60.000000 Hz\nDTD 5:  1920x1080   71.910434 Hz\n"
+                         "DMT 0x05:   640x480    72.808802 Hz\nVIC 5: 1920x1080i 60.000 Hz") == (1920, 1080, 71.910434)
+        line = 'KERNEL_CMDLINE[default]+="quiet rw video=HDMI-A-1:1280x720@60"'
+        assert with_video(line, ["video=HDMI-A-1:1920x1080@72"]) == 'KERNEL_CMDLINE[default]+="quiet rw video=HDMI-A-1:1920x1080@72"'
+        assert with_video(with_video(line, ["video=X:1x1@1"]), ["video=X:1x1@1"]) == with_video(line, ["video=X:1x1@1"])
+        # A screen not seen now (asleep) keeps its entry; one seen gets the new one
+        assert with_video('K="quiet video=DP-1:1x1@1 video=HDMI-A-1:2x2@2"', ["video=HDMI-A-1:3x3@3"]) == 'K="quiet video=DP-1:1x1@1 video=HDMI-A-1:3x3@3"'
+        assert with_video(line, []) == line
+        assert with_video('K="quiet foo.video=1"', ["video=X:1x1@1"]) == 'K="quiet foo.video=1 video=X:1x1@1"'
+        assert with_video("GRUB_CMDLINE_LINUX_DEFAULT='quiet splash'", ["video=X:1x1@1"]) == "GRUB_CMDLINE_LINUX_DEFAULT='quiet splash video=X:1x1@1'"
+        # A value with no quotes: quoted, the options put in (it was left, and "done" said with nothing set)
+        assert with_video("GRUB_CMDLINE_LINUX_DEFAULT=quiet", ["video=X:1x1@1"]) == 'GRUB_CMDLINE_LINUX_DEFAULT="quiet video=X:1x1@1"'
+        assert with_video("KERNEL_CMDLINE[default]+=quiet", ["video=X:1x1@1"]) == 'KERNEL_CMDLINE[default]+="quiet video=X:1x1@1"'
+        # One it can't (a quote not closed): left as it is (said on stderr)
+        assert with_video('K="quiet', ["video=X:1x1@1"]) == 'K="quiet'
+        print("ok")
+        sys.exit(0)
+    sys.exit(main())

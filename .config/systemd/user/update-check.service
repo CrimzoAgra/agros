@@ -1,0 +1,13 @@
+# Started by update-check.timer: a notification with an "Update now" button when updates are waiting (~/.local/bin/update-apps)
+[Unit]
+Description=Check for updates and offer to install them (~/.local/bin/update-apps --check)
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=oneshot
+# Not during a game (it takes ~2 s of CPU and 0.5 GB, and its notification shows over the game): after it
+ExecStartPre=%h/.local/bin/after-games
+ExecStart=%h/.local/bin/update-apps --check
+# It waits on the notification (and runs the update if you click it)
+TimeoutStartSec=infinity

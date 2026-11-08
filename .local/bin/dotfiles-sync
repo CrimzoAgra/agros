@@ -1,0 +1,314 @@
+#!/usr/bin/env bash
+# Copies your current settings into the dotfiles repo (and Legion Control into its repo),
+# then commits and pushes what changed (your bookmarks stay out of it: they're personal, see agros-personal).
+#   dotfiles-sync              sync, commit and push
+#   dotfiles-sync -n           only show what would change
+#   dotfiles-sync add <file>   start keeping a new file (e.g. ~/.config/foo/bar.conf), then sync
+# Only files already in the repo are synced; use "add" for new ones. Only what it copies (or what matches yours at home)
+# is committed: a repo copy you edit there, newer than yours, is skipped and left out, as is any other edit in the repo.
+# The repos: $DOTFILES_DIR (default: where setup ran from, else ~/Projects/dotfiles) and $LEGION_CONTROL_DIR (~/Projects/legion-control-linux).
+set -euo pipefail
+# Where setup ran from (it records it), while that is still a repo
+rec=$(cat "$HOME/.local/state/dotfiles-repo" 2>/dev/null) && [[ -e $rec/.git ]] || rec=$HOME/Projects/dotfiles
+repo=${DOTFILES_DIR:-$rec}
+legion=${LEGION_CONTROL_DIR:-$HOME/Projects/legion-control-linux}
+dry=false
+git -C "$repo" rev-parse --git-dir >/dev/null 2>&1 || { echo "No dotfiles repo at $repo (DOTFILES_DIR)"; exit 1; }
+usage() { sed -n '2,9s/^# \{0,1\}//p' "$0"; }
+# What it's asked first, before any lock: anything else (--help, a typo) or "add" with no file is the usage, not a sync
+# that commits and pushes
+case ${1:-} in
+    '' | -n) ;;
+    add) (($# > 1)) || { usage; exit 1; } ;;
+    *) usage; exit 1 ;;
+esac
+# One at a time: two runs at once raced on the repo's index and stash (the other one finished first, then this one).
+# Held by this script's first run, around a second that does the sync (not by what that starts: git's gc, left running
+# in the background, kept the lock, and the next sync waited on it)
+if [[ -z ${DOTFILES_SYNC_LOCKED:-} ]]; then
+    lock="${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles-sync.lock"
+    mkdir -p "${lock%/*}"
+    # (taken here, by this one, the sync then run with it closed: whether it's busy is flock's own answer, never an
+    # exit status the sync could also end with, which ran the whole sync a second time)
+    exec {lockfd}>>"$lock"
+    if ! flock -n "$lockfd"; then
+        echo "Waiting for the other dotfiles-sync to finish..."
+        flock "$lockfd"
+    fi
+    export DOTFILES_SYNC_LOCKED=1
+    # (Ctrl+C, a closed terminal: the sync, which gets it too, puts your edits in progress back first; this waits for
+    # that, still holding the lock)
+    trap : INT TERM HUP
+    rc=0
+    "$0" "$@" {lockfd}>&- || rc=$?
+    exit "$rc"
+fi
+
+# Edits in progress an earlier sync set aside and never put back (cut off where it couldn't: a power cut, a kill; or
+# clashing with what it pulled): said at every run until they're taken back
+for r in "$repo" "$legion"; do
+    git -C "$r" rev-parse --git-dir >/dev/null 2>&1 || continue
+    while IFS= read -r s; do
+        echo "!! Your edits in progress in $r, set aside by an earlier dotfiles-sync, are still in git's stash: git -C $r stash pop ${s%%:*}"
+    done < <(git -C "$r" stash list 2>/dev/null | grep -F 'dotfiles-sync ' | grep -F ': your edits in progress' || true)
+done
+
+if [[ ${1:-} == add ]]; then
+    shift
+    for f in "$@"; do
+        # A link (e.g. Claude Code's installer's ~/.local/bin/claude): readlink -f would keep the program it points to,
+        # ~200 MB under that program's own path, which GitHub refuses
+        [[ -L $f ]] && { echo "A link, not kept: $f"; exit 1; }
+        f=$(readlink -f "$f")
+        [[ $f == "$HOME"/* && -f $f ]] || { echo "Not a file in your home: $f"; exit 1; }
+        rel=${f#"$HOME"/}
+        # Only these are synced back and installed by setup: anything else would be committed once, then forgotten
+        [[ $rel == .config/* || $rel == .local/* ]] || { echo "Only files in ~/.config or ~/.local are kept: $f"; exit 1; }
+        # (the Settings app's values and keys are this machine's, kept out of the repo)
+        [[ $rel != .config/dots/* && $rel != *.key ]] || { echo "Kept out of the repo on purpose (per-machine settings, keys): $f"; exit 1; }
+        mkdir -p "$repo/$(dirname "$rel")"
+        cp "$f" "$repo/$rel"
+        git -C "$repo" add "$rel"
+        echo "Now keeping: $rel"
+    done
+elif [[ ${1:-} == -n ]]; then
+    dry=true
+fi
+
+# shared <file> <path in repo>: the file as the repo keeps it. Caelestia's settings without the weather location, which
+# is each machine's own (a fresh install finds it by IP; setup keeps yours)
+shared() {
+    if [[ $2 == .config/caelestia/shell.json ]] && jq -e . "$1" >/dev/null 2>&1; then
+        jq --indent 4 '.services.weatherLocation = ""' "$1"
+    else
+        cat "$1"
+    fi
+}
+
+# What the sync itself wrote in a repo and hasn't committed yet (a run stopped before its commit: a rebase open, the
+# commit failed), each as "<sha256>  <path>" in its .git: a repo copy still that is the sync's own, not your edit
+written() { git -C "$1" rev-parse --path-format=absolute --git-path dotfiles-sync-written; }
+sum() { sha256sum <"$1" | cut -d' ' -f1; }
+# wrote <repo> <file>: noted as the sync's own; committed <repo> <files...>: no longer pending
+wrote() { local w; w=$(written "$1"); { forget "$w" "$2"; echo "$(sum "$1/$2")  $2"; } >"$w.new" && mv "$w.new" "$w"; }
+committed() {
+    local w f dir=$1; w=$(written "$dir"); shift
+    [[ -f $w ]] || return 0
+    for f in "$@"; do forget "$w" "$f" >"$w.new" && mv "$w.new" "$w"; done
+}
+forget() { awk -v p="$2" 'substr($0, 67) != p' "$1" 2>/dev/null || true; }
+# own_copy <repo> <file>: the repo's copy is still the one the sync wrote
+own_copy() { grep -qxF "$(sum "$1/$2")  $2" "$(written "$1")" 2>/dev/null; }
+
+# sync <repo> <live dir> <files...>: copy changed live files over the repo copies
+sync() {
+    local dir=$1 live=$2 f
+    shift 2
+    for f in "$@"; do
+        [[ -f $live/$f ]] || continue
+        # A link setup left in place (e.g. Claude Code's installer's ~/.local/bin/claude): copying it would put the
+        # ~200 MB program it points to over the repo's script, and GitHub refuses it
+        [[ -L $live/$f ]] && continue
+        if ! shared "$live/$f" "$f" | cmp -s - "$dir/$f"; then
+            # The repo's copy changed after yours (pulled from the other machine, not yet copied home: a pull sets the
+            # file's time to then; this script's own copies leave it older than your edit): yours would undo that
+            if [[ $dir/$f -nt $live/$f ]]; then
+                echo "  skipped: $f (the repo's is newer: ./setup.sh --only files, or copy yours over it by hand)"
+                continue
+            fi
+            # Nor over a change to the repo's copy not yet committed (an edit in progress there, older than yours: a
+            # setting the app rewrote since, Caelestia's shell.json): copied over, it was lost and yours pushed. Unless
+            # it's the sync's own copy from a run that stopped before committing it (else that file never synced again)
+            if ! git -C "$dir" diff --quiet HEAD -- "$f" 2>/dev/null && ! own_copy "$dir" "$f"; then
+                echo "  skipped: $f (the repo's copy has changes not committed: commit or undo them there first)"
+                continue
+            fi
+            echo "  changed: $f"
+            # (cp for the rest: it keeps the file's mode, e.g. a script's executable bit)
+            if $dry; then :; elif [[ $f == .config/caelestia/shell.json ]]; then shared "$live/$f" "$f" >"$dir/$f"; else cp "$live/$f" "$dir/$f"; fi
+            $dry || wrote "$dir" "$f"
+        fi
+    done
+    return 0
+}
+
+# stopped: the sync interrupted while your edits in progress were set aside (push): its pull undone, they're put back
+# (staged parts staged), and it ends
+# shellcheck disable=SC2329  # (push's trap runs it)
+stopped() {
+    trap - INT TERM HUP
+    local dir=$stopped_dir
+    echo
+    git -C "$dir" rebase --abort >/dev/null 2>&1 || true  # (none open: set -e ended this here)
+    if [[ $(git -C "$dir" rev-parse -q --verify refs/stash) == "$stopped_stash" ]]; then
+        if git -C "$dir" stash apply -q --index >/dev/null 2>&1; then
+            git -C "$dir" stash drop -q
+            echo "  stopped: your edits in progress in $dir put back"
+            exit 130
+        fi
+        git -C "$dir" reset -q --hard HEAD
+        if git -C "$dir" stash apply -q >/dev/null 2>&1; then
+            git -C "$dir" stash drop -q
+            echo "  stopped: your edits in progress in $dir put back (what was staged of them unstaged)"
+            exit 130
+        fi
+        git -C "$dir" reset -q --hard HEAD
+    fi
+    echo "  stopped: your edits in progress in $dir are kept in git's stash (git -C $dir stash list, then git stash pop)"
+    exit 130
+}
+
+# push <repo> <live dir> <files the sync copies...> [-- <files made here...>]: committed where they differ from the last
+# commit: a copied one only while it's the same as yours at home (so also one an earlier run copied and couldn't commit;
+# never a repo copy you're editing there, newer than yours: the run says it's skipped), a made one always (the
+# bookmarks, the extension list). Then the other machine's commits pulled in, and pushed. Anything else changed in the
+# repo (an edit in progress there) is left out as it is
+push() {
+    local dir=$1 live=$2 synced=() made=() changed=() commit=() f stash_before stash_ours='' ok=true
+    shift 2
+    while (($#)); do
+        if [[ $1 == -- ]]; then shift; made=("$@"); break; fi
+        synced+=("$1")
+        shift
+    done
+    # A sync left mid-rebase (by hand, or before this aborted one): nothing committed on top of it
+    if [[ -d $(git -C "$dir" rev-parse --path-format=absolute --git-path rebase-merge) ||
+        -d $(git -C "$dir" rev-parse --path-format=absolute --git-path rebase-apply) ]]; then
+        echo "  NOT synced: a rebase is in progress in $dir (finish it or git rebase --abort)"
+        unpushed=1
+        return 0
+    fi
+    # Nor a merge with conflicts (a pull by hand): its conflict marks would be committed
+    if [[ -n $(git -C "$dir" ls-files -u) ]] || git -C "$dir" rev-parse -q --verify MERGE_HEAD >/dev/null; then
+        echo "  NOT synced: a merge is in progress in $dir (finish it or git merge --abort)"
+        unpushed=1
+        return 0
+    fi
+    # Those that differ from the last commit (tracked, or added with "dotfiles-sync add": a new file isn't kept by lying
+    # in the folder). Only they are committed (commit -- <files>: anything else staged stays staged)
+    ((${#synced[@]} == 0)) || mapfile -d '' -t changed < <(git -C "$dir" diff -z --name-only HEAD -- "${synced[@]}" 2>/dev/null)
+    for f in "${changed[@]}"; do
+        [[ -f $live/$f && ! -L $live/$f ]] && shared "$live/$f" "$f" | cmp -s - "$dir/$f" && commit+=("$f")
+    done
+    ((${#made[@]} == 0)) ||
+        mapfile -d '' -t -O "${#commit[@]}" commit < <(git -C "$dir" diff -z --name-only HEAD -- "${made[@]}" 2>/dev/null)
+    if ((${#commit[@]})); then
+        # (hostname: not on every install. The commit failing, no name and email set yet, a hook: said, not pushed, the
+        # copies left as they are, not stashed as edits in progress and reported pushed)
+        if ! git -C "$dir" commit -q -m "Sync from $(uname -n) $(date +%F)" -- "${commit[@]}"; then
+            echo "  NOT synced: git couldn't commit in $dir (git config user.name and user.email set?)"
+            unpushed=1
+            return 0
+        fi
+        committed "$dir" "${commit[@]}"
+    elif [[ -z $(git -C "$dir" log --oneline '@{u}..' 2>/dev/null) ]]; then
+        echo "  nothing to commit"
+        return
+    fi
+    # What's left (an edit in progress, not the sync's) set aside for the pull, put back after. Only a stash this made
+    # is put back (an older one of yours never), as it was: what was staged staged again
+    if [[ -n $(git -C "$dir" status --porcelain --untracked-files=no) ]]; then
+        echo "  left out (not the sync's: commit it by hand): $(git -C "$dir" status --porcelain --untracked-files=no | cut -c4- | paste -sd' ')"
+        stash_before=$(git -C "$dir" rev-parse -q --verify refs/stash) || true
+        git -C "$dir" stash push -q -m "dotfiles-sync $(date '+%F %T'): your edits in progress" 2>/dev/null || true
+        stash_ours=$(git -C "$dir" rev-parse -q --verify refs/stash) || true
+        if [[ -z $stash_ours || $stash_ours == "$stash_before" ]]; then
+            echo "  NOT pushed: your edits in progress in $dir couldn't be set aside for the pull"
+            unpushed=1
+            return 0
+        fi
+        # Stopped from here to their return (Ctrl+C in the pull, a closed terminal): put back before it ends, not left
+        # in the stash (each later run said nothing of them)
+        stopped_dir=$dir stopped_stash=$stash_ours
+        trap stopped INT TERM HUP
+    fi
+    # The other machine's pushes first (a push behind them is refused, and the commit then sat here unpushed: a later
+    # run, with nothing new to commit, said all was synced)
+    # (a conflict: the rebase is undone, leaving the commit here as it was, not a half-done rebase with conflict marks)
+    { git -C "$dir" pull --rebase -q || { git -C "$dir" rebase --abort 2>/dev/null; false; }; } && git -C "$dir" push -q || {
+        echo "  NOT pushed: run git pull --rebase in $dir"
+        unpushed=1  # the other repo still synced; the exit status says so
+        ok=false
+    }
+    # The edit in progress back, staged parts staged (--index); that failing, as plain changes (said). Clashing with
+    # what the pull brought: its half-applied conflict undone (the folder as pulled, no conflict marks left for every
+    # later sync to refuse), the edit kept whole in git's stash, and said
+    if [[ -n $stash_ours ]]; then
+        if [[ $(git -C "$dir" rev-parse -q --verify refs/stash) != "$stash_ours" ]]; then
+            echo "  NOT synced: your edits in progress in $dir are in git's stash, not on top of it any more: git -C $dir stash list"
+            unpushed=1
+        elif git -C "$dir" stash apply -q --index >/dev/null 2>&1; then
+            git -C "$dir" stash drop -q
+        else
+            git -C "$dir" reset -q --hard HEAD
+            if git -C "$dir" stash apply -q >/dev/null 2>&1; then
+                git -C "$dir" stash drop -q
+                echo "  your edits in progress in $dir are back, but what was staged of them is unstaged now"
+            else
+                git -C "$dir" reset -q --hard HEAD
+                echo "  NOT synced: your edits in progress in $dir clash with what was pulled; kept in git's stash (git -C $dir stash pop, then settle the conflict)"
+                unpushed=1
+            fi
+        fi
+        trap - INT TERM HUP
+    fi
+    if $ok; then echo "  pushed: $(git -C "$dir" log --format='%h %s' -1)"; fi
+}
+
+echo "== dotfiles"
+# The browser's files and the VSCodium extension list are made from the apps themselves, not copied
+mapfile -d '' -t files < <(git -C "$repo" ls-files -z .config .local | grep -zvE '^(.local/share/firefox/.*|.config/VSCodium/extensions.txt)$')
+# Your bookmarks and the new tab's picture are not exported into the repo (it's public): they're personal, and travel
+# in your LibreWolf profile on your pen drive (agros-personal --save)
+# Browser settings: refresh the values of the settings listed in settings.js from LibreWolf
+# (failing, e.g. an unreadable profile: the rest of the sync goes on)
+prof=$("$(dirname "$(readlink -f "$0")")/firefox-bookmarks-export" --profile 2>/dev/null) || prof=""
+python3 - "$repo/.local/share/firefox/settings.js" "$dry" "$prof" <<'EOF' || echo "  LibreWolf settings not refreshed (an error above)"
+import os, re, sys
+path, dry, prof = sys.argv[1], sys.argv[2] == "true", sys.argv[3]
+if not prof or not os.path.exists(path) or not os.path.exists(f"{prof}/prefs.js"):
+    sys.exit()
+# A profile setup never applied settings.js to (LibreWolf was open, or it was made since): its prefs.js lacks them, and
+# each one would be dropped as "back to the default" and pushed to every machine
+if not os.path.exists(f"{prof}/.dotfiles-imported"):
+    print("  LibreWolf settings not refreshed: not applied to this profile yet (./setup.sh --only desktop)")
+    sys.exit()
+live = {}
+for line in open(f"{prof}/prefs.js"):
+    m = re.match(r'user_pref\("([^"]+)",', line)
+    if m:
+        live[m.group(1)] = line.rstrip("\n")
+out = []
+for line in open(path):
+    m = re.match(r'user_pref\("([^"]+)",', line)
+    if not m:
+        out.append(line.rstrip("\n"))
+    elif m.group(1) in live:  # gone from prefs.js = back to LibreWolf's default, so dropped
+        out.append(live[m.group(1)])
+new = "\n".join(out) + "\n"
+if new != open(path).read():
+    print("  changed: LibreWolf settings")
+    if not dry:
+        open(path, "w").write(new)
+EOF
+sync "$repo" "$HOME" "${files[@]}"
+# VSCodium extensions: the list, not the extensions themselves
+if command -v codium >/dev/null; then
+    tmp_ext=$(mktemp)
+    codium --list-extensions >"$tmp_ext" 2>/dev/null || : >"$tmp_ext"  # (failing: nothing to go by; set -e ended the sync here)
+    # None listed: the extensions failed to install here (e.g. offline), not a list to give the other machines
+    if [[ -s $tmp_ext ]] && ! cmp -s "$tmp_ext" "$repo/.config/VSCodium/extensions.txt"; then
+        echo "  changed: VSCodium extensions"
+        $dry || cp "$tmp_ext" "$repo/.config/VSCodium/extensions.txt"
+    fi
+    rm -f "$tmp_ext"
+fi
+# (the browser's files and the extension list: made here, not by sync)
+$dry || push "$repo" "$HOME" "${files[@]}" -- .local/share/firefox .config/VSCodium/extensions.txt
+
+if [[ -d $legion/.git ]]; then
+    echo "== legion-control-linux"
+    sync "$legion" "$HOME/.local/share/legion-control" shell.qml legion-ctl legion-rgb install.sh
+    $dry || push "$legion" "$HOME/.local/share/legion-control" shell.qml legion-ctl legion-rgb install.sh
+fi
+exit "${unpushed:-0}"

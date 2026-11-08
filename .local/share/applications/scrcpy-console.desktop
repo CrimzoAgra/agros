@@ -1,0 +1,9 @@
+[Desktop Entry]
+# Hidden: scrcpy is in the launcher as Phone Link (phone-link.desktop), with no terminal
+NoDisplay=true
+Name=scrcpy (console)
+Type=Application
+Exec=scrcpy
+TryExec=scrcpy
+Icon=scrcpy
+Terminal=false

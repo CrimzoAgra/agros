@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Your accounts (logins, keys, LibreWolf profile, GitHub login...) back from your pen drive: the one thing to run after
+# installing AgrOS. Decrypted straight into place with your passphrase; never in the repo. (setup.sh's personal step)
+#   agros-personal [folder]          restore, from the pen drive plugged in (or that folder); without the file on one,
+#                                    each app is opened for you to sign in
+#   agros-personal --save [folder]   put this PC's accounts on the pen drive (encrypted)
+set -euo pipefail
+st=${XDG_STATE_HOME:-$HOME/.local/state}
+repo=$(cat "$st/dotfiles-repo" 2>/dev/null) && [[ -x $repo/setup.sh ]] || repo=$HOME/Projects/agros
+[[ -x $repo/setup.sh ]] || { echo "No AgrOS repo found (looked in $repo)."; exit 1; }
+case ${1:-} in
+    -h | --help) sed -n '2,7s/^# \{0,1\}//p' "$0"; exit 0 ;;
+    --save) shift; exec "$repo/setup.sh" --save-personal "$@" ;;
+esac
+if [[ -n ${1:-} ]]; then
+    exec "$repo/setup.sh" --personal "$1" --only personal
+fi
+exec "$repo/setup.sh" --only personal

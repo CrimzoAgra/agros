@@ -1,0 +1,219 @@
+# shellcheck shell=bash disable=SC2154  # $repo, $personal, $personal_dir and firefox_profile (60-desktop.sh) come from setup.sh
+# about: Your accounts (only with --personal): back from your pen drive, else each app opened for you to sign in
+# scope: user
+
+# Your logins live on your pen drive only, never in the repo (git keeps every version, and saved logins get past your
+# password and 2FA): ./setup.sh --save-personal puts them there, encrypted with your passphrase (gpg, AES-256: a lost
+# drive gives nothing), ./setup.sh --personal brings them back, decrypted straight into place (no unencrypted copy
+# anywhere). No drive with them: each app is opened for you to sign in instead.
+PERSONAL_FILE=dotfiles-personal.tar.gpg
+# What's in it, from your home: Discord (Equibop), Spotify and Nuvio (flatpaks), Proton VPN, and the login keyring
+# (where Equibop keeps the key to its login and Proton VPN its account: it opens with the password you log in with)
+PERSONAL_PATHS=(.config/equibop .var/app/com.spotify.Client/config/spotify .var/app/com.nuvio.media.desktop/config/nuvio
+    .config/Proton/VPN .local/share/keyrings
+    # Steam: its login (accounts, the saved sign-in, the one to sign in as) and settings (Proton per game, libraries)
+    .steam/registry.vdf .local/share/Steam/local.vdf .local/share/Steam/config/loginusers.vdf
+    .local/share/Steam/config/config.vdf
+    # SteamGridDB's key (lutris-covers: covers for games the stores have none for)
+    .config/dots/steamgriddb.key
+    # GitHub's login (gh): Capri's fork is private, so capri-update needs it (installs her after a restore)
+    .config/gh/hosts.yml)
+# ...less what's only cache (downloaded again)
+PERSONAL_SKIP=(Cache "Code Cache" GPUCache DawnGraphiteCache DawnWebGPUCache Crashpad "Singleton*" equicord.asar
+    Dictionaries updates)
+# ...LibreWolf's profile, those files of it: your Firefox account (Sync), bookmarks and history, passwords, cookies,
+# extensions and their data (into the profile LibreWolf makes on the new PC: its folder's name differs)
+PERSONAL_LIBREWOLF=(signedInUser.json places.sqlite favicons.sqlite logins.json key4.db cert9.db cookies.sqlite
+    permissions.sqlite formhistory.sqlite prefs.js extensions extensions.json extension-preferences.json
+    extension-settings.json storage-sync-v2.sqlite containers.json handlers.json search.json.mozlz4 sessionstore.jsonlz4
+    xulstore.json
+    # (the new tab's background picture: yours, so not in the repo)
+    wallpaper)
+# ...Lutris's store logins (Battle.net, Steam, GOG, Epic, EA, Ubisoft, Rockstar): .cache/lutris/.<store>.auth/.token,
+# Claude Code's skills and memories (its plugins: the desktop step), the weather widget's place (Caelestia's
+# services.weatherLocation), and Claude Code's account and settings: copied first, as Claude Code (likely running)
+# keeps writing them
+# (and each Steam account's own settings: controllers, launch options)
+PERSONAL_DIRS=(.claude/skills ".claude/projects/*/memory" ".local/share/Steam/userdata/*/config")
+PERSONAL_CLAUDE_FILES=(.claude.json .claude/.credentials.json .claude/settings.json)
+
+# Without the drive: these opened one after the other for you to sign in
+PERSONAL_APPS=(
+    "LibreWolf: your Firefox account (Sync brings back bookmarks, passwords, history, extensions)|librewolf about:preferences#sync"
+    "Discord (Equibop)|equibop"
+    "Spotify|flatpak run com.spotify.Client"
+    "Nuvio|flatpak run com.nuvio.media.desktop"
+    "Proton VPN|protonvpn-app"
+    "Lutris: your stores, in its sidebar (Steam, GOG, Epic, Battle.net, EA, Ubisoft, Rockstar)|lutris"
+)
+
+# gpg with your passphrase; PERSONAL_PASSFILE (tests): read from that file instead of asked
+personal_gpg() {
+    if [[ -n ${PERSONAL_PASSFILE:-} ]]; then
+        gpg --batch --yes --quiet --pinentry-mode loopback --passphrase-file "$PERSONAL_PASSFILE" "$@"
+    else
+        gpg --quiet "$@"
+    fi
+}
+
+# The folder to use on your pen drive: --personal/--save-personal's own, else the removable drive plugged in (mounted
+# here if it isn't; with several, the one with the file on it). Nothing found: nothing printed
+personal_drive() {
+    [[ -n ${personal_dir:-} ]] && { echo "$personal_dir"; return; }
+    local dev rm type mnt found=()
+    while read -r dev rm type mnt; do
+        [[ $rm == 1 && $type == part ]] || continue
+        [[ -n $mnt ]] || mnt=$(udisksctl mount -b "$dev" 2>/dev/null | sed -n 's/^Mounted .* at \(.*\)$/\1/p')
+        [[ -n $mnt && -d $mnt ]] && found+=("$mnt")
+    done < <(lsblk -nrpo NAME,RM,TYPE,MOUNTPOINT 2>/dev/null)
+    local d
+    for d in "${found[@]}"; do [[ -f $d/$PERSONAL_FILE ]] && { echo "$d"; return; }; done
+    ((${#found[@]} == 1)) && echo "${found[0]}"
+    return 0
+}
+
+# The apps it's for that are open (their files change under them, or theirs would overwrite these)
+personal_open() {
+    local p
+    for p in librewolf equibop spotify protonvpn-app steam; do pgrep -x "$p" >/dev/null && echo "$p"; done
+    pgrep -f '(^|/)lutris( |$)' >/dev/null && echo lutris
+    flatpak ps --columns=application 2>/dev/null | grep -qx com.nuvio.media.desktop && echo nuvio
+    return 0
+}
+
+# Claude Code running (restoring only: saving copies its files first)
+personal_claude_open() { pgrep -x claude >/dev/null && echo "Claude Code"; return 0; }
+
+# ./setup.sh --save-personal: your logins on this PC onto your pen drive
+personal_save() {
+    local drive open prof paths=() lw=() p f staged skip=() s
+    drive=$(personal_drive)
+    [[ -n $drive ]] || { echo "No pen drive found: plug it in, or name its folder (./setup.sh --save-personal <folder>)."; return 1; }
+    [[ $(readlink -f "$drive") != "$(readlink -f "$repo")"* ]] || { echo "Not in the repo: your logins go on your pen drive."; return 1; }
+    open=$(personal_open)
+    [[ -z $open ]] || { echo "Close these first (their files are being written): $(echo $open)."; return 1; }
+    for p in "${PERSONAL_PATHS[@]}"; do [[ -e $HOME/$p ]] && paths+=("$p"); done
+    for f in "$HOME"/.cache/lutris/.*.auth "$HOME"/.cache/lutris/.*.token; do [[ -f $f ]] && paths+=("${f#"$HOME"/}"); done
+    for p in "${PERSONAL_DIRS[@]}"; do
+        for f in "$HOME"/$p; do [[ -d $f && -n $(ls -A "$f") ]] && paths+=("${f#"$HOME"/}"); done
+    done
+    prof=$(firefox_profile)
+    if [[ -n $prof ]]; then
+        for f in "${PERSONAL_LIBREWOLF[@]}"; do [[ -e $prof/$f ]] && lw+=("$f"); done
+        for f in "$prof"/storage/default/moz-extension*; do [[ -e $f ]] && lw+=("${f#"$prof"/}"); done
+    fi
+    # the weather's place (a file of its own) and Claude Code's files, staged in your runtime folder (in memory, yours
+    # only) and gone after
+    staged=$(mktemp -d "${XDG_RUNTIME_DIR:-/tmp}/personal.XXXXXX")
+    local onstage=(weather-location)
+    jq -r '.services.weatherLocation // empty' "$HOME/.config/caelestia/shell.json" 2>/dev/null >"$staged/weather-location" || true
+    for f in "${PERSONAL_CLAUDE_FILES[@]}"; do
+        [[ -f $HOME/$f ]] || continue
+        mkdir -p "$staged/$(dirname "$f")"; cp -p "$HOME/$f" "$staged/$f"; onstage+=("$f")
+    done
+    for s in "${PERSONAL_SKIP[@]}"; do skip+=(--exclude="$s"); done
+    echo "Saving to $drive/$PERSONAL_FILE. Pick a long passphrase: it's all that keeps a lost drive's finder out."
+    # three tars one after the other (your home, the profile as librewolf/, the place), straight into gpg
+    if {
+        tar -C "$HOME" "${skip[@]}" -cf - "${paths[@]}"
+        ((${#lw[@]})) && tar -C "$prof" "${skip[@]}" --transform 's,^,librewolf/,' -cf - "${lw[@]}"
+        tar -C "$staged" -cf - "${onstage[@]}"
+    } | personal_gpg --symmetric --cipher-algo AES256 --s2k-mode 3 --s2k-digest-algo SHA512 --s2k-count 65011712 \
+        -o "$drive/$PERSONAL_FILE.new"; then
+        mv "$drive/$PERSONAL_FILE.new" "$drive/$PERSONAL_FILE"
+        sync
+    else
+        rm -rf "$drive/$PERSONAL_FILE.new" "$staged"
+        return 1
+    fi
+    rm -rf "$staged"
+    echo "Saved ($(du -h "$drive/$PERSONAL_FILE" | cut -f1)). ./setup.sh --personal brings it back with the drive plugged in."
+}
+
+module_personal() {
+    $personal || { echo "Skipped (./setup.sh --personal: your accounts, from your pen drive)."; return 0; }
+    local drive
+    drive=$(personal_drive)
+    if [[ -n $drive && -f $drive/$PERSONAL_FILE ]]; then
+        personal_restore "$drive/$PERSONAL_FILE"
+    else
+        echo "No $PERSONAL_FILE on a pen drive: you sign in to each app instead."
+        personal_sign_in
+    fi
+}
+
+# Your logins back from the file on the drive, decrypted straight into place (three times: the file's list, its
+# files, the weather's place; gpg's agent asks the passphrase once)
+personal_restore() {
+    local file=$1 open prof loc name dest backup to=() shell="$HOME/.config/caelestia/shell.json"
+    open=$(personal_open; personal_claude_open)
+    [[ -z $open ]] || { echo "Close these first (they'd write over what's brought back): $(echo $open)."; return 1; }
+    prof=$(firefox_profile)
+    [[ $prof == "$HOME"/* ]] || prof=  # (kept outside your home: brought back by hand)
+    # LibreWolf's files into its profile here; none yet (LibreWolf never started): left out, said below
+    if [[ -n $prof ]]; then to=(--transform "s,^librewolf/,${prof#"$HOME"/}/,")
+    else to=(--exclude='librewolf'); fi
+    # what it replaces, backed up first (as setup's files step does)
+    backup="$HOME/.dotfiles-backup/$(date +%Y%m%d-%H%M%S)-personal"
+    while IFS= read -r name; do
+        [[ $name == */ || $name == weather-location ]] && continue
+        [[ $name == librewolf/* && -z $prof ]] && continue
+        dest=${name/#librewolf\//${prof#"$HOME"/}/}
+        # a database's journal left beside it (LibreWolf's new profile) gets replayed over the one brought back,
+        # wrecking it (LibreWolf then sets it aside as .corrupt: no bookmarks): moved to the backup
+        if [[ -f $HOME/$dest-wal || -f $HOME/$dest-shm ]]; then
+            mkdir -p "$backup/$(dirname "$dest")"
+            mv -f "$HOME/$dest"-wal "$HOME/$dest"-shm "$backup/$(dirname "$dest")/" 2>/dev/null || true
+        fi
+        [[ -f $HOME/$dest ]] || continue
+        mkdir -p "$backup/$(dirname "$dest")"
+        cp -a "$HOME/$dest" "$backup/$dest"
+    done < <(personal_gpg -d "$file" | tar -itf -)
+    personal_gpg -d "$file" | tar -C "$HOME" -ixf - "${to[@]}" --exclude=weather-location
+    loc=$(personal_gpg -d "$file" | tar -ixOf - weather-location 2>/dev/null) || loc=
+    if [[ -n $loc && -f $shell ]]; then
+        jq --indent 4 --arg l "$loc" '.services.weatherLocation = $l' "$shell" >"$shell.tmp" && mv "$shell.tmp" "$shell"
+    fi
+    [[ -d $backup ]] && echo "Replaced files backed up to $backup."
+    [[ -n $prof ]] || echo "LibreWolf has no profile yet: start it once and close it, then ./setup.sh --only personal."
+    # Capri: her fork is private, so an install without your GitHub login couldn't fetch her. With it back now, she's
+    # installed (a failure said, the restore still done)
+    if [[ ! -e ${XDG_DATA_HOME:-$HOME/.local/share}/capri/current && -x $HOME/.local/bin/capri-update ]] &&
+        command -v gh >/dev/null && gh auth status >/dev/null 2>&1; then
+        echo "Installing Capri (your GitHub login is back)..."
+        gh auth setup-git >/dev/null 2>&1 || true
+        "$HOME/.local/bin/capri-update" || echo "!! Capri didn't install: run capri-update"
+    fi
+    echo "Accounts back. Log out and in (the keyring): it opens with the password you logged in with on your old PC."
+}
+
+personal_sign_in() {
+    [[ -t 0 ]] || { echo "Signing in needs a terminal."; return 1; }
+    personal_weather
+    local app name cmd r
+    for app in "${PERSONAL_APPS[@]}"; do
+        name=${app%%|*} cmd=${app#*|}
+        if [[ $cmd == "flatpak run "* ]]; then
+            flatpak info "${cmd#flatpak run }" >/dev/null 2>&1 || { echo "$name: not installed, skipped."; continue; }
+        else
+            command -v "${cmd%% *}" >/dev/null || { echo "$name: not installed, skipped."; continue; }
+        fi
+        read -rp "$name: Enter opens it, s skips " r || return 0
+        [[ $r == [sS]* ]] && continue
+        # shellcheck disable=SC2086  # the command and its arguments, split
+        setsid -f "$HOME/.local/bin/app-launch" $cmd >/dev/null 2>&1
+        read -rp "  Signed in? Enter for the next one " r || return 0
+    done
+}
+
+# The weather widget's place, asked (Enter keeps it): kept on this PC only (dotfiles-sync leaves it out of the repo)
+personal_weather() {
+    local shell="$HOME/.config/caelestia/shell.json" loc r
+    [[ -f $shell ]] || return 0
+    loc=$(jq -r '.services.weatherLocation // empty' "$shell" 2>/dev/null) || loc=
+    read -rp "Weather widget's place, a city or lat,lon (Enter keeps ${loc:-"finding it from your connection"}) " r || return 0
+    [[ -n $r ]] || return 0
+    # (shell.json not readable as JSON, edited by hand: said, the step goes on to the apps)
+    { jq --indent 4 --arg l "$r" '.services.weatherLocation = $l' "$shell" >"$shell.tmp" && mv "$shell.tmp" "$shell"; } ||
+        { rm -f "$shell.tmp"; echo "!! $shell isn't valid JSON: the weather place not set"; }
+}

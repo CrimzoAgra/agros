@@ -1,0 +1,6 @@
+#!/bin/sh
+# Copies the current wallpaper and Caelestia colours to the login screen (~/.local/share/caelestia-greeter, installed
+# into /etc/greetd/caelestia-greeter, whose theme folder is yours). Run at every login
+dir=/etc/greetd/caelestia-greeter
+[ -w "$dir/theme" ] || exit 0
+exec "$dir/make-theme.sh" "$dir/theme"

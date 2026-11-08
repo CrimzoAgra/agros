@@ -1,0 +1,30 @@
+#!/bin/sh
+# Sets the DPI of Logitech mice (Solaar) to the Settings app's choice (input.mouse_dpi): their real DPI, so games
+# follow too. The mouse's onboard profile is turned off first (it locks the DPI; this mouse's can't be edited from
+# here). Solaar saves it and, running in the tray (user/apps.lua), puts it back when the mouse reconnects; this also
+# runs at login. Devices without these settings are skipped. With no DPI chosen ("Mouse's own") the mouse keeps its
+# own profile (switched back on if a DPI chosen before had turned it off)
+command -v solaar >/dev/null || exit 0
+# (as dots-settings has it: a value saved that's no longer one of the choices is the default, "Own", not passed on)
+dpi=$("${0%/*}/dots-settings" get input.mouse_dpi 2>/dev/null | jq -r '. // empty' 2>/dev/null)
+marks=${XDG_STATE_HOME:-$HOME/.local/state}/mouse-dpi-profiles-off  # the mice whose onboard profile this turned off
+mkdir -p "${marks%/*}"
+timeout 20 solaar show 2>/dev/null | sed -n 's/^  [0-9]*: //p' | while read -r mouse; do
+    timeout 20 solaar config "$mouse" dpi_extended >/dev/null 2>&1 || continue
+    # "Own" (no DPI chosen): its onboard profile back on, if it was this that turned it off (one you turned off in
+    # Solaar stays off)
+    if [ -z "$dpi" ]; then
+        if grep -qxF "$mouse" "$marks" 2>/dev/null; then
+            timeout 20 solaar config "$mouse" onboard_profiles "Profile 1" >/dev/null 2>&1 &&
+                { grep -vxF "$mouse" "$marks" >"$marks.tmp"; mv "$marks.tmp" "$marks"; }
+        fi
+        continue
+    fi
+    # Marked only if this turns it off: one already off (by you in Solaar, or by this earlier) keeps its mark as it is
+    if ! timeout 20 solaar config "$mouse" onboard_profiles 2>/dev/null | grep -q '^onboard_profiles = Disabled$'; then
+        timeout 20 solaar config "$mouse" onboard_profiles Disabled >/dev/null 2>&1 &&
+            { grep -qxF "$mouse" "$marks" 2>/dev/null || echo "$mouse" >>"$marks"; }
+    fi
+    timeout 20 solaar config "$mouse" dpi_extended X "$dpi" >/dev/null 2>&1
+    timeout 20 solaar config "$mouse" dpi_extended Y "$dpi" >/dev/null 2>&1
+done

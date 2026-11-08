@@ -1,0 +1,7 @@
+# OnFailure= of the user services (game-focus, tray-keeper): a notification when one keeps crashing, with its last error
+[Unit]
+Description=Notify that %i failed
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'notify-send -u critical -a "Dotfiles" -i dialog-error "%i keeps crashing" "It stopped after crashing repeatedly (maybe a Hyprland or Caelestia update changed something). Last lines of its log:\n$(journalctl --user -u %i -n 4 -o cat --no-pager)"'

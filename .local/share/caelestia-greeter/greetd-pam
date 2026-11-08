@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+# Makes the login screen's PAM service, /etc/pam.d/greetd, from greetd.pam (beside this) and the system's own PAM
+# stack as it is now: its "auth include" lines replaced by what they include (system-local-login, system-login,
+# system-auth...), with nodelay on pam_unix and pam_faillock (each asks for a ~2 s pause after a wrong password; the
+# rest, pam_faillock's counting and lockout included, as the system has it). Run by the login screen's install.sh and,
+# after each pambase or pam update, by its pacman hook, so it follows the system's changes (sudo and the text consoles
+# keep the system's files, untouched).
+#   greetd-pam           write /etc/pam.d/greetd (the keyring's lines there kept after it; greetd's own kept once as
+#                        greetd.orig). Anything it can't follow (a substack, an include too deep, a module not there):
+#                        the file left as it is, said, exit 1: never a PAM file that can't log in
+#   greetd-pam --print   only print it (dotfiles-check compares the installed one with it)
+# ($PAM_DIR, $PAM_MODULES, $GREETD_PAM_TEMPLATE: other folders and template, for the tests)
+set -euo pipefail
+pamd=${PAM_DIR:-/etc/pam.d}
+modules=${PAM_MODULES:-/usr/lib/security}
+template=${GREETD_PAM_TEMPLATE:-$(dirname "$(readlink -f "$0")")/greetd.pam}
+
+# auth_of <service> <depth>: that service's auth lines, its own includes followed. As Linux-PAM reads them: the type
+# and control in any case (AUTH, Include), a last line with no newline, anything from a # on ignored. A line continued
+# on the next (a backslash at its end, spaces, tabs and a comment after it aside): not followed, the whole made fails
+# (the file left as it is), rather than read wrong
+auth_of() {
+    local line kind ctl rest
+    (($2 < 6)) || { echo "includes too deep at $1" >&2; return 1; }
+    [[ -f $pamd/$1 ]] || { echo "no $pamd/$1" >&2; return 1; }
+    while IFS= read -r line || [[ -n $line ]]; do
+        # (as Linux-PAM: a comment from its # to the line's end, then the spaces and tabs at its end, gone)
+        line=${line%%#*}
+        line=${line%"${line##*[![:space:]]}"}
+        [[ $line =~ ^[[:space:]]*$ ]] && continue
+        [[ $line != *"\\" ]] || { echo "a line continued on the next in $1, not followed" >&2; return 1; }
+        read -r kind ctl rest <<<"$line"
+        kind=${kind,,}
+        [[ ${kind#-} == auth ]] || continue
+        case ${ctl,,} in
+            include) auth_of "$rest" $(($2 + 1)) || return 1 ;;
+            substack) echo "a substack in $1, not followed" >&2; return 1 ;;
+            *) printf '%s\n' "$line" ;;
+        esac
+    done <"$pamd/$1"
+}
+
+# made: the file as it should be
+made() {
+    local line kind ctl rest out
+    [[ -f $template ]] || { echo "no $template" >&2; return 1; }
+    out=$(while IFS= read -r line || [[ -n $line ]]; do
+        read -r kind ctl rest <<<"$line"
+        if [[ ${kind,,} == auth && ${ctl,,} == include ]]; then auth_of "$rest" 1 || exit 1; else printf '%s\n' "$line"; fi
+    done <"$template") || return 1
+    # nodelay on pam_unix and pam_faillock (auth); then checked: pam_unix there, and every module a file that exists
+    # (an optional "-auth" one may be missing)
+    out=$(awk 'tolower($0) ~ /^-?auth[[:space:]]/ && /[[:space:]](pam_unix|pam_faillock)\.so([[:space:]]|$)/ && !/[[:space:]]nodelay([[:space:]]|$)/ {
+        sub(/[[:space:]]+$/, ""); $0 = $0 " nodelay" } { print }' <<<"$out")
+    grep -qiE '^auth[[:space:]].*[[:space:]]pam_unix\.so([[:space:]]|$)' <<<"$out" || { echo "no pam_unix auth line" >&2; return 1; }
+    local mod
+    while IFS= read -r mod; do
+        [[ -e $modules/$mod || $mod == /* && -e $mod ]] || { echo "module $mod not found" >&2; return 1; }
+    done < <(awk 'tolower($0) ~ /^(auth|account|session|password)[[:space:]]/ {
+        line = $0; sub(/^[A-Za-z]+[[:space:]]+/, "", line)
+        if (line ~ /^\[/) sub(/^\[[^]]*\][[:space:]]+/, "", line); else sub(/^[^[:space:]]+[[:space:]]+/, "", line)
+        split(line, f, /[[:space:]]+/); if (f[1] != "" && f[1] !~ /^(system|common)-/ && f[1] ~ /\.so$/) print f[1] }' <<<"$out")
+    printf '%s\n' "$out"
+}
+
+if [[ ${1:-} == --print ]]; then
+    made
+    exit
+fi
+target=$pamd/greetd
+if ! new=$(made); then
+    echo "!! The login screen's PAM service couldn't be made from the system's (above): $target left as it is"
+    exit 1
+fi
+[[ ! -f $target || -f $target.orig ]] || cp "$target" "$target.orig"
+keyring=$(grep pam_gnome_keyring "$target" 2>/dev/null || true)
+{ printf '%s\n' "$new"; [[ -z $keyring ]] || printf '%s\n' "$keyring"; } >"$target.new"
+chmod 644 "$target.new"
+mv "$target.new" "$target"

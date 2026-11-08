@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# Lutris with the changes in ~/.local/share/lutris-overlay (patch.py, sections.py):
+#   - the grid splits into collapsible "Installed" and "Not installed" sections
+#   - the Games view shows the icon of each game's store in its cover's bottom-right corner
+#   - every cover in the Games view the same size; "Hide game from library" for uninstalled games too
+#   - the store launchers (lutris-library's Launchers category) only in the sidebar, not among the games, and
+#     lutris-library's changes shown without a restart (a library-refresh action)
+#   - Steam games launched while Steam is closed start it in the tray, not its window (steam-start)
+#   - with LUTRIS_START_HIDDEN=1 (at login, user/apps.lua) it starts in its tray only
+#   - games with no proper cover get one from SteamGridDB (lutris-covers)
+# First on the PATH, so the launcher, menu entries and lutris: links all start this. The patched copy is built into
+# ~/.cache/lutris-overlay (links to the installed files, the changed ones copied) the first time after Lutris or the
+# changes update. If a change no longer fits a new Lutris, it starts unchanged and says so (once)
+# Lutris not installed (apps not chosen in setup): nothing to start, and no "your changes are off" for a copy of nothing
+[[ -x /usr/bin/lutris ]] || { echo "Lutris isn't installed" >&2; exit 1; }
+overlay="$HOME/.local/share/lutris-overlay"
+out="${XDG_CACHE_HOME:-$HOME/.cache}/lutris-overlay"
+# Rebuilt when Lutris (its files: any package or version of it), the changes, or which of them are on (Settings app:
+# the lutris.* settings) change
+src=$(python3 -Ic 'import sysconfig; print(sysconfig.get_path("purelib"))')/lutris
+on=$(jq -c 'with_entries(select(.key | startswith("lutris.")))' ~/.config/dots/settings.json 2>/dev/null)
+stamp=$( { find "$src" -name '*.py' -printf '%T@ %s %P\n' | sort; cat "$overlay"/*.py; echo "$on"; } | md5sum)
+# (a failed build is tried again after a day: the failure may have passed, a full disk)
+current() { [[ $(cat "$out/stamp" 2>/dev/null) == "$stamp" ]] ||
+    [[ $(cat "$out.failed" 2>/dev/null) == "$stamp" && -n $(find "$out.failed" -mmin -1440 2>/dev/null) ]]; }
+if ! current; then
+    # One build at a time (the login start and a click can overlap); the second finds it done
+    mkdir -p "${out%/*}"
+    exec 9>"$out.lock"
+    flock 9
+    if ! current; then
+        tmp=$(mktemp -d "$out.new.XXXXXX") err= loads=
+        mkdir -p "$tmp/bin" && cp -as "$src" "$tmp/lutris" && cp /usr/bin/lutris "$tmp/bin/" &&
+            ln -s /usr/share "$tmp/share" &&  # its data (/usr/share/lutris), which it looks for next to its folder
+            err=$(python3 -I "$overlay/patch.py" "$src" "$tmp" 2>&1) &&
+            # Patched Lutris still loads (a change can fit and still use something an update renamed)
+            loads=$(python3 -I -c 'import sys; sys.path.insert(0, sys.argv[1]); import lutris.gui.application, lutris.gui.lutriswindow' "$tmp" 2>&1 |
+                  tail -1; exit "${PIPESTATUS[0]}") && echo "$stamp" >"$tmp/stamp" && rm -f "$out.failed" &&
+            { if [[ -e $out ]]; then mv -T --exchange "$tmp" "$out"; else mv -T "$tmp" "$out"; fi; } || {
+            echo "$stamp" >"$out.failed"
+            notify-send -u critical -a Dotfiles -i dialog-warning "Lutris changed: your changes are off" "${loads:-${err:-the copy could not be made}}"
+        }
+        # Optional changes left out (the rest is on)
+        warned=$(grep '^WARNING' <<<"$err" | sed 's/^WARNING: //')
+        [[ -n $warned && ! -e $out.failed ]] && notify-send -u critical -a Dotfiles -i dialog-warning "Lutris changed: some of your changes are off" "$warned"
+        rm -rf "$tmp"
+    fi
+    exec 9>&-
+fi
+# Steam games start Steam through steam-start (in the tray, not its window) when it's closed. Only when there's no
+# Steam runner config yet: one you made in Lutris stays
+runners="$HOME/.local/share/lutris/runners"
+[[ -e $runners/steam.yml ]] || { mkdir -p "$runners" &&
+    printf 'steam:\n  runner_executable: %s\n' "$HOME/.local/bin/steam-start" >"$runners/steam.yml"; }
+# Lutris's icons (its runtime's: the stores' badges on the covers) come file by file at its first start and count as
+# done even with some failed (no network yet), never fetched again: missing Steam's, they go with the runtime list
+# (fetched again only 6 hours after the last), so this start fetches both
+icons="$HOME/.local/share/lutris/runtime/icons"
+[[ -d $icons && ! -e $icons/hicolor/scalable/apps/steam.svg ]] &&
+    rm -rf "$icons" "${XDG_CACHE_HOME:-$HOME/.cache}/lutris/versions.json"
+# Real covers for games with none, a wide one or Steam's padded one (lutris-covers, from SteamGridDB with its key), in
+# the background, when the library changed since the last look
+checked="${XDG_CACHE_HOME:-$HOME/.cache}/lutris/covers-checked"
+# (detached: a child of this script would become Lutris's after the exec below, and a zombie once it ended)
+[[ ~/.local/share/lutris/pga.db -nt $checked ]] && ( { nice "$HOME/.local/bin/lutris-covers"; touch "$checked"; } &>/dev/null & )
+# The copy of /usr/bin/lutris loads the lutris folder next to its own (the patched one)
+# (a failure mark from another stamp goes: lutris-library reads it as "the patched Lutris isn't running")
+[[ $(cat "$out/stamp" 2>/dev/null) == "$stamp" ]] && { rm -f "$out.failed"; exec "$out/bin/lutris" "$@"; }  # an older build mixed with a newer Lutris could crash
+exec /usr/bin/lutris "$@"

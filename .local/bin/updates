@@ -1,0 +1,4 @@
+#!/bin/sh
+# Opens the Updates app (~/.config/quickshell/updates), from its launcher entry
+# (its window named after its launcher entry, for its icon in the dock; every Quickshell window is org.quickshell otherwise)
+QS_APP_ID=updates exec qs -c updates -n "$@"

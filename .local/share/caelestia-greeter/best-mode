@@ -1,0 +1,37 @@
+#!/usr/bin/env python3
+"""Runs inside cage before the login screen: each screen to its highest resolution, then its best refresh rate
+(the same as the desktop and the kernel console: screenmode.py). cage's default 60 Hz makes some monitors (e.g. Samsung over HDMI) overscan and cut the edges."""
+import json
+import subprocess
+import time
+
+from screenmode import rank
+
+
+def outputs() -> list:
+    try:
+        return json.loads(subprocess.run(["wlr-randr", "--json"], check=False, capture_output=True, text=True).stdout or "[]")
+    except (OSError, ValueError):
+        return []
+
+
+# cage starts this right away, sometimes before it has set up the screens: wait for them (up to 3 s)
+found = []
+for _ in range(30):
+    found = [o for o in outputs() if o.get("enabled", True) and o.get("modes")]
+    if found:
+        break
+    time.sleep(0.1)
+if not found:
+    print("best-mode: no screens found")
+for o in found:
+    # The screen's own resolution when it names one (its native one; a VM window's size), then its best refresh rate
+    pref = [(m["width"], m["height"]) for m in o["modes"] if m.get("preferred")]
+    modes = [m for m in o["modes"] if (m["width"], m["height"]) in pref] or o["modes"]
+    m = max(modes, key=lambda m: rank(m["width"], m["height"], m["refresh"]))
+    mode = f'{m["width"]}x{m["height"]}@{m["refresh"]:.6f}Hz'
+    if m.get("current"):
+        print(f"best-mode: {o['name']} already at {mode}")
+        continue
+    r = subprocess.run(["wlr-randr", "--output", o["name"], "--mode", mode], check=False, capture_output=True, text=True)
+    print(f"best-mode: {o['name']} -> {mode}" + (f" failed: {r.stderr.strip()}" if r.returncode else ""))
