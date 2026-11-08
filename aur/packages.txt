@@ -9,6 +9,7 @@ hyprland-plugin-hyprbars
 qtengine
 darkly-bin
 papirus-folders
+bibata-cursor-theme-bin
 equibop-bin
 spicetify-cli
 spicetify-marketplace-bin
