@@ -5,6 +5,8 @@ export XDG_STATE_HOME=/var/lib/caelestia-greeter XDG_CACHE_HOME=/var/cache/caele
 export QT_WAYLAND_DISABLE_WINDOWDECORATION=1   # no title bar
 export WLR_NO_HARDWARE_CURSORS=1   # pointer drawn in the picture, so it doesn't stay on the shutdown screen
 set -a; . /etc/greetd/caelestia-greeter/env; set +a
+# Virtual GPUs (VMware's at least) can't take Qt's GPU buffers and the login screen dies: drawn in software there
+systemd-detect-virt -q --vm && export QT_QUICK_BACKEND=software
 # Keyboard layout for typing the password: the system's (localectl), as Hyprland uses, variant and options too. Read at
 # each start, so a layout changed later (setup's keyboard step) applies here too
 xkb() { sed -n "s/.*\"Xkb$1\"[[:space:]]*\"\([^\"]*\)\".*/\1/p" /etc/X11/xorg.conf.d/00-keyboard.conf 2>/dev/null | head -1; }
