@@ -29,7 +29,7 @@ io.write(pcall(dofile, ".config/caelestia/user/monitors.lua") and "loaded\n" or 
 [[ $out == $'rule []\nerror' ]] || { echo "FAIL: a broken host file left screens without a rule: $out"; exit 1; }
 # A screen with no rule of its own: its preferred resolution at its fastest rate there (not another resolution's
 # faster one, not the preferred 60); one this machine's host file names: left to that rule; a VM's (one rate there,
-# 60 being its preferred 59.94): no rule of its own, so "preferred" follows its window's size
+# 60 being its preferred 59.94): no fixed mode (its scale-1 rule keeps "preferred"), so it follows its window's size
 echo 'dots.monitor({ output = "desc:Named One", mode = "1920x1080@60" })' >"$t/.config/caelestia/user/hosts/$(cat /proc/sys/kernel/hostname).lua"
 out=$(cd "$here" && HOME=$t lua -e '
 package.path = os.getenv("HOME") .. "/.config/caelestia/?.lua;" .. package.path
@@ -49,5 +49,6 @@ dots = {}
 dofile(".config/caelestia/user/monitors.lua")')
 grep -qx "DP-1 1920x1080@143.98" <<<"$out" || fail "a screen with no rule of its own not at its fastest rate: $out"
 grep -qx "desc:Named One 1920x1080@60" <<<"$out" && ! grep -q "^DP-2 " <<<"$out" || fail "a screen the host file names got another rule: $out"
-! grep -q "^Virtual-1 " <<<"$out" || fail "a screen with one rate got a fixed mode (a VM's then can't follow its window): $out"
+! grep -v "^Virtual-1 preferred$" <<<"$out" | grep -q "^Virtual-1 " ||
+    fail "a screen with one rate got a fixed mode (a VM's then can't follow its window): $out"
 echo "ok monitor-desc"
