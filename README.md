@@ -85,7 +85,7 @@ With the Windows ones they replace in brackets:
 - With the device plugged in (`agros-welcome --system`): Boxflat (Moza Pit House), OpenRazer + Polychromatic (Razer
   Synapse), Solaar (Logitech G Hub, Logi Options+), OpenTabletDriver (tablet app)
 - File Roller + 7-Zip (WinRAR, 7-Zip; Extract/Compress in Thunar's right-click menu)
-- VSCodium, VS Code's open-source build (with your extensions), LibreOffice (Microsoft Office), qBittorrent, AntiMicroX (JoyToKey)
+- VSCodium, VS Code's open-source build (with your extensions), LibreOffice (Microsoft Office), GIMP (Photoshop), qBittorrent, AntiMicroX (JoyToKey)
 - VMware Workstation (`agros-welcome --system`: the AUR package, its installer from a copy on archive.org, as Broadcom
   gives it only to signed-in users; checked against the package's checksum)
 - HP Deskjet 1050 J410: HP's Linux driver (HPLIP), printing and scanning; add the printer in Print Settings once it's

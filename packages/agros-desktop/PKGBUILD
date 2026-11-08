@@ -4,7 +4,7 @@
 # (agros-welcome --system installs the ones for what's plugged in), as is VMware Workstation (its license forbids
 # passing it on: built from the AUR on your machine by agros-welcome --system).
 pkgname=agros-desktop
-pkgver=1
+pkgver=2
 pkgrel=1
 pkgdesc='AgrOS: Hyprland + Caelestia desktop with its apps (meta package)'
 arch=('any')
@@ -39,6 +39,7 @@ depends=(
     proton-vpn-gtk-app
     vscodium                            # VS Code's open-source build
     libreoffice-fresh                   # Microsoft Office
+    gimp                                # Photoshop
     qbittorrent
     antimicrox                          # JoyToKey
     etcher-bin                          # Rufus
