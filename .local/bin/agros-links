@@ -19,4 +19,15 @@ for d in "$lib"/share/*/; do d=${d%/}; link "$d" "$HOME/.local/share/${d##*/}"; 
 for l in "$HOME"/.local/bin/* "$HOME"/.local/share/*; do
     [[ -L $l && $(readlink "$l") == "$lib"/* && ! -e $l ]] && rm -f "$l"
 done
+# Configs a package update brought (a new folder in /etc/skel/.config, fetch's say): copied in once, at the first login
+# after. Never over one of yours, and one you delete stays deleted (the names already offered are kept)
+skel=${AGROS_SKEL:-/etc/skel}/.config seen=${XDG_STATE_HOME:-$HOME/.local/state}/agros/configs-seen
+mkdir -p "${seen%/*}" "$HOME/.config" && touch "$seen"
+for c in "$skel"/*; do
+    [[ -e $c ]] || continue
+    n=${c##*/}
+    grep -qxF -- "$n" "$seen" && continue
+    [[ -e $HOME/.config/$n ]] || cp -r "$c" "$HOME/.config/"
+    echo "$n" >>"$seen"
+done
 exit 0
