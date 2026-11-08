@@ -99,32 +99,43 @@ ColumnLayout {
         }
     }
 
-    ClippingWrapperRectangle {
-        visible: !!root.target?.win && !root.several
-        color: "transparent"
-        radius: Tokens.rounding.medium
-        Layout.alignment: Qt.AlignHCenter
-        Layout.preferredWidth: size.width
-        Layout.preferredHeight: size.height
+    // A preview of its own for each window (kept while the window stays): one view moved on to another window kept
+    // showing the last one's picture in every other frame (a flicker between the two), as each frame only copies in
+    // what changed
+    Repeater {
+        model: ScriptModel {
+            values: !root.several && root.target?.win ? [root.target.win] : []
+        }
 
-        readonly property size size: root.fit(root.target?.win, root.width, root.width)
+        ClippingWrapperRectangle {
+            id: previewBox
 
-        ScreencopyView {
-            id: preview
+            required property var modelData
+            readonly property size size: root.fit(modelData, root.width, root.width)
 
-            captureSource: !root.several && root.shows(root.target?.win) ? root.target.win.wayland : null // qmllint disable unresolved-type
-            live: visible
+            color: "transparent"
+            radius: Tokens.rounding.medium
+            Layout.alignment: Qt.AlignHCenter
+            Layout.preferredWidth: size.width
+            Layout.preferredHeight: size.height
 
-            // Fitted to the menu's width (a tall window: as tall as that, at most)
-            constraintSize.width: root.width
-            constraintSize.height: root.width
+            ScreencopyView {
+                id: preview
 
-            // A click on the preview does what clicking the dock icon does: that window, to the front
-            StateLayer {
-                radius: Tokens.rounding.medium
-                onClicked: {
-                    root.dock?.focusWindow(root.target.win);
-                    root.done();
+                captureSource: root.shows(previewBox.modelData) ? previewBox.modelData.wayland : null // qmllint disable unresolved-type
+                live: visible
+
+                // Fitted to the menu's width (a tall window: as tall as that, at most)
+                constraintSize.width: root.width
+                constraintSize.height: root.width
+
+                // A click on the preview does what clicking the dock icon does: that window, to the front
+                StateLayer {
+                    radius: Tokens.rounding.medium
+                    onClicked: {
+                        root.dock?.focusWindow(previewBox.modelData);
+                        root.done();
+                    }
                 }
             }
         }
