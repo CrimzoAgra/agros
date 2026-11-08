@@ -1,0 +1,14 @@
+# AgrOS's name in /etc/os-release, after CachyOS's own hook (os-release.hook) put CachyOS's there: hooks run in name order
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = filesystem
+Target = lsb-release
+Target = cachyos-hooks
+Target = agros-system
+
+[Action]
+Description = AgrOS's name in os-release...
+When = PostTransaction
+Exec = /usr/share/libalpm/scripts/agros-branding
