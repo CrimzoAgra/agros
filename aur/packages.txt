@@ -10,6 +10,7 @@ qtengine
 darkly-bin
 papirus-folders
 bibata-cursor-theme-bin
+fetch-git
 equibop-bin
 spicetify-cli
 spicetify-marketplace-bin
