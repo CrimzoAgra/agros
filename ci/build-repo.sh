@@ -70,7 +70,15 @@ if [[ -z ${AGROS_SKIP_AUR:-} ]]; then
         asb paru -S --noconfirm --needed --localrepo=agros "${aur[@]}"
 fi
 
-# 2. AgrOS's own packages (no dependencies installed to build them: they're files and settings), keyring first
+# 2. CachyOS's installer, rebuilt against the libraries of today (CachyOS's own copy can lag behind an Arch update:
+# built for Boost 1.91, it didn't start once Arch moved to 1.92). Its version a ".1" above CachyOS's; the live ISO
+# installs it from [agros] (calamares-online.sh)
+asb git clone -q --depth 1 --filter=blob:none --sparse https://github.com/CachyOS/CachyOS-PKGBUILDS.git "$work/cachyos-pkgbuilds"
+(cd "$work/cachyos-pkgbuilds" && asb git sparse-checkout set cachyos-calamares)
+(cd "$work/cachyos-pkgbuilds/cachyos-calamares" && asb sed -i 's/^pkgrel=\([0-9]*\)$/pkgrel=\1.1/' PKGBUILD &&
+    asb env PKGDEST="$out" makepkg -s --noconfirm "${sign[@]}")
+
+# 3. AgrOS's own packages (no dependencies installed to build them: they're files and settings), keyring first
 for d in "$work/agros/packages/agros-keyring" "$work"/agros/packages/*/; do
     d=${d%/}; p=${d##*/}
     [[ $p == agros-keyring && -n ${keyring_done:-} ]] && continue
