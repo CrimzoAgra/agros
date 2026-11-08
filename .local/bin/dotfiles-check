@@ -4,6 +4,8 @@
 #   dotfiles-check            list what's wrong (nothing printed and exit 0 when all is well; a note, such as Caelestia's
 #                             Hyprland config having an update, printed with exit 0)
 #   dotfiles-check --notify   the same, as one notification (none when all is well)
+# (not on the live USB: it isn't set up as an install, so its "problems" would only be noise)
+[[ -d /run/archiso ]] && exit 0
 problems=()
 # Hyprland named (its first one when run from an SSH login or a text console: there hyprctl didn't know it, so config
 # errors went unseen and the title bar plugin was said not to be loaded)

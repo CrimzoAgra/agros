@@ -12,6 +12,8 @@
 #                           at once (the pacman hook system/pacman-hooks/hyprbars-prebuild.hook runs it on a Hyprland
 #                           update; Hyprland needn't be running)
 set -euo pipefail
+# (not on the live USB: no compiler, and nothing to keep it for)
+[[ -d /run/archiso ]] && exit 0
 patch="$HOME/.local/share/hyprbars/hyprbars.patch"
 out="$HOME/.local/lib/hyprbars/libhyprbars.so"
 stamp="${out%/*}/built-for"  # the Hyprland build (its ABI) and the patch it was built from
