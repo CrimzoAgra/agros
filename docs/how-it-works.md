@@ -58,7 +58,7 @@ Server = https://crimzoagra.github.io/agros/$arch
 |---|---|
 | `agros-desktop` | The meta package: every package the desktop is made of (Hyprland, Caelestia, the apps, PipeWire with its JACK, fonts, themes). Hardware apps are optional |
 | `agros-hyprland-settings` | The settings every new account gets (`/etc/skel`): Caelestia's own configs (its dots, pinned), AgrOS's over them (everything in `.config`), launcher entries, LibreWolf settings, the wallpaper; fonts and icons system-wide |
-| `agros-scripts` | The programs in `.local/bin` and the data they use, in `/usr/lib/agros`, linked into each home (`~/.local/bin`, `~/.local/share`; `agros-links` adds new ones at login) |
+| `agros-scripts` | The programs in `.local/bin` and the data they use, in `/usr/lib/agros`, linked into each home (`~/.local/bin`, `~/.local/share`; `agros-links` adds new ones at login, and copies in a config folder an update added to `/etc/skel` once) |
 | `agros-system` | The update at every boot (downloaded at boot, installed at shutdown), pacman hooks that rebuild each user's Caelestia overlay and hyprbars and check the Hyprland config, Bluetooth after sleep, the ananicy rule, the keyring |
 | `agros-greeter` | The Caelestia-style login screen for greetd, its PAM service following the system's, `login-reset` |
 | `agros-boot` | The hidden boot menu, the faster splash with shutdown titles, screens in their best mode from boot |
