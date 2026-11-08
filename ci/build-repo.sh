@@ -39,9 +39,10 @@ if [[ -n $key ]]; then
 fi
 
 # The repo, empty to start with, known to pacman (the AUR packages' own AUR dependencies are installed from it)
-[[ -e $out/agros.db.tar.gz ]] || asb repo-add "${rsign[@]}" "$out/agros.db.tar.gz"
+# (unsigned while it's built: paru adds to it without signing; the last repo-add below signs it)
+[[ -e $out/agros.db.tar.gz ]] || asb repo-add "$out/agros.db.tar.gz"
 grep -q '^\[agros\]' /etc/pacman.conf ||
-    printf '\n[agros]\nSigLevel = Optional TrustAll\nServer = file://%s\n' "$out" >>/etc/pacman.conf
+    printf '\n[agros]\nSigLevel = Never\nServer = file://%s\n' "$out" >>/etc/pacman.conf
 pacman -Sy --noconfirm >/dev/null
 
 # No separate debug packages (Arch's makepkg makes them by default)
