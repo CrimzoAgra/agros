@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# AgrOS's name in /etc/os-release (fastfetch, fetch, Caelestia, the login screen read it) and /etc/lsb-release, as
+# CachyOS's own cachyos-branding does for CachyOS's: after it (zz-agros-os-release.hook), so AgrOS's is the one left.
+# ID_LIKE keeps cachyos and arch, for the tools that look for them
+f=${1:-/etc/os-release} lsb=${2:-/etc/lsb-release}
+[[ -e $f ]] || cp /usr/lib/os-release "$f"
+sed -i "$f" \
+    -e 's|^NAME=.*$|NAME="AgrOS"|' \
+    -e 's|^PRETTY_NAME=.*$|PRETTY_NAME="AgrOS"|' \
+    -e 's|^ID=.*$|ID=agros|' \
+    -e 's|^ID_LIKE=.*$|ID_LIKE="cachyos arch"|' \
+    -e 's|^ANSI_COLOR=.*$|ANSI_COLOR="38;2;190;196;238"|' \
+    -e 's|^HOME_URL=.*$|HOME_URL="https://github.com/CrimzoAgra/agros"|' \
+    -e 's|^DOCUMENTATION_URL=.*$|DOCUMENTATION_URL="https://github.com/CrimzoAgra/agros#readme"|' \
+    -e 's|^SUPPORT_URL=.*$|SUPPORT_URL="https://github.com/CrimzoAgra/agros/issues"|' \
+    -e 's|^BUG_REPORT_URL=.*$|BUG_REPORT_URL="https://github.com/CrimzoAgra/agros/issues"|' \
+    -e 's|^LOGO=.*$|LOGO=agros-logo|' \
+    -e '/^PRIVACY_POLICY_URL=/d'
+grep -q '^ID_LIKE=' "$f" || sed -i "$f" -e '/^ID=/a ID_LIKE="cachyos arch"'
+grep -q '^LOGO=' "$f" || echo 'LOGO=agros-logo' >>"$f"
+if [[ -e $lsb ]]; then
+    sed -i "$lsb" -e 's|^DISTRIB_ID=.*$|DISTRIB_ID=agros|' -e 's|^DISTRIB_DESCRIPTION=.*$|DISTRIB_DESCRIPTION="AgrOS"|'
+fi
+exit 0

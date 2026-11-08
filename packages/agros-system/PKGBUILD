@@ -3,7 +3,7 @@
 # each user's Caelestia overlay, hyprbars and Hyprland config check in step with updates, Bluetooth back on after sleep,
 # the desktop shell at normal CPU priority, and the keyring unlocked with the login password
 pkgname=agros-system
-pkgver=r21.ec431ac
+pkgver=r30.35da937
 pkgrel=1
 pkgdesc='AgrOS system parts: boot-time updates, per-user pacman hooks, Bluetooth resume, ananicy rule, keyring'
 arch=('any')
@@ -26,7 +26,8 @@ package() {
     for t in poweroff reboot halt kexec; do
         install -Dm644 auto-update-timeout.conf "$pkgdir/usr/lib/systemd/system/$t.target.d/agros-auto-update.conf"
     done
-    install -Dm644 -t "$pkgdir/usr/share/libalpm/hooks" agros-*.hook
+    install -Dm644 -t "$pkgdir/usr/share/libalpm/hooks" agros-*.hook zz-agros-os-release.hook
+    install -Dm755 agros-branding "$pkgdir/usr/share/libalpm/scripts/agros-branding"
     install -Dm644 agros-vm.sh "$pkgdir/etc/profile.d/agros-vm.sh"
     install -Dm755 "$_root/system/bluetooth-resume" "$pkgdir/usr/lib/systemd/system-sleep/agros-bluetooth-resume"
     install -Dm644 "$_root/system/ananicy/dotfiles.rules" "$pkgdir/etc/ananicy.d/99-agros/agros.rules"
