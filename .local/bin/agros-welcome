@@ -214,8 +214,46 @@ librewolf_setup() {
     [[ -n $prof && -d $prof ]] || { echo "!! No LibreWolf profile: settings not applied"; return 1; }
     [[ -e $prof/.dotfiles-imported ]] && return 0
     grep '^user_pref' "$settings" >>"$prof/prefs.js"
+    # The new tab's background: the picture, under the id settings.js names it by
+    local wallpaper="$HOME/.local/share/firefox/newtab-wallpaper.jpg" id
+    id=$(grep -oP 'customWallpaper\.uuid", "\K[^"]+' "$settings") || true
+    [[ -f $wallpaper && -n $id ]] && mkdir -p "$prof/wallpaper/library" && cp "$wallpaper" "$prof/wallpaper/library/$id"
+    librewolf_theme "$prof"
     touch "$prof/.dotfiles-imported"
     echo "LibreWolf settings applied."
+}
+
+# The Lagoon theme settings.js picks (Mozilla's, on addons.mozilla.org; not part of LibreWolf): put in the profile's
+# extensions folder and allowed from there (extensions.autoDisableScopes), registered by one start, then made the theme
+# in use (one appearing that way comes in turned off, and extensions.activeThemeID alone doesn't turn it on)
+librewolf_theme() {
+    local prof=$1 id=nova-lagoon@mozilla.org pid
+    grep -q "\"$id\"" "$prof/extensions.json" 2>/dev/null && return 0
+    mkdir -p "$prof/extensions"
+    curl -sfL --max-time 60 -o "$prof/extensions/$id.xpi" \
+        https://addons.mozilla.org/firefox/downloads/latest/nova-lagoon/latest.xpi ||
+        { rm -f "$prof/extensions/$id.xpi"; echo "!! The Lagoon theme didn't download: pick it in LibreWolf's settings, Appearance"; return 0; }
+    echo 'user_pref("extensions.autoDisableScopes", 14);' >>"$prof/prefs.js"
+    librewolf --headless about:blank >/dev/null 2>&1 &
+    pid=$!
+    for _ in $(seq 30); do
+        sleep 1
+        grep -q "\"$id\"" "$prof/extensions.json" 2>/dev/null && break
+    done
+    sleep 2
+    kill "$pid" 2>/dev/null; wait "$pid" 2>/dev/null
+    python3 - "$prof/extensions.json" "$id" <<'EOF' || echo "!! The Lagoon theme isn't turned on: pick it in LibreWolf's settings, Appearance"
+import json, sys
+path, lagoon = sys.argv[1:]
+d = json.load(open(path))
+themes = [a for a in d["addons"] if a.get("type") == "theme"]
+if not any(a["id"] == lagoon for a in themes):
+    sys.exit(1)
+for a in themes:
+    a["active"] = a["id"] == lagoon
+    a["userDisabled"] = not a["active"]
+json.dump(d, open(path, "w"))
+EOF
 }
 
 # VSCodium's extensions (Claude Code's among them: its CLI is ~/.local/bin/claude), then Claude Code's plugins and its
