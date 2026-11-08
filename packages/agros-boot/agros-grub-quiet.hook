@@ -1,0 +1,12 @@
+# agros-boot: GRUB's "Loading Linux..." lines out of its script again after each GRUB update (before grub's own hook
+# makes the menu)
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = grub
+
+[Action]
+Description = Hiding GRUB loading messages (agros-boot)...
+When = PostTransaction
+Exec = /usr/bin/sed -i /^[[:space:]]*echo[[:space:]].*message/d /etc/grub.d/10_linux

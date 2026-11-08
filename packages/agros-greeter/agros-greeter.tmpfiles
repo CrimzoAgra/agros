@@ -1,0 +1,6 @@
+# The login screen runs as greetd's "greeter" user: its writable folders and log
+d /var/lib/caelestia-greeter 0755 greeter greeter -
+d /var/cache/caelestia-greeter 0755 greeter greeter -
+f /var/log/caelestia-greeter.log 0644 greeter greeter -
+# Its wallpaper and colours: written at each login by whoever logs in (greeter-theme-sync), so the wheel group's
+d /etc/greetd/caelestia-greeter/theme 2775 root wheel -

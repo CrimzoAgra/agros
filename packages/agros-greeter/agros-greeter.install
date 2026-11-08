@@ -1,0 +1,32 @@
+# greetd pointed at the login screen (its own config kept as config.toml.agros-orig), its PAM service made from the
+# system's (greetd-pam) with the keyring's lines, the user it shows by default, and greetd on
+_first_user() { getent passwd | awk -F: '$3 >= 1000 && $3 < 60000 && $7 !~ /(nologin|false)$/ {print $1; exit}'; }
+
+post_install() {
+    local g=/etc/greetd/caelestia-greeter cfg=/etc/greetd/config.toml u
+    systemd-tmpfiles --create /usr/lib/tmpfiles.d/agros-greeter.conf >/dev/null 2>&1 || true
+    [[ -f $cfg && ! -f $cfg.agros-orig ]] && cp "$cfg" "$cfg.agros-orig"
+    install -m644 "$g/greetd-config.toml" "$cfg"
+    "$g/greetd-pam" >/dev/null 2>&1 || echo "agros-greeter: greetd's PAM service left as it was (greetd-pam couldn't follow the system's)"
+    if [[ -f /etc/pam.d/greetd ]] && ! grep -q pam_gnome_keyring /etc/pam.d/greetd; then
+        printf '%s\n' '-auth       optional     pam_gnome_keyring.so' \
+            '-session    optional     pam_gnome_keyring.so auto_start' >>/etc/pam.d/greetd
+    fi
+    # Who it shows should its theme break: the first account (the one made in the installer), until someone logs in
+    u=$(_first_user)
+    if [[ -n $u ]] && ! grep -q '^CAELESTIA_GREETER_USER=' "$g/env"; then
+        echo "CAELESTIA_GREETER_USER=$u" >>"$g/env"
+        [[ -e $g/theme/theme.json ]] || runuser -u "$u" -- "$g/make-theme.sh" "$g/theme" "$u" >/dev/null 2>&1 || true
+    fi
+    systemctl enable -f greetd.service >/dev/null 2>&1 || true
+}
+
+post_upgrade() {
+    systemd-tmpfiles --create /usr/lib/tmpfiles.d/agros-greeter.conf >/dev/null 2>&1 || true
+    /etc/greetd/caelestia-greeter/greetd-pam >/dev/null 2>&1 || true
+}
+
+post_remove() {
+    [[ -f /etc/greetd/config.toml.agros-orig ]] && mv /etc/greetd/config.toml.agros-orig /etc/greetd/config.toml
+    true
+}

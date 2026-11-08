@@ -1,0 +1,25 @@
+[Unit]
+Description=Install the system update downloaded at boot
+# After the network too, so it's still up while this installs: the hyprbars pacman hook downloads its source then.
+# Before the boot's download and before systemd-user-sessions: units stop in the reverse order, so at shutdown the
+# download (if still running) is stopped first, and every user session with it (Hyprland, the shell, the apps, an
+# Updates run's pacman or paru: user@.service and the session scopes come after systemd-user-sessions), and this
+# installs after them, never under a running desktop or alongside another pacman. Not ordered on /boot's mount: being
+# before systemd-user-sessions, that made the login screen wait at boot for a slow or "nofail" boot partition (up to
+# 90 s); /boot is after local-fs.target (so still mounted when this stops) unless "nofail", and the install itself
+# checks it's mounted
+After=local-fs.target network.target
+Before=auto-update.service systemd-user-sessions.service
+RequiresMountsFor=/var/lib/pacman /var/cache/pacman
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/true
+ExecStop=/usr/lib/agros/auto-update --install
+# A kernel or NVIDIA driver update rebuilds the boot image: minutes. Its own limit, 30 min; shutdown's (the targets'
+# JobTimeoutSec, also 30 min, then forced) is made longer below, so it can't cut this off first
+TimeoutStopSec=30min
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,24 @@
+[Unit]
+Description=Automatic system update at boot
+# No network-online.target: the desktop's login waits for everything ordered before it (3 s at boot); the script
+# waits for the network itself
+
+[Service]
+# exec, not oneshot: boot (and the desktop, which waits for it) doesn't wait for the update to finish
+Type=exec
+# No shutdown/sleep inhibitor for the run: its system part only downloads (installed at shutdown,
+# auto-update-install.service; a download cut off is picked up again: no "complete" mark, its lock taken out and the
+# files resumed at the next boot), and blocking would refuse power off, sleep and the power button for as long as a
+# slow download took. What it does install now: Flatpak updates (flatpak swaps an app's new version in whole) and
+# AppImages (moved in place once downloaded); a Flatpak from a file is reinstalled, old one out first, so the script
+# holds sleep and power off (as root) around that step alone (30 min at most), its file's download done before
+ExecStart=/usr/lib/agros/auto-update
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=1h
+# (exec: "started" at once, so that limit never applied, and a hung download ran on for good) The whole run ends after
+# 2 h; a download cut off leaves its lock, taken out at the next boot
+RuntimeMaxSec=2h
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,36 @@
+# Maintainer: Filipe Agra
+# The Caelestia-style login screen for greetd (Quickshell in cage), with the keyring unlocked by the login password.
+# Falls back to greetd's text login on its own if it doesn't come up; `sudo login-reset` from a text console for good
+pkgname=agros-greeter
+pkgver=0
+pkgrel=1
+pkgdesc='AgrOS Caelestia-style login screen for greetd'
+arch=('any')
+url='https://github.com/CrimzoAgra/agros'
+license=('GPL-3.0-or-later')
+depends=('greetd' 'greetd-agreety' 'cage' 'wlr-randr' 'quickshell-git' 'uwsm' 'jq' 'file' 'python' 'gnome-keyring')
+backup=('etc/greetd/caelestia-greeter/env')
+install=agros-greeter.install
+_root=$(realpath "${startdir}/../..")
+
+pkgver() {
+    cd "$_root" && printf 'r%s.%s' "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+package() {
+    local src="$_root/.local/share/caelestia-greeter" dst="$pkgdir/etc/greetd/caelestia-greeter"
+    install -Dm644 "$src/shell.qml" "$dst/shell.qml"
+    install -Dm755 "$src/make-theme.sh" "$dst/make-theme.sh"
+    install -Dm755 "$src/best-mode" "$dst/best-mode"
+    install -Dm644 "$src/screenmode.py" "$dst/screenmode.py"
+    install -Dm755 "$src/greetd-pam" "$dst/greetd-pam"
+    install -Dm644 "$src/greetd.pam" "$dst/greetd.pam"
+    cd "$startdir"
+    install -Dm755 run "$dst/run"
+    install -Dm644 config.toml "$dst/greetd-config.toml"
+    install -Dm644 /dev/null "$dst/env"
+    install -Dm755 login-reset "$pkgdir/usr/bin/login-reset"
+    install -Dm755 hyprland-session "$pkgdir/usr/bin/hyprland-session"
+    install -Dm644 agros-greeter-pam.hook "$pkgdir/usr/share/libalpm/hooks/agros-greeter-pam.hook"
+    install -Dm644 agros-greeter.tmpfiles "$pkgdir/usr/lib/tmpfiles.d/agros-greeter.conf"
+}

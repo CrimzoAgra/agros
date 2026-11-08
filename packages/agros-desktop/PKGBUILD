@@ -1,0 +1,60 @@
+# Maintainer: Filipe Agra
+# The whole AgrOS desktop: every package it's made of, in one. The installer installs this; pacman brings in exactly
+# these (nothing that's taken away again). Apps for hardware not every machine has are optional
+# (agros-welcome --system installs the ones for what's plugged in), as is VMware Workstation (its license forbids
+# passing it on: built from the AUR on your machine by agros-welcome --system).
+pkgname=agros-desktop
+pkgver=1
+pkgrel=1
+pkgdesc='AgrOS: Hyprland + Caelestia desktop with its apps (meta package)'
+arch=('any')
+url='https://github.com/CrimzoAgra/agros'
+license=('GPL-3.0-or-later')
+depends=(
+    # AgrOS
+    agros-scripts agros-hyprland-settings agros-system agros-greeter agros-boot agros-welcome
+    # Desktop: Hyprland, Caelestia (shell and CLI), the real Quickshell, the title bar plugin
+    hyprland uwsm xdg-desktop-portal-hyprland xdg-desktop-portal-gtk quickshell-git caelestia-shell caelestia-cli
+    hyprland-plugin-hyprbars hyprpicker
+    # Sound (PipeWire, its JACK too: never jack2), network, Bluetooth, keyring and polkit
+    pipewire pipewire-pulse pipewire-alsa pipewire-audio pipewire-jack wireplumber pwvucontrol
+    networkmanager bluez bluez-utils gnome-keyring polkit-gnome libsecret python-secretstorage
+    # Look: GTK and Qt themes, icons, fonts
+    adw-gtk-theme papirus-icon-theme papirus-folders qtengine frameworkintegration darkly-bin qt6-wayland
+    noto-fonts noto-fonts-emoji noto-fonts-cjk ttf-jetbrains-mono-nerd ttf-cascadia-code-nerd
+    ttf-material-symbols-variable ttf-rubik-vf
+    # Shell and terminal tools
+    fish foot starship eza zoxide direnv fastfetch btop micro bat ripgrep lazygit trash-cli curl git jq
+    # Desktop tools the configs and scripts use
+    thunar thunar-archive-plugin file-roller 7zip gnome-text-editor qview mpv zenity libnotify wl-clipboard cliphist
+    grim slurp swappy brightnessctl ddcutil libqalculate ydotool xdg-user-dirs flatpak nodejs npm python
+    python-gobject python-numpy python-xlib pacman-contrib paru github-cli
+    # Games: CachyOS's gaming packages, Steam, Lutris (every store's library), Faugus, MangoHud, Gamescope
+    mesa lib32-mesa cachyos-gaming-meta steam steam-devices lutris libayatana-appindicator wine-mono wine-gecko
+    python-protobuf gamescope mangohud lib32-mangohud goverlay faugus-launcher wqy-zenhei xorg-fonts-misc spirv-tools
+    # Apps (the Windows ones they replace)
+    equibop-bin                         # Discord, themed with your colours
+    spicetify-cli spicetify-marketplace-bin  # Spotify's theme (Spotify itself: a Flatpak, agros-welcome)
+    librewolf                           # Firefox without telemetry
+    proton-vpn-gtk-app
+    vscodium                            # VS Code's open-source build
+    libreoffice-fresh                   # Microsoft Office
+    qbittorrent
+    antimicrox                          # JoyToKey
+    etcher-bin                          # Rufus
+    scrcpy android-tools android-udev   # Phone Link
+    cups cups-pk-helper hplip sane simple-scan system-config-printer  # HP Deskjet 1050: printing and scanning
+)
+optdepends=(
+    'agros-nvidia: the NVIDIA driver loaded early in the boot'
+    'agros-camera-switch: the Lenovo Legion camera switch'
+    'boxflat-git: Moza Pit House'
+    'openrazer-daemon: Razer devices (with openrazer-driver-dkms and polychromatic)'
+    'polychromatic: Razer Synapse'
+    'solaar: Logitech G Hub, Logi Options+'
+    'opentabletdriver: drawing tablets'
+    'snapper: snapshots before updates'
+    'snap-pac: snapshots around pacman transactions'
+    'grub-btrfs: snapshots in the GRUB menu'
+)
+install=agros-desktop.install

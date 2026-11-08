@@ -30,7 +30,7 @@ def main() -> None:
     cols = {c.collection_path: c for c in secretstorage.get_all_collections(bus)}
     login = cols.get(LOGIN)
     if not login or login.is_locked():
-        return  # the login keyring isn't unlocked at login (system/keyring-setup.sh not run)
+        return  # the login keyring isn't unlocked at login (agros-greeter's PAM lines missing)
     have = {(i.get_label(), tuple(sorted(i.get_attributes().items()))) for i in login.get_all_items()}
     skipped = False
     for path, col in cols.items():

@@ -1,0 +1,20 @@
+# agros-system: for every AgrOS user (agros-each-user)
+# A Hyprland update (or one of the libraries its plugins' ABI hangs on) builds my hyprbars for it straight away, so the
+# next login loads it at once instead of the AUR one for a minute while it builds (hyprbars-build --prebuild; it does
+# nothing when it's already built for it, and a failure leaves the build at login as before)
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = hyprland
+Target = hyprland-git
+Target = aquamarine
+Target = hyprutils
+Target = hyprgraphics
+Target = hyprcursor
+Target = hyprlang
+
+[Action]
+Description = Building each user's hyprbars for the new Hyprland (hyprbars-build --prebuild)...
+When = PostTransaction
+Exec = /usr/lib/agros/bin/agros-each-user hyprbars-build --prebuild

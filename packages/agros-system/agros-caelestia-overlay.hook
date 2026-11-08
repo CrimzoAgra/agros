@@ -1,0 +1,12 @@
+# agros-system: for every AgrOS user (agros-each-user)
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = caelestia-shell
+Target = caelestia-shell-git
+
+[Action]
+Description = Re-applying each user's Caelestia changes (caelestia-overlay)...
+When = PostTransaction
+Exec = /usr/lib/agros/bin/agros-each-user caelestia-overlay

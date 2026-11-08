@@ -1,0 +1,2 @@
+# The splash's titles at shutdown too: the small image built as the system goes down gets the title fonts
+w+ /run/initramfs/mkinitcpio-shutdown.conf - - - - HOOKS+=(plymouth-title-font)\n

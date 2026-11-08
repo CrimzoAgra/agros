@@ -1,0 +1,15 @@
+# Maintainer: Filipe Agra
+# The NVIDIA driver loaded from the start of the boot (in the initramfs), not once the system is up
+pkgname=agros-nvidia
+pkgver=1
+pkgrel=1
+pkgdesc='AgrOS: load the NVIDIA driver early in the boot'
+arch=('any')
+url='https://github.com/CrimzoAgra/agros'
+license=('GPL-3.0-or-later')
+depends=('mkinitcpio')
+install=agros-nvidia.install
+
+package() {
+    install -Dm644 "$startdir/90-agros-nvidia-early.conf" "$pkgdir/etc/mkinitcpio.conf.d/90-agros-nvidia-early.conf"
+}

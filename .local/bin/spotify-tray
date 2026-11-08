@@ -5,7 +5,7 @@
 #   spotify-tray --show   show Spotify, starting it if it isn't running
 #   spotify-tray --show spotify:track:...   the same, opening that link (a link clicked in the browser)
 APP=(flatpak run --user com.spotify.Client)
-# The user install, so spicetify can change it (setup.sh: spotify_path in ~/.config/spicetify/config-xpui.ini)
+# The user install, so spicetify can change it (agros-welcome: spotify_path in ~/.config/spicetify/config-xpui.ini)
 SPOTIFY_DIR="$HOME/.local/share/flatpak/app/com.spotify.Client/current/active/files/extra/share/spotify"
 
 # Spicetify (Caelestia's theme, marketplace): a Spotify update brings back the unchanged app (its xpui.spa),

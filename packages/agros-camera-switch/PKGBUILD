@@ -1,0 +1,23 @@
+# Maintainer: Filipe Agra
+# The Lenovo Legion's physical camera switch: turns the camera off and on like on Windows
+pkgname=agros-camera-switch
+pkgver=0
+pkgrel=1
+pkgdesc='AgrOS: make the Lenovo Legion physical camera switch work'
+arch=('any')
+url='https://github.com/CrimzoAgra/agros'
+license=('GPL-3.0-or-later')
+depends=('python' 'libnotify')
+install=agros-camera-switch.install
+_root=$(realpath "${startdir}/../..")
+
+pkgver() {
+    cd "$_root" && printf 'r%s.%s' "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+package() {
+    install -Dm755 "$_root/.local/share/camera-switch/camera-switchd" "$pkgdir/usr/lib/agros/camera-switchd"
+    install -Dm644 "$startdir/camera-switch.service" "$pkgdir/usr/lib/systemd/system/camera-switch.service"
+    install -Dm644 "$startdir/90-agros-camera-switch.rules" "$pkgdir/usr/lib/udev/rules.d/90-agros-camera-switch.rules"
+    install -Dm644 "$startdir/agros-camera-switch.tmpfiles" "$pkgdir/usr/lib/tmpfiles.d/agros-camera-switch.conf"
+}

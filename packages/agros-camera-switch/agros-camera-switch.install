@@ -1,0 +1,6 @@
+post_install() {
+    systemd-tmpfiles --create /usr/lib/tmpfiles.d/agros-camera-switch.conf >/dev/null 2>&1 || true
+    systemctl enable camera-switch.service >/dev/null 2>&1 || true
+}
+post_upgrade() { systemctl try-restart camera-switch.service >/dev/null 2>&1 || true; }
+pre_remove() { systemctl disable --now camera-switch.service >/dev/null 2>&1 || true; }

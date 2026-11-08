@@ -26,7 +26,7 @@ for k, v in pairs({ surfaceContainer = "1f1f25", onSurface = "e4e1e9", surfaceCo
                     error = "ffb4ab", onError = "690005" }) do scheme[k] = scheme[k] or v end
 local alpha = string.format("%02x", math.floor((vars.windowOpacity or 1) * 255))
 -- This bar is the only set of window buttons: GTK apps (LibreWolf too, and any installed later) draw none, as the GTK
--- button layout has none (setup.sh: window_buttons); VSCodium's are hidden (window.controlsStyle); Electron and Qt apps
+-- button layout has none (agros-welcome: window_buttons); VSCodium's are hidden (window.controlsStyle); Electron and Qt apps
 -- draw none under Hyprland unless they draw their own title bar. Apps that can't hide theirs get no bar from here (a
 -- second close button would be redundant), listed by class as Hyprland can't tell which those are: Steam
 local own_title_bar = { "steam" }

@@ -36,11 +36,11 @@ printf '%s\n' '{"type": "assistant", "message": {"content": [{"type": "text", "t
 notify foot "{\"cwd\": \"/p\", \"transcript_path\": \"$t/transcript.jsonl\"}" && [[ $(sed -n 2p "$t/sent") == "the last" ]] ||
     fail "no last_assistant_message: the conversation's last answer not used: $(cat "$t/sent")"
 
-# setup wires it as Claude Code's Stop hook: added beside the settings and hooks there, once
+# agros-welcome wires it as Claude Code's Stop hook: added beside the settings and hooks there, once
 mkdir -p "$t/home/.claude"
 echo '{"model": "opus", "hooks": {"Stop": [{"hooks": [{"type": "command", "command": "other-hook"}]}], "PreToolUse": []}}' \
     >"$t/home/.claude/settings.json"
-hook() { HOME=$t/home CLAUDE_CONFIG_DIR='' bash -c 'source "$1"; claude_notify_hook' _ "$here/setup/modules/60-desktop.sh"; }
+hook() { HOME=$t/home CLAUDE_CONFIG_DIR='' bash -c 'source "$1"; claude_notify_hook' _ "$here/.local/bin/agros-welcome"; }
 hook >/dev/null; hook >/dev/null
 s=$t/home/.claude/settings.json
 [[ $(jq -r .model "$s") == opus && $(jq -c .hooks.PreToolUse "$s") == "[]" ]] || fail "other settings not kept: $(cat "$s")"
@@ -51,11 +51,11 @@ rm "$s"; hook >/dev/null
     fail "no settings yet: the hook not added: $(cat "$s")"
 echo 'not json' >"$s"; hook >/dev/null
 [[ $(cat "$s") == "not json" ]] || fail "settings that aren't JSON overwritten"
-# Settings of another shape (hooks or its Stop list odd): left untouched, said, and the step goes on (setup's set -e)
+# Settings of another shape (hooks or its Stop list odd): left untouched, said, and the step goes on (set -e)
 for odd in '{"hooks": {"Stop": {}}}' '{"hooks": []}' '{"hooks": {"Stop": ["x"]}}' '{"hooks": {"Stop": [{"hooks": {}}]}}' '[]'; do
     echo "$odd" >"$s"
     out=$(HOME=$t/home CLAUDE_CONFIG_DIR='' bash -c 'set -euo pipefail; source "$1"; claude_notify_hook; echo carried on' _ \
-        "$here/setup/modules/60-desktop.sh" 2>&1) || fail "settings $odd ended the step: $out"
+        "$here/.local/bin/agros-welcome" 2>&1) || fail "settings $odd ended the step: $out"
     [[ $out == *"carried on" && $out == *"!!"* && $(cat "$s") == "$odd" ]] || fail "settings $odd: $out / $(cat "$s")"
 done
 echo "ok claude-notify"

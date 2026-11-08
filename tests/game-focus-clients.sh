@@ -10,7 +10,9 @@ cleanup() {  # (also when a check failed)
     rm -rf "$t" "${disk:-}"
 }
 trap cleanup EXIT
-mkdir -p "$t/pfx"
+mkdir -p "$t/pfx" "$t/bin"
+# (Steam installed natively, as AgrOS has it: its command closes it)
+printf '#!/bin/sh\n' >"$t/bin/steam" && chmod +x "$t/bin/steam" && export PATH=$t/bin:$PATH
 launch() { WINEPREFIX=$t/pfx bash -c 'exec -a "C:\\EA\\EADesktop.exe" sleep 60' >/dev/null 2>&1 & echo $!; }
 helper() { WINEPREFIX=$t/pfx bash -c 'exec -a "QtWebEngineProcess.exe" sleep 60' >/dev/null 2>&1 & echo $!; }
 l1=$(launch); h1=$(helper); l2=$(launch); h2=$(helper)

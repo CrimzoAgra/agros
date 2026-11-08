@@ -1,0 +1,3 @@
+#!/bin/sh
+# One-word desktop command for the text login fallback (the plain "Hyprland" session exits; uwsm works)
+exec uwsm start -e -D Hyprland hyprland.desktop

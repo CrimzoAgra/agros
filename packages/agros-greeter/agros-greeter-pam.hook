@@ -1,0 +1,12 @@
+# agros-greeter: the login screen's PAM service made again from the system's new one (greetd-pam)
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = pambase
+Target = pam
+
+[Action]
+Description = Updating the login screen's PAM service from the system's (caelestia-greeter)...
+When = PostTransaction
+Exec = /etc/greetd/caelestia-greeter/greetd-pam

@@ -9,7 +9,7 @@ appimage-update, not a file you open), a system package with the same launcher e
 before, e.g. from the AUR) is removed, asking for your password, so there's one copy.
 
   appimage-open <file.AppImage>             install/update and start it
-  appimage-open --install <file.AppImage>   install/update only (setup.sh)
+  appimage-open --install <file.AppImage>   install/update only (agros-welcome)
 """
 import os
 import re
@@ -124,7 +124,7 @@ def remove_package_copy(app: str) -> None:
     if owner.returncode != 0 or not pkg:
         return
     cmd = ["pacman", "-R", "--noconfirm", pkg]  # just it: its dependencies may be yours too
-    # sudo when it doesn't need asking (setup.sh), otherwise the desktop's password dialog
+    # sudo when it doesn't need asking (agros-welcome), otherwise the desktop's password dialog
     sudo = subprocess.run(["sudo", "-n", "true"], capture_output=True).returncode == 0
     if subprocess.run((["sudo", "-n"] if sudo else ["pkexec"]) + cmd, capture_output=True).returncode == 0:
         subprocess.run(["notify-send", "-a", "AppImage", f"Removed the {pkg} package (the AppImage replaces it)"],

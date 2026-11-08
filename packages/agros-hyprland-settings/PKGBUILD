@@ -1,0 +1,62 @@
+# Maintainer: Filipe Agra
+# The desktop's settings for every new account (/etc/skel): Caelestia's own configs (pinned, what `caelestia install`
+# would put in your home), AgrOS's over them (Hyprland user modules, Caelestia's shell.json, the widgets, switcher,
+# Updates and Settings apps, launcher entries, LibreWolf and VSCodium settings, the user services), the default
+# wallpaper, and the links to AgrOS's programs (agros-scripts). Fonts and icons go system-wide.
+pkgname=agros-hyprland-settings
+pkgver=0
+pkgrel=1
+pkgdesc='AgrOS Hyprland + Caelestia settings for new users (/etc/skel), wallpaper, fonts and icons'
+arch=('any')
+url='https://github.com/CrimzoAgra/agros'
+license=('GPL-3.0-or-later' 'OFL-1.1')
+depends=('agros-scripts')
+# CachyOS's own fish settings put their config.fish in /etc/skel too: AgrOS's (Caelestia's) replaces them
+conflicts=('cachyos-fish-config')
+replaces=('cachyos-fish-config')
+makedepends=('git')
+# Caelestia's dots (caelestia-dots/caelestia), pinned: a new commit is taken on purpose, after checking it
+_dots=01d2df329240be60148d25804690779a078c6378
+source=("caelestia-dots::git+https://github.com/caelestia-dots/caelestia.git#commit=${_dots}")
+sha256sums=('SKIP')
+_root=$(realpath "${startdir}/../..")
+# Caelestia's components AgrOS takes (its installer's defaults, plus uwsm and the Spotify theme), as "source|dest"
+_components=(hypr fish foot fastfetch btop micro "thunar|Thunar" starship.toml uwsm spicetify)
+
+pkgver() {
+    cd "$_root" && printf 'r%s.%s' "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+package() {
+    local skel="$pkgdir/etc/skel" c src dest f d
+    install -d "$skel/.config"
+    # 1. Caelestia's configs
+    for c in "${_components[@]}"; do
+        src=${c%%|*} dest=${c#*|}
+        cp -r --no-preserve=ownership "$srcdir/caelestia-dots/$src" "$skel/.config/$dest"
+    done
+    # Its session's browser is Firefox; AgrOS's is LibreWolf
+    sed -i 's/^export BROWSER=firefox$/export BROWSER=librewolf/' "$skel/.config/uwsm/env"
+    # 2. AgrOS's, over them
+    cd "$_root"
+    cp -r --no-preserve=ownership .config/. "$skel/.config/"
+    rm -f "$skel/.config/autostart/cachyos-hello.desktop"  # (CachyOS Hello isn't installed)
+    install -d "$skel/.local/share"
+    cp -r --no-preserve=ownership .local/share/applications .local/share/firefox "$skel/.local/share/"
+    install -Dm644 Pictures/Wallpapers/wallpaper.jpg "$skel/Pictures/Wallpapers/wallpaper.jpg"
+    install -Dm644 Pictures/Wallpapers/wallpaper.jpg "$pkgdir/usr/share/backgrounds/agros/wallpaper.jpg"
+    # 3. The links to AgrOS's programs and their data (agros-scripts; agros-links adds later ones at login)
+    install -d "$skel/.local/bin"
+    for f in .local/bin/*; do
+        [[ -f $f ]] && ln -s "/usr/lib/agros/bin/${f##*/}" "$skel/.local/bin/${f##*/}"
+    done
+    for d in caelestia-overlay lutris-overlay lutris-library dots-settings github-release hyprbars camera-switch \
+        caelestia-greeter; do
+        ln -s "/usr/lib/agros/share/$d" "$skel/.local/share/$d"
+    done
+    # Fonts and icons: system-wide
+    install -Dm644 .local/share/fonts/Bangers-Regular.ttf "$pkgdir/usr/share/fonts/agros/Bangers-Regular.ttf"
+    install -Dm644 .local/share/fonts/OFL.txt "$pkgdir/usr/share/licenses/$pkgname/OFL-Bangers.txt"
+    cp -r --no-preserve=ownership .local/share/icons "$pkgdir/usr/share/"
+    find "$skel" -name __pycache__ -prune -exec rm -rf {} +
+}

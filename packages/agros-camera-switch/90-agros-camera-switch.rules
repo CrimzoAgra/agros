@@ -1,0 +1,2 @@
+# agros-camera-switch
+ACTION=="add", SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="04f2", ATTR{idProduct}=="b83e", RUN+="/bin/sh -c 'grep -qx on /var/lib/camera-switch/state || echo 0 >/sys%p/authorized'"

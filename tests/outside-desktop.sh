@@ -49,7 +49,7 @@ out=$("${outside[@]}" "$here/.local/bin/dotfiles-check" 2>&1) || true
 : >"$log"
 mkdir -p "$HOME/Pictures/Wallpapers" && : >"$HOME/Pictures/Wallpapers/wallpaper.jpg"
 printf '#!/bin/sh\n' >"$HOME/.local/bin/caelestia-overlay" && chmod +x "$HOME/.local/bin/caelestia-overlay"
-"${outside[@]}" repo="$here" yes=true bash -c \
-    'source "$1/setup/lib.sh"; source "$1/setup/modules/60-desktop.sh"; caelestia_setup' _ "$here" >/dev/null 2>&1 </dev/null
+"${outside[@]}" bash -c \
+    'source "$1/.local/bin/agros-welcome"; caelestia_setup' _ "$here" >/dev/null 2>&1 </dev/null
 grep -q '^caelestia scheme set -n dynamic for first$' "$log" || fail "the colours not set for Hyprland: $(cat "$log")"
 echo "ok outside-desktop"

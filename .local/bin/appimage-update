@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Updates the AppImages installed by appimage-open from their GitHub releases (auto-update runs it at boot).
 #   appimage-update               every installed AppImage whose launcher entry names its GitHub repo
-#   appimage-update <owner/repo>  install or update that one (setup.sh)
+#   appimage-update <owner/repo>  install or update that one (agros-welcome)
 #   appimage-update --check       only list the ones with a newer version ("<owner/repo>: update available", update-apps)
 # Takes the latest release's Linux x86_64 AppImage, checked against the release's SHA256SUMS when it has one.
 # An app already on that version (same checksum, or same size when there are no checksums) is left alone.

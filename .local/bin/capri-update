@@ -283,7 +283,7 @@ Categories=Utility;
 Keywords=capri;claude;edgerunners;cyberpunk;companion;
 EOF
 # Her key is bound only once she's installed (user/apps.lua): the desktop's config loaded again on her first install,
-# so it works now, not from the next login (./setup.sh --only capri from the desktop). After any game, as the Settings
+# so it works now, not from the next login (capri-update from the desktop). After any game, as the Settings
 # app's (a reload takes a game out of fullscreen); after-games beside this file (setup runs it before the files step).
 # Hyprland named, as after-games does: from an SSH login or a text console the reload failed with nothing said.
 # (without the lock: waiting through a game it held off every capri-update)

@@ -1,0 +1,11 @@
+# agros-boot: the faster splash made again from a new CachyOS boot animation
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = cachyos-plymouth-bootanimation
+
+[Action]
+Description = Updating the faster boot splash (agros-boot)...
+When = PostTransaction
+Exec = /usr/lib/agros/splash-theme --theme-only
