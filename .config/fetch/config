@@ -1,0 +1,26 @@
+# AgrOS's fetch (areofyl/fetch): its logo (logo.txt, fastfetch's at a bigger size: more for the 3D) spinning, in its colours
+os
+host
+kernel
+uptime
+packages
+shell
+display
+wm
+theme
+icons
+font
+cursor
+terminal
+cpu
+gpu
+memory
+swap
+disk
+battery
+locale
+colors
+
+# #bec4ee in front, darker on the extruded sides
+logo_inner=38;2;190;196;238
+logo_outer=38;2;118;124;176

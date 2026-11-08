@@ -4,7 +4,7 @@
         "type": "file",
         "source": "~/.config/fastfetch/agros-logo.txt",
         "color": { "1": "38;2;190;196;238" },
-        "padding": { "top": 1, "right": 3 }
+        "padding": { "top": 0, "right": 3 }
     },
     "display": {
         "separator": "  ",
