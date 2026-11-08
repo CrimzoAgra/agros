@@ -1,0 +1,144 @@
+#!/usr/bin/env bash
+# Brings Caelestia's own Hyprland config (~/.config/hypr, what `caelestia install` put there and nothing refreshes) up
+# to Caelestia's latest, and only that: no system update and no shell restart, which `caelestia update` also does (its
+# paru -Syu past Updates' Qt rebuild: a new Qt left Quickshell unable to start). A file you haven't edited is replaced;
+# one you have (or a link of yours) is left as it is, Caelestia's new version beside it as <file>.new (merge by hand,
+# then delete it). The new config is checked against the Hyprland installed (hypr-config-check) on a copy first: only
+# one that passes goes into ~/.config/hypr; any error (or no check possible), and nothing there changes, said with the
+# errors. A file Caelestia turned into a folder, or the reverse, is left for you, said; so is one in a folder that's a
+# link of yours (stow's). (~/.config: $XDG_CONFIG_HOME when set, as Caelestia uses it.)
+#   caelestia-hypr-refresh           refresh
+#   caelestia-hypr-refresh --check   only print the newer version's commit (exit 0), else exit 1 (up to date) or 2
+#                                    (Caelestia's dots not installed, or its versions unknown here: said on stderr)
+# "Edited" is against the version last refreshed to (~/.local/state/caelestia-hypr-refresh), else the one Caelestia
+# installed (its dots-state.json). Caelestia's own record isn't changed: a later `caelestia update` sees these files
+# as yours and writes its version beside them as .new
+set -uo pipefail
+state=${XDG_STATE_HOME:-$HOME/.local/state}
+dots=$state/caelestia/dots
+mine=$state/caelestia-hypr-refresh
+check=false
+[[ ${1:-} == --check ]] && check=true
+g() { git -C "$dots" "$@"; }
+# say: what stops it (on stderr with --check, whose stdout is the newer version alone)
+say() { if $check; then echo "$*" >&2; else echo "$*"; fi; }
+[[ -d $dots/.git ]] || { say "Caelestia's dots aren't installed here ($dots)"; exit 2; }
+# (Caelestia's repo fetched now; offline: as last fetched)
+GIT_TERMINAL_PROMPT=0 timeout "${FETCH_TIMEOUT:-30}" git -C "$dots" fetch -q origin >/dev/null 2>&1 ||
+    $check || echo "(Caelestia's repo not reached: going by what was last fetched)"
+# The version to compare with: the last refresh's, else Caelestia's own; one its clone doesn't have (upstream rewrote
+# its history, another clone) can't tell edited from not: said, nothing done
+base=$(cat "$mine" 2>/dev/null)
+if [[ -z $base ]] || ! g cat-file -e "$base^{commit}" 2>/dev/null; then
+    base=$(jq -er '.applied_rev // empty' "$state/caelestia/dots-state.json" 2>/dev/null) ||
+        { say "No version Caelestia installed in $state/caelestia/dots-state.json"; exit 2; }
+    g cat-file -e "$base^{commit}" 2>/dev/null ||
+        { say "The version Caelestia installed ($base) isn't in its clone ($dots): can't tell your edits from its files"; exit 2; }
+fi
+up=$(g rev-parse -q --verify '@{u}') || { say "No upstream branch in $dots"; exit 2; }
+if g diff --quiet "$base" "$up" -- hypr; then
+    $check && exit 1
+    echo "Caelestia's Hyprland config is up to date."
+    exit 0
+fi
+if $check; then
+    echo "$up"
+    exit 0
+fi
+
+# Where Caelestia put each file (its dots-state.json), else <config folder>/<its path>
+cfg=${XDG_CONFIG_HOME:-$HOME/.config}
+live=$cfg/hypr
+declare -A dest_of
+while IFS=$'\t' read -r dest src; do
+    [[ -n $src ]] && dest_of[$src]=$dest
+done < <(jq -r '.deployed_files // {} | to_entries[] | "\(.key)\t\(.value)"' "$state/caelestia/dots-state.json" 2>/dev/null)
+[[ -d $live ]] || { echo "No $live: nothing to refresh"; exit 2; }
+# Applied to a copy first, never the live folder: a home of its own (its config folder: the Hyprland config copied,
+# its contents themselves, never a link back; the rest of yours linked in, as the config loads it from there; caches
+# its own), checked there; only a config that passes goes live, file by file (each renamed into place), so a stop at
+# any point leaves yours as it was. Its folder gone however this ends (one a kill left: taken away next time)
+# One run at a time (two shared their files): another one running, even stopped (Ctrl+Z, the laptop asleep), and this
+# says so and ends. Holding that, any staging folder of this tool is one a kill left: taken away
+mkdir -p "$state"
+exec {lockfd}>>"$state/caelestia-hypr-refresh.lock"
+flock -n "$lockfd" || { echo "Another caelestia-hypr-refresh is running: try again once it's done"; exit 2; }
+# (not passed on to the check: its Hyprland, in a process group of its own under timeout, outlived a kill and kept it)
+tmpdir=${TMPDIR:-/tmp}
+find "$tmpdir" -maxdepth 1 -name 'caelestia-hypr-refresh.*' -user "$(id -u)" -exec rm -rf {} + 2>/dev/null
+tmp=$(mktemp -d "$tmpdir/caelestia-hypr-refresh.XXXXXX") || exit 2
+trap 'rm -rf "$tmp"' EXIT
+trap 'trap "" HUP INT TERM; rm -rf "$tmp"; exit 130' HUP INT TERM
+mkdir -p "$tmp/home" "$tmp/config" "$tmp/state" "$tmp/cache" "$tmp/new"
+for e in "$HOME"/.[!.]* "$HOME"/*; do [[ -e $e && ${e##*/} != .config && ${e##*/} != .cache ]] && ln -s "$e" "$tmp/home/"; done
+ln -s "$tmp/config" "$tmp/home/.config"
+for e in "$cfg"/.[!.]* "$cfg"/*; do [[ -e $e && ${e##*/} != hypr ]] && ln -s "$e" "$tmp/config/"; done
+cp -rL "$live" "$tmp/config/hypr" || { echo "Couldn't copy $live (a broken link in it?): nothing changed"; exit 2; }
+# under_link <path>: it, or a folder above it up to the config folder's hypr, is a link (yours: a folder kept
+# elsewhere, as stow makes them): Caelestia's version not put there, only said
+under_link() { local p=$1; while [[ $p == "$live" || $p == "$live"/* ]]; do [[ -L $p ]] && return 0; p=${p%/*}; done; return 1; }
+# What changed (renames as a removal and an addition): put (replaced, or new), beside (edited by you, or a link of
+# yours: written as .new), gone (taken out upstream: yours left), odd (a file now a folder or the reverse: left, said),
+# linked (in a linked folder: left, said)
+put=() beside=() gone=() odd=() linked=() n=0 matched=0
+while IFS= read -r -d '' src; do
+    dest=${dest_of[$src]:-$cfg/$src}
+    [[ $dest == "$live"/* ]] || continue
+    matched=$((matched + 1))
+    kind=$(g cat-file -t "$up:$src" 2>/dev/null)
+    if [[ -z $kind ]]; then
+        [[ -e $dest || -L $dest ]] && gone+=("${dest/#"$HOME"/\~}")
+        continue
+    fi
+    if under_link "${dest%/*}"; then
+        linked+=("${dest/#"$HOME"/\~}")
+        continue
+    fi
+    p=$dest blocked=
+    while p=${p%/*}; [[ $p == "$live"/* ]]; do [[ -e $p && ! -d $p ]] && blocked=1; done
+    if [[ $kind != blob || -n $blocked || (-d $dest && ! -L $dest) ]]; then
+        odd+=("${dest/#"$HOME"/\~}")
+        continue
+    fi
+    n=$((n + 1))
+    g show "$up:$src" >"$tmp/new/$n" || { echo "Couldn't read $src from Caelestia's clone: nothing changed"; exit 2; }
+    if [[ -f $dest && ! -L $dest ]] && cmp -s "$tmp/new/$n" "$dest"; then
+        continue  # (already the new one)
+    elif [[ ! -L $dest ]] && { { [[ ! -e $dest ]] && ! g cat-file -e "$base:$src" 2>/dev/null; } ||
+        { [[ -e $dest ]] && g show "$base:$src" 2>/dev/null | cmp -s - "$dest"; }; }; then
+        put+=("$n" "$dest")
+        staged=$tmp/config/hypr/${dest#"$live"/}
+        mkdir -p "${staged%/*}" && cp "$tmp/new/$n" "$staged" || exit 2
+    else
+        beside+=("$n" "$dest")
+    fi
+done < <(g diff --no-renames --name-only -z "$base" "$up" -- hypr)
+# (none of Caelestia's changed files where this looks: its files elsewhere, this version not taken as done)
+((matched)) || { echo "None of Caelestia's changed files are in $live (where its record says they went): nothing changed"; exit 2; }
+# Its version beside each of yours, whatever the check says (the one to merge yours with)
+for ((i = 0; i < ${#beside[@]}; i += 2)); do
+    mkdir -p "${beside[i + 1]%/*}" && cp "$tmp/new/${beside[i]}" "${beside[i + 1]}.new"
+done
+news=()
+for ((i = 1; i < ${#beside[@]}; i += 2)); do news+=("${beside[i]/#"$HOME"/\~}.new"); done
+((${#odd[@]})) && printf 'A file turned into a folder in Caelestia or the reverse, left as it is (by hand): %s\n' "${odd[@]}"
+((${#gone[@]})) && printf 'No longer in Caelestia, left as it is: %s\n' "${gone[@]}"
+((${#linked[@]})) && printf "In a linked folder of yours, not changed (Caelestia's version: in its clone, $dots): %s\n" "${linked[@]}"
+((${#news[@]})) && printf "Edited by you (or a link), left as it is; Caelestia's new version beside it: %s\n" "${news[@]}"
+checker=$(dirname "$(readlink -f "$0")")/hypr-config-check
+if ! out=$(HOME=$tmp/home XDG_CONFIG_HOME=$tmp/config XDG_STATE_HOME=$tmp/state XDG_CACHE_HOME=$tmp/cache "$checker" {lockfd}>&- 2>&1); then
+    echo "!! Caelestia's new Hyprland config didn't pass the check with the Hyprland installed: nothing changed in"
+    echo "   ${live/#"$HOME"/\~}. The check said:"
+    printf '%s\n' "$out" | sed 's/^/   /'
+    ((${#news[@]})) && echo "   It may need your edited files merged with Caelestia's new versions first (${news[*]}): then run this again."
+    exit 1
+fi
+for ((i = 0; i < ${#put[@]}; i += 2)); do
+    dest=${put[i + 1]}
+    mkdir -p "${dest%/*}" && cp "$tmp/new/${put[i]}" "$dest.refresh.$$" && mv -f "$dest.refresh.$$" "$dest" || exit 1
+    echo "Updated: ${dest/#"$HOME"/\~}"
+done
+echo "$up" >"$mine"
+# (the live config checked with the staging folder gone, so nothing made during it points there)
+rm -rf "$tmp"
+"$checker" {lockfd}>&-

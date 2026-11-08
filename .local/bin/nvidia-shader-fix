@@ -1,0 +1,187 @@
+#!/usr/bin/env python3
+"""Works around NVIDIA shader compiler crashes in specific games, only on the GPUs and drivers that have them.
+
+Cyberpunk 2077 2.5 crashes at startup on Turing cards (RTX 20xx, GTX 16xx) with drivers 610/615:
+NVIDIA's compiler aborts ("Unsupported: extractelement <8 x i4>", SIGILL in libnvidia-gpucomp) on one
+compute shader. The fix (https://github.com/HansKristian-Work/vkd3d-proton/issues/3405) runs that shader
+through spirv-opt, which gives an equivalent shader the driver compiles, and has VKD3D-Proton load it.
+The shader is made from the game's own files on this machine: the first launch on an affected machine dumps it
+(that launch still crashes), and the next one uses the fixed copy.
+
+  nvidia-shader-fix --install   add this to the affected games' Steam launch options, or take it out where the
+                                machine isn't affected (Steam must be closed: steam-start runs it just before
+                                starting Steam)
+  nvidia-shader-fix <command>   launch option wrapper (nvidia-shader-fix %command%): applies the fix if this
+                                machine is affected, otherwise just runs the game
+"""
+import glob
+import os
+import re
+import shutil
+import subprocess
+import sys
+
+HOME = os.path.expanduser("~")
+STEAM = f"{HOME}/.local/share/Steam"
+SELF = f"{HOME}/.local/bin/nvidia-shader-fix"
+OVERRIDES = f"{HOME}/.local/share/vkd3d-shader-override"
+# Each fix: the game, the GPU architecture (CUDA compute capability) and driver series that crash, and the
+# VKD3D-Proton hashes of the shaders the compiler fails on
+FIXES = {
+    "1091500": {  # Cyberpunk 2077 2.5
+        "name": "Cyberpunk 2077",
+        "compute_cap": {"7.5"},  # Turing
+        "drivers": ("610.", "615."),
+        "shaders": ["2169eb1a6850d504"],
+    },
+}
+
+
+def gpus() -> list[tuple[str, str]]:
+    """(compute capability, driver version) of each NVIDIA GPU; none without NVIDIA's driver (AMD, Intel)"""
+    try:
+        out = subprocess.run(["nvidia-smi", "--query-gpu=compute_cap,driver_version", "--format=csv,noheader"],
+                             capture_output=True, text=True, timeout=10).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    # (a line per GPU: a second card counts too; "No devices were found" and other messages don't)
+    return [(cap.strip(), driver.strip()) for cap, _, driver in (line.partition(",") for line in out.splitlines())
+            if driver]
+
+
+def affected(appid: str) -> bool:
+    fix = FIXES.get(appid)
+    return bool(fix) and any(cap in fix["compute_cap"] and driver.startswith(fix["drivers"]) for cap, driver in gpus())
+
+
+def notify(text: str) -> None:
+    subprocess.run(["notify-send", "-a", "Steam", "NVIDIA shader fix", text], capture_output=True)
+
+
+def run(cmd: list[str]) -> int:
+    appid = os.environ.get("SteamAppId") or os.environ.get("SteamGameId", "")
+    if not affected(appid):
+        os.execvp(cmd[0], cmd)
+    fix = FIXES[appid]
+    out = f"{OVERRIDES}/{appid}"
+    dump = f"{HOME}/.cache/nvidia-shader-fix-dump/{appid}"
+    missing = [h for h in fix["shaders"] if not os.path.exists(f"{out}/{h}.spv")]
+    if missing and not (shutil.which("spirv-opt") and shutil.which("spirv-val")):
+        # (setup's Steam extras) Without them every launch dumped the shaders, crashed, and failed after it
+        notify(f"{fix['name']} crashes on this GPU without a fix made with spirv-tools: install it (pacman -S spirv-tools)")
+        os.execvp(cmd[0], cmd)
+    env = dict(os.environ, VKD3D_SHADER_OVERRIDE=out)
+    if missing:
+        # Dump the game's shaders this launch (it still crashes) to make the fixed ones from
+        shutil.rmtree(dump, ignore_errors=True)
+        os.makedirs(dump)
+        env["VKD3D_SHADER_DUMP_PATH"] = dump
+    code = subprocess.run(cmd, env=env).returncode
+    if missing:
+        os.makedirs(out, exist_ok=True)
+        made = []
+        for h in missing:
+            src, dst = f"{dump}/{h}.spv", f"{out}/{h}.spv"
+            # Made beside it and moved in once valid: a half-written one in its place (a failed write, the wrapper
+            # stopped meanwhile) was loaded every launch, crashing the game, and never made again
+            tmp = dst + ".tmp"
+            if (os.path.exists(src) and subprocess.run(["spirv-opt", "-O", src, "-o", tmp]).returncode == 0
+                    and subprocess.run(["spirv-val", tmp]).returncode == 0):
+                os.replace(tmp, dst)
+                made.append(h)
+            elif os.path.exists(tmp):
+                os.remove(tmp)
+        shutil.rmtree(dump, ignore_errors=True)
+        if made:
+            notify(f"{fix['name']}: made the fix for NVIDIA's shader compiler crash. Start the game again.")
+    return code
+
+
+def libraries() -> list[str]:
+    """Steam's game folders (a second drive's too), as steam-installed-games reads them"""
+    try:
+        text = open(f"{STEAM}/steamapps/libraryfolders.vdf").read()
+    except OSError:
+        return [STEAM]
+    return re.findall(r'"path"\s+"([^"]+)"', text) or [STEAM]
+
+
+def install() -> None:
+    """Add the wrapper to the launch options of the installed games this machine needs it for; remove it elsewhere."""
+    for conf in glob.glob(f"{STEAM}/userdata/*/config/localconfig.vdf"):
+        text = open(conf, encoding="utf-8").read()
+        new = text
+        for appid in FIXES:
+            want = any(os.path.exists(f"{lib}/steamapps/appmanifest_{appid}.acf") for lib in libraries()) and affected(appid)
+            new = set_wrapper(new, appid, want)
+        if new != text:
+            # Written whole then swapped in: cut short (a full disk, a crash), Steam would rebuild it with every
+            # game's launch options and settings gone
+            with open(conf + ".tmp", "w", encoding="utf-8") as f:
+                f.write(new)
+            os.replace(conf + ".tmp", conf)
+
+
+def closing(text: str, start: int) -> int:
+    """Where the block opened just before start ends (its "}"), braces in quoted strings not counted; the text's end if
+    it isn't closed"""
+    depth, i, quoted = 1, start, False
+    while i < len(text):
+        c = text[i]
+        if quoted:
+            if c == "\\":
+                i += 1
+            elif c == '"':
+                quoted = False
+        elif c == '"':
+            quoted = True
+        elif c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                return i
+        i += 1
+    return len(text)
+
+
+def set_wrapper(text: str, appid: str, want: bool) -> str:
+    apps = re.search(r'"Software"\s*\{.*?"Valve"\s*\{.*?"Steam"\s*\{.*?"apps"\s*\{', text, re.S | re.I)
+    if not apps:
+        return text
+    # Only within the apps block (the same id as a key elsewhere, after it, isn't the game's entry)
+    block = re.compile(rf'(\n(\t*)"{appid}"\s*\{{)(.*?)(\n\2\}})', re.S)
+    m = block.search(text, apps.end(), closing(text, apps.end()))
+    if not m:
+        if not want:
+            return text
+        # The game was never started on this machine: add its entry
+        indent = re.search(r"\n(\t*)[^\n]*$", text[:apps.end()]).group(1) + "\t"
+        entry = f'\n{indent}"{appid}"\n{indent}{{\n{indent}}}'
+        text = text[:apps.end()] + entry + text[apps.end():]
+        m = block.search(text, apps.end(), closing(text, apps.end()))
+    head, indent, body, tail = m.group(1), m.group(2), m.group(3), m.group(4)
+    opt = re.search(r'(\n\t*"LaunchOptions"\s*")((?:[^"\\]|\\.)*)(")', body)
+    current = opt.group(2) if opt else ""
+    options = re.sub(rf"(^|\s){re.escape(SELF)}\s+", r"\1", current).strip()
+    if want:
+        if "%command%" in options:
+            options = options.replace("%command%", f"{SELF} %command%", 1)
+        else:
+            options = f"{SELF} %command% {options}".strip()
+    if options == current:
+        return text
+    if opt:
+        body = body[:opt.start(2)] + options + body[opt.end(2):]
+    else:
+        body += f'\n{indent}\t"LaunchOptions"\t\t"{options}"'
+    return text[:m.start()] + head + body + tail + text[m.end():]
+
+
+if __name__ == "__main__":
+    if sys.argv[1:] == ["--install"]:
+        install()
+    elif len(sys.argv) > 1:
+        sys.exit(run(sys.argv[1:]))
+    else:
+        print(__doc__)

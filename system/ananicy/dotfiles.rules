@@ -1,0 +1,5 @@
+# The desktop shell (Caelestia's bar and launcher, the Alt+Tab switcher, the widgets: all Quickshell) at normal
+# priority. CachyOS's ananicy-cpp rules put "qs" with background services (nice 10), so under a game hogging the CPU the
+# switcher and launcher got CPU last. Installed by setup's system step into /etc/ananicy.d/99-dotfiles/
+{ "name": "qs", "nice": 0, "ioclass": "best-effort" }
+{ "name": "quickshell", "nice": 0, "ioclass": "best-effort" }

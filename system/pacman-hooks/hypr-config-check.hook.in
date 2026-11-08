@@ -1,0 +1,17 @@
+# Template: setup.sh fills in @USER@ and @HOME@ and installs it as /etc/pacman.d/hooks/hypr-config-check.hook
+# A Hyprland update (or one of the libraries it's built on): the config checked against it straight away, its errors
+# written down for dotfiles-check (hypr-config-check), so a renamed API is said at once, not found at the next login
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = hyprland
+Target = hyprland-git
+Target = aquamarine
+Target = hyprutils
+Target = hyprlang
+
+[Action]
+Description = Checking your Hyprland config against the new Hyprland (hypr-config-check)...
+When = PostTransaction
+Exec = /usr/bin/runuser -u @USER@ -- "@HOME@/.local/bin/hypr-config-check"

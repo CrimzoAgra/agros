@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# Your first desktop session after AgrOS was installed (agros-session-init.service; once, for each user it set up):
+# setup's desktop step, which needs the running desktop (the Caelestia overlay and a restart onto it, the wallpaper and
+# its colours, GTK's window buttons, LibreWolf's settings, VSCodium's extensions, Claude Code's plugins). Then it offers
+# to bring your accounts back from your pen drive (agros-personal), the one thing left for you to do.
+set -uo pipefail
+st=${XDG_STATE_HOME:-$HOME/.local/state}
+mark=$st/agros/session-init-done
+pending=${AGROS_PENDING:-/var/lib/agros/pending}
+[[ -e $mark ]] && exit 0
+# Only a home AgrOS set up (the repo it ran from, recorded by setup's files step)
+repo=$(cat "$st/dotfiles-repo" 2>/dev/null) && [[ -x $repo/setup.sh ]] || exit 0
+
+# Steps the install left for the boot (offline install) first: they bring the apps this step configures
+if [[ -e $pending ]]; then
+    notify-send -a AgrOS -i system-software-install "Finishing the AgrOS setup" \
+        "Some steps were left for when there's network; they're running now." 2>/dev/null || true
+    while systemctl is-active -q agros-firstboot.service 2>/dev/null; do sleep 10; done
+    if [[ -e $pending ]]; then
+        notify-send -a AgrOS -i dialog-warning "AgrOS setup not finished" \
+            "Steps left: $(paste -sd' ' "$pending"). They're tried again at the next boot (log: /var/log/agros-install.log)." 2>/dev/null || true
+        exit 0  # (not marked done: the next login tries again)
+    fi
+fi
+
+# The shell up before the step talks to it (Caelestia's wallpaper, its restart onto the overlay)
+for _ in $(seq 60); do
+    qs list --all 2>/dev/null | grep -q /quickshell/caelestia/ && break
+    sleep 1
+done
+"$repo/setup.sh" --yes --only desktop || echo "!! The desktop step reported a problem (run: $repo/setup.sh --only desktop)"
+mkdir -p "${mark%/*}" && touch "$mark"
+
+# The one thing left: your accounts, from your pen drive. A notification with a button that runs it in a terminal
+# (in the background: this unit is done; the notification stays until answered)
+setsid -f bash -c '
+    a=$(notify-send -a AgrOS -i drive-removable-media -u critical -A restore="Restore now" -A later="Later" \
+        "Welcome to AgrOS" "Everything is installed. Plug in your pen drive and restore your accounts (logins, keys, browser profile). Later: run agros-personal." 2>/dev/null)
+    [[ $a == restore ]] && exec foot --hold -T "AgrOS: your accounts" "$1/.local/bin/agros-personal"
+' _ "$HOME" >/dev/null 2>&1 </dev/null
+exit 0

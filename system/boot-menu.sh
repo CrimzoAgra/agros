@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+# Hides the boot menu: boots CachyOS straight away, press Esc during boot to show the menu
+# (Windows and the auto-update snapshots are listed there). Works with GRUB and Limine. Also takes away the
+# motherboard's own 1 s wait before the boot loader (its boot menu key, e.g. F11, still works): a second less of
+# the motherboard's start-up, when the graphics card's fans run at full speed.
+# Run with: sudo bash system/boot-menu.sh   (setup.sh asks to run it)
+set -euo pipefail
+[[ $EUID -eq 0 ]] || { echo "Run with sudo"; exit 1; }
+
+# Limine (CachyOS's default on newer installs): boot CachyOS straight away with no menu;
+# pressing Esc (any key) in the first second shows the menu (snapshots and Windows are listed there; there's no
+# setting that boots at once and can still be interrupted, so 1 s is the shortest)
+limine_menu() {
+    local conf="" c kv key
+    for c in /boot/limine.conf /boot/limine/limine.conf /boot/EFI/limine/limine.conf /efi/limine.conf; do
+        test -f "$c" && { conf=$c; break; }
+    done
+    [[ -n $conf ]] || { echo "No limine.conf found, boot menu left as is."; return; }
+    cp -n "$conf" "$conf.bak"
+    for kv in "timeout: 1" "quiet: yes" "remember_last_entry: no"; do
+        key=${kv%%:*}
+        if grep -qE "^\s*$key:" "$conf"; then
+            sed -i -E "s|^\s*$key:.*|$kv|" "$conf"
+        else
+            sed -i "1i $kv" "$conf"   # global options go before the entries
+        fi
+    done
+    echo "Limine: boots CachyOS directly, Esc shows the menu ($conf)."
+}
+
+boot_menu() {
+    # CachyOS uses GRUB or Limine: hide the menu (press Esc during boot to show it), always boot CachyOS,
+    # list Windows if there is one, and show the auto-update snapshots in the menu.
+    # Limine when its settings file is there (as boot-video-mode decides; GRUB may still be installed on a machine moved
+    # to Limine), else GRUB
+    if [[ -f /etc/default/limine ]] || { pacman -Q limine >/dev/null 2>&1 && ! command -v grub-mkconfig >/dev/null; }; then
+        limine_menu
+        return
+    fi
+    local conf=/etc/default/grub
+    if [[ ! -f $conf ]] || ! command -v grub-mkconfig >/dev/null; then
+        echo "No GRUB or Limine here, boot menu left as is."
+        return
+    fi
+    cp -n "$conf" "$conf.bak"
+    local kv key value
+    for kv in GRUB_TIMEOUT_STYLE=hidden GRUB_TIMEOUT=1 GRUB_DEFAULT=0 GRUB_SAVEDEFAULT=false GRUB_DISABLE_OS_PROBER=false; do
+        key=${kv%%=*} value=${kv#*=}
+        if grep -qE "^#?\s*$key=" "$conf"; then
+            sed -i -E "s|^#?\s*$key=.*|$key=$value|" "$conf"
+        else
+            echo "$kv" | tee -a "$conf" >/dev/null
+        fi
+    done
+    # No kernel messages on screen while it boots (CachyOS's GRUB leaves "quiet" out; Limine's entries have it)
+    grep -qE "^GRUB_CMDLINE_LINUX_DEFAULT=.*\bquiet\b" "$conf" ||
+        sed -i -E "s/^(GRUB_CMDLINE_LINUX_DEFAULT=['\"])/\1quiet /" "$conf"
+    # GRUB's own "Loading Linux ..." lines too: out of its script now, and again after each GRUB update (a pacman hook,
+    # named to run before grub.hook rebuilds the menu)
+    # (the hook: system/render.sh's, which dotfiles-check compares the installed one with)
+    # shellcheck source=/dev/null  # (system/render.sh)
+    source "$(dirname "$(readlink -f "$0")")/render.sh"
+    # shellcheck disable=SC2154  # (render.sh's)
+    sed -i "$grub_quiet_strip" /etc/grub.d/10_linux
+    mkdir -p /etc/pacman.d/hooks
+    grub_quiet_hook >/etc/pacman.d/hooks/grub-quiet.hook
+    pacman -S --needed --noconfirm os-prober ntfs-3g
+    if [[ $(findmnt -no FSTYPE /) == btrfs ]]; then
+        pacman -S --needed --noconfirm snapper snap-pac grub-btrfs inotify-tools
+        # (not made, e.g. a /.snapshots already there: said, and the boot menu still made below)
+        snapper -c root list >/dev/null 2>&1 || snapper -c root create-config / ||
+            echo "!! Snapper's config for / couldn't be made: no snapshots before updates (see snapper create-config)"
+        # Old snapshots cleared by snapper's own rules (its config's NUMBER_LIMIT...): without its timer, on plain Arch,
+        # every update's snapshots piled up (CachyOS turns it on itself; on again changes nothing)
+        systemctl enable --now snapper-cleanup.timer ||
+            echo "!! snapper-cleanup.timer couldn't be turned on: old snapshots aren't cleared (systemctl enable --now snapper-cleanup.timer)"
+        systemctl enable --now grub-btrfsd.service 2>/dev/null || true
+    fi
+    grub-mkconfig -o /boot/grub/grub.cfg
+}
+
+boot_menu
+if command -v efibootmgr >/dev/null && [[ -d /sys/firmware/efi ]]; then
+    efibootmgr -q -t 0 && echo "Motherboard: no wait before the boot loader." || echo "Motherboard wait left as is (the firmware refused)."
+fi

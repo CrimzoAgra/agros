@@ -1,0 +1,2 @@
+# Linux files: LF everywhere, also in a Windows checkout (a CRLF hyprbars.patch no longer applies)
+* text=auto eol=lf

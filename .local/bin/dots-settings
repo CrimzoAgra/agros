@@ -1,0 +1,331 @@
+#!/usr/bin/python3 -I
+"""The dotfiles' settings: what the Settings app (~/.config/quickshell/settings) shows and changes.
+The list of settings, their defaults and how each one applies: ~/.local/share/dots-settings/schema.json. Your choices
+(only the ones that differ from the default): ~/.config/dots/settings.json. Hyprland's config reads them from
+~/.config/dots/settings.lua (dots.setting(key) in hypr-user.lua), written here on every change; scripts from `values`.
+  dots-settings schema               the pages with each setting's current value, as JSON (for the app)
+  dots-settings values               every setting's current value, as JSON (for scripts)
+  dots-settings get KEY              one setting's current value, as JSON
+  dots-settings set KEY VALUE        change it (VALUE as JSON: true, "tiling"...) and apply it
+  dots-settings set KEY VALUE --later  change it, and print how to apply it (to apply several changes once)
+  dots-settings apply HOW            apply: hypr (reload Hyprland's config; game-focus re-reads its settings then),
+                                     caelestia (rebuild and restart it), mouse-dpi (set it on the mouse); lutris changes
+                                     apply when Lutris next starts
+  dots-settings lua                  write settings.lua again (Hyprland's config does when the schema is newer)
+A setting with "get"/"set" shell commands in the schema lives elsewhere (the window mode: ~/.local/state/window-mode);
+"set" gets the value in $VALUE. A group with "from" lists the changes of a patch that can be turned off, from the
+patch itself (patch.py --list), so a new one shows without editing the schema; "from": "autostart" lists the apps
+with a standard autostart entry (system ones in /etc/xdg/autostart, yours in ~/.config/autostart), each on unless
+your copy says Hidden=true, as GNOME's startup settings do it (turning one off writes that copy); "from":
+"caelestia-keys" lists Caelestia's shortcuts (the kb* variables of ~/.config/hypr/variables.lua, by its sections),
+except those hypr-vars.lua turns off (its other keys are their defaults), which reads your changes back as
+caelestia-keys.<variable>.
+A "keys" setting is a list of shortcuts ("SUPER + M"; a modifier alone for Caelestia's "mod + 0-9" ones)."""
+import fcntl
+import json
+import os
+import pwd
+import re
+import subprocess
+import sys
+
+HOME = pwd.getpwuid(os.getuid()).pw_dir  # not $HOME: run through runuser (a pacman hook), that may be root's
+SCHEMA = f"{HOME}/.local/share/dots-settings/schema.json"
+CONFIG = f"{HOME}/.config/dots"
+SETTINGS = f"{CONFIG}/settings.json"
+
+# How changes take effect
+APPLY = {
+    # After any game (a reload takes a fullscreen game out of fullscreen), on its own: the Settings app isn't held up
+    # until the game closes (it couldn't be opened again meanwhile, and its other changes waited). Hyprland named, as
+    # after-games does: set from an SSH login or a text console, the reload failed with nothing said. (The home folder
+    # passed as the scripts' $0, not written into them: a space or a $ in its path broke them, or ran as commands)
+    "hypr": ["setsid", "-f", "sh", "-c", 'exec >/dev/null 2>&1; "$0/after-games"; '
+             'hyprctl -i "${HYPRLAND_INSTANCE_SIGNATURE:-0}" reload', f"{HOME}/.local/bin"],
+    "caelestia": ["sh", "-c", '"$0/caelestia-overlay" && "$0/caelestia-restart"', f"{HOME}/.local/bin"],
+    "mouse-dpi": [f"{HOME}/.local/bin/mouse-dpi"],
+}
+# Groups listing a patch's changes ("from" in the schema): the patch that lists them; each is setting <name>.<change>
+PATCHES = {
+    "caelestia": f"{HOME}/.local/share/caelestia-overlay/patch.py",
+    "lutris": f"{HOME}/.local/share/lutris-overlay/patch.py",
+}
+
+
+AUTOSTART = ["/etc/xdg/autostart", f"{HOME}/.config/autostart"]
+
+
+def desktop_entry(path):
+    """The [Desktop Entry] keys of a .desktop file"""
+    entry, section = {}, ""
+    with open(path, errors="replace") as f:
+        for line in f:
+            line = line.strip()
+            if line.startswith("["):
+                section = line
+            elif section == "[Desktop Entry]" and "=" in line:
+                key, _, value = line.partition("=")
+                entry.setdefault(key, value)
+    return entry
+
+
+def autostart_settings():
+    """Apps with an autostart entry: by file name, your copy over the system's. Not ones without an icon or hidden from
+    menus (background services: the keyring, accessibility...), nor ones for other desktops"""
+    entries = {}
+    for folder in AUTOSTART:
+        for name in sorted(os.listdir(folder)) if os.path.isdir(folder) else []:
+            if name.endswith(".desktop"):
+                # Your copy may be only "Hidden=true": the name and icon come from the system's
+                entries[name] = {**entries.get(name, {}), **desktop_entry(os.path.join(folder, name))}
+    out = []
+    for name, entry in entries.items():
+        only = entry.get("OnlyShowIn", "")
+        if not entry.get("Icon") or entry.get("NoDisplay") == "true" or (only and "Hyprland" not in only):
+            continue
+        out.append({"key": f"autostart.{name[:-8]}", "label": entry.get("Name", name[:-8]),
+                    "description": entry.get("Comment", ""), "type": "bool", "default": True, "autostart": name})
+    return out
+
+
+def enabled(entry):
+    return entry.get("Hidden") != "true" and entry.get("X-GNOME-Autostart-enabled") != "false"
+
+
+def autostart_on(name):
+    """Your copy decides, else the system's entry (one it ships switched off doesn't start either)"""
+    path = next((p for p in (os.path.join(d, name) for d in (AUTOSTART[1], AUTOSTART[0])) if os.path.exists(p)), None)
+    return enabled(desktop_entry(path) if path else {})
+
+
+def autostart_set(name, on):
+    """Your copy of the entry (the system's copied first), with Hidden=true right under [Desktop Entry], or without it"""
+    mine, system = os.path.join(AUTOSTART[1], name), os.path.join(AUTOSTART[0], name)
+    # (one the system ships switched off starts only from your copy: removing yours, or having none, leaves it off)
+    ships_on = os.path.exists(system) and enabled(desktop_entry(system))
+    if not os.path.exists(mine):
+        if on and ships_on:
+            return
+        with open(system, errors="replace") as f:
+            text = f.read()
+    else:
+        with open(mine, errors="replace") as f:
+            text = f.read()
+        # Yours only hid it (no Exec=) and the system's ships off: the system's copied, or nothing would start
+        if on and not ships_on and os.path.exists(system) and not re.search(r"^Exec=", text, re.M):
+            with open(system, errors="replace") as f:
+                text = f.read()
+
+    def strip(text):
+        return [l for l in text.splitlines() if not l.startswith(("Hidden=", "X-GNOME-Autostart-enabled="))]
+    lines = strip(text)
+    # A copy that only hid the system's entry (no Exec=: the repo's cachyos-hello.desktop, GNOME's), or the system's own
+    # copied when it was turned off: removed, so the system's starts again (and its later updates apply). Kept, it
+    # would still replace the system's entry
+    if on and ships_on:
+        with open(system, errors="replace") as f:
+            same = strip(f.read()) == lines
+        if same or not any(l.startswith("Exec=") for l in lines):
+            os.remove(mine)
+            return
+    if not on:
+        lines.insert([l.strip() for l in lines].index("[Desktop Entry]") + 1, "Hidden=true")
+    os.makedirs(AUTOSTART[1], exist_ok=True)
+    with open(mine, "w") as f:
+        f.write("\n".join(lines) + "\n")
+
+
+def caelestia_keys():
+    """Caelestia's shortcuts as groups of settings, from its variables file: each kb<Name> = "keys" or { "keys", ... },
+    grouped by the comment line above (-- Workspaces...). The first ones are modifiers only (mod + 0-9). None when
+    Caelestia's files aren't there: the rest of the settings still work"""
+    try:
+        return _caelestia_keys()
+    except OSError:
+        return []
+
+
+def _caelestia_keys():
+    # hypr-vars.lua's: "" turns one off (not listed), other keys are its default here (kept when changed back)
+    with open(f"{HOME}/.config/caelestia/hypr-vars.lua") as f:
+        mine = dict(re.findall(r"^\s*(kb\w+)\s*=\s*(.*?)\s*(?:--.*)?$", f.read(), re.M))
+    groups, title, modifier, started = [], "Workspace numbers", True, False
+    with open(f"{HOME}/.config/hypr/variables.lua") as f:
+        for line in f:
+            started = started or "KEYBINDS" in line
+            if not started:
+                continue
+            if "All the following binds" in line:
+                modifier = False
+            comment = re.match(r"^\s*-- ([A-Z][\w ,-]*)$", line)
+            if comment:
+                title = comment.group(1)
+            var = re.match(r"^\s*(kb\w+)\s*=\s*(.*)$", line)
+            if not var:
+                continue
+            default = re.findall(r'"([^"]*)"', mine.get(var.group(1), var.group(2)))
+            if not any(default):
+                continue
+            if not groups or groups[-1]["title"] != f"Caelestia: {title}":
+                groups.append({"title": f"Caelestia: {title}", "settings": []})
+            words = re.sub(r"([a-z])([A-Z])", r"\1 \2", var.group(1)[2:]).replace("Ws", "workspace").replace("Win ", "Window ").lower()
+            groups[-1]["settings"].append({
+                "key": f"caelestia-keys.{var.group(1)}", "label": words[:1].upper() + words[1:], "type": "keys",
+                "default": default, "apply": "hypr", "modifier": modifier,
+                **({"description": "The modifier for workspace numbers: it + 0-9"} if modifier else {})})
+    return groups
+
+
+def schema():
+    with open(SCHEMA) as f:
+        pages = json.load(f)
+    for page in pages["pages"]:
+        page["groups"] = [g for group in page["groups"]
+                          for g in (caelestia_keys() if group.get("from") == "caelestia-keys" else [group])]
+    for group in (g for page in pages["pages"] for g in page["groups"] if "from" in g):
+        name = group["from"]
+        if name == "autostart":
+            group["settings"] = autostart_settings()
+            continue
+        try:
+            changes = json.loads(subprocess.run(["python3", "-I", PATCHES[name], "--list"], capture_output=True,
+                                                text=True).stdout)
+        except ValueError:
+            changes = []
+        group["settings"] = [{"key": f"{name}.{c['id']}", "label": c["label"][:1].upper() + c["label"][1:],
+                              "type": "bool", "default": True, "apply": name} for c in changes]
+    return pages
+
+
+def all_settings(pages):
+    return {s["key"]: s for page in pages["pages"] for group in page["groups"] for s in group["settings"]}
+
+
+def stored():
+    try:
+        with open(SETTINGS) as f:
+            saved = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    return saved if isinstance(saved, dict) else {}  # (a broken file: the defaults, not a crash on every read)
+
+
+def current(setting, saved):
+    if "autostart" in setting:
+        return autostart_on(setting["autostart"])
+    if "get" in setting:
+        out = subprocess.run(["sh", "-c", setting["get"]], capture_output=True, text=True).stdout.strip()
+        return out if setting["type"] != "bool" else out == "true"
+    value = saved.get(setting["key"], setting["default"])
+    # Saved before the setting changed (an option gone, another type): its default, as shown and as applied
+    if setting["type"] == "choice" and value not in [o["value"] for o in setting["options"]]:
+        return setting["default"]
+    if setting["type"] == "bool" and not isinstance(value, bool):
+        return setting["default"]
+    if setting["type"] == "keys":
+        if not (isinstance(value, list) and all(isinstance(v, str) for v in value)):
+            return setting["default"]
+        # (a modifier for Caelestia's "mod + 0-9": one key; several would bind nothing)
+        if setting.get("modifier") and len(value) > 1:
+            return value[:1]
+    return value
+
+
+def values(settings):
+    saved = stored()
+    return {key: current(s, saved) for key, s in settings.items()}
+
+
+def lua_value(value):
+    if isinstance(value, list):
+        return "{ " + ", ".join(lua_value(v) for v in value) + " }"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        return repr(value)
+    # A JSON string is a valid Lua string, if its non-ASCII stays as it is (Lua has no \uXXXX escapes)
+    return json.dumps(value, ensure_ascii=False)
+
+
+def write_lua(settings):
+    saved = stored()
+    # Only the ones kept here: Lua has no use for the window mode or autostart entries. Caelestia's shortcuts only when
+    # changed: written with their defaults, a Caelestia update's new default would never reach them
+    lines = [f"    [{json.dumps(k)}] = {lua_value(current(s, saved))}," for k, s in settings.items()
+             if "get" not in s and "autostart" not in s and (not k.startswith("caelestia-keys.") or k in saved)]
+    os.makedirs(CONFIG, exist_ok=True)
+    # (its own temporary file: "lua", run by Hyprland's config, and a "set" at once wrote the same one, and could leave
+    # half of each; UTF-8, as its strings keep their non-ASCII, whatever the locale)
+    tmp = f"{CONFIG}/settings.lua.{os.getpid()}.tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write("-- Written by ~/.local/bin/dots-settings from settings.json: change settings in the Settings app\n")
+        f.write("return {\n" + "\n".join(lines) + "\n}\n")
+    os.replace(tmp, f"{CONFIG}/settings.lua")
+
+
+def apply(how):
+    # Its failure is this command's (the Settings app shows it)
+    if how in APPLY and subprocess.run(APPLY[how], stdout=subprocess.DEVNULL).returncode != 0:
+        sys.exit(f"Applying it ({how}) failed")
+
+
+def main(args):
+    pages = schema()
+    settings = all_settings(pages)
+    cmd = args[0] if args else ""
+    if cmd == "schema":
+        now = values(settings)
+        for s in settings.values():
+            s["value"] = now[s["key"]]
+        print(json.dumps(pages))
+    elif cmd == "values":
+        print(json.dumps(values(settings)))
+    elif cmd == "get" and len(args) == 2 and args[1] in settings:
+        print(json.dumps(current(settings[args[1]], stored())))
+    elif cmd == "set" and len(args) in (3, 4) and args[1] in settings:
+        try:
+            setting, value = settings[args[1]], json.loads(args[2])
+        except ValueError:
+            sys.exit(f"{args[1]}: the value as JSON (true, \"tiling\"...)")
+        if setting["type"] == "bool" and not isinstance(value, bool):
+            sys.exit(f"{args[1]}: true or false")
+        if setting["type"] == "keys" and not (isinstance(value, list) and all(isinstance(v, str) for v in value)):
+            sys.exit(f"{args[1]}: a list of shortcuts")
+        if setting["type"] == "keys" and setting.get("modifier") and len(value) > 1:
+            sys.exit(f"{args[1]}: one modifier (it + 0-9)")
+        if setting["type"] == "choice" and value not in [o["value"] for o in setting["options"]]:
+            sys.exit(f"{args[1]}: one of {', '.join(o['value'] for o in setting['options'])}")
+        if "set" in setting:
+            subprocess.run(["sh", "-c", setting["set"]], env={**os.environ, "VALUE": str(value)}, check=True)
+            return
+        if "autostart" in setting:
+            return autostart_set(setting["autostart"], value)
+        os.makedirs(CONFIG, exist_ok=True)
+        # One change at a time (the Settings app and a terminal at once): each reads the file the last one wrote, none lost
+        lock = open(f"{CONFIG}/.settings.lock", "w")
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        saved = stored()
+        if value == setting["default"]:
+            saved.pop(args[1], None)
+        else:
+            saved[args[1]] = value
+        with open(f"{SETTINGS}.tmp", "w") as f:
+            json.dump(saved, f, indent=2, sort_keys=True)
+        os.replace(f"{SETTINGS}.tmp", SETTINGS)
+        write_lua(settings)
+        lock.close()
+        how = setting.get("apply", "")
+        if args[3:] == ["--later"]:
+            print(how)
+        else:
+            apply(how)
+    elif cmd == "apply" and len(args) == 2:
+        apply(args[1])
+    elif cmd == "lua":
+        write_lua(settings)
+    else:
+        sys.exit(__doc__)
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

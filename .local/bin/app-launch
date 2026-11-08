@@ -1,0 +1,9 @@
+#!/bin/sh
+# Starts an app the way the desktop's launcher does: in a systemd unit of its own when the session is uwsm-managed (so
+# it isn't counted as part of Hyprland, and stopping it can't take anything else down); directly otherwise. Used by the
+# Hyprland config (user/*.lua) for the apps it starts
+#   app-launch <command> [args...]
+if command -v uwsm >/dev/null && uwsm check is-active >/dev/null 2>&1; then
+    exec uwsm app -- "$@"
+fi
+exec "$@"

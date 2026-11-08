@@ -1,0 +1,17 @@
+# scrcpy shown as Phone Link: your Android phone's screen in a window, controlled with the mouse and keyboard (USB
+# debugging on in the phone's developer options; plug it in). No terminal (scrcpy's own two entries are hidden:
+# scrcpy.desktop, scrcpy-console.desktop). The phone's own screen goes off while it's mirrored, and it stays awake
+# while plugged in; the computer doesn't blank its screen meanwhile; 20 Mbit/s video
+[Desktop Entry]
+Name=Phone Link
+GenericName=Android Remote Control
+Comment=Your phone's screen on the computer
+Type=Application
+Categories=Utility;RemoteAccess;
+Keywords=scrcpy;adb;android;phone;screen;mirroring;
+Exec=scrcpy "--window-title=Phone Link" --turn-screen-off --disable-screensaver --stay-awake --video-bit-rate=20M
+TryExec=scrcpy
+Icon=smartphone
+Terminal=false
+StartupNotify=false
+StartupWMClass=scrcpy

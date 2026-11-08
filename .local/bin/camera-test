@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Live camera preview with no delay (no buffering, fast MJPEG 720p mode). Press q to close.
+# The first camera (usually /dev/video0); a machine with none says so instead of mpv failing
+dev=$(ls /dev/video* 2>/dev/null | head -1)
+[[ -c $dev ]] || { echo "No camera found" >&2; exit 1; }
+exec mpv --title="Camera test" --profile=low-latency --untimed --cache=no \
+    --demuxer-lavf-o=video_size=1280x720,input_format=mjpeg,fflags=+nobuffer \
+    "av://v4l2:$dev" "$@"

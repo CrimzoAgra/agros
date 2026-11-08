@@ -1,0 +1,208 @@
+#!/usr/bin/env python3
+"""Opens AppImages: installs the app (or the new version of it) and starts it.
+
+AppImages open with this (mimeapps.list), so an app's own "Update" button, which downloads the new
+AppImage and opens it, updates the app by itself: the file goes to ~/Applications/<app>.AppImage in place of
+the old version (which is closed first), the launcher entry and icon come from inside the AppImage, and the
+app starts again. An AppImage without a launcher entry inside just runs. When installing (--install: setup and
+appimage-update, not a file you open), a system package with the same launcher entry (the app installed another way
+before, e.g. from the AUR) is removed, asking for your password, so there's one copy.
+
+  appimage-open <file.AppImage>             install/update and start it
+  appimage-open --install <file.AppImage>   install/update only (setup.sh)
+"""
+import os
+import re
+import shutil
+import signal
+import subprocess
+import sys
+import tempfile
+import time
+
+HOME = os.path.expanduser("~")
+APPS = f"{HOME}/Applications"
+ENTRIES = f"{HOME}/.local/share/applications"
+ICONS = f"{HOME}/.local/share/icons"
+
+
+def extract(appimage: str, pattern: str, into: str) -> None:
+    # (one that doesn't run here or hangs: nothing extracted, so "no launcher entry", not a traceback)
+    try:
+        subprocess.run([appimage, "--appimage-extract", pattern], cwd=into,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60)
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+
+def resolve(appimage: str, tmp: str, name: str) -> str:
+    """The extracted file <name> in tmp, with what it links to extracted too: linuxdeploy's AppImages have their launcher
+    entry and icon at the top as links into usr/share, and extracting a link extracts only the link"""
+    path = f"{tmp}/squashfs-root/{name}"
+    for _ in range(8):
+        if not os.path.islink(path):
+            break
+        name = os.path.normpath(os.path.join(os.path.dirname(name), os.readlink(path)))
+        if name.startswith(("/", "..")):  # (outside the AppImage)
+            break
+        extract(appimage, name, tmp)
+        path = f"{tmp}/squashfs-root/{name}"
+    return path
+
+
+def entry_of(appimage: str, tmp: str) -> tuple[str, str, str] | None:
+    """(app id, launcher entry text, icon file in tmp or "") from inside the AppImage."""
+    extract(appimage, "*.desktop", tmp)
+    root = f"{tmp}/squashfs-root"
+    desktops = [f for f in os.listdir(root) if f.endswith(".desktop")] if os.path.isdir(root) else []
+    if not desktops:
+        return None
+    entry = resolve(appimage, tmp, desktops[0])
+    if not os.path.isfile(entry):
+        return None
+    text = open(entry).read()
+    app = desktops[0].removesuffix(".desktop")  # its own case: a package's entry and dock pins use it
+    icon = ""
+    name = re.search(r"^Icon=(.+)$", text, re.M)
+    if name:
+        for ext in ("png", "svg"):
+            extract(appimage, f"{name.group(1)}.{ext}", tmp)
+            found = resolve(appimage, tmp, f"{name.group(1)}.{ext}")
+            if os.path.isfile(found):
+                icon = found
+                break
+    return app, text, icon
+
+
+def close_running(path: str) -> None:
+    """Closes running copies of the installed AppImage (the old version), so the new one starts alone."""
+    pids = []
+    # Not this one, nor what started it (an app's Update button opens the new file through xdg-open, which, and this,
+    # inherit the app's APPIMAGE), but the app itself among those: its program runs from its mount (/tmp/.mount_...)
+    mine, p = set(), os.getpid()
+    while p > 1 and p not in mine:
+        try:
+            exe = os.readlink(f"/proc/{p}/exe")
+        except OSError:
+            exe = ""
+        if "/.mount_" not in exe:
+            mine.add(p)
+        try:
+            p = int(open(f"/proc/{p}/stat").read().rsplit(")", 1)[1].split()[1])
+        except (OSError, IndexError, ValueError):
+            break
+    for pid in filter(str.isdigit, os.listdir("/proc")):
+        if int(pid) in mine:
+            continue
+        try:
+            env = open(f"/proc/{pid}/environ", "rb").read().split(b"\0")
+        except OSError:
+            continue
+        # The app's own processes only (run from its mount, or the file itself), not what it started (a browser opened
+        # from a link, a terminal app's shells): those inherit APPIMAGE too
+        try:
+            exe = os.readlink(f"/proc/{pid}/exe")
+        except OSError:
+            continue
+        if f"APPIMAGE={path}".encode() in env and ("/.mount_" in exe or exe == path):
+            pids.append(int(pid))
+    for pid in pids:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+    for _ in range(50):
+        if not any(os.path.exists(f"/proc/{p}") for p in pids):
+            return
+        time.sleep(0.1)
+
+
+def remove_package_copy(app: str) -> None:
+    """Removes the system package that installs the same app (same launcher entry), if there's one."""
+    owner = subprocess.run(["pacman", "-Qqo", f"/usr/share/applications/{app}.desktop"], capture_output=True, text=True)
+    pkg = owner.stdout.strip()
+    if owner.returncode != 0 or not pkg:
+        return
+    cmd = ["pacman", "-R", "--noconfirm", pkg]  # just it: its dependencies may be yours too
+    # sudo when it doesn't need asking (setup.sh), otherwise the desktop's password dialog
+    sudo = subprocess.run(["sudo", "-n", "true"], capture_output=True).returncode == 0
+    if subprocess.run((["sudo", "-n"] if sudo else ["pkexec"]) + cmd, capture_output=True).returncode == 0:
+        subprocess.run(["notify-send", "-a", "AppImage", f"Removed the {pkg} package (the AppImage replaces it)"],
+                       capture_output=True)
+
+
+def main() -> None:
+    # The old app may be the terminal this runs in (updating it from inside): closing it mustn't end this before the new
+    # one is in place
+    signal.signal(signal.SIGHUP, signal.SIG_IGN)
+    args = sys.argv[1:]
+    install_only = args[:1] == ["--install"]
+    args = args[1:] if install_only else args
+    if len(args) != 1 or not os.path.isfile(args[0]):
+        sys.exit(__doc__)
+    src = os.path.abspath(args[0])
+    os.chmod(src, os.stat(src).st_mode | 0o111)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        found = entry_of(src, tmp)
+        if not found:
+            if not install_only:
+                shutil.rmtree(tmp, ignore_errors=True)  # exec leaves the with block without cleaning up
+                signal.signal(signal.SIGHUP, signal.SIG_DFL)  # the app itself ends with its terminal as usual
+                os.execv(src, [src])
+            sys.exit(f"{src}: no launcher entry inside, not installed")
+        app, text, icon = found
+        dest = f"{APPS}/{app.lower()}.AppImage"
+        updating = os.path.exists(dest) and src != dest
+        os.makedirs(APPS, exist_ok=True)
+        if src != dest:
+            # Not for an update in the background (appimage-update): the app would just vanish, not come back. The
+            # running copy keeps its mounted old file; the new one is used from its next start
+            if not install_only:
+                close_running(dest)
+            shutil.move(src, f"{dest}.new")
+            os.replace(f"{dest}.new", dest)
+        if icon:
+            os.makedirs(ICONS, exist_ok=True)
+            icon_path = f"{ICONS}/{app}-appimage{os.path.splitext(icon)[1]}"
+            shutil.copy(icon, icon_path)
+            text = re.sub(r"^Icon=.*$", f"Icon={icon_path}", text, flags=re.M)
+
+    # The launcher entry: the AppImage's own, run from ~/Applications (same id as e.g. a package's, so pins stay)
+    # (quoted as the launcher entry format wants when the path has a space, a home folder's: else it ran "/home/a")
+    exe = f'"{dest}"' if re.search(r"\s", dest) else dest
+    text = re.sub(r'^Exec=("[^"]*"|\S+)', lambda m: f"Exec={exe}", text, flags=re.M)  # a quoted program too
+    text = re.sub(r"^TryExec=.*\n", "", text, flags=re.M)
+    text = text.rstrip("\n") + f"\nX-AppImage-Path={dest}\n"
+    # Where appimage-update finds new versions (it says, installing from a GitHub release; few AppImages carry it)
+    # (an update from the app's own button has no APPIMAGE_WEBSITE: the one the installed entry has)
+    website = os.environ.get("APPIMAGE_WEBSITE", "")
+    for entry in (f"{ENTRIES}/{app}.desktop", f"{ENTRIES}/{app.lower()}.desktop"):
+        if not website and os.path.exists(entry):
+            found = re.search(r"^X-AppImage-Website=(.+)$", open(entry).read(), re.M)
+            website = found.group(1) if found else ""
+    if website and not re.search(r"^X-AppImage-Website=", text, re.M):
+        text += f"X-AppImage-Website={website}\n"
+    text += "# Made by ~/.local/bin/appimage-open\n"
+    os.makedirs(ENTRIES, exist_ok=True)
+    # An older install's entry under the lowercased id (before entries kept the app's case)
+    old = f"{ENTRIES}/{app.lower()}.desktop"
+    if app != app.lower() and os.path.exists(old) and "# Made by ~/.local/bin/appimage-open" in open(old).read():
+        os.remove(old)
+    open(f"{ENTRIES}/{app}.desktop", "w").write(text)
+    subprocess.run(["update-desktop-database", ENTRIES], capture_output=True)
+    # Only when asked to install: any AppImage you open could name a package's entry (firefox.desktop...)
+    if install_only:
+        remove_package_copy(app)
+
+    name = re.search(r"^Name=(.+)$", text, re.M)
+    if src != dest or install_only:  # (not the installed file itself opened, e.g. from a file manager: nothing new)
+        subprocess.run(["notify-send", "-a", "AppImage", "-i", icon_path if icon else "application-x-executable",
+                        f"{name.group(1) if name else app} {'updated' if updating else 'installed'}"], capture_output=True)
+    if not install_only:
+        subprocess.Popen([dest], start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         preexec_fn=lambda: signal.signal(signal.SIGHUP, signal.SIG_DFL))  # not this one's SIGHUP ignore
+
+
+if __name__ == "__main__":
+    main()

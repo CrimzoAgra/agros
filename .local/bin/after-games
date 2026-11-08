@@ -1,0 +1,13 @@
+#!/bin/sh
+# Waits while a game is open (a window with Caelestia's "game" tag, user/apps.lua): background work (the update check,
+# lutris-library) runs after it, not while it plays. Not a store launcher's window: under Proton those get the tag too
+# (the titles user/apps.lua knows them by). Returns at once outside Hyprland
+# (In braces, read whole before it runs: an update rewriting this file while it waits broke the rest of the run)
+# (Hyprland named, its first one from an SSH login or a text console: there hyprctl didn't know it, and nothing waited)
+{
+while hyprctl -i "${HYPRLAND_INSTANCE_SIGNATURE:-0}" clients -j 2>/dev/null | jq -e 'any(.[]; any(.tags[]?; . == "game" or . == "game*")
+        and (.title | IN("EA", "Ubisoft Connect", "Epic Games Launcher", "Battle.net", "GOG Galaxy", "Rockstar Games Launcher") | not))' >/dev/null 2>&1; do
+    sleep 60
+done
+exit
+}

@@ -1,0 +1,303 @@
+#!/usr/bin/python3 -I
+# Lutris's Games view lists only its library, and games from a store (Steam, EA, Ubisoft, Epic, GOG) join it only once
+# installed. Add the rest as uninstalled entries: the view then shows installed games first and the others below, and
+# opening one installs it through its store like from the store's own list.
+# - Installed Steam games join even when Lutris can't read the Steam library (a private profile: Overwatch)
+# - A game on more than one store shows once: an installed copy, else the Steam one, else the first. The others go to
+#   Lutris's Hidden category (sidebar)
+# - The store launchers (EA App, Ubisoft Connect, Battle.net, Epic, GOG Galaxy, Rockstar) are listed under Launchers in
+#   the sidebar, installed or not: opening one there installs it through Lutris (lutris-overlay keeps them out of the
+#   Games view)
+# Run by lutris-library.path whenever Lutris's database changes (a store sync), and by setup's apps step. An open Lutris
+# shows the changes at once (lutris-overlay's library_refresh action, asked over D-Bus); a plain one once restarted
+import glob
+import json
+import logging
+import os
+import re
+import shutil
+import sqlite3
+import subprocess
+
+import gi
+
+gi.require_version("Gtk", "3.0")
+gi.require_version("Gdk", "3.0")
+from lutris import settings  # noqa: E402
+from lutris.config import write_game_config  # noqa: E402
+from lutris.database import sql  # noqa: E402
+from lutris.database.games import delete_game, get_games  # noqa: E402
+from lutris.database.services import ServiceGameCollection  # noqa: E402
+from lutris.services.lutris import sync_media  # noqa: E402
+from lutris.services.steam import SteamCover, SteamGame, SteamService  # noqa: E402
+from lutris.util.steam.appmanifest import AppManifest, get_appmanifests  # noqa: E402
+from lutris.util.log import logger  # noqa: E402
+from lutris.util.steam import config as steam_config  # noqa: E402
+
+# Lutris's own warnings ("Steam game N has no config", ~50 a run) only: they also went into an open Lutris's log
+logger.setLevel(logging.ERROR)
+
+# Before Lutris's first start (setup on a fresh install) its folders and database don't exist: made as Lutris makes them
+# at start-up, so the launchers are listed from its very first window
+if not os.path.exists(settings.DB_PATH):
+    from lutris.database.schema import syncdb  # noqa: E402
+    from lutris.startup import init_dirs  # noqa: E402
+    init_dirs()
+    syncdb()
+
+
+def library():
+    """What an open Lutris shows of the library (its games and their categories), to tell whether this run changed it"""
+    with sqlite3.connect(settings.DB_PATH, timeout=10) as c:
+        return [c.execute(f"SELECT * FROM {table} ORDER BY 1, 2").fetchall()
+                for table in ("games", "categories", "games_categories")]
+
+
+before = library()
+
+# Flathub's Steam where newer versions of it keep it, which Lutris doesn't look in (as the patched Lutris does,
+# lutris-overlay's flathub_steam)
+steam_config.STEAM_DATA_DIRS += ("~/.var/app/com.valvesoftware.Steam/.local/share/Steam",)
+
+# Lutris adds installed Steam games only if they're in its copy of the Steam library, which it wipes and fails to
+# reload while the profile's game details are private: add them to it from Steam's own files, then let it add them
+steam = SteamService()
+TOOLS = re.compile(r"^(Proton\b|Steam Linux Runtime|Steamworks Common|SteamVR\b)")  # as steam-installed-games
+added = False
+for path in steam.steamapps_paths:
+    for name in get_appmanifests(path):
+        # (each on its own, as Lutris reads them: Steam rewrites a manifest while it downloads, and a half-written one
+        # mustn't stop the run)
+        try:
+            manifest = AppManifest(os.path.join(path, name))
+            appid = manifest.steamid
+            if not manifest.is_installed() or appid in steam.excluded_appids or TOOLS.match(manifest.name or ""):
+                continue
+            if not ServiceGameCollection.get_game("steam", appid):
+                SteamGame.new_from_steam_game({"appid": appid, "name": manifest.name, "playtime_forever": 0}).save()
+                added = True
+            # This script's uninstalled entry for it gives way to the installed one Lutris adds: with both, Lutris's own
+            # duplicate cleanup would delete the installed one (the patched Lutris does the same, lutris-overlay)
+            for placeholder in get_games(filters={"service": "steam", "service_id": appid, "installed": "0"}):
+                if not placeholder["configpath"]:
+                    # (its categories too: the installed one can get its id back, and with it "hidden")
+                    sql.db_delete(settings.DB_PATH, "games_categories", "game_id", placeholder["id"])
+                    delete_game(placeholder["id"])
+            # Lutris's own entry for it, marked uninstalled by a sync while its library's drive wasn't mounted: Lutris
+            # finds the entry and stops there, so it stays "not installed" for good
+            for stale in get_games(filters={"service": "steam", "service_id": appid, "installed": "0"}):
+                if stale["installer_slug"] == f"steam-{appid}":
+                    # (Lutris's uninstall deleted its config: a new one, as Lutris writes for an install)
+                    config = stale["configpath"]
+                    if not config or not os.path.exists(os.path.join(settings.GAME_CONFIG_DIR, config + ".yml")):
+                        config = write_game_config(f"steam-{appid}", {"game": {"appid": appid}})
+                    sql.db_update(settings.DB_PATH, "games", {"installed": 1, "runner": "steam", "configpath": config},
+                                  {"id": stale["id"]})
+        except Exception as e:  # noqa: BLE001
+            logger.error("Steam manifest %s: %s", name, e)
+if added:
+    steam.load_icons()  # their covers, as a Steam sync would (only the missing ones are downloaded)
+steam.add_installed_games()
+# Covers Lutris can't download (newer games' art isn't at the address it uses): Steam's own copies, if it has them
+covers = SteamCover()
+# Steam's own folder: the library that has appcache next to it (the list can start with compatibility tool folders)
+steam_root = next((os.path.dirname(p) for p in steam.steamapps_paths
+                   if os.path.isdir(os.path.join(os.path.dirname(p), "appcache"))), None)
+for game in ServiceGameCollection.get_for_service("steam") if steam_root else []:
+    dest = os.path.join(covers.dest_path, covers.get_filename(game["slug"]))
+    if not (os.path.exists(dest) and os.path.getsize(dest)):  # a failed download leaves an empty file
+        cache = os.path.join(steam_root, "appcache/librarycache", game["appid"])
+        found = sorted(glob.glob(f"{cache}/**/library_600x900.jpg", recursive=True)
+                       + glob.glob(f"{cache}/**/library_capsule.jpg", recursive=True))
+        if found:
+            os.makedirs(covers.dest_path, exist_ok=True)
+            shutil.copyfile(found[0], dest)
+
+db = sqlite3.connect(settings.DB_PATH, timeout=10)
+# Battle.net and Rockstar: their games only while you're signed in to them in Lutris (lutris-overlay's bnet_login and
+# rockstar_source: then their list is your account's). Signed out, Lutris's Battle.net list is every Blizzard game, owned
+# or not. Ones no longer listed (signed out, gone
+# from the account, added by an older run) are taken out again; installed ones are Lutris's own, kept
+# (and only with the sign-in in the Lutris that runs: without it, turned off or left out by an update, Lutris's list is
+# every Blizzard game again)
+def signed_in(service, owned):
+    # (in XDG_CACHE_HOME when it's set, where ~/.local/bin/lutris builds it: next to Lutris's own cache folder)
+    build = os.path.join(os.path.dirname(settings.CACHE_DIR), "lutris-overlay")
+    try:
+        with open(os.path.join(build, f"lutris/services/{service}.py"), encoding="utf-8") as f:
+            patched = "lutris-owned" in f.read()  # the patched Lutris ~/.local/bin/lutris runs
+    except OSError:
+        patched = False
+    # (a failed rebuild runs plain Lutris, the old patched copy left in place)
+    failed = os.path.exists(build + ".failed")
+    return patched and not failed and os.path.exists(os.path.join(settings.CACHE_DIR, owned))
+
+
+SIGN_IN = {"battlenet": "bnet-owned.json", "rockstar": "rockstar-owned.json"}
+NOT_OWNED = tuple(s for s, owned in SIGN_IN.items() if not signed_in(s, owned))
+# Stores whose list is the games you own; other sources (Flathub, local apps, itch.io...) list catalogues, not yours
+STORES = ("steam", "ea_app", "ubisoft", "egs", "gog", "battlenet", "rockstar")
+with db:
+    for service in SIGN_IN:
+        # (an empty list is a reload under way, Lutris refilling it: nothing taken out then)
+        stale = """SELECT id FROM games WHERE installed = 0 AND runner IS NULL AND service = ? AND (? OR (service_id NOT IN
+                   (SELECT appid FROM service_games WHERE service = ?)
+                   AND EXISTS (SELECT 1 FROM service_games WHERE service = ?)))"""
+        args = (service, service in NOT_OWNED, service, service)
+        db.execute(f"DELETE FROM games_categories WHERE game_id IN ({stale})", args)
+        db.execute(f"DELETE FROM games WHERE id IN ({stale})", args)
+
+
+def epic_addon(details):
+    """An Epic add-on (DLC, a map, a route): not a game of its own. As the Legendary client tells them: it names its
+    main game, or it's in the add-ons category"""
+    try:
+        item = json.loads(details or "{}")
+    except ValueError:
+        return False
+    return "mainGameItem" in item or any(c.get("path") == "addons" for c in item.get("categories") or [])
+
+
+# Epic add-ons this script added before it knew them: taken out (one installed is Lutris's own, kept)
+addons = [(appid,) for appid, details in db.execute("SELECT appid, details FROM service_games WHERE service = 'egs'")
+          if epic_addon(details)]
+with db:
+    placeholder = "SELECT id FROM games WHERE service = 'egs' AND service_id = ? AND installed = 0 AND runner IS NULL"
+    db.executemany(f"DELETE FROM games_categories WHERE game_id IN ({placeholder})", addons)
+    db.executemany(f"DELETE FROM games WHERE id IN ({placeholder})", addons)
+known = {(s, i) for s, i in db.execute("SELECT service, service_id FROM games")}
+# (Lutris's own slug for it, else the one its store sync made: lutris.net covers are found by it)
+new = [(name, lutris_slug or slug or f"{service}-{appid}", "steam" if service == "steam" else None, service, appid)
+       for service, appid, name, lutris_slug, slug, details in db.execute(
+           "SELECT service, appid, name, lutris_slug, slug, details FROM service_games")
+       if (service, appid) not in known and service in STORES and service not in NOT_OWNED
+       and not (service == "egs" and epic_addon(details))]
+if new:
+    with db:
+        db.executemany("INSERT INTO games (name, slug, runner, installed, service, service_id) VALUES (?, ?, ?, 0, ?, ?)",
+                       new)
+print(f"{len(new)} games added")
+
+
+# Games a store still lists under an older name (Steam: Overwatch 2 as "Overwatch®")
+SAME = {"overwatch": "overwatch2"}
+
+
+def key(name):
+    """The same game on two stores: names alike but for case, punctuation and ™/®"""
+    k = re.sub(r"[\W_]+", "", name.lower())  # letters of any script kept (ペルソナ3 isn't 3)
+    return SAME.get(k, k)
+
+
+copies = {}
+for game_id, name, installed, service in db.execute(
+        "SELECT id, name, installed, service FROM games WHERE service IS NOT NULL ORDER BY service = 'steam' DESC, id"):
+    if key(name):  # (a name only of punctuation, "!": no telling its copies)
+        copies.setdefault(key(name), []).append((game_id, installed))
+hide = [game_id for group in copies.values() if len(group) > 1
+        for game_id, installed in group[0 if any(i for _, i in group) else 1:] if not installed]
+# The copy that shows: an installed one, else the first (it changes as copies are installed and removed)
+show = {game_id for group in copies.values() if len(group) > 1 for game_id, _ in group} - set(hide)
+# Each copy hidden once: one you unhid in Lutris (the other hidden instead) stays as you left it, so the ids this script
+# hid are remembered. A copy it hid that should show again (the Steam copy refunded): unhide it from Lutris's Hidden view
+mine_file = os.path.expanduser("~/.local/state/lutris-library-hidden")
+try:
+    with open(mine_file, encoding="utf-8") as f:
+        mine = set(json.load(f))
+except (OSError, ValueError):
+    mine = set()
+with db:
+    db.execute("INSERT OR IGNORE INTO categories (name) VALUES ('.hidden')")
+    (category,) = db.execute("SELECT id FROM categories WHERE name = '.hidden'").fetchone()
+    hidden = {i for (i,) in db.execute("SELECT game_id FROM games_categories WHERE category_id = ?", (category,))}
+    mine &= {i for (i,) in db.execute("SELECT id FROM games")}
+    # One this script hid that is now the one to show (installed from the Hidden view or its store keeps its id and
+    # with it "hidden"; or the copy shown instead was removed): unhidden, else the game showed nowhere. Hidden by you
+    # (not in mine): left
+    unhide = sorted(show & hidden & mine)
+    db.executemany("DELETE FROM games_categories WHERE game_id = ? AND category_id = ?", [(i, category) for i in unhide])
+    hidden -= set(unhide)
+    mine -= set(unhide)
+    hide = sorted(set(hide) - hidden - mine)
+    db.executemany("INSERT INTO games_categories (game_id, category_id) VALUES (?, ?)", [(i, category) for i in hide])
+os.makedirs(os.path.dirname(mine_file), exist_ok=True)
+with open(mine_file + ".tmp", "w", encoding="utf-8") as f:
+    json.dump(sorted(mine | set(hide)), f)
+os.replace(mine_file + ".tmp", mine_file)  # (cut short, the list read as empty: copies you unhid were hidden again)
+print(f"{len(hide)} hidden, {len(unhide)} shown again")
+
+
+# The store launchers, under "Launchers" in the sidebar (a category of Lutris's), installed or not: an entry with no
+# store, which Lutris installs by its slug with its own install window (the launcher's setup then opens). Not among the
+# games (lutris-overlay's launchers_apart). Hidden by an earlier version of this script: unhidden, the sidebar's view
+# leaves hidden games out
+LAUNCHERS = {"ea-app": "EA App", "ubisoft-connect": "Ubisoft Connect", "battlenet": "Battle.net",
+             "epic-games-store": "Epic Games Store", "gog-galaxy": "GOG Galaxy",
+             "rockstar-games-launcher": "Rockstar Games Launcher", "steam": "Steam"}
+# Steam installed on the system (setup's apps step), else Flathub's: its entry opens it, not lutris.net's installs
+# (Flatpak, Windows)
+steam_game = {"exe": shutil.which("steam")}
+flatpak = shutil.which("flatpak")
+if not steam_game["exe"] and flatpak and subprocess.run([flatpak, "info", "com.valvesoftware.Steam"],
+                                                        capture_output=True).returncode == 0:
+    steam_game = {"exe": flatpak, "args": "run com.valvesoftware.Steam"}
+with db:
+    db.execute("INSERT OR IGNORE INTO categories (name) VALUES ('Launchers')")
+    (launchers,) = db.execute("SELECT id FROM categories WHERE name = 'Launchers'").fetchone()
+    listed = {i for (i,) in db.execute("SELECT game_id FROM games_categories WHERE category_id = ?", (launchers,))}
+    for slug, name in LAUNCHERS.items():
+        ids = [i for (i,) in db.execute("SELECT id FROM games WHERE slug = ?", (slug,))]
+        if not ids:
+            ids = [db.execute("INSERT INTO games (name, slug, installed) VALUES (?, ?, 0)", (name, slug)).lastrowid]
+        if slug == "steam" and steam_game["exe"]:
+            todo = [i for (i,) in db.execute("SELECT id FROM games WHERE slug = 'steam' AND installed = 0 AND runner IS NULL")]
+            if todo:
+                os.makedirs(settings.GAME_CONFIG_DIR, exist_ok=True)  # (made by Lutris at its start)
+                config = write_game_config("steam-system", {"game": steam_game})
+                db.executemany("UPDATE games SET installed = 1, runner = 'linux', platform = 'Linux', configpath = ? "
+                               "WHERE id = ?", [(config, i) for i in todo])
+        db.executemany("INSERT INTO games_categories (game_id, category_id) VALUES (?, ?)",
+                       [(i, launchers) for i in ids if i not in listed])
+        db.executemany("DELETE FROM games_categories WHERE game_id = ? AND category_id = ?", [(i, category) for i in ids])
+# Their covers from lutris.net (the missing ones; offline: next time)
+try:
+    sync_media(LAUNCHERS)
+except Exception as e:  # noqa: BLE001
+    logger.error("launcher covers: %s", e)
+# Ones lutris.net has none for (Rockstar's: Lutris stretched its small banner instead), from the dotfiles
+bundled = os.path.join(os.path.dirname(os.path.realpath(__file__)), "../share/lutris-library/covers")
+for name in os.listdir(bundled) if os.path.isdir(bundled) else []:
+    slug = os.path.splitext(name)[0]
+    if not glob.glob(os.path.join(settings.COVERART_PATH, slug + ".*")):
+        os.makedirs(settings.COVERART_PATH, exist_ok=True)
+        shutil.copyfile(os.path.join(bundled, name), os.path.join(settings.COVERART_PATH, name))
+
+
+# Last, after every write: an open Lutris shows the changes now, through lutris-overlay's library-refresh action,
+# activated over D-Bus (the org.freedesktop.Application interface Gtk gives it). A Lutris without the action (plain, or
+# an older build) shows them once restarted; none open: nothing to tell (and none started for this: NO_AUTO_START)
+def lutris_refresh():
+    from gi.repository import Gio, GLib  # noqa: E402
+
+    def call(interface, method, args=None):
+        return bus.call_sync("net.lutris.Lutris", "/net/lutris/Lutris", interface, method, args, None,
+                             Gio.DBusCallFlags.NO_AUTO_START, 5000, None)
+
+    try:
+        bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+        (actions,) = call("org.gtk.Actions", "List").unpack()
+    except GLib.Error:
+        return "Lutris: not open"
+    if "library-refresh" not in actions:
+        return "Lutris: open without the refresh change (shows the changes once restarted)"
+    try:
+        call("org.freedesktop.Application", "ActivateAction", GLib.Variant("(sava{sv})", ("library-refresh", [], {})))
+    except GLib.Error as e:
+        return f"Lutris: refresh failed: {e}"
+    return "Lutris: refreshed"
+
+
+# Only when the library changed: lutris-library.path starts this whenever pga.db is closed after being opened for
+# writing, which Lutris does on every read (opening a category, a search). A refresh with nothing new reset the view
+# (selection, scroll) for nothing, and its reads (the view's, done after this has ended) started this again
+print(lutris_refresh() if library() != before else "Lutris: nothing changed")

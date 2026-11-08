@@ -1,0 +1,53 @@
+#!/usr/bin/env python3
+"""Makes the "login" keyring (unlocked by your password at login) the default one.
+
+Apps save passwords to the default keyring. On a fresh install that's often another keyring
+("Default keyring") with its own password, which then asks for that password at every login.
+This moves its passwords into "login" (asking for the old keyring's password once if it's locked)
+and makes "login" the default. Hyprland runs it at login; once "login" is the default it does nothing.
+"""
+import fcntl
+import os
+
+import secretstorage
+
+LOGIN = "/org/freedesktop/secrets/collection/login"
+
+
+def main() -> None:
+    # One at a time: it runs at login and again before Proton VPN starts (user/apps.lua), which waits for this one
+    # The second waits for the first to finish and then does nothing: it would ask again right after you cancelled
+    lock = open(f"{os.environ.get('XDG_RUNTIME_DIR', '/tmp')}/keyring-default.lock", "w")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        return
+    bus = secretstorage.dbus_init()
+    service = secretstorage.util.DBusAddressWrapper("/org/freedesktop/secrets", secretstorage.defines.SS_PREFIX + "Service", bus)
+    if service.call("ReadAlias", "s", "default")[0] == LOGIN:
+        return
+    cols = {c.collection_path: c for c in secretstorage.get_all_collections(bus)}
+    login = cols.get(LOGIN)
+    if not login or login.is_locked():
+        return  # the login keyring isn't unlocked at login (system/keyring-setup.sh not run)
+    have = {(i.get_label(), tuple(sorted(i.get_attributes().items()))) for i in login.get_all_items()}
+    skipped = False
+    for path, col in cols.items():
+        if path == LOGIN or path.endswith("/session"):
+            continue
+        if col.is_locked() and col.unlock():
+            skipped = True  # password prompt cancelled: leave that keyring as it is, and ask again next login
+            continue
+        for item in col.get_all_items():
+            key = (item.get_label(), tuple(sorted(item.get_attributes().items())))
+            if key not in have:
+                login.create_item(item.get_label(), item.get_attributes(), item.get_secret(),
+                                  replace=True, content_type=item.get_secret_content_type())
+                print("moved", item.get_label())
+    if not skipped:  # (with one left out, "login" as the default would stop this asking, and its passwords stay apart)
+        service.call("SetAlias", "so", "default", LOGIN)
+
+
+if __name__ == "__main__":
+    main()

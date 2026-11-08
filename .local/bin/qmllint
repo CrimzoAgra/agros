@@ -1,0 +1,4 @@
+#!/bin/sh
+# Qt 6's qmllint first on the PATH: /usr/bin/qmllint is Qt 5's (qt5-declarative, pulled in by qt5-wayland), which
+# doesn't know Qt 6 QML and reports Quickshell files as broken
+exec /usr/lib/qt6/bin/qmllint "$@"

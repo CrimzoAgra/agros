@@ -1,0 +1,10 @@
+#!/bin/sh
+# The desktop widgets (~/.config/quickshell/widgets), started together with Caelestia, not before it: once Caelestia
+# answers (it has loaded), at most 30 s after login. Asked through "lock isLocked", which needs no screen ("drawers
+# list" logs an error until Caelestia has one)
+for _ in $(seq 120); do
+    qs -c caelestia ipc call lock isLocked >/dev/null 2>&1 && break
+    sleep 0.25
+done
+unset QS_APP_ID  # (not Desktop Settings' name, if started from it: ~/.local/bin/desktop-settings)
+exec qs -c widgets -d

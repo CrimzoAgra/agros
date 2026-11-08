@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# In a virtual machine only (VMware, VirtualBox, QEMU): the host resizes the screen (its window resized, full screen)
+# by changing the screen's preferred mode, which Hyprland doesn't follow on its own (it keeps the mode it set). A config
+# reload applies the new one (monitors.lua's "preferred"). Started at login (user/desktop.lua); does nothing elsewhere
+systemd-detect-virt -vq || exit 0
+
+# Whether a connected screen's preferred mode (the first its connector lists) isn't the one Hyprland shows
+behind() {
+    local s name want have
+    for s in "${SYSFS:-/sys}"/class/drm/card*-*/status; do
+        [[ $(<"$s") == connected ]] || continue
+        name=${s%/status}; name=${name##*/}; name=${name#card*-}
+        want=$(head -1 "${s%/status}/modes" 2>/dev/null) || continue
+        have=$(hyprctl monitors -j | jq -r --arg n "$name" '.[] | select(.name == $n) | "\(.width)x\(.height)"')
+        [[ -n $have && $want != "$have" ]] && return 0
+    done
+    return 1
+}
+
+udevadm monitor --udev --subsystem-match=drm | while read -r _ _ action _; do
+    [[ $action == change ]] || continue
+    sleep 0.3  # (a resize sends several at once)
+    if behind; then hyprctl reload >/dev/null; fi
+done

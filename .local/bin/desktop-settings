@@ -1,0 +1,5 @@
+#!/bin/sh
+# Opens Desktop Settings (~/.config/quickshell/settings), on a page if one is given (windows, features, startup,
+# keys); not twice (-n). Its launcher entry runs this
+# (its window named after its launcher entry, for its icon in the dock; every Quickshell window is org.quickshell otherwise)
+QS_APP_ID=desktop-settings DOTS_SETTINGS_PAGE=${1:-} exec qs -c settings -n

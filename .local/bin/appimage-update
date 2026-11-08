@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# Updates the AppImages installed by appimage-open from their GitHub releases (auto-update runs it at boot).
+#   appimage-update               every installed AppImage whose launcher entry names its GitHub repo
+#   appimage-update <owner/repo>  install or update that one (setup.sh)
+#   appimage-update --check       only list the ones with a newer version ("<owner/repo>: update available", update-apps)
+# Takes the latest release's Linux x86_64 AppImage, checked against the release's SHA256SUMS when it has one.
+# An app already on that version (same checksum, or same size when there are no checksums) is left alone.
+set -uo pipefail
+here=$(dirname "$(readlink -f "$0")")
+source "$here/../share/github-release/lib.sh"
+check=false
+[[ ${1:-} == --check ]] && { check=true; shift; }
+
+# update <owner/repo> [installed AppImage]
+update() {
+    local api url name tmp want="" size
+    api=$(latest_release "$1") || { echo "$1: can't reach GitHub"; return 1; }
+    url=$(asset_url "$api" appimage)
+    [[ -n $url ]] || { echo "$1: no Linux AppImage in the latest release"; return 1; }
+    name=${url##*/}
+    tmp=$(mktemp -d)
+    want=$(checksum "$api" "$name" "$tmp" 2>&1) || { echo "$1: $want"; rm -rf "${tmp:?}"; return 1; }
+    if [[ -n ${2:-} && -f $2 ]]; then
+        size=$(jq -r --arg u "$url" '.assets[] | select(.browser_download_url == $u) | .size' <<<"$api")
+        if [[ -n $want && $(sha256sum "$2" | cut -d' ' -f1) == "$want" ]] || [[ -z $want && $(stat -c %s "$2") == "$size" ]]; then
+            echo "$1: up to date ($name)"
+            rm -rf "${tmp:?}"
+            return 0
+        fi
+    fi
+    if $check; then
+        echo "$1: update available ($name)"
+        rm -rf "${tmp:?}"
+        return 0
+    fi
+    download "$url" "$tmp" "$want" || { rm -rf "${tmp:?}"; return 1; }
+    APPIMAGE_WEBSITE="https://github.com/$1" "$here/appimage-open" --install "$tmp/$name" || { rm -rf "${tmp:?}"; return 1; }
+    rm -rf "${tmp:?}"
+    echo "$1: installed $name"
+}
+
+status=0 found=
+for f in "$HOME"/.local/share/applications/*.desktop; do
+    grep -q "^# Made by ~/.local/bin/appimage-open" "$f" || continue
+    repo=$(sed -nE 's|^X-AppImage-Website=https?://github\.com/([^/]+/[^/#?]+).*|\1|p' "$f" | head -1)
+    [[ -n $repo ]] || continue
+    # (one repo asked for, setup: only that one, with its installed file, so one on the latest version is left alone)
+    (($#)) && [[ ${repo%.git} != "$1" ]] && continue
+    found=1
+    update "${repo%.git}" "$(sed -n 's/^X-AppImage-Path=//p' "$f" | head -1)" || status=1
+done
+# Not installed yet: installed now
+if (($#)) && [[ -z $found ]]; then update "$1" || status=1; fi
+exit $status

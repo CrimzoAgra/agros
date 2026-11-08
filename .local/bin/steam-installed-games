@@ -1,0 +1,45 @@
+#!/usr/bin/env python3
+"""Prints the names of the installed Steam games as a JSON list (Steam's tools left out); null with no Steam at all.
+
+Used by the bar's Steam tray menu (caelestia-overlay) to hide recent games that aren't installed (null: hides none).
+"""
+import glob
+import json
+import os
+import re
+
+# The system's Steam, else Flathub's (its folder as newer, then older versions of it keep it)
+ROOTS = ["~/.local/share/Steam", "~/.var/app/com.valvesoftware.Steam/.local/share/Steam",
+         "~/.var/app/com.valvesoftware.Steam/data/Steam"]
+STEAM = next((p for p in map(os.path.expanduser, ROOTS) if os.path.isdir(p)), None)
+# Tools Steam installs like games
+TOOLS = re.compile(r"^(Proton\b|Steam Linux Runtime|Steamworks Common|SteamVR\b)")
+
+
+def libraries() -> list[str]:
+    try:
+        text = open(f"{STEAM}/steamapps/libraryfolders.vdf").read()
+    except OSError:
+        return [STEAM]
+    # Steam's own folder always: Flathub's lists it by the path its sandbox sees (~/.local/share/Steam), not there here
+    return [STEAM, *re.findall(r'"path"\s+"([^"]+)"', text)]
+
+
+if not STEAM:  # (an empty list would hide every recent game)
+    print("null")
+    raise SystemExit
+names = set()
+for lib in libraries():
+    for f in glob.glob(f"{lib}/steamapps/appmanifest_*.acf"):
+        try:
+            text = open(f, encoding="utf-8", errors="replace").read()  # (one odd byte doesn't end the whole list)
+        except OSError:
+            continue
+        # (a name with quotes in it: written \" in the file)
+        name = re.search(r'"name"\s+"((?:[^"\\]|\\.)+)"', text)
+        flags = re.search(r'"StateFlags"\s+"(\d+)"', text)
+        name = name and re.sub(r"\\(.)", r"\1", name.group(1))
+        # StateFlags bit 4 = fully installed (also set while updating)
+        if name and flags and int(flags.group(1)) & 4 and not TOOLS.match(name):
+            names.add(name)
+print(json.dumps(sorted(names)))

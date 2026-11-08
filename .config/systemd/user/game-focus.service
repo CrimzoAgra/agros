@@ -1,0 +1,17 @@
+# Started by Hyprland at login (user/apps.lua); systemd restarts it if it crashes and stops it at logout
+[Unit]
+Description=Game audio only while the game is focused, notifications when a game wants attention (~/.local/bin/game-focus)
+PartOf=graphical-session.target
+After=graphical-session.target
+# Crashing over and over (e.g. after a Hyprland update): stop after 5 tries in a minute and say so
+StartLimitIntervalSec=60
+StartLimitBurst=5
+OnFailure=service-failed@%n.service
+
+[Service]
+ExecStart=%h/.local/bin/game-focus
+Restart=on-failure
+RestartSec=2
+# Straight back to starting: otherwise every crash, even the first, passes through "failed" and OnFailure= says it
+# "stopped after crashing repeatedly"; this way only the restart limit's final failure does
+RestartMode=direct

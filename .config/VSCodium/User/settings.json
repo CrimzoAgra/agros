@@ -1,0 +1,7 @@
+{
+    "claudeCode.preferredLocation": "panel",
+    "claudeCode.hideOnboarding": true,
+    "update.mode": "none",
+    "window.controlsStyle": "hidden",
+    "security.workspace.trust.untrustedFiles": "open"
+}

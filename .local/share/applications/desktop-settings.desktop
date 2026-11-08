@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Desktop Settings
+Comment=Windows, features, startup apps and keyboard shortcuts of these dotfiles
+Exec=desktop-settings
+Icon=preferences-desktop
+Terminal=false
+Categories=System;Settings;
+Keywords=settings;preferences;dotfiles;windows;startup;shortcuts;keybinds;

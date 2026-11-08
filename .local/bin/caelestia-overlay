@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+# Builds ~/.config/quickshell/caelestia: a copy of Caelestia's config made of links
+# to the installed files (/etc/xdg/quickshell/caelestia), with these changes:
+#   - launcher (Super menu): hover an app for heart (favourite) and thumbtack (dock pin) buttons
+#   - bar: a "dock" entry (pinned apps + open windows, minimised ones dimmed) with Caelestia-style hover popouts;
+#     clicking a window brings it to the front (and a minimised one back)
+#   - bar: the Bluetooth popout can pair new devices
+#   - bar: Spotify's tray icon is shown (it marks itself "Passive", which Caelestia hides)
+#   - launcher (Super menu): favourites at the top, favourites and the rest each in alphabetical order
+#   - volume/brightness popout: brightness only on built-in screens (external ones use their own menu)
+#   - bar: clicking the logo does nothing
+#   - bar: safe triangle, moving towards an open popout doesn't switch to other buttons' popouts
+#   - bar: Steam's tray menu lists only installed games at the top (~/.local/bin/steam-installed-games)
+#   - lock screen: dimmed like the login screen, with a text cursor
+#   - bar: a Scroll Lock icon next to Caps/Num Lock (ScrollLock.qml, LockStatus.qml)
+#   - bar: tray icons in alphabetical order
+#   - bar: right-clicking a tray icon with no standard menu (Wine apps: Epic) opens the app's own (~/.local/bin/tray-menu)
+#   - launcher (Super menu): a "check for updates" button right of the search bar (update-apps --check-now)
+#   - bar: the collapsed tray opens on a click of its arrow (not on hover); it closes on a click elsewhere on the bar
+#     or when the pointer leaves the bar for a window
+#   - bar: the Caps/Num Lock icons read the keyboard again shortly after start and when the keymap changes
+#   - notification sidebar (hover the top edge above it; slides down from the top): notifications only (the
+#     utilities panel stays on its own corner), no divider, ends where that panel starts, not while the power
+#     menu is shown, and it closes the volume slider
+#     It closes without bouncing back, and the edge doesn't open it while a notification pop-up is on screen
+#   - notifications (pop-ups and sidebar): icons, badges and counts in one neutral colour, whatever the urgency
+#   - notifications (pop-ups and sidebar): a click runs the notification's action, like its button, and brings the app
+#     that sent it to the front (dots.focus_app in ~/.config/caelestia/user/windows.lua)
+#   - launcher (Super menu): opens over fullscreen games and videos too
+#   - bar: hovering a workspace shows a live preview of it (WorkspacePreview.qml)
+#   - bar: resting on a preview shows what it shows alone on the desktop, like Windows' Aero Peek: the dock's its window,
+#     the workspace picker's every window on that workspace. The other windows fade out, their blur with them
+#     (dots.peek_screen, user/windows.lua); windows on a workspace not shown: live pictures of them (WindowPeek.qml,
+#     PeekLayer.qml)
+#   - bar: the clock's hour and minute digits line up (each digit centred in a slot as wide as the widest, none stretched)
+#   - bar: workspaces and the tray arrow light up under the mouse like the power button; clicking the workspace
+#     you're on does nothing (no special workspace)
+#   - bar: right-clicking the empty space between the workspaces and the tray (not the dock) opens a menu with
+#     Task Manager (btop) and the floating/tiling switch (BarMenu.qml)
+#   - dashboard: calendar and weather weekdays in the system language (LANG), 3 letters
+#   - no volume pop-up when the shell starts or the sound device changes (sound starting at login, a headset)
+#   - lock screen: its elements come down onto the screen from in front of it, sharpening, from the centre outward, like the
+#     login screen
+#   - Super+K also opens the notification sidebar, merged with the utilities panel below it (one shape, like the
+#     launcher and the dashboard); that panel can stay open with the sidebar
+# Quickshell uses this folder instead of /etc/xdg/... because it's in ~/.config.
+# The changes live in ~/.local/share/caelestia-overlay (patch.py + QML files).
+# Re-run after Caelestia updates (a pacman hook does this automatically).
+# If a change no longer fits a new Caelestia version, the original files are kept for it.
+set -euo pipefail
+src=/etc/xdg/quickshell/caelestia
+dst="$HOME/.config/quickshell/caelestia"
+
+[[ -d $src ]] || { echo "Caelestia not installed at $src"; exit 1; }
+mkdir -p "${dst%/*}"
+# One run at a time (the pacman hook and a Settings toggle can overlap), each in its own folder
+exec 9>"$dst.lock"
+flock 9
+tmp=$(mktemp -d "$dst.new.XXXXXX")
+trap 'rm -rf "$tmp"' EXIT
+rmdir "$tmp" && cp -as "$src" "$tmp"
+rc=0
+out=$(python3 "$HOME/.local/share/caelestia-overlay/patch.py" "$src" "$tmp" 2>&1) || rc=$?
+printf '%s\n' "$out"
+# Patches that no longer fit: kept for dotfiles-check, and said now if you're logged in (this also runs from the
+# pacman hook, where nobody reads the output)
+skipped="${XDG_STATE_HOME:-$HOME/.local/state}/caelestia-overlay-skipped"
+mkdir -p "${skipped%/*}"
+grep '^WARNING' <<<"$out" | sed 's/^WARNING: //' >"$skipped" || true
+# A patch can fit its anchors and still leave broken QML, and one broken file can keep the whole shell from starting
+# (no bar, no lock screen, no notifications): the files it wrote (the real ones; the rest are links to Caelestia's)
+# parsed with Qt's qmllint, syntax errors only
+broken=""
+lint=$(command -v /usr/lib/qt6/bin/qmllint qmllint6 2>/dev/null | head -1) || true
+if [[ -n $lint ]]; then
+    while IFS= read -r f; do
+        # (its output read whole: qmllint exits non-zero on any warning, which pipefail would take for no match)
+        [[ $("$lint" "$f" 2>&1) == *"[syntax]"* ]] && broken+=" ${f#"$tmp"/}"
+    done < <(find "$tmp" -type f -name '*.qml')
+fi
+# Failed with no patch to blame (patch.py itself broken), or broken QML: Caelestia as it comes, none of my changes.
+# Not the old folder: after a Caelestia update its copies are of the old version, next to links to the new one
+failed=false
+if [[ -n $broken ]]; then
+    failed=true
+    echo "The overlay left broken QML (${broken# }), Caelestia runs without your changes" >"$skipped"
+    rm -rf "$tmp" && cp -as "$src" "$tmp"
+elif ((rc != 0)) && [[ ! -s $skipped ]]; then
+    failed=true
+    echo "The overlay failed, Caelestia runs without your changes: $(tail -1 <<<"$out")" >"$skipped"
+    rm -rf "$tmp" && cp -as "$src" "$tmp"
+fi
+if [[ -s $skipped && -S /run/user/$(id -u)/bus ]]; then
+    DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus notify-send -u critical -a Dotfiles -i dialog-warning \
+        "Caelestia changed: some of your changes are off" "$(cat "$skipped")" || true
+fi
+# Swapped in one step: the folder is never missing
+if [[ -e $dst ]]; then mv -T --exchange "$tmp" "$dst"; else mv -T "$tmp" "$dst"; fi
+if $failed; then exit 1; fi

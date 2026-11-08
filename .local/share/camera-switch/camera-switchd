@@ -1,0 +1,137 @@
+#!/usr/bin/env python3
+# Makes the laptop's physical camera switch work on Linux (like on Windows).
+# The switch sends scancodes through "Ideapad extra buttons": 0x10d (269) = off, 0x10c (268) = on.
+# Off: the camera's USB device is de-authorised (it disappears, no app can use it). On: it comes back.
+# The last position is saved, so it's applied again at boot.
+import glob
+import os
+import select
+import struct
+import subprocess
+import threading
+import time
+
+SCAN_OFF, SCAN_ON = 269, 268
+CAMERA = ("04f2", "b83e")  # Integrated Camera (vendor, product)
+STATE = "/var/lib/camera-switch/state"
+
+
+def find_input() -> str | None:
+    block = ""
+    for line in open("/proc/bus/input/devices"):
+        block += line
+        if line.strip():
+            continue
+        if 'Name="Ideapad extra buttons"' in block:
+            for h in block.split("H: Handlers=")[1].split():
+                if h.startswith("event"):
+                    return f"/dev/input/{h}"
+        block = ""
+    return None
+
+
+def camera_dir() -> str | None:
+    for d in glob.glob("/sys/bus/usb/devices/*"):
+        try:
+            if (open(f"{d}/idVendor").read().strip(), open(f"{d}/idProduct").read().strip()) == CAMERA:
+                return d
+        except OSError:
+            pass
+    return None
+
+
+def notify(on: bool) -> None:
+    # Show a notification in every logged-in desktop session
+    for bus in glob.glob("/run/user/*/bus"):
+        uid = bus.split("/")[3]
+        if uid == "0":
+            continue
+        subprocess.run(
+            ["setpriv", f"--reuid={uid}", "--regid={}".format(os.stat(bus).st_gid), "--init-groups",
+             "env", f"DBUS_SESSION_BUS_ADDRESS=unix:path={bus}",
+             "notify-send", "-a", "Camera", "-i", "camera-web" if on else "camera-disabled",
+             "-t", "2000", "Camera on" if on else "Camera off"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+
+
+# The boot thread and the switch both apply: one at a time, so an older position can't be written last
+lock = threading.Lock()
+
+
+def apply(on: bool, announce: bool) -> None:
+    with lock:
+        _apply(on, announce)
+
+
+def _apply(on: bool, announce: bool) -> None:
+    d = camera_dir()
+    if d:
+        with open(f"{d}/authorized", "w") as f:
+            f.write("1" if on else "0")
+    # Written beside it and renamed over it: a crash or power cut mid-write leaves the old position or the new one,
+    # never an empty file (read as on: the camera back at boot with the switch off)
+    os.makedirs(os.path.dirname(STATE), exist_ok=True)
+    with open(STATE + ".new", "w") as f:
+        f.write("on" if on else "off")
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(STATE + ".new", STATE)
+    print(f"camera {'on' if on else 'off'}", flush=True)
+    if announce:
+        notify(on)
+
+
+def saved_on() -> bool:
+    """The position saved: on only when it says on. Anything else (off, an empty or broken file, none at all) is off:
+    for a privacy switch, the camera stays out when in doubt (the udev rule reads it the same way)"""
+    try:
+        with open(STATE) as f:
+            return f.read().strip() == "on"
+    except OSError:
+        return False
+
+
+def main() -> None:
+    # Re-apply the last known position (the switch keeps its position across reboots). At boot the camera may not be
+    # on the USB bus yet, and off has to reach it: wait for it in the background (the switch is listened to meanwhile),
+    # then apply the position as it is by then
+    def at_boot() -> None:
+        for _ in range(30):
+            if camera_dir():
+                break
+            time.sleep(1)
+        with lock:  # the position as it is right then (the switch may have moved meanwhile)
+            try:
+                _apply(saved_on(), announce=False)
+            except OSError:
+                pass
+
+    threading.Thread(target=at_boot, daemon=True).start()
+
+    while True:
+        path = find_input()
+        if not path:
+            time.sleep(2)
+            continue
+        fmt = "llHHi"
+        size = struct.calcsize(fmt)
+        fd = -1
+        try:
+            fd = os.open(path, os.O_RDONLY)
+            while True:
+                select.select([fd], [], [])
+                data = os.read(fd, size * 64)
+                for i in range(0, len(data), size):
+                    _, _, etype, code, value = struct.unpack(fmt, data[i:i + size])
+                    if etype == 4 and code == 4 and value in (SCAN_OFF, SCAN_ON):  # MSC_SCAN
+                        apply(value == SCAN_ON, announce=True)
+        except OSError:
+            time.sleep(2)  # device went away (e.g. resume): find it again
+        finally:
+            if fd >= 0:
+                os.close(fd)  # or every retry would leak one
+
+
+if __name__ == "__main__":
+    main()

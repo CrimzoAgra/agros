@@ -1,0 +1,13 @@
+# Run by lutris-library.path. Lutris writes its database in bursts (a sync is many writes): wait for the burst to end
+# and run once; changes meanwhile, and the script's own writes, don't start it again (it's already running). Never given
+# up on for starting often (the limit stopped it for good)
+[Unit]
+Description=Add uninstalled store games to the Lutris library
+StartLimitIntervalSec=0
+
+[Service]
+Type=oneshot
+ExecStartPre=/usr/bin/sleep 20
+# Lutris writes its database when it starts a game too: the run waits until the game is closed, not while it loads
+ExecStartPre=%h/.local/bin/after-games
+ExecStart=%h/.local/bin/lutris-library

@@ -1,0 +1,6 @@
+#!/bin/sh
+# Clears the text console under the desktop and hides its cursor, so no old text shows when the desktop closes
+# (shutdown). Run at login
+n=$(tr -dc 0-9 </sys/class/tty/tty0/active 2>/dev/null)
+[ -n "$n" ] && [ -w "/dev/tty$n" ] || exit 0  # (no number: /dev/tty would be whatever terminal ran this)
+printf '\033[H\033[2J\033[3J\033[?25l' >"/dev/tty$n"

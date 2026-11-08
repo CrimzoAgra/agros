@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# Scroll Lock as a real lock, like Caps and Num Lock: its keyboard light and the bar's badge.
+# xkeyboard-config's layouts have Scroll Lock lock a "ScrollLock" modifier with the light following it, but
+# never give that modifier a real one, so it does nothing. The keymap made here maps it to Mod3 (otherwise only
+# level 5, which most layouts don't use); Hyprland then keeps the light right by itself.
+# Hyprland (user/keys.lua) runs:
+#   scroll-lock keymap   make that keymap for the system layout (localectl); prints its path (nothing if the
+#                        layout uses level 5, as Mod3 is its shift there)
+#   scroll-lock sync     copy the light's state to $XDG_RUNTIME_DIR/scroll-lock for Caelestia's badge
+#                        (at login and on the Scroll Lock key; Hyprland doesn't report Scroll Lock)
+case ${1:-} in
+keymap)
+    conf=/etc/X11/xorg.conf.d/00-keyboard.conf  # the system's layout (localectl), as Hyprland uses
+    layout=$(grep -oP '"XkbLayout"\s+"\K[^"]+' "$conf" 2>/dev/null | head -1)
+    variant=$(grep -oP '"XkbVariant"\s+"\K[^"]+' "$conf" 2>/dev/null | head -1)
+    options=$(grep -oP '"XkbOptions"\s+"\K[^"]+' "$conf" 2>/dev/null | head -1)
+    out=${XDG_CACHE_HOME:-$HOME/.cache}/scroll-lock/keymap.xkb
+    mkdir -p "${out%/*}"
+    # Made again only when what it's made from changed (Hyprland runs this at every config load, and xkbcli takes a
+    # while): the layout, the keyboard data (its folders' times change as an update replaces files) and this script.
+    # The result is kept with it, "none" included (a layout using level 5)
+    key="$layout|$variant|$options|$(stat -L -c %Y /usr/share/xkeyboard-config-2/symbols /usr/share/X11/xkb/symbols \
+        "$0" 2>/dev/null | paste -sd,)"
+    stamp=$out.key
+    if [[ $(head -1 "$stamp" 2>/dev/null) == "$key" ]]; then
+        made=$(sed -n 2p "$stamp")
+        [[ -z $made ]] && exit 0
+        [[ -s $made ]] && { echo "$made"; exit 0; }
+    fi
+    # result <path>: kept for the next time, and said (nothing: no keymap of its own for this layout)
+    result() { printf '%s\n%s\n' "$key" "$1" >"$stamp"; [[ -z $1 ]] || echo "$1"; exit 0; }
+    base=$(xkbcli compile-keymap --layout "${layout:-us}" --variant "$variant" --options "$options" 2>/dev/null) || exit 0
+    symbols=$(sed -n '/xkb_symbols/,$p' <<<"$base")
+    grep -v 'key <LVL5>' <<<"$symbols" | grep -qE 'EIGHT_LEVEL|ISO_Level5' && result ""
+    grep -qE 'modifier_map [^{]*\{[^}]*<SCLK>' <<<"$symbols" && result ""
+    # after the last modifier_map line
+    awk '{ lines[NR] = $0; if ($0 ~ /^[ \t]*modifier_map /) last = NR }
+         END { for (i = 1; i <= NR; i++) { print lines[i]; if (i == last) print "\tmodifier_map Mod3 { <SCLK> };" } }' \
+        <<<"$base" >"$out.tmp"
+    xkbcli compile-keymap --keymap "$out.tmp" >/dev/null 2>&1 </dev/null || { rm -f "$out.tmp"; exit 0; }
+    mv "$out.tmp" "$out"
+    result "$out"
+    ;;
+sync)
+    on=0
+    for led in /sys/class/leds/*::scrolllock/brightness; do
+        [[ -r $led && $(cat "$led") != 0 ]] && on=1
+    done
+    printf '%s\n' "$on" >"${XDG_RUNTIME_DIR:-/run/user/$UID}/scroll-lock"   # in place: Caelestia watches it
+    ;;
+*) echo "usage: scroll-lock keymap|sync" >&2; exit 1 ;;
+esac

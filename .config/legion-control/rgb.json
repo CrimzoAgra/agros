@@ -1,0 +1,25 @@
+{
+  "brightness": 100,
+  "zones": {
+    "keyboard": {
+      "mode": "static",
+      "color": "#ffffff",
+      "speed": 10
+    },
+    "front": {
+      "mode": "off",
+      "color": "#ffffff",
+      "speed": 10
+    },
+    "back": {
+      "mode": "off",
+      "color": "#ffffff",
+      "speed": 10
+    },
+    "logo": {
+      "mode": "static",
+      "color": "#ffffff",
+      "speed": 10
+    }
+  }
+}

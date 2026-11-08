@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - name: Tools the tests use
+        run: |
+          pacman -Syu --noconfirm --needed git jq python python-gobject python-numpy python-xlib python-secretstorage \
+            gnupg shellcheck sudo libnotify procps-ng util-linux which diffutils
+      - uses: actions/checkout@v4
+      - name: Shellcheck (the installer and AgrOS's own scripts)
+        run: |
+          shellcheck -S warning install/agros-install install/agros-session-init .local/bin/agros-personal
+      - name: Tests, as a normal user (setup refuses root)
+        run: |
+          useradd -m ci
+          chown -R ci: .
+          runuser -u ci -- git config --global --add safe.directory '*'
+          runuser -u ci -- tests/run.sh $(cd tests && ls *.sh | sed 's/\.sh$//' | grep -vx -e run -e lib -e agros-install) boot-video-mode
+      - name: The installer's own test, as root (it makes a throwaway user)
+        run: tests/run.sh agros-install

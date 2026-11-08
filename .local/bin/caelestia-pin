@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+# Pin / unpin apps.
+#   caelestia-pin        -> top of the Caelestia launcher (launcher.favouriteApps in shell.json)
+#   caelestia-pin dock   -> the bar's dock (~/.config/quickshell/sidedock/pins.json: the path of the old side dock, kept)
+# Pick an app to toggle it; press Esc to finish.
+#   caelestia-pin dock <app id>   toggle that app's dock pin, no picker (the dock's and the Super menu's pin buttons)
+#   caelestia-pin dock --order '<JSON order>' [<run>:<count>]   the dock's pins in that order (its drag to reorder)
+if [[ ${1:-} == dock ]]; then
+    cfg="$HOME/.config/quickshell/sidedock/pins.json"
+    path='.'
+    prompt="Pin to dock: "
+    empty='[]'
+else
+    cfg="$HOME/.config/caelestia/shell.json"
+    path='.launcher.favouriteApps'
+    prompt="Pin to Super menu: "
+    empty='{}'
+fi
+mkdir -p "${cfg%/*}"
+[[ -s $cfg ]] || echo "$empty" >"$cfg"
+
+toggle() {
+    # One change at a time: two quick pin clicks would both start from the same file and one would be lost
+    # (held for this change only, not while the picker is open)
+    (
+        flock 9
+        # (a value that isn't a list, from a hand edit: started again, not left failing)
+        jq --arg id "$1" "$path = (($path | arrays // [])
+                | if any(.[]; . == \$id) then map(select(. != \$id)) else . + [\$id] end)" \
+            "$cfg" >"$cfg.tmp" && mv "$cfg.tmp" "$cfg"
+    ) 9>"$cfg.lock"
+}
+# The dock's own order (its drag), under the same lock as a pin click. One JSON value: the order (by entry id, as the
+# dock shows its pins), as a list, or {"order": [...], "keys": {pin: its entry id}} for the pins the dock started from
+# (so a pin stored by another name, "Spotify" for com.spotify.Client, is matched); anything else leaves the pins as
+# they are. Merged with the pins as they are now: the order given, by entry id, for the pins still there; one pinned by
+# the drag itself (an open window dropped among them: not one of those it started from) kept; one unpinned since not
+# brought back; one pinned since (not in the order) kept after them. With <seq> ("<the dock's run>:<count>"): one not
+# newer than the last order written by the same run (two drags finishing out of order) changes nothing
+if [[ ${1:-} == dock && ${2:-} == --order ]]; then
+    (
+        flock 9
+        req=$(jq -sce 'length == 1 and (.[0] | (type == "array" and all(.[]; type == "string"))
+                or (type == "object" and (.order | type == "array" and all(.[]; type == "string"))
+                    and ((.keys // {}) | type == "object" and all(.[]; type == "string"))))' <<<"${3:-}" >/dev/null 2>&1 &&
+              jq -c 'if type == "array" then {order: ., keys: {}} else {order, keys: (.keys // {})} end' <<<"$3") ||
+            { echo "Not a list of app ids, pins left as they are: ${3:-}" >&2; exit 1; }
+        seq=${4:-}
+        IFS=: read -r last_run last_n 2>/dev/null <"$cfg.order-seq" || true
+        run=${seq%%:*} n=${seq#*:}
+        if [[ $seq =~ ^[^:]+:[0-9]+$ && $run == "${last_run:-}" && ${last_n:-} =~ ^[0-9]+$ ]] && ((n <= last_n)); then
+            echo "An older order than the last one written: left out" >&2
+            exit 0
+        fi
+        jq --argjson req "$req" '(arrays // []) as $now | $req.order as $order | $req.keys as $keys
+            | def key: ($keys[.] // .);
+              def same($b): ascii_downcase == ($b | ascii_downcase);
+              ($now | map(key)) as $nowkeys | [$keys[]] as $base
+            | ($order | map(select(. as $k | (any($base[]; same($k)) | not) or any($nowkeys[]; same($k)))))
+              + ($now | map(select(key as $k | all($order[]; same($k) | not))))' "$cfg" >"$cfg.tmp" ||
+            { echo "The dock's order couldn't be written: pins left as they are" >&2; rm -f "$cfg.tmp"; exit 1; }
+        mv "$cfg.tmp" "$cfg"
+        # (noted only once written)
+        [[ ! $seq =~ ^[^:]+:[0-9]+$ ]] || echo "$seq" >"$cfg.order-seq"
+    ) 9>"$cfg.lock"
+    exit
+fi
+if [[ -n ${2:-} ]]; then
+    toggle "$2"
+    exit
+fi
+
+declare -A names
+for f in /usr/share/applications/*.desktop \
+         /var/lib/flatpak/exports/share/applications/*.desktop \
+         "$HOME"/.local/share/flatpak/exports/share/applications/*.desktop \
+         "$HOME"/.local/share/applications/*.desktop; do
+    [[ -e $f ]] || continue
+    id=$(basename "$f" .desktop)
+    # (a hidden copy, e.g. your own over the system's: hidden, as in the launcher)
+    grep -qiE '^(NoDisplay|Hidden)=true' "$f" && { unset "names[$id]"; continue; }
+    name=$(grep -m1 '^Name=' "$f" | cut -d= -f2-)
+    names[$id]=${name:-$id}
+done
+
+while true; do
+    mapfile -t pinned < <(jq -r "$path // [] | .[]" "$cfg")
+    menu=$(
+        for id in "${pinned[@]}"; do
+            printf '★ %s  (%s)\n' "${names[$id]:-$id}" "$id"  # (one hidden since: still listed, to unpin)
+        done
+        for id in "${!names[@]}"; do
+            printf '%s\n' "${pinned[@]}" | grep -qxF -- "$id" && continue
+            printf '   %s  (%s)\n' "${names[$id]}" "$id"
+        done | sort -f
+    )
+    choice=$(fuzzel --dmenu --only-match --prompt "$prompt" --width 50 <<<"$menu") || exit 0
+    id=$(sed -E 's/.*\(([^)]*)\)$/\1/' <<<"$choice")
+    [[ -n $id ]] || exit 0
+    toggle "$id"
+done

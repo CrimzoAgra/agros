@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Opens the own menu of a tray icon that has no standard one (Wine apps: the Epic Games launcher...), at the mouse, by
+# its ContextMenu call; Quickshell only shows standard menus. From the bar's tray (Caelestia overlay, TrayItem.qml).
+#   tray-menu <tray icon id>
+id=$1
+read -r x y < <(hyprctl cursorpos -j | jq -r '"\(.x) \(.y)"')
+for item in $(busctl --user get-property org.kde.StatusNotifierWatcher /StatusNotifierWatcher \
+    org.kde.StatusNotifierWatcher RegisteredStatusNotifierItems | cut -d' ' -f3- | tr -d '"'); do
+    service=${item%%/*} path=/${item#*/}
+    if [[ $(busctl --user get-property "$service" "$path" org.kde.StatusNotifierItem Id 2>/dev/null) == "s \"$id\"" ]]; then
+        exec busctl --user call "$service" "$path" org.kde.StatusNotifierItem ContextMenu ii "$x" "$y"
+    fi
+done

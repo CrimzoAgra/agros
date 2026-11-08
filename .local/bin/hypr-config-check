@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# Checks the Hyprland config against the Hyprland installed, without starting it (Hyprland --verify-config): run by the
+# pacman hook system/pacman-hooks/hypr-config-check.hook.in after a Hyprland update, so an API it renamed is found
+# then, not at the next login with binds missing. Its errors go to ~/.local/state/hypr-config-check, which
+# dotfiles-check reports (and this prints); none: that file goes. Exit 0: it loads; 1: errors; 2: couldn't check
+# (Hyprland refused to run here: its file left as it was)
+set -uo pipefail
+state="${XDG_STATE_HOME:-$HOME/.local/state}/hypr-config-check"
+mkdir -p "${state%/*}"
+cd ~ || exit 1  # (it writes a log in the folder it's run from: from pacman, that's /)
+# Hyprland won't run without a runtime folder, and from the pacman hook (runuser, sudo, at shutdown) there's none: its
+# "XDG_RUNTIME_DIR is not set" was taken for the config's error. One of its own then, gone after
+if [[ -z ${XDG_RUNTIME_DIR:-} || ! -d ${XDG_RUNTIME_DIR:-} ]]; then
+    XDG_RUNTIME_DIR=$(mktemp -d) || exit 2
+    export XDG_RUNTIME_DIR
+    trap 'rm -rf "$XDG_RUNTIME_DIR"' EXIT
+fi
+# (outside the session, so it loads the files on disk rather than asking the running Hyprland. DOTS_VERIFY_CONFIG:
+# hypr-user.lua only checks then, with none of its side effects: no "failed to load" notification, which
+# dotfiles-check gives itself, and no settings file written)
+out=$(timeout 60 env -u HYPRLAND_INSTANCE_SIGNATURE -u WAYLAND_DISPLAY DOTS_VERIFY_CONFIG=1 \
+    Hyprland --verify-config -c "${XDG_CONFIG_HOME:-$HOME/.config}/hypr/hyprland.lua" 2>&1)
+rc=$?
+if ((rc == 0)); then
+    rm -f "$state"
+    echo "Hyprland's config loads with the Hyprland installed."
+    exit 0
+fi
+# Hyprland refusing to run here at all (its environment, before any config): couldn't check, not a config error
+refused="XDG_RUNTIME_DIR is not set|properly set up user|superuser"
+if grep -qiE "$refused" <<<"$out" && ! grep -q 'Config parsing result' <<<"$out"; then
+    echo "Hyprland's config couldn't be checked here: $(grep -m1 -iE "$refused" <<<"$out" | sed 's/\x1b\[[0-9;]*m//g')"
+    exit 2
+fi
+# its own report (after "Config parsing result"), else the end of what it printed (it crashed, or timed out)
+errors=$(sed -n '/Config parsing result/,$p' <<<"$out" | tail -n +2 | grep -v '^\s*$')
+[[ -n $errors ]] || errors=$(tail -5 <<<"$out")
+printf '%s\n' "$errors" >"$state"
+echo "Hyprland's config has errors with the Hyprland installed:"
+printf '%s\n' "$errors"
+exit 1

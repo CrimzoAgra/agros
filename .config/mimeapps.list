@@ -1,0 +1,12 @@
+[Added Associations]
+
+[Default Applications]
+application/vnd.appimage=appimage-open.desktop;
+application/x-iso9660-appimage=appimage-open.desktop;
+application/pdf=librewolf.desktop;
+application/xhtml+xml=librewolf.desktop;
+inode/directory=thunar.desktop
+text/html=librewolf.desktop;
+text/plain=org.gnome.TextEditor.desktop;
+x-scheme-handler/http=librewolf.desktop;
+x-scheme-handler/https=librewolf.desktop;

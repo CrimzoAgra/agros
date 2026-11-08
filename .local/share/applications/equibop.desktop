@@ -1,0 +1,13 @@
+# Equibop shown as Discord: its name, description and icon (a copy of /usr/share/applications/equibop.desktop; this one wins)
+[Desktop Entry]
+Name=Discord
+GenericName=Internet Messenger
+Comment=All-in-one voice and text chat for gamers that's free, secure, and works on both your desktop and phone.
+Type=Application
+Categories=Network;InstantMessaging;Chat;
+Keywords=discord;vencord;electron;chat;equibop
+MimeType=x-scheme-handler/discord;
+Exec=equibop %U
+TryExec=equibop
+Icon=discord
+StartupWMClass=equibop
