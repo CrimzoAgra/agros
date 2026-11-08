@@ -26,7 +26,7 @@ jobs:
         run: |
           pacman -Syu --noconfirm --needed git jq python python-gobject python-numpy python-xlib python-secretstorage \
             gnupg shellcheck sudo libnotify procps-ng util-linux which diffutils pacman-contrib file gtk3 lua lutris
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Shellcheck (AgrOS's own scripts and package scripts)
         run: |
           shellcheck -S warning .local/bin/agros-* ci/build-repo.sh packages/agros-boot/boot-menu \
@@ -63,7 +63,7 @@ jobs:
           pacman -U --noconfirm /tmp/keyring.pkg /tmp/mirrorlist.pkg
           sed -i '/^\[core\]/i [cachyos]\nInclude = /etc/pacman.d/cachyos-mirrorlist\n' /etc/pacman.conf
           pacman -Sy --noconfirm
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0  # (the packages' versions count the commits)
       - name: Signing key
@@ -84,7 +84,7 @@ jobs:
           pacman -Sy
           pacman -S --noconfirm --print agros-desktop >/tmp/plan 2>&1 || { cat /tmp/plan; exit 1; }
           ! grep -E '/(noctalia[^/]*|jack2|firefox|dolphin|kitty|alacritty|cachyos-hello)-[0-9]' /tmp/plan
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: out
 
@@ -97,4 +97,4 @@ jobs:
     environment:
       name: github-pages
     steps:
-      - uses: actions/deploy-pages@v4
+      - uses: actions/deploy-pages@v5
