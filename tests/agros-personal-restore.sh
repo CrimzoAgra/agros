@@ -35,6 +35,24 @@ mkdir -p "$old/.config/dots"; echo SECRET-SGDB >"$old/.config/dots/steamgriddb.k
 echo SECRET-STEAM >"$old/.local/share/Steam/config/config.vdf"; echo cfg >"$old/.local/share/Steam/userdata/42/config/localconfig.vdf"
 echo shot >"$old/.local/share/Steam/userdata/42/7/screenshot"
 echo note >"$old/.claude/projects/-home-me/memory/MEMORY.md"; echo skill >"$old/.claude/skills/s/SKILL.md"
+mkdir -p "$old/.claude/plugins/p" "$old/.claude/cache" "$old/.config/VSCodium/User/globalStorage/ext"
+echo chat >"$old/.claude/projects/-home-me/session.jsonl"; echo plugin >"$old/.claude/plugins/p/x"; echo c >"$old/.claude/cache/c"
+echo SECRET-LUTRIS >"$old/.cache/lutris/auth-token"; echo state >"$old/.config/VSCodium/User/globalStorage/ext/s.json"
+# Lutris with the EA App installed (its Wine folder holds its login) and Steam (a store's own, not carried)
+lutris_db() {  # <home> <slug> <installed> <directory> <configpath>
+    mkdir -p "$1/.local/share/lutris/games"
+    python3 -I -c 'import sqlite3, sys
+db = sqlite3.connect(sys.argv[1])
+db.execute("CREATE TABLE IF NOT EXISTS games (id INTEGER PRIMARY KEY, name TEXT, slug TEXT, installer_slug TEXT, platform TEXT, runner TEXT, directory TEXT, installed INTEGER, installed_at INTEGER, configpath TEXT)")
+db.execute("INSERT INTO games (name, slug, installed, runner, directory, configpath) VALUES (?, ?, ?, ?, ?, ?)", sys.argv[2:])
+db.commit()' "$1/.local/share/lutris/pga.db" "$2" "$2" "$3" "${6:-wine}" "$4" "$5"
+}
+lutris_db "$old" ea-app 1 "$old/Games/ea-app" ea-app-1
+lutris_db "$old" overwatch 1 "" "" steam
+mkdir -p "$old/Games/ea-app/drive_c/users/steamuser/AppData/Local/EADesktop/Cache"
+echo SECRET-EA >"$old/Games/ea-app/drive_c/users/steamuser/AppData/Local/EADesktop/login"
+echo c >"$old/Games/ea-app/drive_c/users/steamuser/AppData/Local/EADesktop/Cache/c"  # (a launcher's folder is whole)
+printf 'game:\n  prefix: %s/Games/ea-app\n' "$old" >"$old/.local/share/lutris/games/ea-app-1.yml"
 mkdir -p "$t/gitdrive/.git"; run "$old" personal_save x "$t/gitdrive" >/dev/null 2>&1 && fail "saved into a git repo"
 run "$old" personal_save >/dev/null || fail "--save-personal failed"
 file=$drive/dotfiles-personal.tar.gpg
@@ -50,6 +68,7 @@ echo "wrong" >"$t/pass"
 run "$new" personal_main >/dev/null 2>&1 && fail "a wrong passphrase was taken"
 [[ $(cat "$new/.config/equibop/sessionData/token") == mine ]] || fail "a wrong passphrase still changed files"
 echo "correct horse battery staple" >"$t/pass"
+lutris_db "$new" ea-app 0 "" ""  # (lutris-library's entry for it, not installed)
 nl=$new/.config/librewolf/librewolf/xyz.default-release
 echo stale >"$nl/logins.json-wal"  # the new profile's journal, which would be replayed over the one brought back
 run "$new" personal_main >/dev/null || fail "--personal failed"
@@ -68,6 +87,16 @@ run "$new" personal_main >/dev/null || fail "--personal failed"
 [[ -e $new/.local/share/Steam/userdata/42/7 ]] && fail "more of Steam's userdata than its settings came along"
 [[ $(cat "$new/.claude/.credentials.json") == SECRET-CLAUDE && -f $new/.claude.json ]] || fail "Claude Code's account not back"
 [[ -f $new/.claude/projects/-home-me/memory/MEMORY.md && -f $new/.claude/skills/s/SKILL.md ]] || fail "Claude Code's memories or skills not back"
+[[ -f $new/.claude/projects/-home-me/session.jsonl && -f $new/.claude/plugins/p/x ]] || fail "Claude Code's sessions or plugins not back"
+[[ -e $new/.claude/cache ]] && fail "Claude Code's cache came along"
+[[ $(cat "$new/.cache/lutris/auth-token") == SECRET-LUTRIS ]] || fail "Lutris's own login not back"
+[[ -f $new/.config/VSCodium/User/globalStorage/ext/s.json ]] || fail "VSCodium's extension data not back"
+ea=$new/Games/ea-app/drive_c/users/steamuser/AppData/Local/EADesktop
+[[ $(cat "$ea/login") == SECRET-EA && -f $ea/Cache/c ]] || fail "the EA App's folder not back whole"
+row=$(python3 -I -c 'import sqlite3, sys; print(*sqlite3.connect(sys.argv[1]).execute("SELECT installed, runner, directory, configpath FROM games WHERE slug = ?", ("ea-app",)).fetchone(), sep="|")' "$new/.local/share/lutris/pga.db")
+[[ $row == "1|wine|$new/Games/ea-app|ea-app-1" ]] || fail "the EA App not installed again in Lutris: $row"
+grep -q "prefix: $new/Games/ea-app" "$new/.local/share/lutris/games/ea-app-1.yml" || fail "the EA App's config still points at the old home"
+[[ -e $new/lutris-launchers.json ]] && fail "lutris-launchers.json left in the home"
 grep -rqx mine "$new"/.dotfiles-backup/*-personal/.config/equibop/sessionData/token 2>/dev/null || fail "replaced file not backed up"
 
 # without the drive's file
