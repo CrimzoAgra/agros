@@ -1,7 +1,6 @@
 *.bak*
 __pycache__/
-# Personal (never in this public repo): your bookmarks and the new tab picture travel on your pen drive
+# Personal (never in this public repo): your bookmarks travel on your pen drive
 .local/share/firefox/bookmarks.html
-.local/share/firefox/newtab-wallpaper.jpg
 *.key
 *.gpg
