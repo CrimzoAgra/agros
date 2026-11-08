@@ -785,7 +785,10 @@ ShellRoot {
                 // ---- Left column: weather, calendar ----
                 ColumnLayout {
                     x: stage.width * 0.30
-                    y: stage.height * 0.08
+                    // Below the band along the top that Caelestia keeps for itself on an empty workspace (dragging its
+                    // panels out: its dragThreshold, 80, and its border): the weather panel's tab and pencil were in it,
+                    // so the mouse never reached them
+                    y: Math.max(stage.height * 0.08, 120)
                     width: 290
                     spacing: 34
 
