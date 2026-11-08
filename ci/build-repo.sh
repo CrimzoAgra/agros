@@ -22,14 +22,15 @@ asb() { sudo -u builder -H env ${GNUPGHOME:+GNUPGHOME=$GNUPGHOME} "$@"; }
 # Signing: the key handed to the builder (makepkg --sign and repo-add --sign run as it)
 sign=() rsign=()
 if [[ -n $key ]]; then
+    src_gpg=${GNUPGHOME:-$HOME/.gnupg}  # (where the key was imported: CI's container has its own HOME)
     export GNUPGHOME=/home/builder/.gnupg
     install -d -m700 -o builder -g builder "$GNUPGHOME"
-    gpg --homedir /root/.gnupg --export-secret-keys "$key" | asb gpg --batch --import
+    gpg --homedir "$src_gpg" --export-secret-keys "$key" | asb gpg --batch --import
     echo "allow-loopback-pinentry" | asb tee "$GNUPGHOME/gpg-agent.conf" >/dev/null
     sign=(--sign --key "$key") rsign=(--sign --key "$key")
     # agros-keyring: the public key and its fingerprint
-    gpg --homedir /root/.gnupg --export "$key" >"$work/agros/packages/agros-keyring/agros.gpg"
-    fpr=$(gpg --homedir /root/.gnupg --with-colons --fingerprint "$key" | awk -F: '$1 == "fpr" {print $10; exit}')
+    gpg --homedir "$src_gpg" --export "$key" >"$work/agros/packages/agros-keyring/agros.gpg"
+    fpr=$(gpg --homedir "$src_gpg" --with-colons --fingerprint "$key" | awk -F: '$1 == "fpr" {print $10; exit}')
     echo "$fpr:4:" >"$work/agros/packages/agros-keyring/agros-trusted"
     chown builder: "$work/agros/packages/agros-keyring/"agros*
     # (pacman here trusts it too: the repo's signed database and packages are read below)
