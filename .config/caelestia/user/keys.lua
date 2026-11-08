@@ -96,11 +96,13 @@ end)
 hl.define_submap("vm", function()
     hl.bind("CTRL + ALT + Escape", hl.dsp.submap("reset"))
 end)
-hl.on("window.active", function(win)
+local function vm_keys(win)
     local vm, current = win ~= nil and (win.class or ""):lower() == "vmware", hl.get_current_submap()
     if vm and current ~= "vm" and current ~= "dots-capture" then
         hl.dispatch(hl.dsp.submap("vm"))
     elseif not vm and current == "vm" then
         hl.dispatch(hl.dsp.submap("reset"))
     end
-end)
+end
+hl.on("window.active", vm_keys)
+vm_keys(hl.get_active_window())  -- (VMware already focused when the config loads: no event comes)
