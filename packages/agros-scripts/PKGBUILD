@@ -1,0 +1,36 @@
+# Maintainer: Filipe Agra
+# The desktop's programs (game focus, tray keeper, the Updates app's updater, the Settings app's CLI, Lutris and
+# Claude Code wrappers...) and the data they use, in /usr/lib/agros, linked into each home (agros-links)
+pkgname=agros-scripts
+pkgver=0
+pkgrel=1
+pkgdesc='AgrOS desktop programs and their data (game focus, tray keeper, updater, Settings CLI, overlays)'
+arch=('any')
+url='https://github.com/CrimzoAgra/agros'
+license=('GPL-3.0-or-later')
+depends=('bash' 'python' 'python-gobject' 'jq' 'libnotify' 'git' 'curl' 'util-linux')
+_root=$(realpath "${startdir}/../..")
+# The data folders that are code (the rest of ~/.local/share is settings: agros-hyprland-settings)
+_share=(caelestia-overlay lutris-overlay lutris-library dots-settings github-release hyprbars camera-switch
+    caelestia-greeter)
+
+pkgver() {
+    cd "$_root" && printf 'r%s.%s' "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+package() {
+    cd "$_root"
+    install -d "$pkgdir/usr/lib/agros/bin" "$pkgdir/usr/lib/agros/share"
+    local f d
+    for f in .local/bin/*; do
+        [[ -f $f ]] && install -m755 "$f" "$pkgdir/usr/lib/agros/bin/"
+    done
+    for d in "${_share[@]}"; do
+        cp -r --no-preserve=ownership ".local/share/$d" "$pkgdir/usr/lib/agros/share/"
+    done
+    find "$pkgdir/usr/lib/agros" -name __pycache__ -prune -exec rm -rf {} +
+    # The links each login adds (programs that came with an update since the account was made)
+    install -Dm644 "$startdir/agros-links.service" "$pkgdir/usr/lib/systemd/user/agros-links.service"
+    install -d "$pkgdir/usr/lib/systemd/user/default.target.wants"
+    ln -s ../agros-links.service "$pkgdir/usr/lib/systemd/user/default.target.wants/agros-links.service"
+}

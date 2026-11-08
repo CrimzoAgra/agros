@@ -1,0 +1,292 @@
+#!/usr/bin/env bash
+# AgrOS's first login (agros-welcome.service, once per account): what a package can't do because it's per user, or
+# can't be redistributed, then the offer to bring your accounts back from your pen drive.
+#   agros-welcome            your account's part, at your first login (the service runs it; again by hand is fine)
+#   agros-welcome --system   the system's part, with sudo, in a terminal it opens itself: the apps for hardware
+#                            that's plugged in (Razer, Logitech, Moza, tablets, the Legion's camera switch) and
+#                            VMware Workstation (its license forbids passing it on, so it's built here from the AUR)
+# Log: ~/.local/state/agros/welcome.log
+set -uo pipefail
+st=${XDG_STATE_HOME:-$HOME/.local/state}/agros
+bin=$HOME/.local/bin
+
+# Claude Code's plugins, as "GitHub repo of its marketplace|plugin@marketplace"
+CLAUDE_PLUGINS=(
+    "DietrichGebert/ponytail|ponytail@ponytail"              # minimal code: justifies each line first (needs node)
+    "addyosmani/agent-skills|agent-skills@addy-agent-skills" # Addy Osmani's engineering skills
+)
+# Apps for hardware, only when a device of that USB vendor is plugged in (or paired over Bluetooth), as
+# "name|packages|vendor ids". OpenTabletDriver turns off the kernel's own pen drivers (a convertible's pen stopped
+# working), OpenRazer builds a kernel module at every update: so not on machines without them
+HARDWARE=(
+    "Boxflat (Moza Pit House)|boxflat-git|346e"
+    "OpenRazer + Polychromatic (Razer Synapse)|openrazer-daemon openrazer-driver-dkms polychromatic|1532"
+    "Solaar (Logitech G Hub, Logi Options+)|solaar|046d"
+    "OpenTabletDriver (Wacom, Huion, XP-Pen, Gaomon tablets)|opentabletdriver|056a 256c 28bd 5543"
+)
+
+installed() { [[ $(pacman -Qq "$1" 2>/dev/null) == "$1" ]]; }
+
+# --- The system's part (root) ---
+
+# vendors: USB devices (behind hubs and receivers too) and Bluetooth ones (HID names: 0005:046D:B023.0001); not
+# built-in I2C ones (0018:…): a convertible's own Wacom pen would pull in OpenTabletDriver, which breaks it
+vendors() { { cat /sys/bus/usb/devices/*/idVendor; ls /sys/bus/hid/devices | awk -F: '$1 == "0005" {print tolower($2)}'; } 2>/dev/null | sort -u; }
+usb_device() {
+    local d
+    for d in /sys/bus/usb/devices/*; do
+        [[ $(cat "$d/idVendor" 2>/dev/null):$(cat "$d/idProduct" 2>/dev/null) == "$1:$2" ]] && return 0
+    done
+    return 1
+}
+kernel_headers() {
+    local f
+    for f in /usr/lib/modules/*/pkgbase; do [[ -f $f ]] && echo "$(<"$f")-headers"; done | sort -u
+}
+
+system_part() {
+    local user=${SUDO_USER:?run with sudo from your account} entry name pkgs usb v want=() names=()
+    v=$(vendors)
+    for entry in "${HARDWARE[@]}"; do
+        IFS='|' read -r name pkgs usb <<<"$entry"
+        grep -qxFf <(tr ' ' '\n' <<<"$usb") <<<"$v" || continue
+        names+=("$name")
+        # shellcheck disable=SC2206  # (space-separated package names)
+        want+=($pkgs)
+    done
+    if grep -qs 'Name="Ideapad extra buttons"' /proc/bus/input/devices && usb_device 04f2 b83e; then
+        names+=("the Legion's camera switch")
+        want+=(agros-camera-switch)
+    fi
+    if ((${#want[@]})); then
+        echo "For the hardware plugged in: ${names[*]}"
+        pacman -S --needed --noconfirm "${want[@]}" || echo "!! Some of them didn't install: ${want[*]}"
+    fi
+    # VMware Workstation: from the AUR (its installer from a copy on archive.org, as Broadcom gives it only to signed-in
+    # users, checked against the package's checksum), built as you (an AUR helper refuses root), its modules by DKMS
+    # for every installed kernel. vmware-keymaps first: the package needs it but sets that only in its build script
+    echo "VMware Workstation (built from the AUR: a few minutes)"
+    # shellcheck disable=SC2046  # (package names)
+    pacman -S --needed --noconfirm $(kernel_headers) >/dev/null
+    if sudo -u "$user" paru -S --needed --noconfirm --skipreview vmware-keymaps vmware-workstation; then
+        modprobe -a vmw_vmci vmmon 2>/dev/null || echo "!! VMware's kernel modules didn't load: restart before using it"
+        systemctl enable --now vmware-networks.path vmware-usbarbitrator.path || echo "!! VMware's services couldn't be turned on"
+    else
+        echo "!! VMware Workstation didn't install: agros-welcome --system tries again"
+    fi
+    # OpenRazer only talks to users in its group
+    if installed openrazer-daemon; then
+        local g
+        g=$(getent group openrazer >/dev/null && echo openrazer || echo plugdev)
+        getent group "$g" >/dev/null || groupadd -r "$g"
+        gpasswd -a "$user" "$g" >/dev/null
+    fi
+    mkdir -p "$(getent passwd "$user" | cut -d: -f6)/.local/state/agros"
+    touch "$(getent passwd "$user" | cut -d: -f6)/.local/state/agros/system-done"
+    echo "Done."
+}
+
+if [[ ${1:-} == --system && ${BASH_SOURCE[0]} == "$0" ]]; then
+    [[ $EUID -eq 0 ]] || exec sudo "$0" --system
+    system_part
+    exit
+fi
+
+# --- Your account's part ---
+
+[[ $EUID -ne 0 || ${BASH_SOURCE[0]} != "$0" ]] || { echo "Run as your account (agros-welcome --system for the system's part)"; exit 1; }
+
+caelestia_setup() {
+    # (run in an && list, so set -e is off in here: a failure said, not left silent)
+    if "$HOME/.local/bin/caelestia-overlay"; then
+        echo "Caelestia overlay (your changes to Caelestia) built."
+    else
+        echo "!! The Caelestia overlay didn't build (run: ~/.local/bin/caelestia-overlay)"
+    fi
+    # Run from the desktop: the running Caelestia keeps the files it loaded (it doesn't see the rebuilt overlay), so
+    # it's restarted onto the new ones. Started by Hyprland, with the desktop's environment: from elsewhere (an SSH
+    # login) it came up without the icon theme and app list, and the bar lost its logo and app icons
+    # (by Quickshell's own list, as dotfiles-check: a shell its crash handler restarted shows no "-c caelestia" in ps).
+    # Hyprland named (-i, its first one when this isn't run inside it): from an SSH login or a text console hyprctl
+    # doesn't know it, and the restart failed with nothing said
+    if qs list --all 2>/dev/null | grep -q "/quickshell/caelestia/shell.qml" &&
+        hyprctl -i "${HYPRLAND_INSTANCE_SIGNATURE:-0}" dispatch 'hl.dsp.exec_cmd("~/.local/bin/caelestia-restart")' >/dev/null 2>&1; then
+        echo "Caelestia restarted with them."
+    fi
+    # Only the first time (its own mark, not Caelestia's wallpaper file, which Caelestia may have written already): run
+    # again (after a pull), it would replace the wallpaper and colours you've picked since
+    local mark="$st/wallpaper-set"
+    if [[ -e $mark ]]; then
+        echo "Wallpaper and colours left as you have them."
+        return 0
+    fi
+    # Then the colours from it (Caelestia starts on its fixed teal scheme). In that order: the dynamic scheme is refused
+    # while no wallpaper is set ("No wallpaper set"), and a fresh install kept the teal accent.
+    # Hyprland named for the CLI too (the same first one as -i 0): it asks Hyprland whether its config is Lua, and from an
+    # SSH login or a text console wrote the window borders' colours to current.conf, which the Lua config doesn't read
+    local sig=${HYPRLAND_INSTANCE_SIGNATURE:-$(hyprctl instances -j 2>/dev/null | jq -r '.[0].instance // empty' 2>/dev/null)}
+    if HYPRLAND_INSTANCE_SIGNATURE=$sig caelestia wallpaper -f "$HOME/Pictures/Wallpapers/wallpaper.jpg" 2>/dev/null; then
+        if HYPRLAND_INSTANCE_SIGNATURE=$sig caelestia scheme set -n dynamic >/dev/null 2>&1; then
+            echo "Wallpaper and colours set."
+        else
+            echo "!! Wallpaper set, but not its colours (run: caelestia scheme set -n dynamic)"
+        fi
+        mkdir -p "${mark%/*}" && touch "$mark"
+    else
+        echo "Wallpaper will be set from inside Caelestia (run: caelestia wallpaper -f ~/Pictures/Wallpapers/wallpaper.jpg)"
+    fi
+}
+
+# No window buttons drawn by GTK apps (LibreWolf too, and apps installed later): the title bars on floating windows have
+# them (.config/caelestia/user/titlebars.lua)
+window_buttons() {
+    gsettings set org.gnome.desktop.wm.preferences button-layout 'appmenu:' 2>/dev/null || true
+}
+
+# Your VSCodium extensions (list in .config/VSCodium/extensions.txt, kept up to date by dotfiles-sync; open replacements
+# for the Microsoft-only ones: basedpyright for Pylance, clangd for the C/C++ tools)
+vscode_extensions() {
+    local list="$HOME/.config/VSCodium/extensions.txt" ext
+    command -v codium >/dev/null && [[ -f $list ]] || return 0
+    while read -r ext; do
+        [[ -n $ext ]] || continue
+        codium --install-extension "$ext" >/dev/null 2>&1 || echo "!! VSCodium extension failed: $ext"
+    done <"$list"
+    echo "VSCodium extensions installed."
+}
+
+# Claude Code comes with its VS Code extension (in extensions.txt); ~/.local/bin/claude runs its CLI
+claude_plugins() {
+    local claude="$HOME/.local/bin/claude" entry repo_m plugin
+    "$claude" --version >/dev/null 2>&1 || { echo "Claude Code isn't installed: skipping its plugins"; return 0; }
+    for entry in "${CLAUDE_PLUGINS[@]}"; do
+        IFS='|' read -r repo_m plugin <<<"$entry"
+        "$claude" plugin marketplace add "$repo_m" >/dev/null 2>&1 || true # already added is fine
+        "$claude" plugin install "$plugin" --scope user >/dev/null 2>&1 || echo "!! Claude plugin failed: $plugin"
+    done
+    echo "Claude Code plugins installed."
+    claude_notify_hook
+}
+
+# A notification when Claude Code finishes an answer: ~/.local/bin/claude-notify as its Stop hook, added to
+# ~/.claude/settings.json beside what's there (your other settings and hooks kept; already there: left as it is). A file
+# of another shape than Claude Code's (not an object, hooks or its Stop list odd) is left untouched, and said; never
+# failing the step
+claude_notify_hook() {
+    local f="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json" cmd="$HOME/.local/bin/claude-notify" new
+    mkdir -p "${f%/*}" || return 0
+    [[ -s $f ]] || echo '{}' >"$f" || return 0
+    if ! jq -e 'type == "object" and ((.hooks // {}) | type == "object" and ((.Stop // []) | type == "array"
+            and all(.[]; type == "object" and ((.hooks // []) | type == "array" and all(.[]; type == "object")))))' \
+            "$f" >/dev/null 2>&1; then
+        echo "!! $f isn't in the shape Claude Code writes (hooks.Stop a list of {hooks: [...]}): its notification hook not added"
+        return 0
+    fi
+    jq -e --arg c "$cmd" 'any(.hooks.Stop[]?.hooks[]?; .command == $c)' "$f" >/dev/null 2>&1 && return 0
+    # (written in place: a link stays one)
+    if new=$(jq --indent 2 --arg c "$cmd" '.hooks.Stop = (.hooks.Stop // []) + [{hooks: [{type: "command", command: $c}]}]' "$f") &&
+        printf '%s\n' "$new" >"$f"; then
+        echo "Claude Code's notification hook (claude-notify) added."
+    else
+        echo "!! Claude Code's notification hook couldn't be added to $f"
+    fi
+    return 0
+}
+
+# LibreWolf's settings (.local/share/firefox/settings.js) into its profile, once per profile: started once in the
+# background when it has none yet
+librewolf_setup() {
+    local settings="$HOME/.local/share/firefox/settings.js" prof pid
+    command -v librewolf >/dev/null && [[ -f $settings ]] || return 0
+    pgrep -x librewolf >/dev/null && { echo "LibreWolf is open: its settings are applied at the next login"; return 1; }
+    prof=$("$bin/firefox-bookmarks-export" --profile 2>/dev/null)
+    if [[ -z $prof ]]; then
+        librewolf --headless about:blank >/dev/null 2>&1 &
+        pid=$!
+        for _ in $(seq 30); do
+            sleep 1
+            prof=$("$bin/firefox-bookmarks-export" --profile 2>/dev/null)
+            [[ -n $prof && -f $prof/prefs.js ]] && break
+        done
+        sleep 2
+        kill "$pid" 2>/dev/null; wait "$pid" 2>/dev/null
+    fi
+    [[ -n $prof && -d $prof ]] || { echo "!! No LibreWolf profile: settings not applied"; return 1; }
+    [[ -e $prof/.dotfiles-imported ]] && return 0
+    grep '^user_pref' "$settings" >>"$prof/prefs.js"
+    touch "$prof/.dotfiles-imported"
+    echo "LibreWolf settings applied."
+}
+
+# VSCodium's extensions (Claude Code's among them: its CLI is ~/.local/bin/claude), then Claude Code's plugins and its
+# notification hook
+vscodium_setup() { vscode_extensions && claude_plugins; }
+
+# Flatpaks: Spotify for you (so Spicetify can change it), then Spicetify; Nuvio and ArtCraft from their GitHub
+# releases' .flatpak files (flatpak-bundle-update keeps them updated: they have no Flatpak repo)
+flatpaks() {
+    local ok=0
+    flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo || ok=1
+    flatpak install --user -y --noninteractive flathub com.spotify.Client || { echo "!! Spotify (Flatpak) failed"; ok=1; }
+    "$bin/flatpak-bundle-update" --install NuvioMedia/NuvioDesktop || ok=1
+    "$bin/flatpak-bundle-update" --install storytold/craft-launcher || ok=1
+    if command -v spicetify >/dev/null; then
+        spicetify -q config >/dev/null 2>&1 || true
+        spicetify -q config spotify_path "$HOME/.local/share/flatpak/app/com.spotify.Client/current/active/files/extra/share/spotify" \
+            prefs_path "$HOME/.var/app/com.spotify.Client/config/spotify/prefs" \
+            current_theme caelestia color_scheme caelestia custom_apps marketplace || echo "!! Spicetify setup failed"
+    fi
+    return $ok
+}
+
+# The rest that's per user: GTK apps' own window buttons off (the floating windows' title bars have them), Equibop's
+# theme in your colours, Lutris's store launchers, the tablet and Razer services
+others() {
+    window_buttons
+    local eq="$HOME/.config/equibop/settings/settings.json"
+    if command -v equibop >/dev/null; then
+        mkdir -p "${eq%/*}"; [[ -s $eq ]] || echo '{}' >"$eq"
+        jq '.enabledThemes = ((.enabledThemes // []) + ["caelestia.theme.css"] | unique)' "$eq" >"$eq.tmp" && mv "$eq.tmp" "$eq" || rm -f "$eq.tmp"
+    fi
+    [[ -x /usr/bin/lutris ]] && { "$bin/lutris-library" >/dev/null 2>&1 || echo "!! lutris-library failed"; }
+    installed opentabletdriver && systemctl --user enable --now opentabletdriver.service 2>/dev/null
+    installed openrazer-daemon && systemctl --user enable --now openrazer-daemon.service 2>/dev/null
+    true
+}
+
+# (sourced, by the tests: only the functions)
+[[ ${BASH_SOURCE[0]} == "$0" ]] || return 0
+mkdir -p "$st"
+exec > >(tee -a "$st/welcome.log") 2>&1
+echo "== agros-welcome $(date '+%F %T')"
+
+# Each step once, marked done; one that failed is tried again at the next login
+step() {
+    local name=$1
+    shift
+    [[ -e $st/done-$name ]] && return 0
+    echo "-- $name"
+    "$@" && touch "$st/done-$name"
+}
+# (the shell up first: the overlay's restart and the wallpaper talk to it)
+for _ in $(seq 60); do qs list --all 2>/dev/null | grep -q /quickshell/caelestia/ && break; sleep 1; done
+step caelestia caelestia_setup
+step others others
+step librewolf librewolf_setup
+step flatpaks flatpaks
+step vscodium vscodium_setup
+
+# The system's part (hardware apps, VMware) and your accounts: asked in one notification, run in a terminal
+if [[ ! -e $st/offered ]]; then
+    touch "$st/offered"
+    setsid -f bash -c '
+        a=$(notify-send -a AgrOS -i system-software-install -u critical -A restore="Restore my accounts" \
+            -A system="Install hardware apps and VMware" -A later="Later" "Welcome to AgrOS" \
+            "Everything is installed. Plug in your pen drive to restore your accounts (logins, keys, browser profile). Later: run agros-personal, or agros-welcome --system for the hardware apps and VMware." 2>/dev/null)
+        case $a in
+            restore) exec foot -T "AgrOS: your accounts" sh -c "\"$1/agros-personal\"; echo; read -rp \"Enter closes this window \" _" ;;
+            system) exec foot -T "AgrOS: hardware apps and VMware" sh -c "\"$1/agros-welcome\" --system; echo; read -rp \"Enter closes this window \" _" ;;
+        esac
+    ' _ "$bin" >/dev/null 2>&1 </dev/null
+fi
+echo "== done $(date '+%F %T')"

@@ -1,0 +1,51 @@
+#!/bin/sh
+# Started by greetd as the "greeter" user: a kiosk compositor (cage) showing the Quickshell login screen
+export XDG_CONFIG_HOME=/var/lib/caelestia-greeter XDG_DATA_HOME=/var/lib/caelestia-greeter
+export XDG_STATE_HOME=/var/lib/caelestia-greeter XDG_CACHE_HOME=/var/cache/caelestia-greeter
+export QT_WAYLAND_DISABLE_WINDOWDECORATION=1   # no title bar
+export WLR_NO_HARDWARE_CURSORS=1   # pointer drawn in the picture, so it doesn't stay on the shutdown screen
+set -a; . /etc/greetd/caelestia-greeter/env; set +a
+# Keyboard layout for typing the password: the system's (localectl), as Hyprland uses, variant and options too. Read at
+# each start, so a layout changed later (setup's keyboard step) applies here too
+xkb() { sed -n "s/.*\"Xkb$1\"[[:space:]]*\"\([^\"]*\)\".*/\1/p" /etc/X11/xorg.conf.d/00-keyboard.conf 2>/dev/null | head -1; }
+XKB_DEFAULT_LAYOUT=$(xkb Layout) XKB_DEFAULT_VARIANT=$(xkb Variant) XKB_DEFAULT_OPTIONS=$(xkb Options)
+export XKB_DEFAULT_LAYOUT="${XKB_DEFAULT_LAYOUT:-us}" XKB_DEFAULT_VARIANT XKB_DEFAULT_OPTIONS
+if [ -z "$XDG_RUNTIME_DIR" ]; then
+    XDG_RUNTIME_DIR=/tmp/caelestia-greeter-$(id -u)
+    mkdir -p "$XDG_RUNTIME_DIR" && chmod 700 "$XDG_RUNTIME_DIR"
+    export XDG_RUNTIME_DIR
+fi
+# Wipe leftover boot text from this console, so it can't flash between screens
+clear_console() { printf '\033[H\033[2J\033[3J\033[?25l' >/dev/tty 2>/dev/null || true; }
+clear_console
+exec >>/var/log/caelestia-greeter.log 2>&1   # keep the text console clean
+echo "=== $(date -Is) starting"
+
+# Safety net: if the login screen hasn't shown up after 20 s (crash, black screen), or closes without a login (a crash
+# after its first frame: greetd would restart it in a loop, then give up on a black screen), greetd's text login
+ready="$XDG_RUNTIME_DIR/caelestia-greeter-ready"
+rm -f "$ready"
+# shell.qml writes the time there when it starts a session: unchanged once it closes, no login (not compared with the
+# clock, which can jump at boot)
+launched="$XDG_STATE_HOME/caelestia-greeter-last-launch"
+before=$(cat "$launched" 2>/dev/null)
+fall_back() {
+    echo "$1, falling back"
+    kill -- -$pid 2>/dev/null
+    wait $pid 2>/dev/null
+    # On the console, not the log, and with the cursor back
+    printf '\033[?25h' >/dev/tty 2>/dev/null
+    exec agreety --cmd hyprland-session </dev/tty >/dev/tty 2>&1
+}
+# In a process group of its own: the fallback stops all of it (dbus-run-session alone would leave cage on the screen)
+setsid dbus-run-session -- cage -s -- sh -c '/etc/greetd/caelestia-greeter/best-mode; exec qs -p /etc/greetd/caelestia-greeter' &
+pid=$!
+i=0
+while [ $i -lt 20 ] && [ ! -e "$ready" ] && kill -0 $pid 2>/dev/null; do
+    sleep 1
+    i=$((i + 1))
+done
+[ -e "$ready" ] || fall_back "login screen didn't start"
+wait $pid
+[ "$(cat "$launched" 2>/dev/null)" != "$before" ] || fall_back "login screen closed without a login"
+clear_console   # again before the desktop starts

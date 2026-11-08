@@ -1,0 +1,9 @@
+#!/bin/bash
+# Fonts for the splash's shutdown and restart titles (agros-boot): Plymouth draws text only in Plymouth.ttf and
+# Plymouth-bold.ttf, and its own hook copies fonts under their real names only
+build() {
+  local f
+  for f in /usr/share/fonts/Plymouth.ttf /usr/share/fonts/Plymouth-bold.ttf; do
+    [[ -e $f ]] && add_file "$(readlink -f "$f")" "$f"
+  done
+}

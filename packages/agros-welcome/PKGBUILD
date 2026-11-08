@@ -1,0 +1,18 @@
+# Maintainer: Filipe Agra
+# AgrOS's first login: what's per user (Caelestia's overlay and wallpaper, LibreWolf's settings, the Spotify, Nuvio and
+# ArtCraft Flatpaks with Spicetify, VSCodium's extensions and Claude Code's plugins), then the offer to restore your
+# accounts from your pen drive and to install the hardware apps and VMware (agros-welcome --system)
+pkgname=agros-welcome
+pkgver=1
+pkgrel=1
+pkgdesc='AgrOS first-login setup (per-user apps, Flatpaks) and account restore'
+arch=('any')
+url='https://github.com/CrimzoAgra/agros'
+license=('GPL-3.0-or-later')
+depends=('agros-scripts' 'flatpak' 'libnotify' 'foot' 'jq' 'paru')
+
+package() {
+    install -Dm644 "$startdir/agros-welcome.service" "$pkgdir/usr/lib/systemd/user/agros-welcome.service"
+    install -d "$pkgdir/usr/lib/systemd/user/graphical-session.target.wants"
+    ln -s ../agros-welcome.service "$pkgdir/usr/lib/systemd/user/graphical-session.target.wants/agros-welcome.service"
+}

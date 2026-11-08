@@ -3,6 +3,13 @@ name: CI
 on:
   push:
   pull_request:
+  # Daily: the AUR packages AgrOS carries rebuilt when they've moved on (and against the latest Arch libraries)
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   test:
@@ -12,16 +19,74 @@ jobs:
       - name: Tools the tests use
         run: |
           pacman -Syu --noconfirm --needed git jq python python-gobject python-numpy python-xlib python-secretstorage \
-            gnupg shellcheck sudo libnotify procps-ng util-linux which diffutils
+            gnupg shellcheck sudo libnotify procps-ng util-linux which diffutils pacman-contrib file gtk3 lua lutris
       - uses: actions/checkout@v4
-      - name: Shellcheck (the installer and AgrOS's own scripts)
+      - name: Shellcheck (AgrOS's own scripts and package scripts)
         run: |
-          shellcheck -S warning install/agros-install install/agros-session-init .local/bin/agros-personal
-      - name: Tests, as a normal user (setup refuses root)
+          shellcheck -S warning .local/bin/agros-* ci/build-repo.sh packages/agros-boot/boot-menu \
+            packages/agros-boot/splash-theme packages/agros-system/auto-update
+      - name: Tests, as a normal user
         run: |
           useradd -m ci
           chown -R ci: .
           runuser -u ci -- git config --global --add safe.directory '*'
-          runuser -u ci -- tests/run.sh $(cd tests && ls *.sh | sed 's/\.sh$//' | grep -vx -e run -e lib -e agros-install) boot-video-mode
-      - name: The installer's own test, as root (it makes a throwaway user)
-        run: tests/run.sh agros-install
+          runuser -u ci -- tests/run.sh
+
+  repo:
+    # The [agros] pacman repo: built on every push to main and daily, published on GitHub Pages
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: test
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+      options: --privileged
+    steps:
+      - name: Build tools, and CachyOS's repo (what AgrOS installs on, and paru)
+        run: |
+          sed -i 's/^#\[multilib\]/[multilib]/; /^\[multilib\]/{n;s/^#Include/Include/}' /etc/pacman.conf
+          sed -i 's/^#*DownloadUser.*/#DownloadUser = alpm/' /etc/pacman.conf
+          pacman-key --init
+          pacman -Syu --noconfirm --needed base-devel git sudo
+          m=https://mirror.cachyos.org/repo/x86_64/cachyos
+          curl -fsSL -o /tmp/keyring.pkg "$m/$(curl -fsSL "$m/" | grep -o 'cachyos-keyring-[^"]*\.pkg\.tar\.zst' | sort -V | tail -1)"
+          curl -fsSL -o /tmp/mirrorlist.pkg "$m/$(curl -fsSL "$m/" | grep -o 'cachyos-mirrorlist-[^"]*\.pkg\.tar\.zst' | sort -V | tail -1)"
+          mkdir /tmp/k && bsdtar -xf /tmp/keyring.pkg -C /tmp/k
+          pacman-key --add /tmp/k/usr/share/pacman/keyrings/cachyos.gpg
+          pacman-key --lsign-key F3B607488DB35A47
+          pacman -U --noconfirm /tmp/keyring.pkg /tmp/mirrorlist.pkg
+          sed -i '/^\[core\]/i [cachyos]\nInclude = /etc/pacman.d/cachyos-mirrorlist\n' /etc/pacman.conf
+          pacman -Sy --noconfirm
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # (the packages' versions count the commits)
+      - name: Signing key
+        env:
+          AGROS_GPG_KEY: ${{ secrets.AGROS_GPG_KEY }}
+        run: |
+          [ -n "$AGROS_GPG_KEY" ] || { echo "::error::Add the AGROS_GPG_KEY secret (the repo's signing key, gpg --armor --export-secret-keys)"; exit 1; }
+          echo "$AGROS_GPG_KEY" | gpg --batch --import
+          echo "GPGKEY=$(gpg --list-secret-keys --with-colons | awk -F: '$1 == "fpr" {print $10; exit}')" >>"$GITHUB_ENV"
+      - name: Build the repo
+        run: |
+          git config --global --add safe.directory '*'
+          ci/build-repo.sh out/x86_64
+      - name: Install check (agros-desktop resolves in one transaction, none of what AgrOS leaves out)
+        run: |
+          printf '\n[agros]\nServer = file://%s/out/x86_64\n' "$PWD" >>/etc/pacman.conf
+          pacman -Sy
+          pacman -S --noconfirm --print agros-desktop >/tmp/plan
+          ! grep -E '/(noctalia[^/]*|jack2|firefox|dolphin|kitty|alacritty|cachyos-hello)-[0-9]' /tmp/plan
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: out
+
+  publish:
+    needs: repo
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+    steps:
+      - uses: actions/deploy-pages@v4

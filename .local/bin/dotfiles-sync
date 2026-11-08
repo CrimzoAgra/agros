@@ -6,10 +6,10 @@
 #   dotfiles-sync add <file>   start keeping a new file (e.g. ~/.config/foo/bar.conf), then sync
 # Only files already in the repo are synced; use "add" for new ones. Only what it copies (or what matches yours at home)
 # is committed: a repo copy you edit there, newer than yours, is skipped and left out, as is any other edit in the repo.
-# The repos: $DOTFILES_DIR (default: where setup ran from, else ~/Projects/dotfiles) and $LEGION_CONTROL_DIR (~/Projects/legion-control-linux).
+# The repos: $DOTFILES_DIR (default: where setup ran from, else ~/Projects/agros) and $LEGION_CONTROL_DIR (~/Projects/legion-control-linux).
 set -euo pipefail
 # Where setup ran from (it records it), while that is still a repo
-rec=$(cat "$HOME/.local/state/dotfiles-repo" 2>/dev/null) && [[ -e $rec/.git ]] || rec=$HOME/Projects/dotfiles
+rec=$(cat "$HOME/.local/state/dotfiles-repo" 2>/dev/null) && [[ -e $rec/.git ]] || rec=$HOME/Projects/agros
 repo=${DOTFILES_DIR:-$rec}
 legion=${LEGION_CONTROL_DIR:-$HOME/Projects/legion-control-linux}
 dry=false
@@ -113,7 +113,7 @@ sync() {
             # The repo's copy changed after yours (pulled from the other machine, not yet copied home: a pull sets the
             # file's time to then; this script's own copies leave it older than your edit): yours would undo that
             if [[ $dir/$f -nt $live/$f ]]; then
-                echo "  skipped: $f (the repo's is newer: ./setup.sh --only files, or copy yours over it by hand)"
+                echo "  skipped: $f (the repo's is newer: copy it over yours, or yours over it, by hand)"
                 continue
             fi
             # Nor over a change to the repo's copy not yet committed (an edit in progress there, older than yours: a
@@ -271,7 +271,7 @@ if not prof or not os.path.exists(path) or not os.path.exists(f"{prof}/prefs.js"
 # A profile setup never applied settings.js to (LibreWolf was open, or it was made since): its prefs.js lacks them, and
 # each one would be dropped as "back to the default" and pushed to every machine
 if not os.path.exists(f"{prof}/.dotfiles-imported"):
-    print("  LibreWolf settings not refreshed: not applied to this profile yet (./setup.sh --only desktop)")
+    print("  LibreWolf settings not refreshed: not applied to this profile yet (agros-welcome)")
     sys.exit()
 live = {}
 for line in open(f"{prof}/prefs.js"):

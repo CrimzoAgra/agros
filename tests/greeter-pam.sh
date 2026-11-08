@@ -70,12 +70,9 @@ for breakage in substack missing-module no-unix missing-include continued contin
         fail "a stack with $breakage: the file not left as it was, or not said: $out"
 done
 
-# install.sh: installs it and its template, runs it, and its pacman hook (pambase, pam)
-# shellcheck disable=SC2016  # (install.sh's own line, as written there)
-grep -q 'install -m 755 "$src/greetd-pam" "$dst/greetd-pam"' "$i/install.sh" || fail "install.sh doesn't install greetd-pam"
-# shellcheck source=/dev/null  # (system/render.sh)
-source "$here/system/render.sh"
-hook=$(heredoc "$i/install.sh" /etc/pacman.d/hooks/caelestia-greeter-pam.hook)
+# agros-greeter installs it and its template, and its pacman hook (pambase, pam) runs it
+grep -q 'install -Dm755 "$src/greetd-pam" "$dst/greetd-pam"' "$here/packages/agros-greeter/PKGBUILD" || fail "agros-greeter doesn't install greetd-pam"
+hook=$(cat "$here/packages/agros-greeter/agros-greeter-pam.hook")
 { grep -qx 'Target = pambase' <<<"$hook" && grep -qx 'Target = pam' <<<"$hook" &&
     grep -qx 'Exec = /etc/greetd/caelestia-greeter/greetd-pam' <<<"$hook"; } || fail "the PAM hook: $hook"
 echo "ok greeter-pam"

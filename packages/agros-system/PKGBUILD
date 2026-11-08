@@ -1,0 +1,32 @@
+# Maintainer: Filipe Agra
+# AgrOS's system parts: the update at every boot (downloaded at boot, installed at shutdown), pacman's hooks that keep
+# each user's Caelestia overlay, hyprbars and Hyprland config check in step with updates, Bluetooth back on after sleep,
+# the desktop shell at normal CPU priority, and the keyring unlocked with the login password
+pkgname=agros-system
+pkgver=0
+pkgrel=1
+pkgdesc='AgrOS system parts: boot-time updates, per-user pacman hooks, Bluetooth resume, ananicy rule, keyring'
+arch=('any')
+url='https://github.com/CrimzoAgra/agros'
+license=('GPL-3.0-or-later')
+depends=('agros-scripts' 'pacman-contrib' 'bluez' 'bluez-utils' 'gnome-keyring' 'libsecret' 'sudo' 'curl' 'flatpak')
+optdepends=('snapper: a snapshot before each update' 'ananicy-cpp: the shell rule')
+install=agros-system.install
+_root=$(realpath "${startdir}/../..")
+
+pkgver() {
+    cd "$_root" && printf 'r%s.%s' "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+package() {
+    cd "$startdir"
+    install -Dm755 auto-update "$pkgdir/usr/lib/agros/auto-update"
+    install -Dm644 -t "$pkgdir/usr/lib/systemd/system" auto-update.service auto-update-install.service
+    local t
+    for t in poweroff reboot halt kexec; do
+        install -Dm644 auto-update-timeout.conf "$pkgdir/usr/lib/systemd/system/$t.target.d/agros-auto-update.conf"
+    done
+    install -Dm644 -t "$pkgdir/usr/share/libalpm/hooks" agros-*.hook
+    install -Dm755 "$_root/system/bluetooth-resume" "$pkgdir/usr/lib/systemd/system-sleep/agros-bluetooth-resume"
+    install -Dm644 "$_root/system/ananicy/dotfiles.rules" "$pkgdir/etc/ananicy.d/99-agros/agros.rules"
+}

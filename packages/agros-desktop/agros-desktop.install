@@ -1,0 +1,5 @@
+post_install() {
+    # Printing started on demand (when something prints or Print Settings opens); Flathub for the system's Flatpaks
+    systemctl enable cups.socket >/dev/null 2>&1 || true
+    flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo >/dev/null 2>&1 || true
+}

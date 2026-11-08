@@ -1,0 +1,13 @@
+[Unit]
+Description=AgrOS first login: per-user app setup (wallpaper, Flatpaks, VSCodium, Claude Code), then your accounts
+After=graphical-session.target
+PartOf=graphical-session.target
+ConditionPathExists=!%S/agros/done-vscodium
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/agros-welcome
+TimeoutStartSec=1h
+
+[Install]
+WantedBy=graphical-session.target

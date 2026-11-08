@@ -24,9 +24,7 @@ for text, want in (("on", True), ("on\n", True), ("off", False), ("", False), ("
 os.remove(cs.STATE)
 assert cs.saved_on() is False, "no saved position read as on"
 P
-# shellcheck source=/dev/null  # (system/render.sh)
-source "$here/system/render.sh"
-rule=$(heredoc "$c/install.sh" /etc/udev/rules.d/90-camera-switch.rules | grep -o "RUN+=\"[^\"]*\"")
+rule=$(grep -o "RUN+=\"[^\"]*\"" "$here/packages/agros-camera-switch/90-agros-camera-switch.rules")
 sh_cmd=${rule#*-c \'}; sh_cmd=${sh_cmd%\'\"}
 for text in on off "" garbage; do
     printf '%s' "$text" >"$t/udev-state"; : >"$t/authorized"

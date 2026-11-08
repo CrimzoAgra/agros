@@ -1,0 +1,8 @@
+#!/bin/sh
+# Puts back greetd's text login (the Caelestia login screen not used), and restarts the login service.
+# Back to the Caelestia one: sudo pacman -S agros-greeter (its install points greetd at it again)
+[ "$(id -u)" -eq 0 ] || { echo "Run: sudo login-reset"; exit 1; }
+printf '[terminal]\nvt = 1\n\n[default_session]\ncommand = "agreety --cmd hyprland-session"\nuser = "greeter"\n' >/etc/greetd/config.toml.new
+# (beside it, then renamed over it: cut off midway, never half a file greetd can't start from)
+chmod 644 /etc/greetd/config.toml.new && mv /etc/greetd/config.toml.new /etc/greetd/config.toml
+systemctl restart greetd

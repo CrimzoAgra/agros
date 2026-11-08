@@ -1,0 +1,16 @@
+# AUR packages AgrOS builds into its own repo ([agros]), with the AUR packages they need. Only ones that may be passed
+# on: VMware Workstation isn't here (its license forbids it; agros-welcome --system builds it on your machine).
+quickshell-git
+caelestia-cli
+caelestia-shell
+ttf-rubik-vf
+hyprland-plugin-hyprbars
+qtengine
+darkly-bin
+papirus-folders
+equibop-bin
+spicetify-cli
+spicetify-marketplace-bin
+python-trayer-git
+boxflat-git
+polychromatic

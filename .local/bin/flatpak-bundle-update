@@ -3,7 +3,7 @@
 # to update from, from the GitHub releases their metadata links to (update-apps and the boot-time auto-update run it).
 #   flatpak-bundle-update           update them
 #   flatpak-bundle-update --check   only list the ones with a newer version ("<app id>: update available (<old> -> <new>)")
-#   flatpak-bundle-update --install <owner/repo>   install one for the user from its latest release (setup.sh)
+#   flatpak-bundle-update --install <owner/repo>   install one for the user from its latest release (agros-welcome)
 #   flatpak-bundle-update --fetch <dir>              only download the updates' files into dir (listed in dir/fetched)
 #   flatpak-bundle-update --install-fetched <dir>    reinstall from those (the boot's update: it holds sleep and power
 #                                                    off as root around this step alone, logind refusing it to a user

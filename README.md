@@ -5,7 +5,7 @@ AgrOS is a whole desktop installed in one go, on top of CachyOS. You get Hyprlan
 Caelestia-style login screen. It comes with fixes for games, tray apps and the keyboard, every app below with its
 settings, and Capri, the desktop companion. It's made for two machines: a Lenovo Legion Pro 7 (Gen 10) laptop and a
 desktop (RTX 2060, external monitor). Things that depend on the hardware check for it, so the same install works on
-both. The files are laid out like `$HOME`.
+both. The files are laid out like `$HOME`; `packages/` turns them into pacman packages.
 
 **What's not in this repo:** your personal data, meaning logins, keys, your browser profile and bookmarks (they travel
 encrypted on your pen drive, see below), and copyrighted wallpapers. The default wallpaper
@@ -15,83 +15,73 @@ Laptop settings and lighting are in a separate repo: **legion-control-linux**.
 
 ## Install AgrOS
 
-1. **Boot the AgrOS ISO** (from [agros-iso](https://github.com/CrimzoAgra/agros-iso): CachyOS's installer with the
-   AgrOS step) and install as usual, connected to the internet. Hyprland is picked for you.
-2. At the end, the installer sets everything up for your user by itself. It runs every step of `setup.sh` (table
-   below) unattended, with no questions; expect it to take a while (packages are built). You don't run `setup.sh`.
-3. Reboot and log in. At your first login, AgrOS sets the wallpaper and its colours and applies the app settings,
-   then offers to restore your accounts.
-4. **The one thing you run:** plug in your pen drive and click *Restore now*, or run `agros-personal`. It brings back
-   your logins (Discord, Spotify, Nuvio, Proton VPN, Steam, Lutris's stores, Claude Code, GitHub), the login keyring
-   and your LibreWolf profile (bookmarks, passwords, extensions). Capri installs right after that, since her fork is
-   private and needs your GitHub login.
+1. **Boot the AgrOS ISO** ([agros-iso](https://github.com/CrimzoAgra/agros-iso): CachyOS's installer, with AgrOS's
+   package list) and install as usual. There's no desktop to pick: the installer installs `agros-desktop`, AgrOS's
+   meta package, from the `[agros]` repo, alongside CachyOS's base. pacman puts in exactly the final set of packages
+   in one go; nothing is installed only to be taken away again, and nothing is built during the install.
+2. Reboot and log in. At your first login, `agros-welcome` does what's per user: Caelestia's overlay, the wallpaper and
+   its colours, LibreWolf's settings, the Spotify, Nuvio and ArtCraft Flatpaks with Spicetify, VSCodium's extensions
+   and Claude Code's plugins.
+3. **The one thing you run:** its notification offers *Restore my accounts*. Plug in your pen drive and click it, or
+   run `agros-personal`. It brings back your logins (Discord, Spotify, Nuvio, Proton VPN, Steam, Lutris's stores,
+   Claude Code, GitHub), the login keyring and your LibreWolf profile (bookmarks, passwords, extensions). Capri
+   installs right after that, since her fork is private and needs your GitHub login.
 
-If the install had no network, the steps it couldn't do run by themselves at the first boot with network
-(`agros-firstboot.service`; log in `/var/log/agros-install.log`).
-
-Already on CachyOS? `sudo ~/Projects/agros/install/agros-install $USER` does the same as the installer (clone the
-repo to `~/Projects/agros` first).
+The same notification offers *Install hardware apps and VMware* (`agros-welcome --system`). It installs the apps for
+the hardware that's plugged in: Boxflat (Moza), OpenRazer + Polychromatic (Razer), Solaar (Logitech),
+OpenTabletDriver (tablets) and the Legion's camera switch. It also builds VMware Workstation from the AUR, because its
+license forbids passing it on.
 
 Before reinstalling, put this PC's accounts on the pen drive: `agros-personal --save` (encrypted with a passphrase
 you pick; never in the repo).
 
-## Contents
+Already on CachyOS or Arch: add the `[agros]` repo (below), `sudo pacman -S agros-keyring agros-desktop`, then make a
+new account (it gets AgrOS's settings from `/etc/skel`) or copy `/etc/skel` into your home.
 
-- [Install AgrOS](#install-agros)
-- [The setup steps](#the-setup-steps)
-- [Layout](#layout)
-- [Desktop Settings app](#desktop-settings-app)
-- [Desktop and Caelestia](#desktop-and-caelestia)
-- [Windows and keys](#windows-and-keys)
-- [Screens and colours](#screens-and-colours)
-- [Games](#games)
-- [Tray apps and startup](#tray-apps-and-startup)
-- [Apps](#apps)
-- [Updates and system](#updates-and-system)
-- [Laptop hardware](#laptop-hardware)
-- [Lua API (`dots`)](#lua-api-dots)
-- [Keeping it in sync](#keeping-it-in-sync)
-- [Tests](#tests)
-- [Troubleshooting](#troubleshooting)
+### How it's packaged
 
-## The setup steps
+The same structure as CachyOS, EndeavourOS or Garuda: a signed pacman repo of AgrOS's own packages, built by CI from
+this repo (`ci/build-repo.sh`, `.github/workflows/ci.yml`) and published on GitHub Pages:
 
-The installer runs these for you (`install/agros-install`). By hand, as your normal user, `./setup.sh` runs them too.
-One user per machine: the system parts (pacman's hooks, the boot's update, the login screen) serve the account they
-were set up for, and `dotfiles-check` on any other account says nothing about them.
+```ini
+[agros]
+Server = https://crimzoagra.github.io/agros/$arch
+```
 
-Made for a fresh **CachyOS Hyprland** install (GRUB or Limine boot menu, Noctalia shell by default). `setup.sh` runs
-the steps in `setup/modules/` in order, asking before each one that installs or changes the system (`files` and
-`desktop` always run; replaced files are backed up):
-
-| Step | What it does |
+| Package | What it is |
 |---|---|
-| `keyboard` | Keyboard layout (asked, the current one by default): text consoles, login screen and Hyprland all use the system's |
-| `packages` | Desktop packages: official repos via pacman, AUR via paru (installed if missing); the real Quickshell in place of CachyOS's `noctalia-qs` |
-| `caelestia` | Caelestia's own installer (`caelestia install`): the shell and its default configs (not its Spotify/VS Code parts) |
-| `apps` | GPU drivers (`chwd`), the CachyOS gaming packages and the apps below; removes CachyOS's Firefox once LibreWolf is in (its profile in `~/.mozilla` stays) |
-| `capri` | Capri, the Edgerunners 2 desktop companion (asked, yes by default; `--no-capri` leaves her out): my fork of CapriDesktop merged with its latest release, updated from the Updates app (a new release looked for at every boot) |
-| `files` | Your files into your home, over Caelestia's defaults; anything replaced is backed up to `~/.dotfiles-backup/<date>/` |
-| `desktop` | Builds the Caelestia overlay, sets the wallpaper and colours, turns off GTK apps' own window buttons, imports the LibreWolf settings and, asked (not with `--yes`), its bookmarks, installs the VSCodium extensions and Claude Code plugins |
-| `shell` | fish as your login shell |
-| `system` | With sudo: the pacman hook, the shell at normal CPU priority (ananicy rule), Bluetooth, updates at every boot, hidden boot menu, screens' best mode from boot, NVIDIA driver loaded early, the login screen and faster splash, keyring unlocked at login |
-| `hardware` | Only on matching hardware: the Legion's camera switch, Legion Control, a VMware VM's screen following its window |
-| `personal` | Only with `--personal`: your accounts back from your pen drive, else each app opened to sign in (see below) |
-| `noctalia` | Last: removes Noctalia (CachyOS's default shell and login screen), only once the Caelestia login screen is in, and its leftover apps (Dolphin, kitty, Alacritty: Thunar and foot are used instead) |
+| `agros-desktop` | The meta package: every package the desktop is made of (Hyprland, Caelestia, the apps, PipeWire with its JACK, fonts, themes). Hardware apps are optional |
+| `agros-hyprland-settings` | The settings every new account gets (`/etc/skel`): Caelestia's own configs (its dots, pinned), AgrOS's over them (everything in `.config`), launcher entries, LibreWolf settings, the wallpaper; fonts and icons system-wide |
+| `agros-scripts` | The programs in `.local/bin` and the data they use, in `/usr/lib/agros`, linked into each home (`~/.local/bin`, `~/.local/share`; `agros-links` adds new ones at login) |
+| `agros-system` | The update at every boot (downloaded at boot, installed at shutdown), pacman hooks that rebuild each user's Caelestia overlay and hyprbars and check the Hyprland config, Bluetooth after sleep, the ananicy rule, the keyring |
+| `agros-greeter` | The Caelestia-style login screen for greetd, its PAM service following the system's, `login-reset` |
+| `agros-boot` | The hidden boot menu, the faster splash with shutdown titles, screens in their best mode from boot |
+| `agros-nvidia`, `agros-camera-switch` | NVIDIA driver loaded early; the Legion's camera switch |
+| `agros-welcome` | The first-login step above |
+| `agros-keyring` | The repo's signing key |
 
-The apps, with the Windows ones they replace in brackets:
+The AUR packages AgrOS uses (`aur/packages.txt`: Quickshell, Caelestia, equibop, Spicetify, darkly, ...) are built into
+the same repo. To change AgrOS, change this repo: CI builds and publishes the packages, and pacman updates every
+machine. Settings in `/etc/skel` reach new accounts; your own home keeps what you've changed.
+
+The CI needs a repository secret, `AGROS_GPG_KEY`: the signing key, from `gpg --armor --export-secret-keys <id>`. It
+also needs GitHub Pages turned on with "GitHub Actions" as its source.
+
+### The apps
+
+With the Windows ones they replace in brackets:
 
 - CachyOS gaming packages: Proton, Wine, Steam, Lutris, MangoHud, Gamescope, GOverlay, Faugus
 - Equibop (Discord, themed with your colours)
 - Spotify (Flatpak, for your user) with Spicetify (Caelestia's theme in your colours, marketplace)
 - LibreWolf; Nuvio and ArtCraft Launcher (Flatpaks from their GitHub releases)
 - Proton VPN
-- With the device plugged in (else skipped: plug it in and run `./setup.sh --only apps`): Boxflat (Moza Pit House),
-  OpenRazer + Polychromatic (Razer Synapse), Solaar (Logitech G Hub, Logi Options+), OpenTabletDriver (tablet app)
+- With the device plugged in (`agros-welcome --system`): Boxflat (Moza Pit House), OpenRazer + Polychromatic (Razer
+  Synapse), Solaar (Logitech G Hub, Logi Options+), OpenTabletDriver (tablet app)
 - File Roller + 7-Zip (WinRAR, 7-Zip; Extract/Compress in Thunar's right-click menu)
 - VSCodium, VS Code's open-source build (with your extensions), LibreOffice (Microsoft Office), qBittorrent, AntiMicroX (JoyToKey)
-- VMware Workstation (the AUR package: its installer from a copy on archive.org, as Broadcom gives it only to
-  signed-in users; checked against the package's checksum)
+- VMware Workstation (`agros-welcome --system`: the AUR package, its installer from a copy on archive.org, as Broadcom
+  gives it only to signed-in users; checked against the package's checksum)
 - HP Deskjet 1050 J410: HP's Linux driver (HPLIP), printing and scanning; add the printer in Print Settings once it's
   plugged in, scan with Document Scanner
 - balenaEtcher (Rufus), and Phone Link: scrcpy, your Android phone's screen on the computer (USB debugging on, phone
@@ -100,38 +90,38 @@ The apps, with the Windows ones they replace in brackets:
   [CapriDesktop](https://github.com/nunezValen/CapriDesktop), her chat on your Claude Code (see [Apps](#apps))
 - WhatsApp, Outlook, Teams and OneDrive: use the web versions
 
-Options:
+### Your accounts
 
-```sh
-./setup.sh --yes                   # yes to everything (but the bookmarks: a later run asks)
-./setup.sh --user-only             # only the steps in your home (files, desktop): no packages, no sudo
-./setup.sh --only files desktop    # only these steps
-./setup.sh --list                  # the steps
-./setup.sh --no-capri              # without Capri
-./setup.sh --save-personal         # this PC's accounts onto your pen drive (encrypted; never in the repo)
-./setup.sh --personal              # ...and at the end, your accounts back from it
-```
-
-Your accounts (`--personal`): LibreWolf's Firefox account, bookmarks, passwords, cookies and extensions; Discord
-(Equibop), Spotify, Nuvio, Proton VPN (and the login keyring they keep their keys in); Lutris's store logins; Steam's
-login and settings; Claude Code's account, settings, skills and memories (its plugins come with the desktop step); the weather widget's place.
-`--save-personal` puts them, apps closed, in `dotfiles-personal.tar.gpg` on your pen drive
-(the removable drive plugged in, mounted if it isn't, or the folder you name after it), encrypted with a passphrase you
-pick (gpg, AES-256): a lost drive gives nothing without it. `--personal` decrypts it straight into place (nothing
-unencrypted written anywhere else) and backs up what it replaces; the keyring opens with your old login password.
-Never in the repo: saved logins get past your password and 2FA, and git keeps every version. With no drive, it opens
-each app for you to sign in instead (LibreWolf's Firefox account brings bookmarks and passwords through Sync) and asks
-the weather widget's place. Save again now and then: logins expire.
+`agros-personal` covers LibreWolf's Firefox account, bookmarks, passwords, cookies and extensions; Discord (Equibop),
+Spotify, Nuvio, Proton VPN (and the login keyring they keep their keys in); Lutris's store logins; Steam's login and
+settings; Claude Code's account, settings, skills and memories; GitHub's login; and the weather widget's place.
+`agros-personal --save` puts them, apps closed, in `dotfiles-personal.tar.gpg` on your pen drive (the removable drive
+plugged in, mounted if it isn't, or the folder you name after it), encrypted with a passphrase you pick (gpg, AES-256):
+a lost drive gives nothing without it. `agros-personal` decrypts it straight into place (nothing unencrypted written
+anywhere else) and backs up what it replaces; the keyring opens with your old login password. It's never in the repo:
+saved logins get past your password and 2FA, and git keeps every version. With no drive, it opens each app for you to
+sign in instead (LibreWolf's Firefox account brings bookmarks and passwords through Sync) and asks the weather
+widget's place. Save again now and then: logins expire.
 
 Other screens get their own resolution at its fastest refresh rate; a machine's own screens go in
 `.config/caelestia/user/hosts/<hostname>.lua` (see [Screens and colours](#screens-and-colours)).
+
+## Credits and licenses
+
+AgrOS is GPL-3.0-or-later (`LICENSE`). It builds on [Caelestia](https://github.com/caelestia-dots) (GPL-3.0): its dots
+are installed as they are, and the overlay in `.local/share/caelestia-overlay` changes its shell. It also builds on
+[hyprland-plugins](https://github.com/hyprwm/hyprland-plugins)' hyprbars (BSD-3-Clause), patched by
+`.local/share/hyprbars/hyprbars.patch`, and [Lutris](https://github.com/lutris/lutris) (GPL-3.0), changed by
+`.local/share/lutris-overlay`. The Bangers font is under the SIL Open Font License 1.1 (`.local/share/fonts/OFL.txt`).
+The default wallpaper is original artwork made for AgrOS.
 
 ## Layout
 
 | Path | What's there |
 |---|---|
-| `setup.sh`, `setup/` | The installer: `lib.sh` (shared helpers) and `modules/NN-<step>.sh` |
-| `system/` | The parts installed outside your home, run with sudo (setup's `system` step) |
+| `packages/` | The PKGBUILDs of AgrOS's packages (and their system files: units, hooks, the boot update) |
+| `aur/packages.txt`, `ci/` | The AUR packages built into `[agros]`, and the script that builds the repo |
+| `system/` | Files the system packages install (Bluetooth after sleep, the boot video mode, the ananicy rule) |
 | `.config/caelestia/` | Hyprland settings (`hypr-user.lua`, `hypr-vars.lua`, `user/`) and Caelestia settings (`shell.json`) |
 | `.config/quickshell/` | The switcher, desktop widgets, Updates and Desktop Settings apps, their shared colours (`common/`), and the dock's pins |
 | `.local/share/caelestia-overlay/` | My changes to Caelestia's own code, patched in by `caelestia-overlay` |
@@ -334,7 +324,7 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
     40 px wide and the bar's full height, side by side at the right edge, no background until hovered
     (a rounded rectangle inside the button: faint white for minimise and maximise, the power button's red for close)
   - The only window buttons there are: GTK apps (LibreWolf included, and any installed later) draw none (the GTK button
-    layout, set by `setup.sh`), VSCodium's are hidden (`window.controlsStyle`); Steam, which can't turn its own off,
+    layout, set by `agros-welcome`), VSCodium's are hidden (`window.controlsStyle`); Steam, which can't turn its own off,
     gets no bar
   - None on fullscreen windows or games (the `game` tag: Proton's `steam_app_<id>`, Lutris's, gamescope's and native
     Steam games; often borderless over the whole screen)
@@ -467,9 +457,9 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
   (`.local/share/icons/hicolor/scalable/apps/vscodiumlogo.svg`).
   Claude Code's plugins and conversations are in `~/.claude`, shared by both
 - **`.local/bin/claude`**: Claude Code in the terminal (the CLI inside the editor's extension; without it, the next `claude` on PATH), for what the extension
-  can't do, like `/plugin`. Its plugins (installed by setup's `desktop` step, `CLAUDE_PLUGINS` in
-  `setup/modules/60-desktop.sh`): [ponytail](https://github.com/DietrichGebert/ponytail) (minimal code; needs
-  Node.js) and Addy Osmani's [agent-skills](https://github.com/addyosmani/agent-skills), each at its repo's latest version (not pinned: what they are when setup runs). `.local/bin/claude-notify`: a notification when it finishes an answer (its Stop hook, added to `~/.claude/settings.json` by the same step)
+  can't do, like `/plugin`. Its plugins (installed by `agros-welcome`, `CLAUDE_PLUGINS` in
+  `.local/bin/agros-welcome`): [ponytail](https://github.com/DietrichGebert/ponytail) (minimal code; needs
+  Node.js) and Addy Osmani's [agent-skills](https://github.com/addyosmani/agent-skills), each at its repo's latest version (not pinned: what they are at your first login). `.local/bin/claude-notify`: a notification when it finishes an answer (its Stop hook, added to `~/.claude/settings.json` by `agros-welcome` too)
 - **`.local/share/firefox/`**: LibreWolf bookmarks (toolbar, `bookmarks.html`, Firefox's format) and the settings Firefox Sync doesn't
   carry (`settings.js`: privacy, new tab, theme, toolbar layout, sidebar; add a `user_pref` line to keep another),
   the Lagoon theme with the Linux system theme off (a new profile gets Lagoon installed from addons.mozilla.org at setup),
@@ -527,31 +517,29 @@ step asks for each).
 - **`.local/bin/update-apps`**: updates everything (system and AUR apps, Flatpaks, AppImages), like at boot. `--list` is what the Updates app shows; every 6 hours (`update-check.timer`) it checks, and when
   updates are waiting a notification's "Update now" opens the Updates app and starts. VSCodium's own updater (which
   only opens the website) is off
-- **`system/auto-update-setup.sh`**: updates everything at every boot: Flatpaks (system-wide and yours) and AppImages
+- **The boot update** (`agros-system`: `packages/agros-system/auto-update`, for every account): updates everything at every boot: Flatpaks (system-wide and yours) and AppImages
   then (Capri's new release only looked for: `capri-update --check`), and the system, kernel and CachyOS gaming packages downloaded then and installed at shutdown, after a Snapper
   snapshot (installed under the running session, a new NVIDIA driver or kernel broke games and USB devices until a
   reboot). AUR apps and Capri aren't built at boot: they wait until you start an update (their build scripts can change under you). Run in a terminal, `update-apps` shows each AUR package's build-script changes for review first; the Updates app's "Update all" builds them without that review (it lists which ones first, in its log; it asks for your password in a
   dialog), which also rebuilds Quickshell after a Qt update. Log: `/var/log/auto-update.log`; `dotfiles-check` says an install at shutdown that failed or was held back (until one goes through), and 3 shutdowns in a row with nothing installed, with the last one's reason (the boot's download didn't finish: only a finished one is installed; something else using pacman still held its lock; a soft reboot, which keeps the kernel running). An install cut off has pacman's lists put back, and its lock removed, at the next boot or install. Its download stops after 2 h; the install has 30 min (shutdown's own limit is made 45 min for it); `paccache.timer` keeps pacman's cache from growing for good
-- **`system/boot-menu.sh`**: hidden boot menu (GRUB or Limine): straight into CachyOS, Esc in the first second shows
+- **`agros-boot`**: hidden boot menu (GRUB or Limine): straight into CachyOS, Esc in the first second shows
   the menu (Windows and snapshots listed). No motherboard wait before the boot loader (`efibootmgr -t 0`; F11 still
   opens its boot menu)
-- **`system/boot-video-mode.sh`**: no "no video" between the login screen and the desktop. Installs
-  `system/boot-video-mode`, which at every boot gives the kernel console each connected screen's best mode as a
+- **`agros-boot`** also: no "no video" between the login screen and the desktop. `system/boot-video-mode` at every boot gives the kernel console each connected screen's best mode as a
   `video=` boot option (Limine or GRUB), and only rebuilds the boot entries when the screens changed
-- **`system/nvidia-early.sh`**: loads the NVIDIA driver from the start of the boot (in the initramfs, which CachyOS's
+- **`agros-nvidia`**: loads the NVIDIA driver from the start of the boot (in the initramfs, which CachyOS's
   `chwd` leaves it out of): about 2 s sooner, with the boot splash on it
-- **`system/keyring-setup.sh`**: unlocks the passwords keyring with your login password (no keyring prompts from
+- **`agros-greeter`** and **`agros-system`**: unlock the passwords keyring with your login password (no keyring prompts from
   Proton VPN, Equibop...)
-- **`system/bluetooth-setup.sh`**: Bluetooth on at boot (`AutoEnable=true`) and after sleep (`system/bluetooth-resume`,
+- **`agros-system`**: Bluetooth on at boot and after sleep (`system/bluetooth-resume`,
   a systemd sleep hook: waking resets the adapter, which comes back off)
-- **`system/pacman-hooks/`** (setup fills in your user and installs them in `/etc/pacman.d/hooks/`):
-  `caelestia-overlay.hook.in` re-applies the overlay after every `caelestia-shell` update; `hyprbars-prebuild.hook.in`
-  builds the title bar plugin for a new Hyprland (or a library its plugins hang on) straight away;
-  `hypr-config-check.hook.in` checks the Hyprland config against a new Hyprland (`hypr-config-check`, its errors said
-  by `dotfiles-check`). `system/boot-menu.sh` adds `grub-quiet.hook` (GRUB's loading messages hidden again after each
-  GRUB update)
-- **`.local/share/boot-tweaks/`**: boot and shutdown screens, and installs the login screen: faster Plymouth splash,
-  boot/shutdown text hidden, "Shutting Down..." and "Restarting..." in the system language
+- **pacman hooks** (`agros-system`, for every account through `agros-each-user`): the Caelestia overlay re-applied after
+  every `caelestia-shell` update; the title bar plugin built for a new Hyprland (or a library its plugins hang on)
+  straight away; the Hyprland config checked against a new Hyprland (`hypr-config-check`, its errors said by
+  `dotfiles-check`). `agros-boot` adds one that hides GRUB's loading messages again after each GRUB update, and one
+  that remakes the faster splash after a CachyOS splash update
+- **The splash** (`agros-boot`): the CachyOS animation without its closing animation, boot/shutdown text hidden,
+  "Shutting Down..." and "Restarting..." in the system language
 
 ## Laptop hardware
 
@@ -592,21 +580,21 @@ first and clone your fork. Your bookmarks and the new tab's picture are never ex
 travel in your LibreWolf profile on the pen drive.
 
 After changing settings, run `dotfiles-sync` (`-n` to see what changed first; `add <file>` to keep a new file). It
-copies your current settings into the repo (`$DOTFILES_DIR`, default the folder setup ran from, else `~/Projects/dotfiles`; Legion Control into
+copies your current settings into the repo (`$DOTFILES_DIR`, default `~/Projects/agros`; Legion Control into
 `$LEGION_CONTROL_DIR`), commits and pushes. Only what it copied, or what matches your copy at home,
 is committed: a file you're editing in the repo itself (newer than yours, said as skipped) and any other change there are
 left out, set aside for the pull and put back after (one that clashes with what was pulled stays in `git stash`, and
 the sync says it failed).
 
-After pulling changes made elsewhere, copy them into your home first (`./setup.sh --only files desktop`), or the next
-`dotfiles-sync` skips the files the repo has newer (and says so) until you do. After changing anything in `system/` or the login screen,
-run its script again with sudo: those parts live outside your home, so `dotfiles-sync` doesn't carry them.
+After pulling changes made elsewhere, copy the ones you want into your home first, or the next `dotfiles-sync` skips
+the files the repo has newer (and says so) until you do. Changes to `packages/`, `system/` or the login screen reach
+the system as package updates: push them, CI publishes the new packages, and the next update installs them.
 
 ## Tests
 
 `tests/run.sh` runs them all (`tests/run.sh lutris-overlay` just one), each in a throwaway home, so nothing of yours is
 touched. Run it after changing a script, and after Caelestia, Lutris or Hyprland updates: they check that the
-Caelestia and Lutris changes and the hyprbars patch still fit, besides the setup's file copy, the
+Caelestia and Lutris changes and the hyprbars patch still fit, besides the boot update, the account restore, the
 bookmarks export, dotfiles-sync not undoing pulled changes, the settings file Lua reads, the login screen's theme,
 lutris-covers' cover checks and the boot video mode.
 
@@ -624,4 +612,5 @@ lutris-covers' cover checks and the boot video mode.
   version written beside the ones you have as `.new`) and checks the config. Not `caelestia update`: its own system
   update skips the Updates app's Qt rebuild, and a new Qt leaves the shell unable to start
 - **No title bar highlight**: see `~/.cache/hyprbars-build.log`, or run `hyprbars-build`
-- **A setup step failed**: run it again on its own, e.g. `./setup.sh --only apps`
+- **A first-login step failed**: `agros-welcome` runs again at the next login (or run it yourself); its log is
+  `~/.local/state/agros/welcome.log`

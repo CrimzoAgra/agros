@@ -97,7 +97,7 @@ read -r skips since skipwhy 2>/dev/null <"$au/skipped"
 # pacman's own lock with nothing running that takes it (one cut off: a crash, a power cut): every install and update
 # fails on it, the one at shutdown too. What takes it: pacman (paru, yay and the shutdown install run it) and the
 # programs built on its library (pamac's daemon, PackageKit's). pacman-key and paccache don't. (The one list of them,
-# and lock_holder: system/auto-update-setup.sh writes both into the boot's update too)
+# and lock_holder: packages/agros-system/auto-update has the same two: tests/auto-update-install.sh checks they match)
 pacman_holders='pacman|paru|yay|pamac|pamac-daemon|packagekitd|octopi-helper'
 # lock_holder: one of them running that may hold pacman's lock ("<pid> <its command>"; exit 1: none). Not pacman on
 # other lists (--dbpath elsewhere: checkupdates', the boot's download) nor one only querying (-Q..., paru -Qua)
@@ -146,80 +146,7 @@ for s in game-focus tray-keeper; do
     ((n > 0)) && problems+=("$s logged $n error(s) since it started: $(grep -E '^[A-Za-z]*Error' <<<"$log" | tail -1)")
 done
 
-# System files setup installed that aren't the repo's any more (the repo changed since): that step run again. Each
-# compared by content with what the step would write now, rendered as it does (system/render.sh), so a fresh clone or
-# checkout of the same files says nothing. Only those that are installed (each is a choice in setup, or hardware
-# there); pacman's hooks also when one of them is missing. ($root: a stand-in for / in the tests)
-# Where setup ran from (it records it), while that is still a repo
-rec=$(cat "$HOME/.local/state/dotfiles-repo" 2>/dev/null) && [[ -e $rec/.git ]] || rec=$HOME/Projects/dotfiles
-repo=${DOTFILES_DIR:-$rec}
-root=${DOTFILES_CHECK_ROOT:-}
-stale=() steps=()
-# old <name> <step>: that one isn't the repo's
-old() { stale+=("$1"); [[ " ${steps[*]} " == *" $2 "* ]] || steps+=("$2"); }
-# differs <installed> <command...>: the file isn't what the command writes
-differs() { local f=$1; shift; ! "$@" 2>/dev/null | cmp -s - "$f"; }
-me=$(id -un)
-hooks=$root/etc/pacman.d/hooks
-# Whose they are: setup is for one user per machine, and writes pacman's hooks and the boot's update for the account
-# that ran it (from that account's repo). Another account's login says nothing about them: running setup there would
-# only move them to it, and the first account would then be told. Read from what's installed (the hooks' runuser, else
-# the boot's update's sudo -u); nothing found, compared as this account's
-owner=$(sed -n 's|^Exec = /usr/bin/runuser -u \([^ ]*\) -- .*|\1|p' "$hooks"/*.hook 2>/dev/null | head -1)
-[[ -n $owner ]] || owner=$(sed -n 's|.* sudo -u "\([^"]*\)" -H .*|\1|p' "$root/usr/local/bin/auto-update" 2>/dev/null | head -1)
-# (no repo there, e.g. cloned elsewhere without DOTFILES_DIR: nothing to compare with, not everything "older")
-if [[ -f $repo/system/render.sh && ${owner:-$me} == "$me" ]]; then
-    # shellcheck source=/dev/null  # (system/render.sh)
-    source "$repo/system/render.sh"
-    myhome=$(getent passwd "$me" | cut -d: -f6)
-    [[ -d $root/etc/ananicy.d && -e $repo/system/ananicy/dotfiles.rules ]] &&
-        ! cmp -s "$repo/system/ananicy/dotfiles.rules" "$root/etc/ananicy.d/99-dotfiles/dotfiles.rules" && old ananicy system
-    b=$root/usr/local/lib/boot-video-mode
-    [[ -e $b/boot-video-mode ]] && { ! cmp -s "$repo/system/boot-video-mode" "$b/boot-video-mode" ||
-        ! cmp -s "$repo/.local/share/caelestia-greeter/screenmode.py" "$b/screenmode.py"; } && old boot-video-mode system
-    # The login screen: its run script, login-reset, its PAM hook (written by install.sh) and the files it copies; its
-    # PAM service as greetd-pam would make it now from the system's (the keyring's lines aside): one the hook didn't
-    # make again after the system's changed, or that can't be made any more
-    g=$root/etc/greetd/caelestia-greeter i=$repo/.local/share/caelestia-greeter
-    # shellcheck disable=SC2016  # (install.sh's own target, as written there)
-    [[ -e $g/run ]] && { differs "$g/run" heredoc "$i/install.sh" '"$dst/run.new"' ||
-        differs "$root/usr/local/bin/login-reset" heredoc "$i/install.sh" /usr/local/bin/login-reset.new ||
-        differs "$root/etc/pacman.d/hooks/caelestia-greeter-pam.hook" heredoc "$i/install.sh" /etc/pacman.d/hooks/caelestia-greeter-pam.hook ||
-        ! cmp -s <(grep -v pam_gnome_keyring "$root/etc/pam.d/greetd" 2>/dev/null) \
-            <(PAM_DIR=$root/etc/pam.d GREETD_PAM_TEMPLATE=$i/greetd.pam "$i/greetd-pam" --print 2>/dev/null) ||
-        for f in shell.qml best-mode make-theme.sh screenmode.py greetd-pam greetd.pam; do ! cmp -s "$i/$f" "$g/$f" && break; false; done; } &&
-        old login-screen system
-    [[ -e $root/usr/lib/systemd/system-sleep/bluetooth-resume ]] &&
-        ! cmp -s "$repo/system/bluetooth-resume" "$root/usr/lib/systemd/system-sleep/bluetooth-resume" && old bluetooth system
-    # (the script and its two units: the boot's download, the install at shutdown)
-    a=$repo/system/auto-update-setup.sh u=$root/etc/systemd/system
-    [[ -e $root/usr/local/bin/auto-update ]] && { differs "$root/usr/local/bin/auto-update" render_auto_update "$repo" "$me" "$myhome" ||
-        differs "$u/auto-update.service" heredoc "$a" /etc/systemd/system/auto-update.service ||
-        differs "$u/auto-update-install.service" heredoc "$a" /etc/systemd/system/auto-update-install.service; } &&
-        old auto-update system
-    # pacman's hooks: once the system step put one in, every template's, as it renders them (a hook added since: missing)
-    if compgen -G "$hooks/*.hook" >/dev/null; then
-        for in in "$repo"/system/pacman-hooks/*.hook.in; do
-            h=$hooks/$(basename "$in" .in)
-            if [[ ! -e $h ]] || differs "$h" render_hook "$in" "$me" "$myhome"; then old pacman-hooks system; break; fi
-        done
-    fi
-    [[ -e $hooks/grub-quiet.hook ]] && differs "$hooks/grub-quiet.hook" grub_quiet_hook && old boot-menu system
-    # The keyring unlocked at login (greetd's PAM) and its password changed with yours (passwd's): the second came later
-    [[ -f $root/etc/pam.d/passwd ]] && grep -qs pam_gnome_keyring "$root/etc/pam.d/greetd" &&
-        ! grep -qs pam_gnome_keyring "$root/etc/pam.d/passwd" && old keyring system
-    # Only where they apply: installed with an NVIDIA driver, on the Legion with its camera switch
-    n=$root/etc/mkinitcpio.conf.d/90-nvidia-early.conf
-    [[ -e $n ]] && differs "$n" heredoc "$repo/system/nvidia-early.sh" /etc/mkinitcpio.conf.d/90-nvidia-early.conf &&
-        old nvidia-early system
-    c=$repo/.local/share/camera-switch
-    [[ -e $root/usr/local/bin/camera-switchd ]] && { ! cmp -s "$c/camera-switchd" "$root/usr/local/bin/camera-switchd" ||
-        differs "$root/etc/systemd/system/camera-switch.service" heredoc "$c/install.sh" /etc/systemd/system/camera-switch.service ||
-        differs "$root/etc/udev/rules.d/90-camera-switch.rules" heredoc "$c/install.sh" /etc/udev/rules.d/90-camera-switch.rules; } &&
-        old camera-switch hardware
-fi
-((${#stale[@]})) &&
-    problems+=("System files not the repo's any more (${stale[*]}): run ./setup.sh --only ${steps[*]} in $repo")
+# (The system's files are AgrOS's packages' own: pacman keeps them as the packages have them)
 
 # Notes (not problems: exit 0 all the same); as a notification, low urgency, each new version once
 if ((${#notes[@]})); then

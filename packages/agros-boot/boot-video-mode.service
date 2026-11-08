@@ -1,0 +1,10 @@
+[Unit]
+Description=Kernel console in each screen's best mode (from the next boot)
+After=auto-update.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/agros/boot-video-mode/boot-video-mode
+
+[Install]
+WantedBy=multi-user.target

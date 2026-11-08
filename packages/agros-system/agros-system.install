@@ -1,0 +1,20 @@
+# The services on, and the keyring's password changed with yours (passwd's PAM)
+post_install() {
+    systemctl enable bluetooth.service paccache.timer auto-update.service auto-update-install.service >/dev/null 2>&1 || true
+    # (the keyring's own user services masked: the one started at login, unlocked by PAM, is the one used)
+    systemctl --global mask gnome-keyring-daemon.service gnome-keyring-daemon.socket >/dev/null 2>&1 || true
+    if [[ -f /etc/pam.d/passwd ]] && ! grep -q pam_gnome_keyring /etc/pam.d/passwd; then
+        echo '-password   optional     pam_gnome_keyring.so' >>/etc/pam.d/passwd
+    fi
+    systemctl daemon-reload >/dev/null 2>&1 || true
+}
+
+post_upgrade() {
+    systemctl daemon-reload >/dev/null 2>&1 || true
+}
+
+pre_remove() {
+    systemctl disable --now auto-update.service auto-update-install.service >/dev/null 2>&1 || true
+    systemctl --global unmask gnome-keyring-daemon.service gnome-keyring-daemon.socket >/dev/null 2>&1 || true
+    sed -i '/^-password   optional     pam_gnome_keyring.so$/d' /etc/pam.d/passwd 2>/dev/null || true
+}

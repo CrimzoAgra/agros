@@ -1,0 +1,9 @@
+[Unit]
+Description=Link AgrOS's programs into your home (~/.local/bin, ~/.local/share)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/agros/bin/agros-links
+
+[Install]
+WantedBy=default.target

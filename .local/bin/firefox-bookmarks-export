@@ -5,7 +5,7 @@ that LibreWolf can import. Works while LibreWolf is open (it reads a copy of the
   firefox-bookmarks-export [output]   default: <the dotfiles repo>/.local/share/firefox/bookmarks.html
   firefox-bookmarks-export --profile  only print the LibreWolf profile's folder (setup and dotfiles-sync use it)
 
-setup.sh imports that file into LibreWolf on a new machine.
+(Your bookmarks travel in your LibreWolf profile on your pen drive: agros-personal.)
 """
 import configparser
 import html
@@ -23,7 +23,7 @@ try:
 except OSError:
     REPO = ""
 if not os.path.exists(f"{REPO}/.git"):  # (a file in a worktree)
-    REPO = f"{HOME}/Projects/dotfiles"
+    REPO = f"{HOME}/Projects/agros"
 REPO = os.environ.get("DOTFILES_DIR") or REPO
 OUT = sys.argv[1] if len(sys.argv) > 1 else f"{REPO}/.local/share/firefox/bookmarks.html"
 # Firefox's own default links, not worth keeping

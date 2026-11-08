@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# system/auto-update-setup.sh's /usr/local/bin/auto-update, made from the setup script with its paths moved into a
+# agros-system's auto-update (packages/agros-system/auto-update), with its paths moved into a
 # throwaway folder and pacman/snapper (and the boot half's curl, flatpak, sudo) stand-ins. The install at shutdown
 # (--install): the safety snapshot taken without DBus (at shutdown snapperd can't be started over it), a failed install
 # puts pacman's package lists back, and how it went is written down for dotfiles-check (ok, held for a new Qt, failed,
@@ -11,26 +11,30 @@
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 mkdir -p "$t/bin" "$t/pac/sync" "$t/au/db/sync"
-# The script as auto-update-setup.sh writes it (system/render.sh's render_auto_update: its heredoc, with $user, $home
-# and dotfiles-check's lock holders filled in, as dotfiles-check renders it to compare with the installed one)
-# shellcheck source=/dev/null  # (system/render.sh)
-source "$here/system/render.sh"
-[[ $(pacman_holders_of "$here") == *pacman*packagekitd* && -n $(lock_holder_of "$here") ]] ||
-    fail "dotfiles-check's pacman_holders or lock_holder not found"
-render_auto_update "$here" "$(id -un)" "$t/home" |
-    sed -e "s|/var/lib/auto-update|$t/au|g" -e "s|/var/lib/pacman|$t/pac|g" -e "s|/var/log/auto-update.log|$t/log|g" \
-        -e "s|for m in /boot |for m in $t/boot |" -e "s|/etc/grub.d/41_snapshots-btrfs|$t/grub-btrfs|g" \
-        -e "s|command -v limine-snapper-sync|command -v $t/limine-sync|; s|^\( *\)limine-snapper-sync >|\1$t/limine-sync >|" \
-        >"$t/auto-update"
-grep -q -- '--install' "$t/auto-update" || fail "auto-update not found in the setup script"
+# The script as agros-system installs it; its pacman lock holders the same as dotfiles-check's (one definition each,
+# kept alike)
+au=$here/packages/agros-system
+holders() { sed -n "s/^\( *\)pacman_holders='\([^']*\)'.*/\2/p" "$1" | head -1; }
+holder_fn() { sed -n '/^lock_holder() {$/,/^}$/p' "$1"; }
+[[ -n $(holders "$au/auto-update") && $(holders "$au/auto-update") == "$(holders "$here/.local/bin/dotfiles-check")" &&
+    $(holder_fn "$au/auto-update") == "$(holder_fn "$here/.local/bin/dotfiles-check")" ]] ||
+    fail "auto-update's pacman_holders or lock_holder not dotfiles-check's"
+# (the AgrOS users: just this one, its home here)
+printf '#!/bin/sh\necho %s\n' "$(id -un)" >"$t/bin/agros-each-user"; chmod +x "$t/bin/agros-each-user"
+sed -e "s|/var/lib/auto-update|$t/au|g" -e "s|/var/lib/pacman|$t/pac|g" -e "s|/var/log/auto-update.log|$t/log|g" \
+    -e "s|for m in /boot |for m in $t/boot |" -e "s|/etc/grub.d/41_snapshots-btrfs|$t/grub-btrfs|g" \
+    -e "s|command -v limine-snapper-sync|command -v $t/limine-sync|; s|^\( *\)limine-snapper-sync >|\1$t/limine-sync >|" \
+    -e "s|\${AGROS_EACH_USER:-/usr/lib/agros/bin/agros-each-user}|$t/bin/agros-each-user|" \
+    "$au/auto-update" >"$t/auto-update"
+grep -q -- '--install' "$t/auto-update" || fail "auto-update has no --install"
 # (the script itself checked: nothing else reads it before it runs at boot and shutdown)
 bash -n "$t/auto-update" || fail "the generated auto-update doesn't parse"
 if command -v shellcheck >/dev/null; then
     out=$(shellcheck -s bash "$t/auto-update") || fail "shellcheck on the generated auto-update: $out"
 fi
 # The boot's download (only that: the install is at shutdown) holds off neither power off nor sleep
-unit=$(heredoc "$here/system/auto-update-setup.sh" /etc/systemd/system/auto-update.service)
-[[ $(grep '^ExecStart=' <<<"$unit") == "ExecStart=/usr/local/bin/auto-update" ]] ||
+unit=$(cat "$au/auto-update.service")
+[[ $(grep '^ExecStart=' <<<"$unit") == "ExecStart=/usr/lib/agros/auto-update" ]] ||
     fail "auto-update.service doesn't start the download by itself: $(grep '^ExecStart=' <<<"$unit")"
 grep -q 'systemd-inhibit' <<<"$unit" && fail "the boot's download blocks shutdown and sleep (systemd-inhibit)"
 # Flatpaks from a file at boot: downloaded with nothing held, then reinstalled with sleep and power off held by root
@@ -41,14 +45,12 @@ grep -q 'systemd-inhibit' <<<"$unit" && fail "the boot's download blocks shutdow
     grep -B2 -- '--install-fetched "$fetched"' "$t/auto-update" | grep -q '^ *timeout 30m systemd-inhibit --what=sleep:shutdown --mode=block '; } ||
     fail "the boot's Flatpak reinstall not held by root around that step alone: $(grep -n -A6 'Those from a file' "$t/auto-update")"
 # Shutdown's own limit (the targets' JobTimeoutSec) longer than the install's (TimeoutStopSec), so it can't cut it off
-stop=$(sed -n 's/^TimeoutStopSec=\([0-9]*\)min$/\1/p' "$here/system/auto-update-setup.sh")
-job=$(grep -o 'JobTimeoutSec=[0-9]*min' "$here/system/auto-update-setup.sh" | grep -o '[0-9]*')
+stop=$(sed -n 's/^TimeoutStopSec=\([0-9]*\)min$/\1/p' "$au/auto-update-install.service")
+job=$(grep -o 'JobTimeoutSec=[0-9]*min' "$au/auto-update-timeout.conf" | grep -o '[0-9]*')
 { [[ -n $stop && -n $job ]] && ((job > stop)); } || fail "shutdown's limit ($job min) not longer than the install's ($stop min)"
 # The install at shutdown after every user session (Hyprland, the shell, an Updates run's pacman): stopped in the
 # reverse order, so before systemd-user-sessions (and the boot's download), after the network (still up for hooks)
-# shellcheck source=/dev/null  # (system/render.sh)
-source "$here/system/render.sh"
-unit=$(heredoc "$here/system/auto-update-setup.sh" /etc/systemd/system/auto-update-install.service)
+unit=$(cat "$au/auto-update-install.service")
 { grep -qxE 'Before=.*\bsystemd-user-sessions\.service\b.*' <<<"$unit" && grep -qxE 'Before=.*\bauto-update\.service\b.*' <<<"$unit" &&
     grep -qxE 'After=.*\bnetwork\.target\b.*' <<<"$unit" &&
     # (nor on /boot's mount: before systemd-user-sessions, the login screen waited on a slow boot partition)

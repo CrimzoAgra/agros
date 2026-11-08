@@ -1,0 +1,3 @@
+_initramfs() { if command -v limine-mkinitcpio >/dev/null; then limine-mkinitcpio; else mkinitcpio -P; fi >/dev/null 2>&1 || true; }
+post_install() { _initramfs; }
+post_remove() { _initramfs; }

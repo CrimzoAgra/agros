@@ -1,0 +1,35 @@
+# Maintainer: Filipe Agra
+# A faster, cleaner boot: the boot menu hidden (Esc shows it; Windows and snapshots listed), the CachyOS splash without
+# its closing animation (and with shutdown/restart titles), the console in each screen's best mode from boot
+pkgname=agros-boot
+pkgver=0
+pkgrel=1
+pkgdesc='AgrOS boot: hidden boot menu, faster splash, screens in their best mode from boot'
+arch=('any')
+url='https://github.com/CrimzoAgra/agros'
+license=('GPL-3.0-or-later')
+depends=('plymouth' 'noto-fonts' 'os-prober' 'ntfs-3g' 'v4l-utils' 'python' 'efibootmgr' 'mkinitcpio')
+optdepends=('snapper: snapshots before updates, listed in the boot menu'
+            'snap-pac: snapshots around pacman transactions'
+            'grub-btrfs: snapshots in the GRUB menu')
+install=agros-boot.install
+_root=$(realpath "${startdir}/../..")
+
+pkgver() {
+    cd "$_root" && printf 'r%s.%s' "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+package() {
+    cd "$startdir"
+    install -Dm755 boot-menu "$pkgdir/usr/lib/agros/boot-menu"
+    install -Dm755 splash-theme "$pkgdir/usr/lib/agros/splash-theme"
+    install -Dm755 "$_root/system/boot-video-mode" "$pkgdir/usr/lib/agros/boot-video-mode/boot-video-mode"
+    install -Dm644 "$_root/.local/share/caelestia-greeter/screenmode.py" "$pkgdir/usr/lib/agros/boot-video-mode/screenmode.py"
+    install -Dm644 boot-video-mode.service "$pkgdir/usr/lib/systemd/system/boot-video-mode.service"
+    install -Dm644 -t "$pkgdir/usr/share/libalpm/hooks" agros-grub-quiet.hook agros-splash.hook
+    install -Dm644 plymouth-title-font "$pkgdir/usr/lib/initcpio/install/plymouth-title-font"
+    install -Dm644 agros-boot.tmpfiles "$pkgdir/usr/lib/tmpfiles.d/agros-boot.conf"
+    install -d "$pkgdir/usr/share/fonts"
+    ln -s noto/NotoSans-Medium.ttf "$pkgdir/usr/share/fonts/Plymouth.ttf"
+    ln -s noto/NotoSans-Bold.ttf "$pkgdir/usr/share/fonts/Plymouth-bold.ttf"
+}

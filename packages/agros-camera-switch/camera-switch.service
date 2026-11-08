@@ -1,0 +1,11 @@
+[Unit]
+Description=Physical camera switch (turns the camera off/on like on Windows)
+After=systemd-udevd.service
+
+[Service]
+ExecStart=/usr/lib/agros/camera-switchd
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

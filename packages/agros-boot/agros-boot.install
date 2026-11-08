@@ -1,0 +1,17 @@
+post_install() {
+    /usr/lib/agros/boot-menu || echo "agros-boot: the boot menu left as it was"
+    systemctl enable boot-video-mode.service >/dev/null 2>&1 || true
+    /usr/lib/agros/splash-theme || echo "agros-boot: the splash left as it was"
+}
+
+post_upgrade() {
+    systemctl daemon-reload >/dev/null 2>&1 || true
+}
+
+pre_remove() {
+    systemctl disable boot-video-mode.service >/dev/null 2>&1 || true
+    [[ $(plymouth-set-default-theme 2>/dev/null) == cachyos-bootanimation-fast ]] &&
+        plymouth-set-default-theme cachyos-bootanimation 2>/dev/null
+    rm -rf /usr/share/plymouth/themes/cachyos-bootanimation-fast
+    true
+}

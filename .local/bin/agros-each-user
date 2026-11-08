@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Runs a command as each AgrOS user: regular accounts (UID 1000 and up, with a home and a login shell) whose home has
+# that command linked in ~/.local/bin (AgrOS gives every new account those links). For pacman's hooks and the boot's
+# update, which run as root and serve every user.
+#   agros-each-user <command> [args...]    the command's name in ~/.local/bin
+#   agros-each-user --list                 the users, one per line
+set -uo pipefail
+users() {
+    getent passwd | awk -F: '$3 >= 1000 && $3 < 60000 && $7 !~ /(nologin|false)$/ {print $1 ":" $6}' |
+        while IFS=: read -r u h; do [[ -d $h ]] && echo "$u:$h"; done
+}
+if [[ ${1:-} == --list ]]; then users | cut -d: -f1; exit 0; fi
+cmd=${1:?usage: agros-each-user <command> [args...]}
+shift
+rc=0
+while IFS=: read -r u h; do
+    [[ -x $h/.local/bin/$cmd ]] || continue
+    runuser -u "$u" -- env HOME="$h" USER="$u" LOGNAME="$u" XDG_RUNTIME_DIR="/run/user/$(id -u "$u")" \
+        DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$(id -u "$u")/bus" "$h/.local/bin/$cmd" "$@" || rc=1
+done < <(users)
+exit $rc

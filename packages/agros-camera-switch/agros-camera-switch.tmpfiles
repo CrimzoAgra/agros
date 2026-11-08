@@ -1,0 +1,3 @@
+# The switch's saved position, starting from "on" (the next flip sets the real one); one there is kept
+d /var/lib/camera-switch 0755 root root -
+f /var/lib/camera-switch/state 0644 root root - on

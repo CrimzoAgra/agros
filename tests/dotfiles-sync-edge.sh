@@ -40,8 +40,8 @@ if out=$(run --help); then fail "an unknown argument reported success: $out"; fi
 # No repo there (not cloned yet, DOTFILES_DIR wrong): says so, not git's error halfway through
 if out=$(DOTFILES_DIR=$t/none HOME=$home PATH=$t/bin:$PATH "$here/.local/bin/dotfiles-sync" 2>&1); then fail "no repo reported success"; fi
 [[ $out == "No dotfiles repo at $t/none"* ]] || fail "no repo: $out"
-# Where setup ran from, recorded, but that clone gone since: ~/Projects/dotfiles, not "No dotfiles repo"
-mkdir -p "$home/.local/state" "$home/Projects"; echo "$t/gone" >"$home/.local/state/dotfiles-repo"; ln -s "$repo" "$home/Projects/dotfiles"
+# Where setup ran from, recorded, but that clone gone since: ~/Projects/agros, not "No dotfiles repo"
+mkdir -p "$home/.local/state" "$home/Projects"; echo "$t/gone" >"$home/.local/state/dotfiles-repo"; ln -s "$repo" "$home/Projects/agros"
 out=$(HOME=$home LEGION_CONTROL_DIR=$t/none PATH=$t/bin:$PATH "$here/.local/bin/dotfiles-sync" -n 2>&1) || fail "a stale recorded repo: $out"
 rm -r "$home/.local/state/dotfiles-repo" "$home/Projects"
 

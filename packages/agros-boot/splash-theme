@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# The CachyOS boot animation without its closing animation (the login screen comes ~4 s sooner), with titles at
+# shutdown and restart in the system language: made from the installed CachyOS theme, set as the splash, and the boot
+# images made again. Run by agros-boot's install, and after each update of the CachyOS theme (agros-splash.hook)
+set -euo pipefail
+src=/usr/share/plymouth/themes/cachyos-bootanimation
+dst=/usr/share/plymouth/themes/cachyos-bootanimation-fast
+[[ -f $src/cachyos-bootanimation.plymouth ]] || { echo "No CachyOS boot animation: splash left as it is"; exit 0; }
+case $(sed -n 's/^LANG=\(..\).*/\1/p' /etc/locale.conf 2>/dev/null) in
+    pt) shut="A encerrar..." restart="A reiniciar..." ;;
+    es) shut="Apagando..." restart="Reiniciando..." ;;
+    fr) shut="Arrêt en cours..." restart="Redémarrage..." ;;
+    de) shut="Wird heruntergefahren..." restart="Neustart..." ;;
+    *) shut="Shutting Down..." restart="Restarting..." ;;
+esac
+mkdir -p "$dst"
+sed -e 's/^Name=cachyos-bootanimation$/Name=cachyos-bootanimation-fast/' \
+    -e '/^\[boot-up\]/,/^\[/ s/^UseEndAnimation=true/UseEndAnimation=false/' \
+    -e 's/^TitleFont=.*/TitleFont=Noto Sans Medium 26/' \
+    -e "/^\[shutdown\]\$/a _Title=$shut" -e "/^\[reboot\]\$/a _Title=$restart" \
+    "$src/cachyos-bootanimation.plymouth" >"$dst/cachyos-bootanimation-fast.plymouth"
+[[ ${1:-} == --theme-only ]] && exit 0
+plymouth-set-default-theme cachyos-bootanimation-fast
+if command -v limine-mkinitcpio >/dev/null; then limine-mkinitcpio; else mkinitcpio -P; fi

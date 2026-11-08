@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Links each AgrOS program and its data folder into your home (~/.local/bin/<name>, ~/.local/share/<folder>), where the
+# desktop's configs and scripts look for them. New accounts get them from /etc/skel; this adds ones that came with a
+# package update since. Never over a file of your own: only missing ones, and links that point into AgrOS. Run at
+# every login (agros-links.service).
+set -uo pipefail
+lib=${AGROS_LIB:-/usr/lib/agros}
+link() {  # link <target> <link>
+    if [[ -L $2 ]]; then
+        [[ $(readlink "$2") == "$lib"/* && $(readlink "$2") != "$1" ]] && ln -sfn "$1" "$2"
+        return 0
+    fi
+    [[ -e $2 ]] && return 0
+    mkdir -p "${2%/*}" && ln -s "$1" "$2"
+}
+for f in "$lib"/bin/*; do [[ -f $f ]] && link "$f" "$HOME/.local/bin/${f##*/}"; done
+for d in "$lib"/share/*/; do d=${d%/}; link "$d" "$HOME/.local/share/${d##*/}"; done
+# Links into AgrOS whose program a package update took away
+for l in "$HOME"/.local/bin/* "$HOME"/.local/share/*; do
+    [[ -L $l && $(readlink "$l") == "$lib"/* && ! -e $l ]] && rm -f "$l"
+done
+exit 0

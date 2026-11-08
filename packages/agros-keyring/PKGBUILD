@@ -1,0 +1,17 @@
+# Maintainer: Filipe Agra
+# AgrOS's signing key, so pacman trusts the [agros] repo. agros.gpg is the public key (CI exports it from the signing
+# key); agros-trusted its fingerprint
+pkgname=agros-keyring
+pkgver=1
+pkgrel=1
+pkgdesc='AgrOS repository signing key'
+arch=('any')
+url='https://github.com/CrimzoAgra/agros'
+license=('GPL-3.0-or-later')
+install=agros-keyring.install
+
+package() {
+    install -Dm644 "$startdir/agros.gpg" "$pkgdir/usr/share/pacman/keyrings/agros.gpg"
+    install -Dm644 "$startdir/agros-trusted" "$pkgdir/usr/share/pacman/keyrings/agros-trusted"
+    install -Dm644 /dev/null "$pkgdir/usr/share/pacman/keyrings/agros-revoked"
+}
