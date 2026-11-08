@@ -43,7 +43,8 @@ jobs:
     steps:
       - name: Build tools, and CachyOS's repo (what AgrOS installs on, and paru)
         run: |
-          sed -i 's/^#\[multilib\]/[multilib]/; /^\[multilib\]/{n;s/^#Include/Include/}' /etc/pacman.conf
+          # [multilib] (Steam's 32-bit libraries), as CachyOS has it on
+          grep -q '^\[multilib\]' /etc/pacman.conf || printf '\n[multilib]\nInclude = /etc/pacman.d/mirrorlist\n' >>/etc/pacman.conf
           sed -i 's/^#*DownloadUser.*/#DownloadUser = alpm/' /etc/pacman.conf
           pacman-key --init
           pacman -Syu --noconfirm --needed base-devel git sudo
