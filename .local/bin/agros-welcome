@@ -309,6 +309,8 @@ step() {
 # (the shell up first: the overlay's restart and the wallpaper talk to it)
 for _ in $(seq 60); do qs list --all 2>/dev/null | grep -q /quickshell/caelestia/ && break; sleep 1; done
 step caelestia caelestia_setup
+# The live USB (the ISO's own session): only the desktop's look, nothing downloaded, no accounts to restore
+[[ -d /run/archiso ]] && { echo "== live system: done $(date '+%F %T')"; exit 0; }
 step others others
 step librewolf librewolf_setup
 step flatpaks flatpaks

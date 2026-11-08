@@ -1,5 +1,7 @@
 # Started by update-check.timer: a notification with an "Update now" button when updates are waiting (~/.local/bin/update-apps)
 [Unit]
+# (not on the live USB)
+ConditionPathExists=!/run/archiso
 Description=Check for updates and offer to install them (~/.local/bin/update-apps --check)
 PartOf=graphical-session.target
 After=graphical-session.target
