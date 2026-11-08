@@ -25,6 +25,10 @@ end
 -- Set before the host file (a screen's own rule wins over this one whatever the order), so a mistake in that file (it
 -- stops the rest of this one) still leaves every screen on
 dots.monitor({ output = "", mode = "preferred", position = "auto", scale = "auto" })
+-- A VM's screen (Virtual-1...): 1, as it has no physical size for "auto" to go by (it took 2 in VMware)
+for _, m in ipairs(hl.get_monitors() or {}) do
+    if m.name:match("^Virtual%-") then dots.monitor({ output = m.name, mode = "preferred", position = "auto", scale = 1 }) end
+end
 
 -- This machine's own screens (user/hosts/<hostname>.lua), if it has a file. Not under pcall: a mistake in it shows as
 -- a config error
