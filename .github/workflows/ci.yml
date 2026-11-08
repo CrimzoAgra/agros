@@ -72,9 +72,10 @@ jobs:
           ci/build-repo.sh out/x86_64
       - name: Install check (agros-desktop resolves in one transaction, none of what AgrOS leaves out)
         run: |
-          printf '\n[agros]\nServer = file://%s/out/x86_64\n' "$PWD" >>/etc/pacman.conf
+          # (build-repo.sh added [agros] unchecked while building: now with signatures required, as users have it)
+          sed -i '/^\[agros\]$/,/^Server/{/^SigLevel/d}' /etc/pacman.conf
           pacman -Sy
-          pacman -S --noconfirm --print agros-desktop >/tmp/plan
+          pacman -S --noconfirm --print agros-desktop >/tmp/plan 2>&1 || { cat /tmp/plan; exit 1; }
           ! grep -E '/(noctalia[^/]*|jack2|firefox|dolphin|kitty|alacritty|cachyos-hello)-[0-9]' /tmp/plan
       - uses: actions/upload-pages-artifact@v3
         with:
