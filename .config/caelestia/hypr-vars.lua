@@ -1,5 +1,7 @@
 -- Caelestia's variables I change (~/.config/hypr/variables.lua has them all)
 local vars = {
+    -- The pointer: Bibata (Caelestia's sweet-cursors isn't installed)
+    cursorTheme = "Bibata-Modern-Ice",
     browser = "librewolf",  -- Super+W: Caelestia's is Firefox, which setup leaves out (LibreWolf instead)
     -- Sleep (Super+Shift+L, the touchpad's 4-finger swipe down): plain suspend where hibernating can't work, as on
     -- CachyOS's default zram-only swap (Caelestia's suspend-then-hibernate alone then did nothing)

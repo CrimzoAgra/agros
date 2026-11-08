@@ -4,7 +4,7 @@
 # (agros-welcome --system installs the ones for what's plugged in), as is VMware Workstation (its license forbids
 # passing it on: built from the AUR on your machine by agros-welcome --system).
 pkgname=agros-desktop
-pkgver=2
+pkgver=3
 pkgrel=1
 pkgdesc='AgrOS: Hyprland + Caelestia desktop with its apps (meta package)'
 arch=('any')
@@ -20,7 +20,8 @@ depends=(
     pipewire pipewire-pulse pipewire-alsa pipewire-audio pipewire-jack wireplumber pwvucontrol
     networkmanager bluez bluez-utils gnome-keyring polkit-gnome libsecret python-secretstorage
     # Look: GTK and Qt themes, icons, fonts
-    adw-gtk-theme papirus-icon-theme papirus-folders qtengine frameworkintegration darkly-bin qt6-wayland
+    adw-gtk-theme papirus-icon-theme papirus-folders bibata-cursor-theme-bin qtengine frameworkintegration darkly-bin
+    qt6-wayland
     noto-fonts noto-fonts-emoji noto-fonts-cjk ttf-jetbrains-mono-nerd ttf-cascadia-code-nerd
     ttf-material-symbols-variable ttf-rubik-vf
     # Shell and terminal tools
