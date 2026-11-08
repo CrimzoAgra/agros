@@ -11,9 +11,9 @@ arch=('any')
 url='https://github.com/CrimzoAgra/agros'
 license=('GPL-3.0-or-later' 'OFL-1.1')
 depends=('agros-scripts')
-# CachyOS's own fish settings put their config.fish in /etc/skel too: AgrOS's (Caelestia's) replaces them
-conflicts=('cachyos-fish-config')
-replaces=('cachyos-fish-config')
+# CachyOS's own fish and micro settings put their files in /etc/skel too: AgrOS's replace them
+conflicts=('cachyos-fish-config' 'cachyos-micro-settings')
+replaces=('cachyos-fish-config' 'cachyos-micro-settings')
 makedepends=('git')
 # Caelestia's dots (caelestia-dots/caelestia), pinned: a new commit is taken on purpose, after checking it
 _dots=01d2df329240be60148d25804690779a078c6378
