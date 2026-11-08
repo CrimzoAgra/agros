@@ -32,7 +32,9 @@ PERSONAL_PATHS=(.config/equibop .var/app/com.spotify.Client/config/spotify .var/
     # SteamGridDB's key (lutris-covers: covers for games the stores have none for)
     .config/dots/steamgriddb.key
     # GitHub's login (gh): Capri's fork is private, so capri-update needs it (installs her after a restore)
-    .config/gh/hosts.yml)
+    .config/gh/hosts.yml
+    # VSCodium's extensions' own data (their logins and settings; the extensions themselves: agros-welcome's list)
+    .config/VSCodium/User/globalStorage)
 # ...less what's only cache (downloaded again)
 PERSONAL_SKIP=(Cache "Code Cache" GPUCache DawnGraphiteCache DawnWebGPUCache Crashpad "Singleton*" equicord.asar
     Dictionaries updates)
@@ -45,12 +47,15 @@ PERSONAL_LIBREWOLF=(signedInUser.json places.sqlite favicons.sqlite logins.json 
     # (the new tab's background picture: yours, so not in the repo)
     wallpaper)
 # ...Lutris's store logins (Battle.net, Steam, GOG, Epic, EA, Ubisoft, Rockstar): .cache/lutris/.<store>.auth/.token,
-# Claude Code's skills and memories (its plugins: the desktop step), the weather widget's place (Caelestia's
-# services.weatherLocation), and Claude Code's account and settings: copied first, as Claude Code (likely running)
-# keeps writing them
+# and its lutris.net login (auth-token); the weather widget's place (Caelestia's services.weatherLocation)
 # (and each Steam account's own settings: controllers, launch options)
-PERSONAL_DIRS=(.claude/skills ".claude/projects/*/memory" ".local/share/Steam/userdata/*/config")
-PERSONAL_CLAUDE_FILES=(.claude.json .claude/.credentials.json .claude/settings.json)
+PERSONAL_DIRS=(".local/share/Steam/userdata/*/config")
+# ...Claude Code, all of it (its account, settings, sessions, memories, skills, plugins: ~/.claude and ~/.claude.json)
+# but these, remade as it runs: copied first, as Claude Code (likely running) keeps writing them
+PERSONAL_CLAUDE_SKIP=(cache shell-snapshots session-env sessions ide)
+# ...the store launchers installed in Lutris (each one's Wine folder, whole: their logins are in there, and installing
+# one again gives a signed-out one), put back as installed. Their Wine itself is downloaded by Lutris
+PERSONAL_LAUNCHERS=(epic-games-store ea-app ubisoft-connect battlenet gog-galaxy rockstar-games-launcher)
 
 # Without the drive: these opened one after the other for you to sign in
 PERSONAL_APPS=(
@@ -101,14 +106,14 @@ personal_claude_open() { pgrep -x claude >/dev/null && echo "Claude Code"; retur
 
 # agros-personal --save: your logins on this PC onto your pen drive
 personal_save() {
-    local drive open prof paths=() lw=() p f staged skip=() s
+    local drive open prof paths=() lw=() games=() p f staged skip=() s
     drive=$(personal_drive)
     [[ -n $drive ]] || { echo "No pen drive found: plug it in, or name its folder (agros-personal --save <folder>)."; return 1; }
     [[ ! -e $drive/.git ]] || { echo "Not in a git repo: your logins go on your pen drive."; return 1; }
     open=$(personal_open)
     [[ -z $open ]] || { echo "Close these first (their files are being written): $(echo $open)."; return 1; }
     for p in "${PERSONAL_PATHS[@]}"; do [[ -e $HOME/$p ]] && paths+=("$p"); done
-    for f in "$HOME"/.cache/lutris/.*.auth "$HOME"/.cache/lutris/.*.token; do [[ -f $f ]] && paths+=("${f#"$HOME"/}"); done
+    for f in "$HOME"/.cache/lutris/.*.auth "$HOME"/.cache/lutris/.*.token "$HOME"/.cache/lutris/auth-token; do [[ -f $f ]] && paths+=("${f#"$HOME"/}"); done
     for p in "${PERSONAL_DIRS[@]}"; do
         for f in "$HOME"/$p; do [[ -d $f && -n $(ls -A "$f") ]] && paths+=("${f#"$HOME"/}"); done
     done
@@ -122,16 +127,44 @@ personal_save() {
     staged=$(mktemp -d "${XDG_RUNTIME_DIR:-/tmp}/personal.XXXXXX")
     local onstage=(weather-location)
     jq -r '.services.weatherLocation // empty' "$HOME/.config/caelestia/shell.json" 2>/dev/null >"$staged/weather-location" || true
-    for f in "${PERSONAL_CLAUDE_FILES[@]}"; do
-        [[ -f $HOME/$f ]] || continue
-        mkdir -p "$staged/$(dirname "$f")"; cp -p "$HOME/$f" "$staged/$f"; onstage+=("$f")
-    done
+    if [[ -d $HOME/.claude ]]; then
+        mkdir -p "$staged/.claude"; onstage+=(.claude)
+        for f in "$HOME"/.claude/* "$HOME"/.claude/.[!.]*; do
+            [[ -e $f ]] || continue
+            for s in "${PERSONAL_CLAUDE_SKIP[@]}"; do [[ ${f##*/} == "$s" ]] && continue 2; done
+            cp -a "$f" "$staged/.claude/"
+        done
+    fi
+    [[ -f $HOME/.claude.json ]] && { cp -p "$HOME/.claude.json" "$staged/"; onstage+=(.claude.json); }
+    # the launchers: their folders and Lutris configs (to save), their Lutris entries (lutris-launchers.json, to put back)
+    if [[ -f $HOME/.local/share/lutris/pga.db ]]; then
+        mapfile -t games < <(python3 -I - "$HOME" "$staged/lutris-launchers.json" "${PERSONAL_LAUNCHERS[@]}" <<'EOF'
+import json, os, sqlite3, sys
+home, out, slugs = sys.argv[1], sys.argv[2], sys.argv[3:]
+db = sqlite3.connect(f"file:{home}/.local/share/lutris/pga.db?mode=ro", uri=True)
+db.row_factory = sqlite3.Row
+keep = []
+for r in db.execute("SELECT slug, name, installer_slug, platform, runner, directory, configpath FROM games WHERE "
+                    f"installed = 1 AND runner = 'wine' AND slug IN ({','.join('?' * len(slugs))})", slugs):
+    r = dict(r)
+    d, y = r["directory"] or "", f"{home}/.local/share/lutris/games/{r['configpath']}.yml"
+    if d.startswith(home + "/") and os.path.isdir(d) and os.path.isfile(y):  # (elsewhere: not yours to carry)
+        r["directory"] = os.path.relpath(d, home)
+        keep.append(r)
+        print(r["directory"])
+        print(os.path.relpath(y, home))
+json.dump({"home": home, "games": keep}, open(out, "w"))
+EOF
+        )
+        onstage+=(lutris-launchers.json)
+    fi
     for s in "${PERSONAL_SKIP[@]}"; do skip+=(--exclude="$s"); done
     echo "Saving to $drive/$PERSONAL_FILE. Pick a long passphrase: it's all that keeps a lost drive's finder out."
-    # three tars one after the other (your home, the profile as librewolf/, the place), straight into gpg
+    # tars one after the other (your home, the profile as librewolf/, the launchers whole, the staged), straight into gpg
     if {
         tar -C "$HOME" "${skip[@]}" -cf - "${paths[@]}"
         ((${#lw[@]})) && tar -C "$prof" "${skip[@]}" --transform 's,^,librewolf/,' -cf - "${lw[@]}"
+        ((${#games[@]})) && tar -C "$HOME" -cf - "${games[@]}"
         tar -C "$staged" -cf - "${onstage[@]}"
     } | personal_gpg --symmetric --cipher-algo AES256 --s2k-mode 3 --s2k-digest-algo SHA512 --s2k-count 65011712 \
         -o "$drive/$PERSONAL_FILE.new"; then
@@ -159,7 +192,7 @@ personal_main() {
 # Your logins back from the file on the drive, decrypted straight into place (three times: the file's list, its
 # files, the weather's place; gpg's agent asks the passphrase once)
 personal_restore() {
-    local file=$1 open prof loc name dest backup to=() shell="$HOME/.config/caelestia/shell.json"
+    local file=$1 open prof loc name dest backup meta to=() shell="$HOME/.config/caelestia/shell.json"
     open=$(personal_open; personal_claude_open)
     [[ -z $open ]] || { echo "Close these first (they'd write over what's brought back): $(echo $open)."; return 1; }
     prof=$(firefox_profile)
@@ -170,7 +203,7 @@ personal_restore() {
     # what it replaces, backed up first (as setup's files step does)
     backup="$HOME/.dotfiles-backup/$(date +%Y%m%d-%H%M%S)-personal"
     while IFS= read -r name; do
-        [[ $name == */ || $name == weather-location ]] && continue
+        [[ $name == */ || $name == weather-location || $name == lutris-launchers.json ]] && continue
         [[ $name == librewolf/* && -z $prof ]] && continue
         dest=${name/#librewolf\//${prof#"$HOME"/}/}
         # a database's journal left beside it (LibreWolf's new profile) gets replayed over the one brought back,
@@ -183,8 +216,13 @@ personal_restore() {
         mkdir -p "$backup/$(dirname "$dest")"
         cp -a "$HOME/$dest" "$backup/$dest"
     done < <(personal_gpg -d "$file" | tar -itf -)
-    personal_gpg -d "$file" | tar -C "$HOME" -ixf - "${to[@]}" --exclude=weather-location
-    loc=$(personal_gpg -d "$file" | tar -ixOf - weather-location 2>/dev/null) || loc=
+    personal_gpg -d "$file" | tar -C "$HOME" -ixf - "${to[@]}" --exclude=weather-location --exclude=lutris-launchers.json
+    # the weather's place and the launchers' Lutris entries (either may not be in it: an older save)
+    meta=$(mktemp -d "${XDG_RUNTIME_DIR:-/tmp}/personal.XXXXXX")
+    personal_gpg -d "$file" | tar -C "$meta" -ixf - weather-location lutris-launchers.json 2>/dev/null || true
+    loc=$(cat "$meta/weather-location" 2>/dev/null) || loc=
+    [[ -s $meta/lutris-launchers.json ]] && personal_launchers "$meta/lutris-launchers.json"
+    rm -rf "$meta"
     if [[ -n $loc && -f $shell ]]; then
         jq --indent 4 --arg l "$loc" '.services.weatherLocation = $l' "$shell" >"$shell.tmp" && mv "$shell.tmp" "$shell"
     fi
@@ -199,6 +237,35 @@ personal_restore() {
         "$HOME/.local/bin/capri-update" || echo "!! Capri didn't install: run capri-update"
     fi
     echo "Accounts back. Log out and in (the keyring): it opens with the password you logged in with on your old PC."
+}
+
+# The launchers brought back, installed again in Lutris: their entries (made by lutris-library, else new) marked
+# installed, in their folder here; their configs' paths moved to this home if it's named differently
+personal_launchers() {
+    python3 -I - "$HOME" "$1" <<'EOF' || echo "!! Lutris's launchers not put back: open Lutris once, then agros-personal again"
+import json, os, sqlite3, sys, time
+home, f = sys.argv[1:]
+data = json.load(open(f))
+if not data["games"]:
+    sys.exit(0)
+db_path = f"{home}/.local/share/lutris/pga.db"
+if not os.path.isfile(db_path):
+    sys.exit(1)
+db = sqlite3.connect(db_path)
+with db:
+    for g in data["games"]:
+        y = f"{home}/.local/share/lutris/games/{g['configpath']}.yml"
+        if data["home"] != home and os.path.isfile(y):
+            text = open(y).read().replace(data["home"] + "/", home + "/")
+            open(y, "w").write(text)
+        values = (g["installer_slug"], g["platform"], g["runner"], os.path.join(home, g["directory"]), g["configpath"],
+                  int(time.time()))
+        if not db.execute("UPDATE games SET installer_slug = ?, platform = ?, runner = ?, directory = ?, configpath = ?, "
+                          "installed_at = ?, installed = 1 WHERE slug = ?", (*values, g["slug"])).rowcount:
+            db.execute("INSERT INTO games (installer_slug, platform, runner, directory, configpath, installed_at, "
+                       "installed, name, slug) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)", (*values, g["name"], g["slug"]))
+print("Lutris: " + ", ".join(g["name"] for g in data["games"]) + " back, signed in")
+EOF
 }
 
 personal_sign_in() {

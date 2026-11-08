@@ -15,7 +15,10 @@ Close your apps first. It saves your logins into one file on the stick, encrypte
 that passphrase, a lost stick gives nothing away. Save again every so often, because logins expire.
 
 It covers your LibreWolf profile (bookmarks, passwords, extensions), Discord, Spotify, Nuvio, Proton VPN, Steam,
-Lutris's stores, Claude Code, GitHub and the weather widget's town.
+Lutris's stores and the launchers you installed in it (Epic, EA, Ubisoft...: they come back installed and signed in),
+VSCodium's extension data, all of Claude Code (login, settings, sessions, memories, plugins), GitHub and the weather
+widget's town. Your VSCodium extensions themselves are installed by AgrOS. With launchers installed the file is a few
+GB, so use a stick with room for it.
 
 ## Restoring them (after installing)
 
