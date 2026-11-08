@@ -3,7 +3,7 @@
 # hl API, in a throwaway home: every file compiles; the whole config loads with the settings file missing, broken or
 # odd, with and without the title bar plugin; the event handlers (windows opening, keys, screens) and the functions
 # scripts call don't error; every dots.bind / dots.setting name is in the Settings app's schema and every function in
-# the README's Lua API table exists
+# the Lua API table (docs/how-it-works.md) exists
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 command -v lua >/dev/null || { echo "skip hypr-config (no lua)"; exit 0; }
@@ -318,8 +318,8 @@ bad=$(grep -h "opaque = true" "$here"/.config/caelestia/user/*.lua | grep -v "do
 # One screen (a HiDPI laptop panel alone): the same config loads with no errors
 out=$(run_config "$good" 1 1) || fail "the config failed to load on one screen: $(tail -4 <<<"$out")"
 grep -q '^config error' <<<"$out" && fail "config errors on one screen: $(grep '^config error' <<<"$out")"
-# Every function of the README's Lua API table is there once the config has loaded
-for f in $(grep -E '^\| `[a-z_]+\(' "$here/README.md" | cut -d'|' -f2 | grep -oE '`[a-z_]+\(' | tr -d '`('); do
+# Every function of the Lua API table (docs/how-it-works.md) is there once the config has loaded
+for f in $(grep -E '^\| `[a-z_]+\(' "$here/docs/how-it-works.md" | cut -d'|' -f2 | grep -oE '`[a-z_]+\(' | tr -d '`('); do
     grep -qx "function $f" <<<"$out" || fail "dots.$f (README's Lua API) isn't defined"
 done
 # Caelestia's launcher interrupt on Super+scroll: the workspace keys take Super+scroll with two screens, and give the
