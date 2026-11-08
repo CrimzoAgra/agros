@@ -92,6 +92,7 @@ hl = {
         if blur and blur.ignore_opacity ~= nil then CONFIG["decoration.blur.ignore_opacity"] = blur.ignore_opacity end
     end,
     get_config = function(key) return CONFIG[key] end,
+    get_current_submap = function() return "" end,
     bind = function(keys, action)
         check(type(keys) == "string" and keys:match("%S"), "hl.bind: no keys: " .. tostring(keys))
         check(action ~= nil, "hl.bind: no action for " .. tostring(keys))
