@@ -1,7 +1,8 @@
 # Maintainer: Filipe Agra
 # AgrOS's system parts: the update at every boot (downloaded at boot, installed at shutdown), pacman's hooks that keep
 # each user's Caelestia overlay, hyprbars and Hyprland config check in step with updates, Bluetooth back on after sleep,
-# the desktop shell at normal CPU priority, and the keyring unlocked with the login password
+# the desktop shell at normal CPU priority, the keyring unlocked with the login password, and a VMware VM's screen
+# following its window
 pkgname=agros-system
 pkgver=r30.35da937
 pkgrel=1
@@ -12,6 +13,7 @@ license=('GPL-3.0-or-later')
 depends=('agros-scripts' 'pacman-contrib' 'bluez' 'bluez-utils' 'gnome-keyring' 'libsecret' 'sudo' 'curl' 'flatpak')
 optdepends=('snapper: a snapshot before each update' 'ananicy-cpp: the shell rule')
 install=agros-system.install
+backup=('etc/vmware-tools/tools.conf')
 _root=$(realpath "${startdir}/../..")
 
 pkgver() {
@@ -28,6 +30,7 @@ package() {
     done
     install -Dm644 -t "$pkgdir/usr/share/libalpm/hooks" agros-*.hook zz-agros-os-release.hook
     install -Dm755 agros-branding "$pkgdir/usr/share/libalpm/scripts/agros-branding"
+    install -Dm644 vmware-tools.conf "$pkgdir/etc/vmware-tools/tools.conf"
     install -Dm755 "$_root/system/bluetooth-resume" "$pkgdir/usr/lib/systemd/system-sleep/agros-bluetooth-resume"
     install -Dm644 "$_root/system/ananicy/dotfiles.rules" "$pkgdir/etc/ananicy.d/99-agros/agros.rules"
 }
