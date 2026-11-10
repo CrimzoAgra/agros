@@ -179,8 +179,15 @@ ShellRoot {
         const game = cls.match(/^steam_app_(\d+)$/);
         if (game && Quickshell.iconPath(`steam_icon_${game[1]}`, true))
             return Quickshell.iconPath(`steam_icon_${game[1]}`);
-        const entry = cls ? (DesktopEntries.byId(cls) ?? DesktopEntries.heuristicLookup(cls)) : null;
-        return Quickshell.iconPath(entry?.icon ?? "", "application-x-executable");
+        return Quickshell.iconPath((cls ? entryFor(cls) : null)?.icon ?? "", "application-x-executable");
+    }
+
+    function entryFor(cls: string): var {
+        // Quickshell's lookup misses a reverse-DNS class whose file names the short one (org.cachyos.cachyos-pi, its
+        // StartupWMClass cachyos-pi) and the other way round: the last part of each compared
+        const tail = s => (s ?? "").toLowerCase().split(".").pop();
+        return DesktopEntries.byId(cls) ?? DesktopEntries.heuristicLookup(cls) ??
+            DesktopEntries.applications.values.find(e => tail(e.id) === tail(cls) || tail(e.startupClass) === tail(cls)) ?? null;
     }
 
     GlobalShortcut {

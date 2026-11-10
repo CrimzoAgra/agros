@@ -110,7 +110,11 @@ ClippingRectangle {
         const game = id.match(/^steam_app_(\d+)$/);
         if (game)
             return DesktopEntries.applications.values.find(e => e.icon === `steam_icon_${game[1]}`) ?? null;
-        return DesktopEntries.byId(id) ?? DesktopEntries.heuristicLookup(id);
+        // Quickshell's lookup misses a reverse-DNS class whose file names the short one (org.cachyos.cachyos-pi, its
+        // StartupWMClass cachyos-pi) and the other way round: the last part of each compared
+        const tail = s => (s ?? "").toLowerCase().split(".").pop();
+        return DesktopEntries.byId(id) ?? DesktopEntries.heuristicLookup(id) ??
+            DesktopEntries.applications.values.find(e => tail(e.id) === tail(id) || tail(e.startupClass) === tail(id)) ?? null;
     }
 
     function keyFor(id: string): string {
