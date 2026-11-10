@@ -254,6 +254,9 @@ for a in themes:
     a["userDisabled"] = not a["active"]
 json.dump(d, open(path, "w"))
 EOF
+    # The add-on startup cache still names the old theme, and LibreWolf draws that one (Lagoon only listed as on):
+    # without it LibreWolf rebuilds it from extensions.json
+    rm -f "$prof/addonStartup.json.lz4"
 }
 
 # VSCodium's extensions (Claude Code's among them: its CLI is ~/.local/bin/claude), then Claude Code's plugins and its
