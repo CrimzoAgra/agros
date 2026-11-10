@@ -4,7 +4,7 @@
 # (agros-welcome --system installs the ones for what's plugged in), as is VMware Workstation (its license forbids
 # passing it on: built from the AUR on your machine by agros-welcome --system).
 pkgname=agros-desktop
-pkgver=4
+pkgver=5
 pkgrel=1
 pkgdesc='AgrOS: Hyprland + Caelestia desktop with its apps (meta package)'
 arch=('any')
@@ -26,6 +26,7 @@ depends=(
     ttf-material-symbols-variable ttf-rubik-vf
     # Shell and terminal tools
     fish foot starship eza zoxide direnv fastfetch fetch-git btop micro bat ripgrep lazygit trash-cli curl git jq
+    inotify-tools                       # grub-btrfsd (CachyOS's grub-btrfs-support turns it on without it)
     # Desktop tools the configs and scripts use
     thunar thunar-archive-plugin file-roller 7zip gnome-text-editor qview mpv zenity libnotify wl-clipboard cliphist
     grim slurp swappy brightnessctl ddcutil libqalculate ydotool xdg-user-dirs flatpak nodejs npm python
