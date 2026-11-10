@@ -47,11 +47,16 @@ end
 -- Hyprland is up, from here because this file loads before Caelestia's own start-up (hyprland/execs.lua), so this runs
 -- first and the shell starts with it: set before, it took Hyprland's own renderer down to the CPU too
 -- (agros-system's agros-vm.sh used to set it for the whole session, in every VM: Hyprland too, on the CPU)
+-- Not when Hyprland runs with the vmw-dmabuf shim (a VMware guest's own fix, never shipped: it makes Hyprland accept
+-- those buffers, so the apps stay on the GPU too)
 hl.on("hyprland.start", function()
     local f = io.open("/sys/class/drm/card0/device/vendor")
     local vendor = f and f:read("l")
     if f then f:close() end
-    if vendor == "0x15ad" then
+    local maps = io.open("/proc/self/maps")
+    local shim = maps and maps:read("a"):find("vmw-dmabuf", 1, true)
+    if maps then maps:close() end
+    if vendor == "0x15ad" and not shim then
         hl.env("LIBGL_ALWAYS_SOFTWARE", "1")
         hl.env("XWAYLAND_NO_GLAMOR", "1")
     end
