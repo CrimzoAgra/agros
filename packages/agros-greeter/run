@@ -5,9 +5,16 @@ export XDG_STATE_HOME=/var/lib/caelestia-greeter XDG_CACHE_HOME=/var/cache/caele
 export QT_WAYLAND_DISABLE_WINDOWDECORATION=1   # no title bar
 export WLR_NO_HARDWARE_CURSORS=1   # pointer drawn in the picture, so it doesn't stay on the shutdown screen
 set -a; . /etc/greetd/caelestia-greeter/env; set +a
-# Virtual GPUs (VMware's at least) can't take Qt's GPU buffers and the login screen dies: OpenGL on the CPU there
-# (Mesa's llvmpipe; Qt's own software drawing would drop the blur and shapes, which are shaders)
-systemd-detect-virt -q --vm && export LIBGL_ALWAYS_SOFTWARE=1
+# VMware (its vmwgfx driver), with agros-vmware: cage runs with its vmw-dmabuf shim, so it accepts the login screen's
+# GPU buffers and the screen draws on VMware's virtual GPU (the shim is cage's only, not the login screen's). Any other
+# virtual GPU can't take Qt's GPU buffers and the login screen dies: OpenGL on the CPU there (Mesa's llvmpipe; Qt's own
+# software drawing would drop the blur and shapes, which are shaders)
+cage_preload=
+if [ -e /sys/module/vmwgfx ] && [ -e /usr/lib/agros/vmw-dmabuf.so ]; then
+    cage_preload=/usr/lib/agros/vmw-dmabuf.so
+elif systemd-detect-virt -q --vm; then
+    export LIBGL_ALWAYS_SOFTWARE=1
+fi
 # Keyboard layout for typing the password: the system's (localectl), as Hyprland uses, variant and options too. Read at
 # each start, so a layout changed later (setup's keyboard step) applies here too
 xkb() { sed -n "s/.*\"Xkb$1\"[[:space:]]*\"\([^\"]*\)\".*/\1/p" /etc/X11/xorg.conf.d/00-keyboard.conf 2>/dev/null | head -1; }
@@ -41,7 +48,8 @@ fall_back() {
     exec agreety --cmd hyprland-session </dev/tty >/dev/tty 2>&1
 }
 # In a process group of its own: the fallback stops all of it (dbus-run-session alone would leave cage on the screen)
-setsid dbus-run-session -- cage -s -- sh -c '/etc/greetd/caelestia-greeter/best-mode; exec qs -p /etc/greetd/caelestia-greeter' &
+setsid dbus-run-session -- env ${cage_preload:+LD_PRELOAD=$cage_preload} cage -s -- \
+    sh -c 'unset LD_PRELOAD; /etc/greetd/caelestia-greeter/best-mode; exec qs -p /etc/greetd/caelestia-greeter' &
 pid=$!
 i=0
 while [ $i -lt 20 ] && [ ! -e "$ready" ] && kill -0 $pid 2>/dev/null; do
