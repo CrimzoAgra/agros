@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # In a virtual machine only (VMware, VirtualBox, QEMU): the host resizes the screen (its window resized, full screen)
-# by changing the screen's preferred mode, which Hyprland doesn't follow on its own (it keeps the mode it set). A config
-# reload applies the new one (monitors.lua's "preferred"). Started at login (user/desktop.lua); does nothing elsewhere
+# by changing the screen's preferred mode, which Hyprland doesn't follow on its own (it reads a screen's modes only when
+# it connects). A config reload applies the new one (monitors.lua sets the kernel's mode). Started at login
+# (user/desktop.lua); does nothing elsewhere
 systemd-detect-virt -vq || exit 0
 
 # Whether a connected screen's preferred mode (the first its connector lists) isn't the one Hyprland shows
