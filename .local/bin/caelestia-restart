@@ -15,7 +15,12 @@ export SHELL
 if pgrep -f com.spotify.Client >/dev/null && ! hyprctl clients -j | jq -e 'any(.[]; .class | ascii_downcase == "spotify")' >/dev/null; then
     hyprctl eval 'dots.spotify_silent_set(true)' >/dev/null
 fi
-qs -c caelestia kill >/dev/null 2>&1
+# Every Caelestia running, by its process: the one from before the overlay existed runs from
+# /etc/xdg/quickshell/caelestia, which "qs -c caelestia kill" (now the overlay's) doesn't match, and two shells
+# doubled the room the bar keeps (maximised and tiled windows' gaps)
+for pid in $(qs list --all 2>/dev/null | awk '/Process ID:/ {pid = $3} /Config path: .*\/quickshell\/caelestia\/shell\.qml$/ {print pid}'); do
+    qs kill --pid "$pid" >/dev/null 2>&1
+done
 # Until it's gone (at most 5 s): one still closing makes the new one (-n) not start at all
 for _ in $(seq 50); do qs list --all 2>/dev/null | grep -q "/quickshell/caelestia/shell.qml" || break; sleep 0.1; done
 # From home: apps opened from the launcher and dock start in Caelestia's folder (Thunar opens there)
