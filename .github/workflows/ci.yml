@@ -74,6 +74,8 @@ jobs:
           echo "$AGROS_GPG_KEY" | gpg --batch --import
           echo "GPGKEY=$(gpg --list-secret-keys --with-colons | awk -F: '$1 == "fpr" {print $10; exit}')" >>"$GITHUB_ENV"
       - name: Build the repo
+        env:
+          AGROS_PUBLISHED: https://crimzoagra.github.io/agros/x86_64
         run: |
           git config --global --add safe.directory '*'
           ci/build-repo.sh out/x86_64

@@ -4,7 +4,8 @@
 # Run in an Arch container, as root (it makes a "builder" user for makepkg):
 #   ci/build-repo.sh <out dir>           the repo in <out dir> (agros.db, agros.files, the packages)
 # Environment: GPGKEY (a key id in root's keyring: packages and the database signed with it, its public key in
-# agros-keyring), AGROS_SKIP_AUR=1 (only AgrOS's own packages)
+# agros-keyring), AGROS_SKIP_AUR=1 (only AgrOS's own packages), AGROS_PUBLISHED (the published repo's URL: a package
+# already there under the same version is kept as published)
 set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
 out=$(mkdir -p "${1:?usage: build-repo.sh <out dir>}" && cd "$1" && pwd)
@@ -92,6 +93,18 @@ for d in "$work/agros/packages/agros-keyring" "$work"/agros/packages/*/; do
     (cd "$d" && asb env PKGDEST="$out" makepkg -f --nodeps --noconfirm "${sign[@]}")
 done
 cd "$out"
+# A package whose version hasn't changed keeps the file already published, when its signature checks out: a rebuild
+# is a different file under the same name, and a copy of the old one in pacman's cache then reads as corrupted
+if [[ -n ${AGROS_PUBLISHED:-} && -n $key ]]; then
+    for f in ./*.pkg.tar.zst; do
+        f=${f#./}
+        curl -fsSL --max-time 300 -o "$work/pub" "$AGROS_PUBLISHED/$f" &&
+            curl -fsSL --max-time 60 -o "$work/pub.sig" "$AGROS_PUBLISHED/$f.sig" &&
+            asb gpg --batch --verify "$work/pub.sig" "$work/pub" 2>/dev/null || continue
+        mv -f "$work/pub" "$f" && mv -f "$work/pub.sig" "$f.sig" && chown builder: "$f" "$f.sig"
+        echo "-- $f: the published file kept"
+    done
+fi
 asb repo-add -R "${rsign[@]}" agros.db.tar.gz ./*.pkg.tar.zst
 # GitHub Pages serves no symlinks: the database's names as real files
 for f in agros.db agros.files; do
