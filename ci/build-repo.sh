@@ -87,7 +87,9 @@ SH
     asb sed -i -e "/^prepare() {/{n;r $work/calamares-labels" -e '}' PKGBUILD &&
     asb env PKGDEST="$out" makepkg -s --noconfirm "${sign[@]}")
 
-# 3. AgrOS's own packages (no dependencies installed to build them: they're files and settings), keyring first
+# 3. AgrOS's own packages (no dependencies installed to build them: they're files and settings, but for agros-vmware's
+# shim, built against libdrm), keyring first
+pacman -S --needed --noconfirm libdrm >/dev/null
 for d in "$work/agros/packages/agros-keyring" "$work"/agros/packages/*/; do
     d=${d%/}; p=${d##*/}
     [[ $p == agros-keyring && -n ${keyring_done:-} ]] && continue

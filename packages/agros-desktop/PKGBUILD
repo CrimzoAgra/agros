@@ -4,7 +4,7 @@
 # (agros-welcome --system installs the ones for what's plugged in), as is VMware Workstation (its license forbids
 # passing it on: built from the AUR on your machine by agros-welcome --system).
 pkgname=agros-desktop
-pkgver=5
+pkgver=6
 pkgrel=1
 pkgdesc='AgrOS: Hyprland + Caelestia desktop with its apps (meta package)'
 arch=('any')
@@ -13,6 +13,7 @@ license=('GPL-3.0-or-later')
 depends=(
     # AgrOS
     agros-scripts agros-hyprland-settings agros-system agros-greeter agros-boot agros-welcome
+    agros-vmware                        # in a VMware VM, the desktop on its virtual GPU (does nothing elsewhere)
     # Desktop: Hyprland, Caelestia (shell and CLI), the real Quickshell, the title bar plugin
     hyprland uwsm xdg-desktop-portal-hyprland xdg-desktop-portal-gtk quickshell-git caelestia-shell caelestia-cli
     hyprland-plugin-hyprbars hyprpicker

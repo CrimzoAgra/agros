@@ -1,0 +1,24 @@
+# Maintainer: Filipe Agra
+# In a VMware virtual machine: the desktop drawn on its virtual GPU (VMware's 3D acceleration: the host's GPU), apps
+# included. vmw-dmabuf.so (vmw-dmabuf.c) lets the compositors, Hyprland and the login screen's cage, accept the apps'
+# GPU buffers on VMware's vmwgfx driver, which they otherwise refuse (every GPU app dropped). Loaded only into those two
+# and only where vmwgfx is loaded (~/.config/uwsm/env.d/vmw-dmabuf.sh, agros-greeter's run); anywhere else it's never
+# loaded, and even loaded it only acts on vmwgfx
+pkgname=agros-vmware
+pkgver=1
+pkgrel=1
+pkgdesc='AgrOS in a VMware VM: the desktop and apps on the virtual GPU (vmw-dmabuf shim for the compositors)'
+arch=('x86_64')
+url='https://github.com/CrimzoAgra/agros'
+license=('GPL-3.0-or-later')
+depends=('libdrm')
+source=('vmw-dmabuf.c')
+sha256sums=('SKIP')
+
+build() {
+    gcc $CFLAGS $LDFLAGS -shared -fPIC -o vmw-dmabuf.so vmw-dmabuf.c $(pkg-config --cflags --libs libdrm) -ldl
+}
+
+package() {
+    install -Dm755 vmw-dmabuf.so "$pkgdir/usr/lib/agros/vmw-dmabuf.so"
+}
