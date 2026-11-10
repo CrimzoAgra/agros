@@ -28,8 +28,8 @@ local alpha = string.format("%02x", math.floor((vars.windowOpacity or 1) * 255))
 -- This bar is the only set of window buttons: GTK apps (LibreWolf too, and any installed later) draw none, as the GTK
 -- button layout has none (agros-welcome: window_buttons); VSCodium's are hidden (window.controlsStyle); Electron and Qt apps
 -- draw none under Hyprland unless they draw their own title bar. Apps that can't hide theirs get no bar from here (a
--- second close button would be redundant), listed by class as Hyprland can't tell which those are: Steam
-local own_title_bar = { "steam" }
+-- second close button would be redundant), listed by class as Hyprland can't tell which those are: Steam, Proton VPN (its own minimise and close)
+local own_title_bar = { "steam", "protonvpn-app" }
 local height = 32
 -- dots.titlebar_height: windows.lua's maximise leaves room for the bar above a window that has one. None on fullscreen windows or
 -- games (dots.is_game, apps.lua: often borderless over the whole screen, not fullscreen), as in the rules at the end
