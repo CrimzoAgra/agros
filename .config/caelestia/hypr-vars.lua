@@ -41,4 +41,19 @@ for key, keys in pairs(ok and type(settings) == "table" and settings or {}) do
     local var = type(key) == "string" and key:match("^caelestia%-keys%.(kb%w+)$")
     if var and type(keys) == "table" then vars[var] = #keys == 1 and keys[1] or (#keys == 0 and "" or keys) end
 end
+-- In a VMware virtual machine (its virtual GPU, PCI vendor 0x15ad): Hyprland draws on that GPU (window animations,
+-- blur), the apps on the CPU. Apps' GPU-drawn buffers from it are refused ("invalid arguments for wl_surface.attach")
+-- and the app dropped: Quickshell (the shell, widgets), Qt apps and XWayland (so every X11 app: Nuvio...). Set once
+-- Hyprland is up, from here because this file loads before Caelestia's own start-up (hyprland/execs.lua), so this runs
+-- first and the shell starts with it: set before, it took Hyprland's own renderer down to the CPU too
+-- (agros-system's agros-vm.sh used to set it for the whole session, in every VM: Hyprland too, on the CPU)
+hl.on("hyprland.start", function()
+    local f = io.open("/sys/class/drm/card0/device/vendor")
+    local vendor = f and f:read("l")
+    if f then f:close() end
+    if vendor == "0x15ad" then
+        hl.env("LIBGL_ALWAYS_SOFTWARE", "1")
+        hl.env("XWAYLAND_NO_GLAMOR", "1")
+    end
+end)
 return vars
