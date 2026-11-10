@@ -25,9 +25,16 @@ end
 -- Set before the host file (a screen's own rule wins over this one whatever the order), so a mistake in that file (it
 -- stops the rest of this one) still leaves every screen on
 dots.monitor({ output = "", mode = "preferred", position = "auto", scale = "auto" })
--- A VM's screen (Virtual-1...): 1, as it has no physical size for "auto" to go by (it took 2 in VMware)
+-- A VM's screen (Virtual-1...): 1, as it has no physical size for "auto" to go by (it took 2 in VMware). Its size the
+-- kernel's preferred mode, not Hyprland's "preferred": Hyprland reads a screen's modes once, when it connects, so after
+-- the VM's window was resized it kept the old size (vm-screen-follow reloads when the kernel's changes)
 for _, m in ipairs(hl.get_monitors() or {}) do
-    if m.name:match("^Virtual%-") then dots.monitor({ output = m.name, mode = "preferred", position = "auto", scale = 1 }) end
+    if m.name:match("^Virtual%-%d+$") then
+        local p = io.popen("head -qn1 /sys/class/drm/card*-" .. m.name .. "/modes 2>/dev/null")
+        local mode = p and p:read("l")
+        if p then p:close() end
+        dots.monitor({ output = m.name, mode = mode or "preferred", position = "auto", scale = 1 })
+    end
 end
 
 -- This machine's own screens (user/hosts/<hostname>.lua), if it has a file. Not under pcall: a mistake in it shows as
