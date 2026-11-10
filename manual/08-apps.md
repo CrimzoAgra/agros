@@ -8,7 +8,6 @@ Everything here comes installed, listed next to the Windows app it replaces.
 | **Equibop**, themed in your colours | Discord |
 | **Spotify**, themed in your colours | Spotify |
 | **LibreOffice** | Microsoft Office |
-| **GIMP** | Photoshop |
 | **VSCodium**, VS Code's open-source build | VS Code |
 | **Thunar** | File Explorer |
 | **File Roller** + 7-Zip (Extract/Compress in the right-click menu) | WinRAR, 7-Zip |
