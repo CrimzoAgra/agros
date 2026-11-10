@@ -72,11 +72,19 @@ if [[ -z ${AGROS_SKIP_AUR:-} ]]; then
 fi
 
 # 2. CachyOS's installer, rebuilt against the libraries of today (CachyOS's own copy can lag behind an Arch update:
-# built for Boost 1.91, it didn't start once Arch moved to 1.92). Its version a ".1" above CachyOS's; the live ISO
-# installs it from [agros] (calamares-online.sh)
+# built for Boost 1.91, it didn't start once Arch moved to 1.92). Its version a ".2" above CachyOS's (raised with each
+# change of AgrOS's: an unchanged version keeps the published file); the live ISO installs it from [agros]
+# (calamares-online.sh). The partition names drawn in the theme's text colours, not black and grey (unreadable on
+# AgrOS's dark installer)
+# shortcut: a plain text swap, so a rewrite upstream leaves the names black again (nothing fails); check the
+# Partitions page after a new CachyOS version
 asb git clone -q --depth 1 --filter=blob:none --sparse https://github.com/CachyOS/CachyOS-PKGBUILDS.git "$work/cachyos-pkgbuilds"
 (cd "$work/cachyos-pkgbuilds" && asb git sparse-checkout set cachyos-calamares)
-(cd "$work/cachyos-pkgbuilds/cachyos-calamares" && asb sed -i 's/^pkgrel=\([0-9]*\)$/pkgrel=\1.1/' PKGBUILD &&
+cat >"$work/calamares-labels" <<'SH'
+    sed -i -e 's/painter->setPen( Qt::black );/painter->setPen( palette().windowText().color() );/' -e 's/painter->setPen( Qt::gray );/painter->setPen( palette().placeholderText().color() );/' src/modules/partition/gui/PartitionLabelsView.cpp
+SH
+(cd "$work/cachyos-pkgbuilds/cachyos-calamares" && asb sed -i 's/^pkgrel=\([0-9]*\)$/pkgrel=\1.2/' PKGBUILD &&
+    asb sed -i -e "/^prepare() {/{n;r $work/calamares-labels" -e '}' PKGBUILD &&
     asb env PKGDEST="$out" makepkg -s --noconfirm "${sign[@]}")
 
 # 3. AgrOS's own packages (no dependencies installed to build them: they're files and settings), keyring first

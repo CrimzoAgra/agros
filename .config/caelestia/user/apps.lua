@@ -30,6 +30,10 @@ hl.window_rule({ match = { class = "^(updates|desktop-settings)$" }, float = tru
 -- LibreWolf opaque too (Caelestia's opacity for every other window left web pages see-through)
 -- (both tagged dots_opaque too: window peek, user/windows.lua, fades them back to whole, as they are)
 hl.window_rule({ match = { class = "^(librewolf)$" }, opaque = true, tag = "+dots_opaque" })
+-- The installer (the live USB's): sized to the screen, in the middle; at its own size its summary page ran past the
+-- bottom of a small screen and hid the Install button
+hl.window_rule({ match = { class = "^(io\\.calamares\\.calamares)$" }, float = true,
+                 size = "(monitor_w*0.8) (monitor_h*0.9)", center = true })
 -- Games: Caelestia tags them "game" by class (Proton's steam_app_<id>, Lutris's steam_app_default, gamescope) and gives
 -- that tag its rules (tearing allowed, no idle, opaque). Native Linux Steam games keep their own class: tagged here by
 -- the SteamGameId Steam puts in their environment (as game-focus finds them), which a window rule can't see
