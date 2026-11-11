@@ -37,14 +37,12 @@ package() {
     done
     # Its session's browser is Firefox; AgrOS's is LibreWolf
     sed -i 's/^export BROWSER=firefox$/export BROWSER=librewolf/' "$skel/.config/uwsm/env"
-    # Its shell started on AgrOS's changes to it (caelestia-overlay) from the first login: else it came up on Caelestia's
-    # own config (no dock, the bar laid out differently) and jumped when agros-welcome rebuilt it and restarted it. Built
-    # first only when missing (a few seconds, that once); under the overlay's lock, so agros-welcome's build waits
-    # (through sh: hl.exec_cmd runs a line as one command, without a shell, so "||" and ";" did nothing and the shell
-    # never started)
-    sed -i "s|^\\( *\\)hl.exec_cmd(\"caelestia shell -d\")\$|\\1hl.exec_cmd(\"sh -c '[ -e ~/.config/quickshell/caelestia/shell.qml ] \\|\\| ~/.local/bin/caelestia-overlay; exec caelestia shell -d'\")|" \
+    # Its shell started by caelestia-start: on AgrOS's changes to it from the first login (built first when missing),
+    # else it came up on Caelestia's own config (no dock, the bar laid out otherwise) and jumped when agros-welcome
+    # rebuilt it and restarted it; and each start logged
+    sed -i 's|^\( *\)hl.exec_cmd("caelestia shell -d")$|\1hl.exec_cmd("~/.local/bin/caelestia-start")|' \
         "$skel/.config/hypr/hyprland/execs.lua"
-    grep -q "caelestia-overlay; exec caelestia shell -d'" "$skel/.config/hypr/hyprland/execs.lua" ||
+    grep -q 'hl.exec_cmd("~/.local/bin/caelestia-start")' "$skel/.config/hypr/hyprland/execs.lua" ||
         { echo "Caelestia's execs.lua changed: its shell's start not found" >&2; return 1; }
     # 2. AgrOS's, over them
     cd "$_root"
