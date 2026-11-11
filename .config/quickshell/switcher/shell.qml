@@ -1,8 +1,8 @@
 // Super+Tab workspace switcher in Caelestia's style: a row of live previews of the workspaces that have windows,
 // in workspace order. Tab cycles on from the current one (wrapping round).
 //   Super+Tab / Super+Shift+Tab  open it on the next / previous one, or move along; releasing Super goes there
-//   Escape cancels; clicking a preview goes there (the mouse over one only highlights it: Tab, the arrow keys or a
-//   click pick)
+//   Escape cancels; clicking a preview goes there, or clicking a window in it brings that window up, as in Alt+Tab (the
+//   mouse over one only highlights it, and outlines the window under it: Tab, the arrow keys or a click pick)
 // Alt+Tab opens the same panel for the windows of the current workspace instead (minimised ones too, which come
 // back when picked), most recently used first, so a quick Alt+Tab goes to the previous window; releasing Alt picks
 // The keys are bound in ~/.config/caelestia/user/keys.lua to these global shortcuts: Hyprland hands them over in the
@@ -329,6 +329,21 @@ ShellRoot {
                         // The previewed workspace: this column on the screen the switcher is on (minimised windows
                         // aren't on it: they only show as icons)
                         readonly property var shown: wins.filter(t => root.wsOf(t)?.id > 0 && (t.lastIpcObject?.monitor ?? t.workspace?.monitor?.id) === root.monitor?.id)
+                        // Floating ones last, as they're drawn (on top)
+                        readonly property var stacked: shown.slice().sort((a, b) => (a.lastIpcObject.floating ? 1 : 0) - (b.lastIpcObject.floating ? 1 : 0))
+                        // The window under the pointer in the preview (clicked: that window, as in Alt+Tab)
+                        property var hovered: null
+
+                        // The window at x, y of the preview's frame (its 4 px margin in): the topmost there, or null
+                        function windowAt(x: real, y: real): var {
+                            const px = (x - 4) / win.scaleF + (root.monitor?.x ?? 0), py = (y - 4) / win.scaleF + (root.monitor?.y ?? 0);
+                            for (let i = stacked.length - 1; i >= 0; i--) {
+                                const ipc = stacked[i].lastIpcObject;
+                                if (px >= ipc.at[0] && px < ipc.at[0] + ipc.size[0] && py >= ipc.at[1] && py < ipc.at[1] + ipc.size[1])
+                                    return stacked[i];
+                            }
+                            return null;
+                        }
 
                         spacing: 10
 
@@ -370,7 +385,7 @@ ShellRoot {
                                 // is what crashed Caelestia's shell
                                 Repeater {
                                     model: ScriptModel {
-                                        values: card.shown.slice().sort((a, b) => (a.lastIpcObject.floating ? 1 : 0) - (b.lastIpcObject.floating ? 1 : 0))
+                                        values: card.stacked
                                         objectProp: "address"
                                     }
 
@@ -386,6 +401,20 @@ ShellRoot {
                                         live: root.open
                                     }
                                 }
+
+                                // The window under the pointer: outlined over the others (one behind shows whole)
+                                Rectangle {
+                                    readonly property var ipc: card.hovered?.lastIpcObject
+                                    visible: !!ipc
+                                    x: ipc ? (ipc.at[0] - (root.monitor?.x ?? 0)) * win.scaleF : 0
+                                    y: ipc ? (ipc.at[1] - (root.monitor?.y ?? 0)) * win.scaleF : 0
+                                    width: ipc ? ipc.size[0] * win.scaleF : 0
+                                    height: ipc ? ipc.size[1] * win.scaleF : 0
+                                    color: "transparent"
+                                    radius: 4
+                                    border.width: 2
+                                    border.color: root.c("primary")
+                                }
                             }
 
                             MouseArea {
@@ -394,9 +423,18 @@ ShellRoot {
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    root.selected = card.index;
-                                    root.commit();
+                                onPositionChanged: mouse => card.hovered = card.windowAt(mouse.x, mouse.y)
+                                onExited: card.hovered = null
+                                // On a window: that window (Alt+Tab's click, dots.focus_window); elsewhere: the workspace
+                                onClicked: mouse => {
+                                    const w = card.windowAt(mouse.x, mouse.y);
+                                    if (!w) {
+                                        root.selected = card.index;
+                                        root.commit();
+                                        return;
+                                    }
+                                    root.open = false;
+                                    Quickshell.execDetached(["hyprctl", "eval", `dots.focus_window("0x${w.address}", true)`]);
                                 }
                             }
                         }
