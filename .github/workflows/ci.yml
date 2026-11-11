@@ -28,12 +28,18 @@ jobs:
       - name: Tools the tests use
         run: |
           # (only what isn't there: pacman warns about each one asked for that is). Node, qmllint, Hyprland's headers
-          # and a kernel with mkinitcpio: the tests that check against them
+          # with a compiler (hyprbars built), mkinitcpio: the tests that check against them
           pkgs=(git jq python python-gobject python-numpy python-xlib python-secretstorage gnupg shellcheck sudo libnotify
             procps-ng util-linux which diffutils pacman-contrib file gtk3 lua lutris nodejs qt6-declarative hyprland
-            mkinitcpio linux)
+            base-devel mkinitcpio)
+          # (a machine id: without one systemd's install hooks warn that /etc isn't set up)
+          systemd-machine-id-setup >/dev/null
           pacman -Sy
           pacman -Su --noconfirm --needed $(pacman -T "${pkgs[@]}")
+          # A kernel's modules for nvidia-early, unpacked rather than installed: its install hook builds an initramfs,
+          # which fails in a container
+          pacman -Sw --noconfirm linux >/dev/null
+          bsdtar -xf "$(ls /var/cache/pacman/pkg/linux-[0-9]*.pkg.tar.zst | sort -V | tail -1)" -C / usr/lib/modules
           git config --system init.defaultBranch main
           # (Ubuntu's host lets no unprivileged user namespace act as root in it: game-focus-audio makes them)
           [ ! -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ] ||
@@ -60,7 +66,7 @@ jobs:
           install -Dm644 -o ci -g ci /tmp/dots/hypr/variables.lua /home/ci/.config/hypr/variables.lua
           chown -R ci: .
           runuser -u ci -- git config --global --add safe.directory '*'
-          runuser -u ci -- tests/run.sh
+          runuser -u ci -- env DOTS_BUILD_TESTS=1 tests/run.sh
 
   repo:
     # The [agros] pacman repo: built on every push to main and daily, published on GitHub Pages
