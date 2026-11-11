@@ -11,6 +11,13 @@
             property string stamp // (as the date and time field takes it)
             property string zoneTyped
             property string timeTyped
+            // The time zone from your location (~/.local/bin/timezone-auto: on while its flag file is there)
+            property bool autoZone
+            readonly property string autoZoneScript: `${Quickshell.env("HOME")}/.local/bin/timezone-auto`
+            readonly property string place: GlobalConfig.services.weatherLocation
+
+            // (a new weather location: the zone follows it)
+            onPlaceChanged: if (autoZone) Quickshell.execDetached([autoZoneScript])
 
             // timedatectl again shortly after a change (it applies it in the background), then every few seconds
             function refresh(): void {
@@ -68,6 +75,12 @@
                 onTriggered: show.running = true
             }
 
+            Process {
+                running: true
+                command: ["test", "-e", `${Quickshell.env("XDG_STATE_HOME") || Quickshell.env("HOME") + "/.local/state"}/agros/timezone-auto`]
+                onExited: code => clock.autoZone = code === 0
+            }
+
             Component.onCompleted: show.running = true
         }
 
@@ -102,12 +115,25 @@
             }
         }
 
-        // The time zone: typed and picked from the system's list (a city's name finds it: "lisbon", "new york")
+        ToggleRow {
+            text: Tr.tr("Set the time zone automatically")
+            subtext: Tr.tr("From the weather location, or your internet address when that's automatic")
+            checked: clock.autoZone
+            onToggled: {
+                clock.autoZone = checked;
+                Quickshell.execDetached([clock.autoZoneScript, checked ? "on" : "off"]);
+                checked = Qt.binding(() => clock.autoZone);
+            }
+        }
+
+        // The time zone: typed and picked from the system's list (a city's name finds it: "lisbon", "new york"); shown
+        // only, while it's set automatically
         SuggestRow {
             first: false
+            enabled: !clock.autoZone
             icon: "public"
             label: Tr.tr("Time zone")
-            subtext: Tr.tr("Type a city to find it")
+            subtext: clock.autoZone ? Tr.tr("Set from your location") : Tr.tr("Type a city to find it")
             placeholderText: Tr.tr("Region/City")
             value: clock.zone
             suggestions: {

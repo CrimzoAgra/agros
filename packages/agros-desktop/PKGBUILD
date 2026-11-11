@@ -4,7 +4,7 @@
 # (agros-welcome --system installs the ones for what's plugged in), as is VMware Workstation (its license forbids
 # passing it on: built from the AUR on your machine by agros-welcome --system).
 pkgname=agros-desktop
-pkgver=7
+pkgver=8
 pkgrel=1
 pkgdesc='AgrOS: Hyprland + Caelestia desktop with its apps (meta package)'
 arch=('any')
@@ -32,6 +32,7 @@ depends=(
     thunar thunar-archive-plugin file-roller 7zip gnome-text-editor qview mpv zenity libnotify wl-clipboard cliphist
     grim slurp swappy brightnessctl ddcutil libqalculate ydotool xdg-user-dirs flatpak nodejs npm python
     python-gobject python-numpy python-xlib pacman-contrib paru github-cli
+    gammastep geoclue                   # night light (Caelestia's execs.lua starts both; no location without geoclue)
     # Games: CachyOS's gaming packages, Steam, Lutris (every store's library), Faugus, MangoHud, Gamescope
     mesa lib32-mesa cachyos-gaming-meta steam steam-devices lutris libayatana-appindicator wine-mono wine-gecko
     python-protobuf gamescope mangohud lib32-mangohud goverlay faugus-launcher wqy-zenhei xorg-fonts-misc spirv-tools

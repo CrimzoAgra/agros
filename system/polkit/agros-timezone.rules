@@ -1,0 +1,7 @@
+// The time zone changed without the password by an admin at the machine: timezone-auto sets it at every login
+// (Settings > Language & region > "Set the time zone automatically"), where a prompt would come out of nowhere
+polkit.addRule(function(action, subject) {
+    if (action.id == "org.freedesktop.timedate1.set-timezone" && subject.local && subject.active &&
+        subject.isInGroup("wheel"))
+        return polkit.Result.YES;
+});

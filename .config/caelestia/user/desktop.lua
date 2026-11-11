@@ -21,6 +21,9 @@ hl.on("hyprland.start", function() hl.exec_cmd("~/.local/bin/bluetooth-on") end)
 -- In a VM: the screen follows its window and full screen (vm-screen-follow does nothing elsewhere)
 hl.on("hyprland.start", function() hl.exec_cmd("~/.local/bin/vm-screen-follow") end)
 
+-- The time zone from your location, when Settings > Language & region says so (timezone-auto does nothing otherwise)
+hl.on("hyprland.start", function() hl.exec_cmd("~/.local/bin/timezone-auto") end)
+
 -- Updates: a notification with an "Update now" button when updates are waiting (~/.local/bin/update-apps; the boot
 -- update covers the rest). 15 minutes after login, then every 6 hours
 -- (the first check from here, not the timer: any daemon-reload restarts a timer's OnActiveSec count)

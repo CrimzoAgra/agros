@@ -59,7 +59,7 @@ Server = https://crimzoagra.github.io/agros/$arch
 | `agros-desktop` | The meta package: every package the desktop is made of (Hyprland, Caelestia, the apps, PipeWire with its JACK, fonts, themes). Hardware apps are optional |
 | `agros-hyprland-settings` | The settings every new account gets (`/etc/skel`): Caelestia's own configs (its dots, pinned), AgrOS's over them (everything in `.config`), launcher entries, LibreWolf settings, the wallpaper; fonts and icons system-wide |
 | `agros-scripts` | The programs in `.local/bin` and the data they use, in `/usr/lib/agros`, linked into each home (`~/.local/bin`, `~/.local/share`; `agros-links` adds new ones at login, and copies in once each config file an update added to `/etc/skel`) |
-| `agros-system` | The update at every boot (downloaded at boot, installed at shutdown), pacman hooks that rebuild each user's Caelestia overlay and hyprbars and check the Hyprland config, Bluetooth after sleep, the ananicy rule, the keyring |
+| `agros-system` | The update at every boot (downloaded at boot, installed at shutdown), pacman hooks that rebuild each user's Caelestia overlay and hyprbars and check the Hyprland config, Bluetooth after sleep, the ananicy rule, the keyring, the night light's and time zone's permissions (geoclue, polkit) |
 | `agros-greeter` | The Caelestia-style login screen for greetd, its PAM service following the system's, `login-reset` |
 | `agros-boot` | The hidden boot menu, the faster splash with shutdown titles, screens in their best mode from boot |
 | `agros-nvidia`, `agros-camera-switch` | NVIDIA driver loaded early; the Legion's camera switch |
@@ -245,6 +245,22 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
 - **`.local/bin/caelestia-restart`**: restarts Caelestia with a clean environment (also Ctrl+Super+Alt+R), keeping
   Spotify hidden
 - **`.local/bin/caelestia-pin`**: pin apps to the launcher or dock from a picker
+- **Night light** (`.config/gammastep/config.ini`): gammastep, which Caelestia's `execs.lua` starts at login with
+  geoclue's demo agent (both in `agros-desktop`), turns the screens warmer after sunset (6500 K by day, 4000 K at
+  night, faded in). Its location comes from geoclue (Arch's: Wi-Fi networks and then the IP, looked up on BeaconDB, its
+  default since Mozilla's service closed; nothing to set). `agros-system`'s `/etc/geoclue/conf.d/90-agros.conf` lets
+  gammastep have it without the agent asking at every login. Without a location (offline, nothing found) gammastep
+  waits, untinted, and isn't restarted; there's no fallback on purpose (the weather location is often a town far away
+  or empty): to set it by hand, `location-provider=manual` and a `[manual]` section with `lat=` and `lon=`
+- **`.local/bin/timezone-auto`**: Settings > Language & region > "Set the time zone automatically" (Caelestia's
+  Settings app, `nexus-time-block.qml`; on while `~/.local/state/agros/timezone-auto` is there; off by default). Its
+  zone comes from Caelestia's weather location: `lat,lon` through Open-Meteo's forecast (`timezone=auto`), a town
+  through Open-Meteo's geocoding, empty (automatic) by IP through ip-api.com, as Caelestia's weather finds you. Not
+  geoclue: it says only coordinates, and the weather location is what you picked. Run at login (`user/desktop.lua`),
+  when turned on, and when the page sees the weather location change; set with `timedatectl` only when it differs.
+  `agros-system`'s polkit rule (`/usr/share/polkit-1/rules.d/50-agros-timezone.rules`) lets an admin (wheel) at the
+  machine change the time zone without the password, so the one at login never asks; for anyone else it's left as it
+  is (`--no-ask-password`). No network or no answer: nothing changes. While it's on, the Time zone field only shows it
 - **`.config/quickshell/widgets/`**: desktop widgets styled after the Spider-Verse wallpaper
   - Comic panels with halftone dots and the film's red/cyan misprint glitch, laid out in the sky around the falling
     Miles
@@ -453,7 +469,7 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
 - **`.config/systemd/user/service-failed@.service`**: when game-focus or tray-keeper keeps crashing (5 times in a
   minute) it's stopped instead of restarting forever, with a notification showing its last error
 - **At login** (`user/desktop.lua`): `widgets-start`, `greeter-theme-sync`, `console-clear` (no old
-  text under the desktop at shutdown), `keyring-default`, `bluetooth-on`, `vm-screen-follow` (in a VM), the update check timer, and `dotfiles-check`
+  text under the desktop at shutdown), `keyring-default`, `bluetooth-on`, `vm-screen-follow` (in a VM), `timezone-auto` (when on), the update check timer, and `dotfiles-check`
   after 30 s
 - **`.config/autostart/`**: CachyOS's welcome app and Polychromatic's
   own autostart off (OpenRazer's service applies the
@@ -544,6 +560,9 @@ step asks for each).
   Proton VPN, Equibop...)
 - **`agros-system`**: Bluetooth on at boot and after sleep (`system/bluetooth-resume`,
   a systemd sleep hook: waking resets the adapter, which comes back off)
+- **`agros-system`** also: the night light's location without a prompt (`system/geoclue/agros.conf`) and the time zone
+  changed without the password by admins at the machine (`system/polkit/agros-timezone.rules`), both described under
+  Desktop and Caelestia
 - **pacman hooks** (`agros-system`, for every account through `agros-each-user`): the Caelestia overlay re-applied after
   every `caelestia-shell` update; the title bar plugin built for a new Hyprland (or a library its plugins hang on)
   straight away; the Hyprland config checked against a new Hyprland (`hypr-config-check`, its errors said by
