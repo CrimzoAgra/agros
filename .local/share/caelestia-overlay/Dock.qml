@@ -257,7 +257,8 @@ ClippingRectangle {
     implicitWidth: Tokens.sizes.bar.innerWidth
     implicitHeight: column.implicitHeight + Tokens.padding.small * 2
     height: Math.min(implicitHeight, parent?.height ?? implicitHeight)
-    anchors.verticalCenter: parent?.verticalCenter
+    // (at the top of its space, under the workspaces: its icons start in one place however few there are)
+    anchors.top: parent?.top
 
     color: items.length ? Colours.tPalette.m3surfaceContainer : "transparent"
     radius: Tokens.rounding.full
