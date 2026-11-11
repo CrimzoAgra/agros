@@ -14,6 +14,14 @@ dots.bind("windows_prev", hl.dsp.global("switcher:windows-prev"))
 -- Tab) was pressed in between (which is also why Caelestia's Super-release launcher stays shut). Codes as this hook
 -- gets them (evdev + 8): left Super 133, right Super 134, left Alt 64, right Alt 108
 -- (In the one key hook at the end of this file, with the other two: it runs on every key press and release)
+-- Clicking a workspace in Super+Tab: Super is held then (releasing it picks), and Super+click is Caelestia's window
+-- drag, which Hyprland took before the click reached the switcher. Off while the switcher is open (it calls this
+-- as it opens and closes), back as it closes
+-- shortcut: the switcher dying while open leaves Super+drag off until the next config reload (which binds it again)
+function dots.switcher_open(open)
+    pcall(hl.unbind, "SUPER + mouse:272")
+    if not open then hl.bind("SUPER + mouse:272", hl.dsp.window.drag(), { mouse = true }) end
+end
 hl.layer_rule({ match = { namespace = "workspace-switcher" }, blur = true, ignore_alpha = 0.3, animation = "fade" })
 hl.on("hyprland.start", function() hl.exec_cmd("qs -c switcher -d") end)
 
