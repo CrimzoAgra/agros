@@ -78,7 +78,11 @@ if [[ -z ${AGROS_SKIP_AUR:-} ]]; then
     printf '[options]\nLocalRepo = agros\nSkipReview\nNoCheck\n[bin]\nMFlags = %s\n' "${sign[*]:-}" |
         asb tee /home/builder/.config/paru/paru.conf >/dev/null
     # ninja's status lines for steps with no description (blank) left out
-    aur_build() { asb paru -S --noconfirm --needed --localrepo=agros "${aur[@]}" 2>&1 | sed -u '/^\[[0-9]*\/[0-9]*\] *$/d'; }
+    # (and makepkg's note that it builds in the sources it unpacked: paru unpacks, then builds, always)
+    aur_build() {
+        asb paru -S --noconfirm --needed --localrepo=agros "${aur[@]}" 2>&1 |
+            sed -u -e '/^\[[0-9]*\/[0-9]*\] *$/d' -e '/WARNING: Using existing \$srcdir\/ tree/d'
+    }
     # (twice: a download that drops, GitHub's now and then, fails only its package; the second pass builds what's left)
     aur_build || aur_build
 fi
@@ -107,7 +111,7 @@ cp "$work/makepkg.conf" /etc/makepkg.conf
 
 # 3. AgrOS's own packages (no dependencies installed to build them: they're files and settings, but for agros-vmware's
 # shim, built against libdrm), keyring first
-pacman -S --needed --noconfirm libdrm >/dev/null
+pacman -T libdrm >/dev/null || pacman -S --noconfirm libdrm >/dev/null
 for d in "$work/agros/packages/agros-keyring" "$work"/agros/packages/*/; do
     d=${d%/}; p=${d##*/}
     [[ $p == agros-keyring && -n ${keyring_done:-} ]] && continue
@@ -118,7 +122,9 @@ for d in "$work/agros/packages/agros-keyring" "$work"/agros/packages/*/; do
         continue
     fi
     echo "-- $p"
-    (cd "$d" && asb env PKGDEST="$out" makepkg -f --nodeps --noconfirm "${sign[@]}")
+    # (--nodeps on purpose: makepkg's warning that it skips them left out)
+    (cd "$d" && asb env PKGDEST="$out" makepkg -f --nodeps --noconfirm "${sign[@]}" 2>&1 |
+        sed -u '/WARNING: Skipping dependency checks/d')
 done
 cd "$out"
 # A package whose version hasn't changed keeps the file already published, when its signature checks out: a rebuild
@@ -126,14 +132,18 @@ cd "$out"
 if [[ -n ${AGROS_PUBLISHED:-} && -n $key ]]; then
     for f in ./*.pkg.tar.zst; do
         f=${f#./}
-        curl -fsSL --max-time 300 -o "$work/pub" "$AGROS_PUBLISHED/$f" &&
-            curl -fsSL --max-time 60 -o "$work/pub.sig" "$AGROS_PUBLISHED/$f.sig" &&
+        # (silent: a new version isn't published yet, its 404 expected)
+        curl -fsSL --max-time 300 -o "$work/pub" "$AGROS_PUBLISHED/$f" 2>/dev/null &&
+            curl -fsSL --max-time 60 -o "$work/pub.sig" "$AGROS_PUBLISHED/$f.sig" 2>/dev/null &&
             asb gpg --batch --verify "$work/pub.sig" "$work/pub" 2>/dev/null || continue
         mv -f "$work/pub" "$f" && mv -f "$work/pub.sig" "$f.sig" && chown builder: "$f" "$f.sig"
         echo "-- $f: the published file kept"
     done
 fi
-asb repo-add -R "${rsign[@]}" agros.db.tar.gz ./*.pkg.tar.zst
+# The database made again from the packages here (paru's local repo already holds the AUR ones: added over it, each
+# warned that its entry already existed)
+rm -f agros.db agros.db.tar.gz agros.files agros.files.tar.gz agros.db*.sig agros.files*.sig
+asb repo-add "${rsign[@]}" agros.db.tar.gz ./*.pkg.tar.zst
 # GitHub Pages serves no symlinks: the database's names as real files
 for f in agros.db agros.files; do
     [[ -L $f ]] && cp --remove-destination "$(readlink -f "$f")" "$f"
