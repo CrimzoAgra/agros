@@ -300,8 +300,7 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
   other screen: logind suspends as usual. Booting or reloading with the lid closed keeps it off
 - **Switchers** (`.config/quickshell/switcher/`, in Caelestia's style; releasing Super/Alt or clicking picks, Tab and the
   arrow keys move, the mouse over a preview only highlights it, Escape cancels):
-  - Super+Tab: live previews of the workspaces with windows, in workspace order, Tab cycling on from the current one;
-    clicking a window in a preview brings that window up (outlined under the mouse), as Alt+Tab's click does
+  - Super+Tab: live previews of the workspaces with windows, in workspace order, Tab cycling on from the current one
   - Alt+Tab: the current workspace's windows, most recently used first (minimised ones too), each preview in its
     window's shape
 - **Windows like on Windows** (`user/windows.lua`):
