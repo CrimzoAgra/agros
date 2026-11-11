@@ -67,8 +67,9 @@ if [[ -z ${AGROS_SKIP_AUR:-} ]]; then
     mapfile -t aur < <(grep -v '^\s*\(#\|$\)' "$root/aur/packages.txt")
     # PipeWire's JACK for what needs a "jack" (never jack2, which AgrOS doesn't install either)
     pacman -S --needed --noconfirm pipewire-jack >/dev/null
-    # (spicetify-cli's build runs node, which its AUR package doesn't list)
-    pacman -S --needed --noconfirm nodejs >/dev/null
+    # (spicetify-cli's build runs node, which its AUR package doesn't list. Arch's: CachyOS's, first in pacman.conf,
+    # can lag an Arch library's new version, and node then doesn't start (libsimdjson.so.34, November 2026))
+    pacman -S --needed --noconfirm extra/nodejs >/dev/null
     # The keys AUR sources are signed with (papirus-folders' author, 1BA35B1B...: its PKGBUILD's validpgpkeys), kept in
     # the repo: the keyserver timed out (16 minutes, then the build failed)
     asb gpg --batch --import <"$root/ci/papirus-folders.asc" ||  # (read here: the builder may not read the checkout)
