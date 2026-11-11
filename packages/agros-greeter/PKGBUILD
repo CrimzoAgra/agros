@@ -27,6 +27,9 @@ package() {
     install -Dm644 "$src/greetd.pam" "$dst/greetd.pam"
     cd "$startdir"
     install -Dm755 run "$dst/run"
+    # The desktop's pointer (hypr-vars.lua's cursorTheme): cage's wlroots loads the theme named "default", found here
+    # first (run's XCURSOR_PATH), so the system's own default stays as it is
+    printf '[Icon Theme]\nInherits=Bibata-Modern-Ice\n' | install -Dm644 /dev/stdin "$dst/icons/default/index.theme"
     install -Dm644 config.toml "$dst/greetd-config.toml"
     install -Dm644 /dev/null "$dst/env"
     install -Dm755 login-reset "$pkgdir/usr/bin/login-reset"

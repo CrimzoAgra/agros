@@ -4,6 +4,8 @@ export XDG_CONFIG_HOME=/var/lib/caelestia-greeter XDG_DATA_HOME=/var/lib/caelest
 export XDG_STATE_HOME=/var/lib/caelestia-greeter XDG_CACHE_HOME=/var/cache/caelestia-greeter
 export QT_WAYLAND_DISABLE_WINDOWDECORATION=1   # no title bar
 export WLR_NO_HARDWARE_CURSORS=1   # pointer drawn in the picture, so it doesn't stay on the shutdown screen
+# The desktop's pointer, not the system default's (icons/default inherits it: the PKGBUILD)
+export XCURSOR_PATH=/etc/greetd/caelestia-greeter/icons:/usr/share/icons XCURSOR_THEME=Bibata-Modern-Ice XCURSOR_SIZE=24
 set -a; . /etc/greetd/caelestia-greeter/env; set +a
 # VMware (its vmwgfx driver), with agros-vmware: cage runs with its vmw-dmabuf shim, so it accepts the login screen's
 # GPU buffers and the screen draws on VMware's virtual GPU (the shim is cage's only, not the login screen's). Any other

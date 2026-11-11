@@ -636,7 +636,7 @@ ShellRoot {
             }
         }
 
-        // Bottom bar: session on the left, power on the right
+        // Bottom bar: session on the left; sleep, restart and power off on the right
         RowLayout {
             opacity: root.fallOpacity(5)
             scale: root.fallScale(5)
@@ -656,6 +656,11 @@ ShellRoot {
 
             Item {
                 Layout.fillWidth: true
+            }
+
+            Pill {
+                icon: "bedtime"
+                onClicked: Quickshell.execDetached(["systemctl", "suspend"])
             }
 
             Pill {
