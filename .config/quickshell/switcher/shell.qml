@@ -1,5 +1,5 @@
-// Super+Tab workspace switcher in Caelestia's style: a row of live previews of the workspaces that have windows,
-// in workspace order. Tab cycles on from the current one (wrapping round).
+// Super+Tab workspace switcher in Caelestia's style: a row of live previews of the workspaces that have windows, the
+// current one first, then the last used first (as Alt+Tab orders windows). Tab cycles on from the current one.
 //   Super+Tab / Super+Shift+Tab  open it on the next / previous one, or move along; releasing Super goes there
 //   Escape cancels; clicking a preview goes there (the mouse over one only highlights it: Tab, the arrow keys or a
 //   click pick)
@@ -130,8 +130,11 @@ ShellRoot {
             Hyprland.refreshToplevels();
             const used = new Set(Hyprland.toplevels.values.map(t => columnOf(t)).filter(c => c > 0));
             used.add(current);
-            cards = [...used].sort((a, b) => a - b);
-            selected = cards.indexOf(current);
+            // As Alt+Tab: the current one first, then the last used first (by its most recently focused window), so a
+            // quick Super+Tab goes back to the previous workspace; never-used ones last, in number order
+            const last = col => Math.min(1e6, ...windowsIn(col).map(t => recency(t)));
+            cards = [...used].sort((a, b) => (b === current) - (a === current) || last(a) - last(b) || a - b);
+            selected = 0;
             open = true;
         }
         selected = (selected + dir + cards.length) % cards.length;
