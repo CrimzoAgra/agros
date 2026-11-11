@@ -41,13 +41,22 @@ fi
 
 # The repo, empty to start with, known to pacman (the AUR packages' own AUR dependencies are installed from it)
 # (unsigned while it's built: paru adds to it without signing; the last repo-add below signs it)
-[[ -e $out/agros.db.tar.gz ]] || asb repo-add "$out/agros.db.tar.gz"
+# (an empty archive: repo-add with no packages warns, twice, that it made an empty database)
+if [[ ! -e $out/agros.db.tar.gz ]]; then
+    for db in db files; do
+        asb bsdtar -czf "$out/agros.$db.tar.gz" --files-from /dev/null && asb ln -sf "agros.$db.tar.gz" "$out/agros.$db"
+    done
+fi
 grep -q '^\[agros\]' /etc/pacman.conf ||
     printf '\n[agros]\nSigLevel = Never\nServer = file://%s\n' "$out" >>/etc/pacman.conf
 pacman -Sy --noconfirm >/dev/null
 
 # No separate debug packages (Arch's makepkg makes them by default)
 sed -i 's/^\(OPTIONS=(.*\) debug/\1 !debug/' /etc/makepkg.conf
+# The AUR packages and CachyOS's installer built without compiler warnings: theirs (quickshell's hundreds), not
+# AgrOS's to fix, and they buried the log. Back on for AgrOS's own packages (3.)
+cp /etc/makepkg.conf "$work/makepkg.conf"
+printf '\nCFLAGS+=" -w"\nCXXFLAGS+=" -w"\n' >>/etc/makepkg.conf
 
 # 1. The AUR packages, with paru (it builds the AUR dependencies too, in order, and adds them all to the repo)
 if [[ -z ${AGROS_SKIP_AUR:-} ]]; then
@@ -67,9 +76,10 @@ if [[ -z ${AGROS_SKIP_AUR:-} ]]; then
     asb mkdir -p /home/builder/.config/paru
     printf '[options]\nLocalRepo = agros\nSkipReview\nNoCheck\n[bin]\nMFlags = %s\n' "${sign[*]:-}" |
         asb tee /home/builder/.config/paru/paru.conf >/dev/null
+    # ninja's status lines for steps with no description (blank) left out
+    aur_build() { asb paru -S --noconfirm --needed --localrepo=agros "${aur[@]}" 2>&1 | sed -u '/^\[[0-9]*\/[0-9]*\] *$/d'; }
     # (twice: a download that drops, GitHub's now and then, fails only its package; the second pass builds what's left)
-    asb paru -S --noconfirm --needed --localrepo=agros "${aur[@]}" ||
-        asb paru -S --noconfirm --needed --localrepo=agros "${aur[@]}"
+    aur_build || aur_build
 fi
 
 # 2. CachyOS's installer, rebuilt against the libraries of today (CachyOS's own copy can lag behind an Arch update:
@@ -91,6 +101,8 @@ SH
 (cd "$work/cachyos-pkgbuilds/cachyos-calamares" && asb sed -i 's/^pkgrel=\([0-9]*\)$/pkgrel=\1.4/' PKGBUILD &&
     asb sed -i -e "/^prepare() {/{n;r $work/calamares-labels" -e '}' PKGBUILD &&
     asb env PKGDEST="$out" makepkg -s --noconfirm "${sign[@]}")
+
+cp "$work/makepkg.conf" /etc/makepkg.conf
 
 # 3. AgrOS's own packages (no dependencies installed to build them: they're files and settings, but for agros-vmware's
 # shim, built against libdrm), keyring first
