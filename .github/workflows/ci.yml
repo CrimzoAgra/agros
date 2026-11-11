@@ -19,14 +19,37 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
-    container: archlinux:latest
+    runs-on: ubuntu-26.04
+    # (privileged: game-focus-audio's user namespaces)
+    container:
+      image: archlinux:latest
+      options: --privileged
     steps:
       - name: Tools the tests use
         run: |
-          pacman -Syu --noconfirm --needed git jq python python-gobject python-numpy python-xlib python-secretstorage \
-            gnupg shellcheck sudo libnotify procps-ng util-linux which diffutils pacman-contrib file gtk3 lua lutris
+          # (only what isn't there: pacman warns about each one asked for that is). Node, qmllint, Hyprland's headers
+          # and a kernel with mkinitcpio: the tests that check against them
+          pkgs=(git jq python python-gobject python-numpy python-xlib python-secretstorage gnupg shellcheck sudo libnotify
+            procps-ng util-linux which diffutils pacman-contrib file gtk3 lua lutris nodejs qt6-declarative hyprland
+            mkinitcpio linux)
+          pacman -Sy
+          pacman -Su --noconfirm --needed $(pacman -T "${pkgs[@]}")
+          git config --system init.defaultBranch main
+          # (Ubuntu's host lets no unprivileged user namespace act as root in it: game-focus-audio makes them)
+          [ ! -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ] ||
+            echo 0 >/proc/sys/kernel/apparmor_restrict_unprivileged_userns
       - uses: actions/checkout@v7
+      - name: Caelestia (from the published [agros] repo) and its dots' shortcuts, for the tests that check against it
+        run: |
+          pacman-key --init
+          pacman-key --add ci/agros.asc
+          pacman-key --lsign-key BFE9289F7759E521AE60CFCD23B6096B42D05E1E
+          printf '\n[agros]\nServer = https://crimzoagra.github.io/agros/$arch\n' >>/etc/pacman.conf
+          pacman -Sy --noconfirm --needed caelestia-shell
+          # (the dots' commit agros-hyprland-settings pins)
+          dots=$(sed -n 's/^_dots=//p' packages/agros-hyprland-settings/PKGBUILD)
+          git init -q /tmp/dots && git -C /tmp/dots fetch -q --depth 1 https://github.com/caelestia-dots/caelestia "$dots"
+          git -C /tmp/dots checkout -q FETCH_HEAD
       - name: Shellcheck (AgrOS's own scripts and package scripts)
         run: |
           shellcheck -S warning .local/bin/agros-* ci/build-repo.sh packages/agros-boot/boot-menu \
@@ -34,6 +57,7 @@ jobs:
       - name: Tests, as a normal user
         run: |
           useradd -m ci
+          install -Dm644 -o ci -g ci /tmp/dots/hypr/variables.lua /home/ci/.config/hypr/variables.lua
           chown -R ci: .
           runuser -u ci -- git config --global --add safe.directory '*'
           runuser -u ci -- tests/run.sh
@@ -42,7 +66,7 @@ jobs:
     # The [agros] pacman repo: built on every push to main and daily, published on GitHub Pages
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     needs: test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     container:
       image: archlinux:latest
       options: --privileged
@@ -53,7 +77,9 @@ jobs:
           grep -q '^\[multilib\]' /etc/pacman.conf || printf '\n[multilib]\nInclude = /etc/pacman.d/mirrorlist\n' >>/etc/pacman.conf
           sed -i 's/^#*DownloadUser.*/#DownloadUser = alpm/' /etc/pacman.conf
           pacman-key --init
-          pacman -Syu --noconfirm --needed base-devel git sudo
+          pacman -Sy
+          pacman -Su --noconfirm --needed $(pacman -T base-devel git sudo)
+          git config --system init.defaultBranch main
           m=https://mirror.cachyos.org/repo/x86_64/cachyos
           curl -fsSL -o /tmp/keyring.pkg "$m/$(curl -fsSL "$m/" | grep -o 'cachyos-keyring-[^"]*\.pkg\.tar\.zst' | sort -V | tail -1)"
           curl -fsSL -o /tmp/mirrorlist.pkg "$m/$(curl -fsSL "$m/" | grep -o 'cachyos-mirrorlist-[^"]*\.pkg\.tar\.zst' | sort -V | tail -1)"
@@ -93,7 +119,7 @@ jobs:
 
   publish:
     needs: repo
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     permissions:
       pages: write
       id-token: write

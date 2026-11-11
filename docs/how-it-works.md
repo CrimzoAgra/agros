@@ -628,6 +628,11 @@ Caelestia and Lutris changes and the hyprbars patch still fit, besides the boot 
 bookmarks export, dotfiles-sync not undoing pulled changes, the settings file Lua reads, the login screen's theme,
 lutris-covers' cover checks and the boot video mode.
 
+CI runs them on every push, with what the checks against Caelestia, Hyprland, Qt and the kernel need (Caelestia from
+the published `[agros]` repo, its dots at the pinned commit), so none is skipped there but `nvidia-early` where the
+installed kernel has the driver. The AUR packages and CachyOS's installer are built there without compiler warnings
+(theirs, not AgrOS's); AgrOS's own packages keep them.
+
 ## Troubleshooting
 
 - **The login screen broke**: Ctrl+Alt+F2, log in, `sudo login-reset`
