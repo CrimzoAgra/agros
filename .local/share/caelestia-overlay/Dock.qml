@@ -15,6 +15,7 @@ import Caelestia.Config
 import qs.components
 import qs.components.containers
 import qs.services
+import qs.utils
 import qs.modules.launcher.services
 
 // Quickshell's ClippingRectangle directly, not Caelestia's StyledClippingRect wrapper (gone in later Caelestia versions)
@@ -94,27 +95,10 @@ ClippingRectangle {
         return out.concat(pinned);
     }
 
-    // A Steam game with no shortcut: its own icon (steam_icon_<id>: game-focus makes it from Steam's cache), else Steam's
-    function steamIcon(cls: string): string {
-        const game = cls.match(/^steam_app_(\d+)$/);
-        if (!game)
-            return "";
-        return Quickshell.iconPath(`steam_icon_${game[1]}`, true) ? `steam_icon_${game[1]}` : "steam";
-    }
-
+    // A window's (or pinned app's) app file: the one lookup the bar and switcher use too (WindowApps.qml, as
+    // Icons.windowApps); Quickshell's own if that patch didn't fit
     function entryFor(id: string): DesktopEntry {
-        if (!id)
-            return null; // a window with no class: the lookup would find an unrelated app
-        // A Steam game (steam_app_<id>): the shortcut Steam made for it (its name, icon steam_icon_<id>), as the switchers
-        // show it; the name lookup found Steam itself
-        const game = id.match(/^steam_app_(\d+)$/);
-        if (game)
-            return DesktopEntries.applications.values.find(e => e.icon === `steam_icon_${game[1]}`) ?? null;
-        // Quickshell's lookup misses a reverse-DNS class whose file names the short one (org.cachyos.cachyos-pi, its
-        // StartupWMClass cachyos-pi) and the other way round: the last part of each compared
-        const tail = s => (s ?? "").toLowerCase().split(".").pop();
-        return DesktopEntries.byId(id) ?? DesktopEntries.heuristicLookup(id) ??
-            DesktopEntries.applications.values.find(e => tail(e.id) === tail(id) || tail(e.startupClass) === tail(id)) ?? null;
+        return Icons.windowApps ? Icons.windowApps.appEntry(id) : id ? DesktopEntries.byId(id) ?? DesktopEntries.heuristicLookup(id) : null;
     }
 
     function keyFor(id: string): string {
@@ -420,8 +404,8 @@ ClippingRectangle {
                     // square), so measure each icon's artwork and scale it to the same visual size, centred.
                     //   bounds: box around the artwork; coverage: how much of the image it fills (0-1);
                     //   reach: distance from the artwork's centre to its farthest pixel (square icons' corners)
-                    // (a game with no Steam shortcut: its icon from Steam's cache, else Steam's)
-                    readonly property string iconSource: Quickshell.iconPath(modelData.entry?.icon ?? root.steamIcon(modelData.win?.lastIpcObject.class ?? ""), "application-x-executable")
+                    // (Icons.windowApps: the bar's and switcher's icon too)
+                    readonly property string iconSource: Quickshell.iconPath(modelData.entry?.icon ?? Icons.windowApps?.iconName(modelData.win?.lastIpcObject.class ?? "") ?? "", "application-x-executable")
                     property rect bounds: Qt.rect(0.06, 0.06, 0.88, 0.88)
                     property real coverage: 0.77
                     property real reach: 0.62

@@ -1,0 +1,131 @@
+#!/usr/bin/env python3
+# app-for-window <class> <pid>: the app file (its id, no ".desktop") a window belongs to, when its class names none
+# Quickshell finds (org.cachyos.cachyos-pi with StartupWMClass=cachyos-pi; Java, Wine, script apps). So the dock, the
+# switcher and the bar show the app's own icon, the one the Super menu shows. Prints nothing when no app fits. By, in
+# order: the class's last part against each app's id and StartupWMClass; a Flatpak's app id; the window's program
+# (its executable, or the script or .exe a runtime runs) against each app's Exec. Apps the menu shows win over hidden ones
+import os
+import shlex
+import shutil
+import sys
+
+# Programs that run another one: the app is the file they're given
+RUNTIMES = {"env", "sh", "bash", "python", "python3", "java", "wine", "wine64", "node", "electron", "mono", "pkexec",
+            "sudo", "gamemoderun", "prime-run", "uwsm", "app2unit"}
+
+
+def base(path):
+    name = os.path.basename(path).lower()
+    for ext in (".exe", ".py", ".jar", ".appimage", ".sh", ".bin"):
+        if name.endswith(ext):
+            return name[: -len(ext)]
+    return name
+
+
+def program(argv):
+    """The program a command line runs (as written): past env's VAR=value, runtimes and their options"""
+    for i, a in enumerate(argv):
+        if a.startswith("-") and i or "=" in a and not a.startswith("/"):
+            continue
+        b = base(a)
+        if b.startswith("python") or b.startswith("electron") or b in RUNTIMES:
+            continue
+        return "" if b == "flatpak" else a  # (a Flatpak's app: by its id, not "flatpak run")
+    return ""
+
+
+def tail(s):
+    return s.lower().rsplit(".", 1)[-1]
+
+
+def apps():
+    """(id, StartupWMClass, Exec's program names, shown in the menu, Exec's length) of each app file, in XDG order (a user's file
+    first). The program's name as written and as the file it links to (libreoffice: soffice, its windows' class)"""
+    home = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+    dirs = [home] + (os.environ.get("XDG_DATA_DIRS") or "/usr/local/share:/usr/share").split(":")
+    seen = set()
+    for d in dirs:
+        root = os.path.join(d, "applications")
+        for top, _, files in os.walk(root):
+            for f in sorted(files):
+                if not f.endswith(".desktop"):
+                    continue
+                path = os.path.join(top, f)
+                app = os.path.relpath(path, root)[: -len(".desktop")].replace("/", "-")
+                if app in seen:
+                    continue
+                seen.add(app)
+                keys, section = {}, ""
+                try:
+                    with open(path, encoding="utf-8", errors="replace") as fh:
+                        for line in fh:
+                            line = line.strip()
+                            if line.startswith("["):
+                                section = line
+                            elif section == "[Desktop Entry]" and "=" in line:
+                                k, v = line.split("=", 1)
+                                keys.setdefault(k.strip(), v.strip())
+                except OSError:
+                    continue
+                if keys.get("Type", "Application") != "Application" or keys.get("Hidden") == "true":
+                    continue
+                try:
+                    argv = [a for a in shlex.split(keys.get("Exec", "")) if not a.startswith("%")]
+                except ValueError:
+                    argv = []
+                exe = program(argv)
+                found = exe and shutil.which(exe)
+                exe = {base(exe), base(os.path.realpath(found)) if found else ""} - {""} if exe else set()
+                yield app, keys.get("StartupWMClass", ""), exe, keys.get("NoDisplay") != "true", len(argv)
+
+
+def window_programs(pid):
+    """The window's program names: its executable's, and the one its command line runs"""
+    names = []
+    try:
+        names.append(base(os.readlink(f"/proc/{pid}/exe")))
+    except OSError:
+        pass
+    try:
+        with open(f"/proc/{pid}/cmdline", "rb") as fh:
+            argv = [a.decode(errors="replace") for a in fh.read().split(b"\0") if a]
+        names.append(base(program(argv)))
+        names += [base(a) for a in argv if a.lower().endswith(".exe")]  # (Wine: the .exe anywhere in its command)
+    except OSError:
+        pass
+    return [n for n in names if n and n not in RUNTIMES and not n.startswith(("python", "electron", "wine"))]
+
+
+def flatpak(pid):
+    try:
+        with open(f"/proc/{pid}/root/.flatpak-info", encoding="utf-8") as fh:
+            for line in fh:
+                if line.startswith("name="):
+                    return line.split("=", 1)[1].strip()
+    except OSError:
+        pass
+    return ""
+
+
+def main(cls, pid):
+    every = list(apps())
+    ids = {a[0] for a in every}
+    # Best first: by class, then the Flatpak's id, then by program; within each, apps the menu shows first
+    for shown in (True, False):
+        for app, wmclass, _, visible, _ in every:
+            if visible == shown and cls and (tail(app) == tail(cls) or wmclass and tail(wmclass) == tail(cls)):
+                return app
+    if pid:
+        fp = flatpak(pid)
+        if fp in ids:
+            return fp
+        # (several apps run one program, LibreOffice's: the one run plainly, Start Center, not Calc's --calc)
+        names = set(window_programs(pid))
+        fits = [(not visible, length, app) for app, _, exe, visible, length in every if exe & names]
+        if fits:
+            return min(fits)[2]
+    return ""
+
+
+if __name__ == "__main__":
+    print(main(sys.argv[1] if len(sys.argv) > 1 else "", sys.argv[2] if len(sys.argv) > 2 else ""))

@@ -28,6 +28,8 @@
 #     that sent it to the front (dots.focus_app in ~/.config/caelestia/user/windows.lua)
 #   - launcher (Super menu): opens over fullscreen games and videos too
 #   - bar: hovering a workspace shows a live preview of it (WorkspacePreview.qml)
+#   - bar, dock and Alt+Tab: a window's icon by one lookup, ~/.config/quickshell/common/WindowApps.qml (Quickshell's,
+#     else ~/.local/bin/app-for-window: the class's last part, a Flatpak's id, the window's program), the Super menu's icon
 #   - bar: resting on a preview shows what it shows alone on the desktop, like Windows' Aero Peek: the dock's its window,
 #     the workspace picker's every window on that workspace. The other windows fade out, their blur with them
 #     (dots.peek_screen, user/windows.lua); windows on a workspace not shown: live pictures of them (WindowPeek.qml,

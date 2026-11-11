@@ -180,6 +180,30 @@ def dock():
     return files
 
 
+def window_icons():
+    """One lookup for every icon of a window (bar workspaces, active window, dock and its popout; the switcher loads
+    the same file): ~/.config/quickshell/common/WindowApps.qml, as Icons.windowApps, getAppIcon and
+    getAppCategoryIcon through it"""
+    rel = "utils/Icons.qml"
+    s = read(rel)
+    # (Quickshell's own lookup until the file has loaded)
+    s = swap(s, "DesktopEntries.heuristicLookup(name)?.icon",
+             "(root.windowApps?.appEntry(name) ?? DesktopEntries.heuristicLookup(name))?.icon", "getAppIcon's lookup")
+    s = swap(s, "DesktopEntries.heuristicLookup(name)?.categories",
+             "(root.windowApps?.appEntry(name) ?? DesktopEntries.heuristicLookup(name))?.categories",
+             "getAppCategoryIcon's lookup")
+    s = append_block(s, """
+    // ---- caelestia-overlay: a window's app and icon, the switcher's lookup too (../common/WindowApps.qml; not an
+    // import: Quickshell blocks those from outside this folder) ----
+    readonly property var windowApps: windowAppsFile.item
+    property Loader windowAppsFile: Loader {
+        source: `file://${Quickshell.shellPath("../common/WindowApps.qml")}`
+    }
+}
+""")
+    return {rel: s}
+
+
 def dock_space():
     # The dock turned off (or left out by an update): its entry in the bar's list (shell.json) matched nothing and its
     # space went, moving the workspaces down and the tray and clock up. Kept as space instead, so the rest stays put
@@ -1539,6 +1563,7 @@ def workspace_preview():
 FEATURES = (
     ("launcher pin buttons", launcher),
     ("bar dock", dock),
+    ("app icons for windows whose class names no app", window_icons),
     ("the dock's place kept when it's off", dock_space),
     ("bluetooth pairing", bluetooth),
     ("Spotify tray icon", spotify_tray),
