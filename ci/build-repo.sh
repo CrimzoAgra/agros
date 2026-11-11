@@ -60,9 +60,10 @@ if [[ -z ${AGROS_SKIP_AUR:-} ]]; then
     pacman -S --needed --noconfirm pipewire-jack >/dev/null
     # (spicetify-cli's build runs node, which its AUR package doesn't list)
     pacman -S --needed --noconfirm nodejs >/dev/null
-    # The keys AUR sources are signed with (papirus-folders' author)
-    asb gpg --batch --keyserver hkps://keyserver.ubuntu.com --recv-keys AB6D54C1C16D2507 ||
-        echo "!! papirus-folders' signing key not fetched: it won't build"
+    # The keys AUR sources are signed with (papirus-folders' author, 1BA35B1B...: its PKGBUILD's validpgpkeys), kept in
+    # the repo: the keyserver timed out (16 minutes, then the build failed)
+    asb gpg --batch --import <"$root/ci/papirus-folders.asc" ||  # (read here: the builder may not read the checkout)
+        echo "!! papirus-folders' signing key not imported: it won't build"
     asb mkdir -p /home/builder/.config/paru
     printf '[options]\nLocalRepo = agros\nSkipReview\nNoCheck\n[bin]\nMFlags = %s\n' "${sign[*]:-}" |
         asb tee /home/builder/.config/paru/paru.conf >/dev/null
