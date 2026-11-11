@@ -14,7 +14,7 @@ syntax() {
 }
 
 for f in "$here"/.config/quickshell/*/shell.qml "$here"/.config/quickshell/common/*.qml "$here"/.local/share/caelestia-overlay/*.qml; do
-    [[ ${f##*/} == appitem-block.qml ]] && continue  # (a fragment patch.py appends to Caelestia's AppItem.qml)
+    [[ ${f##*/} == *-block.qml ]] && continue  # (fragments patch.py puts in Caelestia's files: checked there, below)
     syntax "$f"
 done
 
