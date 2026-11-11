@@ -49,6 +49,8 @@ ShellRoot {
     }
 
     property bool open: false
+    // Super+click free for the previews while open (Caelestia's window drag otherwise takes it: keys.lua)
+    onOpenChanged: Quickshell.execDetached(["hyprctl", "eval", `dots.switcher_open(${open})`])
     property string mode: "workspaces" // or "windows" (Alt+Tab)
     property var cards: [] // workspace columns (1-10), or windows, in the order shown
     property int selected: 0
