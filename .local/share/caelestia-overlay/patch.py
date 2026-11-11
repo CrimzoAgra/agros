@@ -204,6 +204,27 @@ def window_icons():
     return {rel: s}
 
 
+def nexus_region():
+    """Nexus > Language & region: the weather location picker (the desktop forecast widget's, ../common/PlacePicker.qml,
+    in place of Caelestia's "coming soon"), and the system clock: time, network time (NTP), date and time by hand, time
+    zone (timedatectl)"""
+    rel = "modules/nexus/pages/LanguageAndRegion.qml"
+    s = read(rel)
+    s = insert(s, "import Quickshell\n", "import Quickshell.Io\n", before=False)
+    start = s.find("        // Placeholder until the map-based location picker lands\n")
+    end = s.find("        // Units\n", start)
+    if start < 0 or end < 0:
+        raise LookupError("the weather location placeholder")
+    s = s[:start] + own("nexus-weather-block.qml") + "\n" + s[end:]
+    clock = """            first: true
+            last: true
+            label: Tr.tr("Clock format")"""
+    s = swap(s, clock, clock.replace("            last: true\n", ""), "the clock format row")
+    s = insert(s, "            onSelected: item => GlobalConfig.services.clockFormat = item.value\n        }\n",
+               own("nexus-time-block.qml"), before=False)
+    return {rel: s, "modules/nexus/common/SuggestRow.qml": own("SuggestRow.qml")}
+
+
 def dock_space():
     # The dock turned off (or left out by an update): its entry in the bar's list (shell.json) matched nothing and its
     # space went, moving the workspaces down and the tray and clock up. Kept as space instead, so the rest stays put
@@ -1564,6 +1585,7 @@ FEATURES = (
     ("launcher pin buttons", launcher),
     ("bar dock", dock),
     ("app icons for windows whose class names no app", window_icons),
+    ("settings: weather location picker and system clock", nexus_region),
     ("the dock's place kept when it's off", dock_space),
     ("bluetooth pairing", bluetooth),
     ("Spotify tray icon", spotify_tray),

@@ -248,7 +248,8 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
   - A clock, weather with a 3-day forecast, a calendar, "Spidey-sense" CPU/RAM/GPU/SSD meters (they shake when the
     PC runs hot), and a now-playing card with controls
   - Weather follows Caelestia's `services.weatherLocation` in `shell.json` (a city, or `lat,lon`; empty finds you by
-    IP, as on a fresh install). The pencil by the weather panel's tab (with the mouse over it) types it there; it's
+    IP, as on a fresh install). The pencil by the weather panel's tab (with the mouse over it) types it there, as does
+    Settings > Language & region (one picker for both, `.config/quickshell/common/PlacePicker.qml`); it's
     this machine's own, so setup keeps yours and `dotfiles-sync` doesn't copy it into the repo; media shows the same player as Caelestia's dashboard
   - A dimmed skeleton until the first forecast or player arrives; kept updating while windows cover them, so they're
     current whenever the desktop shows

@@ -66,10 +66,10 @@ pin x thunar
     fail "favourites: $(cat "$shell")"
 pin x foot
 [[ $(jq -c .launcher.favouriteApps "$shell") == '["thunar"]' ]] || fail "favourite unpin: $(cat "$shell")"
-# The weather widget's writer of the same file (widgets/shell.qml's setLocation) takes the same lock: a pin change under
+# The weather location's writer of the same file (common/PlacePicker.qml's setLocation, the widget's and Settings') takes the same lock: a pin change under
 # way when it writes isn't lost, nor its own
 # shellcheck disable=SC2016  # (the QML's own text, as written there)
-cmd=$(grep -o 'f="$HOME/.config/caelestia/shell.json"; exec 9>[^`]*' "$here/.config/quickshell/widgets/shell.qml")
+cmd=$(grep -o 'f="$HOME/.config/caelestia/shell.json"; exec 9>[^`]*' "$here/.config/quickshell/common/PlacePicker.qml")
 [[ -n $cmd ]] || fail "the weather widget's writer not found"
 echo '{"launcher": {"favouriteApps": ["foot"]}}' >"$shell"
 # shellcheck disable=SC2016  # (the stand-in's own)

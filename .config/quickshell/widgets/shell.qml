@@ -205,18 +205,6 @@ ShellRoot {
     property var weather: null
     property string city: ""
 
-    function get(url: string, cb: var): void {
-        const x = new XMLHttpRequest();
-        x.onreadystatechange = () => {
-            if (x.readyState === XMLHttpRequest.DONE && x.status === 200)
-                try {
-                    cb(JSON.parse(x.responseText));
-                } catch (e) {}
-        };
-        x.open("GET", url);
-        x.send();
-    }
-
     // Caelestia's settings this uses, read from its file (not its internal config module, which an update may rename):
     // its defaults where the file has none
     FileView {
@@ -229,24 +217,32 @@ ShellRoot {
             try {
                 root.services = JSON.parse(text()).services ?? {};
             } catch (e) {} // half-written while Caelestia saves: the next change reads it
-            // The first weather fetch, once the city setting is known (a city set made it already, as it changed)
-            if (root.fetchId === 0)
-                root.fetchWeather();
         }
-        onLoadFailed: if (root.fetchId === 0) root.fetchWeather() // no settings file: by IP
     }
     property var services: ({})
 
-    // Its weather location setting (Settings > Language & region): a city name, "lat,lon", or empty for automatic
-    readonly property string location: String(services.weatherLocation ?? "").trim()
+    // The weather location and its picker: the one Caelestia's settings use too (../common/PlacePicker.qml; not an
+    // import: Quickshell blocks those from outside this folder). Its setting is Caelestia's, so a change in either shows
+    // in both
+    Loader {
+        id: placesLoader
+        source: `file://${Quickshell.shellPath("../common/PlacePicker.qml")}`
+    }
+    readonly property var places: placesLoader.item
+    readonly property string location: places?.location ?? ""
 
-    onLocationChanged: fetchWeather()
+    function get(url: string, cb: var): void {
+        places?.get(url, cb);
+    }
 
-    // The pencil on the weather panel's tab sets it (empty: automatic again), in Caelestia's file as it writes it
-    // (tried again twice: Caelestia may be halfway through rewriting the file, which jq then can't read). Under the
-    // lock caelestia-pin takes to change the same file (its Super menu pins): neither loses the other's change
-    function setLocation(loc: string): void {
-        Quickshell.execDetached(["sh", "-c", `f="$HOME/.config/caelestia/shell.json"; exec 9>"$f.lock"; flock 9; [ -s "$f" ] || echo "{}" >"$f"; for i in 1 2 3; do jq --indent 4 --arg l "$1" '.services.weatherLocation = $l' "$f" >"$f.tmp" && mv "$f.tmp" "$f" && exit; sleep 0.3; done; rm -f "$f.tmp"`, "sh", loc.trim()]);
+    onLocationChanged: if (places?.ready) fetchWeather()
+    // (the first fetch once the setting is known; again when the place's name may have changed)
+    Connections {
+        target: root.places
+
+        function onChanged(): void {
+            root.fetchWeather();
+        }
     }
 
     // Bumped on every fetch: replies to an older one (e.g. the previous location) are dropped
@@ -261,110 +257,17 @@ ShellRoot {
         });
     }
 
-    // Places picked from the suggestions are saved as "lat,lon" (the exact place, for Caelestia too); their names are kept
-    // here to show on the tab, keyed by that value
-    FileView {
-        id: placeNamesFile
-
-        path: `${Quickshell.env("HOME")}/.local/state/desktop-widgets/place-names.json`
-        onLoaded: {
-            try {
-                root.placeNames = JSON.parse(text()) ?? {};
-            } catch (e) {}
-            // (a coordinate's name, if it came after the forecast was asked for: the tab named by it, not by the numbers)
-            if (root.fetchId > 0)
-                root.fetchWeather();
-        }
-    }
-    property var placeNames: ({})
-
-    // pickPlace(place): an open-meteo geocoding result set as the location, by its coordinates, its name kept
-    function pickPlace(p: var): void {
-        const loc = `${Number(p.latitude).toFixed(4)},${Number(p.longitude).toFixed(4)}`;
-        const names = Object.assign({}, root.placeNames);
-        names[loc] = p.name;
-        root.placeNames = names;
-        Quickshell.execDetached(["sh", "-c", 'mkdir -p "${1%/*}" && printf "%s\\n" "$2" >"$1.tmp" && mv "$1.tmp" "$1"', "sh", placeNamesFile.path, JSON.stringify(names)]);
-        // the place it already is (picked again, maybe under a new name): the location doesn't change, so the tab is
-        // brought up to date here
-        if (loc === root.location)
-            root.fetchWeather();
-        else
-            root.setLocation(loc);
-    }
-
-    // Suggestions for the location being typed: open-meteo's geocoding search (nothing else sent with it), as typed,
-    // a quarter second after the last key; a reply to an older text dropped
-    property var suggestions: []
-    property string suggestedFor // (the text they're for: Up/Down and Enter use them only while it's still what's typed)
-    property int suggestId: 0
-
-    function suggest(text: string): void {
-        const id = ++root.suggestId;
-        const q = text.trim();
-        if (q.length < 2) {
-            root.suggestions = [];
-            return;
-        }
-        // (more asked than shown: countries, mountains and airports are dropped)
-        get(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=20&format=json`, g => {
-            if (id !== root.suggestId)
-                return;
-            root.suggestedFor = q;
-            root.suggestions = root.towns(g.results).slice(0, 6).map(p => Object.assign({}, p, {
-                name: root.townName(p),
-                admin1: root.regionName(p.admin1)
-            }));
-        });
-    }
-
-    // Open-meteo's places (GeoNames) that are towns and cities, the same rule everywhere: its feature code says so
-    function towns(results: var): var {
-        return (results ?? []).filter(p => String(p.feature_code ?? "").startsWith("PPL"));
-    }
-
-    // A region's name without its kind, the same rule for every country: "Porto District", "Moscow Oblast", "Canton of
-    // Bern", "Departamento de Bolívar", "Jakarta Special Capital Region" are Porto, Moscow, Bern, Bolívar, Jakarta. A name
-    // that's only directions or kinds without it stays whole ("Western Province", "National Capital Region", "Free State")
-    function regionName(s: var): string {
-        const n = String(s ?? "").trim();
-        const kind = "(Special )?Capital Region|Capital Territory|Special Region|Autonomous (Region|Okrug|Oblast|Republic|Community)|Province|Region|Department|Oblast|District|County|Governorate|State|Division|Parish|Rayon|Raion|Prefecture|Municipality|Voivodeship|Canton|Territory|Krai|Kray|Okrug|Republic|Emirate|Borough";
-        const m = n.replace(new RegExp(`\\s+(${kind})$`), "")
-            .replace(new RegExp(`^(National Capital Territory|Special Region|Autonomous Region|Provincia|Departamento|Province|Canton|State|Region|Republic|Municipality|Governorate|Distrito|District) (of|in|de|del|da|do|di|du) `), "")
-            .replace(/^(Provincia|Departamento|Distrito|Canton) (?=[A-ZÀ-Ý])/, "");
-        const generic = /^(North|South|East|West|Northern|Southern|Eastern|Western|Central|Capital|National|Upper|Lower|Free|Federal|Autonomous|Special|Greater|Middle|Inner|Outer|Coastal|Far|Grand|Northeast|Northwest|Southeast|Southwest|North-East|North-West|South-East|South-West)$/;
-        return m && m !== n && !m.split(/\s+/).every(w => generic.test(w)) ? m : n;
-    }
-
-    // A town's name as people say it. GeoNames sometimes names an area's seat by the area: "Matosinhos Municipality",
-    // "Querétaro City". So the seat (PPLA*, PPLC) of an area of its name plus one word (in any language) is named as the
-    // area; "Frankfurt am Main", "Santiago de los Caballeros" and a city's parts ("Stuttgart Feuerbach") keep theirs
-    function townName(p: var): string {
-        const n = String(p.name ?? "");
-        if (!/^PPL(A\d?|C)$/.test(String(p.feature_code ?? "")))
-            return n;
-        for (const a of [p.admin4, p.admin3, p.admin2].map(s => String(s ?? "")))
-            if (a && (n.startsWith(a + " ") || n.endsWith(" " + a)) && n.replace(a, "").trim().split(/\s+/).length === 1)
-                return a;
-        return n;
-    }
-
-    // "City, region, country", the parts it has (a region named as the city left out)
-    function placeLabel(p: var): string {
-        return [p.name, p.admin1 !== p.name ? p.admin1 : "", p.country].filter(s => s).join(", ");
-    }
-
     function fetchWeather(): void {
         const id = ++root.fetchId;
         const loc = root.location;
         const coords = loc.split(",").map(s => parseFloat(s));
         if (coords.length === 2 && coords.every(n => !isNaN(n))) {
             // (a place picked from the suggestions: by the name it had there)
-            fetchForecast(id, root.placeNames[loc] || loc, coords[0], coords[1]);
+            fetchForecast(id, root.places.name, coords[0], coords[1]);
         } else if (loc) {
             get(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(loc)}&count=10&format=json`, g => {
                 // the first town of that name ("Roma" is the town, not Romania), else what there is
-                const r = root.towns(g.results)[0] ?? g.results?.[0];
+                const r = root.places.towns(g.results)[0] ?? g.results?.[0];
                 // No such place (misspelt): said so, not the previous city's forecast left showing
                 if (!r) {
                     if (id === root.fetchId) {
@@ -815,24 +718,21 @@ ShellRoot {
 
                             function start(): void {
                                 // (a place picked before: its name to edit, not its coordinates)
-                                field.text = root.placeNames[root.location] || root.location;
+                                field.text = root.places.name;
                                 editing = true;
                                 field.forceActiveFocus();
                                 field.selectAll();
                                 closeSuggestions();
                             }
                             function finish(save: bool): void {
-                                if (save && picked >= 0 && root.suggestions[picked] && root.suggestedFor === field.text.trim())
-                                    root.pickPlace(root.suggestions[picked]);
-                                else if (save && field.text.trim() !== (root.placeNames[root.location] || root.location))
-                                    root.setLocation(field.text);
+                                if (save)
+                                    root.places.apply(field.text, picked);
                                 editing = false;
                                 closeSuggestions();
                             }
                             function closeSuggestions(): void {
                                 suggestDelay.stop();
-                                root.suggestId++; // (a reply still on its way: dropped)
-                                root.suggestions = [];
+                                root.places.closeSuggestions();
                                 picked = -1;
                             }
 
@@ -840,13 +740,13 @@ ShellRoot {
                                 id: suggestDelay
 
                                 interval: 250
-                                onTriggered: root.suggest(field.text)
+                                onTriggered: root.places.suggest(field.text)
                             }
 
                             // New suggestions (for what's typed now): none picked, so Enter doesn't take the one that
                             // came to sit where an earlier list's pick was
                             Connections {
-                                target: root
+                                target: root.places
 
                                 function onSuggestionsChanged(): void {
                                     cityEdit.picked = -1;
@@ -895,9 +795,9 @@ ShellRoot {
                                     Keys.onReturnPressed: cityEdit.finish(true)
                                     Keys.onEnterPressed: cityEdit.finish(true)
                                     // Escape closes the suggestions first, then cancels
-                                    Keys.onEscapePressed: root.suggestions.length > 0 ? cityEdit.closeSuggestions() : cityEdit.finish(false)
-                                    Keys.onDownPressed: if (root.suggestions.length > 0 && root.suggestedFor === text.trim()) cityEdit.picked = Math.min(cityEdit.picked + 1, root.suggestions.length - 1)
-                                    Keys.onUpPressed: if (root.suggestions.length > 0 && root.suggestedFor === text.trim()) cityEdit.picked = Math.max(cityEdit.picked - 1, -1)
+                                    Keys.onEscapePressed: root.places.suggestions.length > 0 ? cityEdit.closeSuggestions() : cityEdit.finish(false)
+                                    Keys.onDownPressed: if (root.places.suggestions.length > 0 && root.places.suggestedFor === text.trim()) cityEdit.picked = Math.min(cityEdit.picked + 1, root.places.suggestions.length - 1)
+                                    Keys.onUpPressed: if (root.places.suggestions.length > 0 && root.places.suggestedFor === text.trim()) cityEdit.picked = Math.max(cityEdit.picked - 1, -1)
                                     onActiveFocusChanged: if (!activeFocus && cityEdit.editing) cityEdit.finish(false)
                                     onTextEdited: {
                                         cityEdit.picked = -1;
@@ -919,7 +819,7 @@ ShellRoot {
                             // editing (clickAway is under it)
                             Rectangle {
                                 antialiasing: true
-                                visible: cityEdit.editing && root.suggestions.length > 0
+                                visible: cityEdit.editing && root.places.suggestions.length > 0
                                 anchors.top: editBox.bottom
                                 anchors.topMargin: 4
                                 anchors.left: editBox.left
@@ -939,7 +839,7 @@ ShellRoot {
                                     Repeater {
                                         id: suggestRepeater
 
-                                        model: root.suggestions
+                                        model: root.places.suggestions
 
                                         Rectangle {
                                             id: suggestion
@@ -956,7 +856,7 @@ ShellRoot {
 
                                                 anchors.verticalCenter: parent.verticalCenter
                                                 x: 11
-                                                text: root.placeLabel(suggestion.modelData)
+                                                text: root.places.placeLabel(suggestion.modelData)
                                                 width: suggestion.width - 22
                                                 elide: Text.ElideRight
                                                 font.family: root.comic
