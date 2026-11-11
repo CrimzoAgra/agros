@@ -32,8 +32,10 @@ jobs:
           pkgs=(git jq python python-gobject python-numpy python-xlib python-secretstorage gnupg shellcheck sudo libnotify
             procps-ng util-linux which diffutils pacman-contrib file gtk3 lua lutris nodejs qt6-declarative hyprland
             base-devel mkinitcpio)
-          # (a machine id: without one systemd's install hooks warn that /etc isn't set up)
+          # (a machine id: without one systemd's install hooks warn that /etc isn't set up; and its hook that loads a
+          # package's kernel modules off: no systemd running here, it fails)
           systemd-machine-id-setup >/dev/null
+          mkdir -p /etc/pacman.d/hooks && ln -sf /dev/null /etc/pacman.d/hooks/36-systemd-modules-load.hook
           pacman -Sy
           pacman -Su --noconfirm --needed $(pacman -T "${pkgs[@]}")
           # A kernel's modules for nvidia-early, unpacked rather than installed: its install hook builds an initramfs,
@@ -82,6 +84,9 @@ jobs:
           # [multilib] (Steam's 32-bit libraries), as CachyOS has it on
           grep -q '^\[multilib\]' /etc/pacman.conf || printf '\n[multilib]\nInclude = /etc/pacman.d/mirrorlist\n' >>/etc/pacman.conf
           sed -i 's/^#*DownloadUser.*/#DownloadUser = alpm/' /etc/pacman.conf
+          # (as in the test job: a machine id, and no kernel-modules hook with no systemd running)
+          systemd-machine-id-setup >/dev/null
+          mkdir -p /etc/pacman.d/hooks && ln -sf /dev/null /etc/pacman.d/hooks/36-systemd-modules-load.hook
           pacman-key --init
           pacman -Sy
           pacman -Su --noconfirm --needed $(pacman -T base-devel git sudo)
