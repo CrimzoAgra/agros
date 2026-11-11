@@ -1,5 +1,8 @@
 <p align="center">
-  <img src="docs/images/agros-banner.svg" alt="AgrOS" width="420">
+  <picture>
+    <source media="(prefers-reduced-motion: reduce)" srcset="docs/images/agros-banner.svg">
+    <img src="docs/images/agros-banner-animated.png" alt="AgrOS" width="420">
+  </picture>
 </p>
 
 # AgrOS
