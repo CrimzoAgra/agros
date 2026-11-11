@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# The time zone from where you are, while Settings > Language & region > "Set the time zone automatically" is on: the
+# weather location's (Caelestia's shell.json: "lat,lon" or a town, through Open-Meteo), or your IP's when that's
+# automatic (ip-api.com, as Caelestia's weather does). Set only when it differs, without a password (agros-system's
+# polkit rule, for admins); no network or no answer: left as it is
+#   timezone-auto           set it, if it's on (at login, and when the weather location changes)
+#   timezone-auto on | off  turn it on (and set it) or off
+flag=${XDG_STATE_HOME:-$HOME/.local/state}/agros/timezone-auto
+case $1 in
+    on) mkdir -p "${flag%/*}" && touch "$flag" ;;
+    off) rm -f "$flag"; exit 0 ;;
+esac
+[[ -e $flag ]] || exit 0
+
+# (at login the network can still be coming up)
+nm-online -q -t 60 >/dev/null 2>&1
+get() { curl -fsS --max-time 10 "$@" 2>/dev/null; }
+place=$(jq -r '.services.weatherLocation // ""' "${XDG_CONFIG_HOME:-$HOME/.config}/caelestia/shell.json" 2>/dev/null)
+if [[ $place =~ ^\ *(-?[0-9.]+)\ *,\ *(-?[0-9.]+)\ *$ ]]; then
+    zone=$(get "https://api.open-meteo.com/v1/forecast?latitude=${BASH_REMATCH[1]}&longitude=${BASH_REMATCH[2]}&timezone=auto" |
+        jq -r '.timezone // empty' 2>/dev/null)
+elif [[ $place ]]; then
+    zone=$(get -G --data-urlencode "name=$place" -d count=1 https://geocoding-api.open-meteo.com/v1/search |
+        jq -r '.results[0].timezone // empty' 2>/dev/null)
+else
+    zone=$(get 'http://ip-api.com/json?fields=timezone' | jq -r '.timezone // empty' 2>/dev/null)
+fi
+# (an answer off the network: only a zone name goes on to timedatectl, which checks it's a real one)
+[[ $zone =~ ^[A-Za-z0-9_+-]+(/[A-Za-z0-9_+-]+)*$ ]] || exit 0
+[[ $zone == "$(timedatectl show -p Timezone --value 2>/dev/null)" ]] && exit 0
+# (never a password prompt out of nowhere: without the polkit rule, not an admin, it's left as it is)
+timedatectl --no-ask-password set-timezone "$zone"
