@@ -27,15 +27,6 @@ ColumnLayout {
 
     onGoneChanged: if (gone) done()
 
-    // A window being closed: no preview of it (Dock.closeSoon)
-    // (as the dock's own: a Steam game with no shortcut, its icon from Steam's cache, else Steam's)
-    function steamIcon(cls: string): string {
-        const game = cls.match(/^steam_app_(\d+)$/);
-        if (!game)
-            return "";
-        return Quickshell.iconPath(`steam_icon_${game[1]}`, true) ? `steam_icon_${game[1]}` : "steam";
-    }
-
     // A window's preview size, fitted in w x h as the preview fits it: known before its first frame arrives (until then
     // the preview was an empty w x h box, and the menu jumped to the window's shape a frame later, on every open)
     function fit(win: var, w: real, h: real): size {
@@ -69,8 +60,8 @@ ColumnLayout {
             asynchronous: true
             Layout.alignment: Qt.AlignVCenter
             implicitSize: details.implicitHeight
-            // (a game with no Steam shortcut: Steam's icon, as in the dock)
-            source: Quickshell.iconPath(root.target?.entry?.icon ?? root.steamIcon(root.target?.win?.lastIpcObject.class ?? ""), "application-x-executable")
+            // (Icons.windowApps: the dock's, bar's and switcher's icon too)
+            source: Quickshell.iconPath(root.target?.entry?.icon ?? Icons.windowApps?.iconName(root.target?.win?.lastIpcObject.class ?? "") ?? "", "application-x-executable")
         }
 
         ColumnLayout {

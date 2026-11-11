@@ -174,20 +174,13 @@ ShellRoot {
             Quickshell.execDetached(["hyprctl", "eval", `dots.goto_workspace(${col})`]);
     }
 
-    function iconFor(cls: string): string {
-        // Steam games: Steam's per-game icon (installed with the game's shortcut)
-        const game = cls.match(/^steam_app_(\d+)$/);
-        if (game && Quickshell.iconPath(`steam_icon_${game[1]}`, true))
-            return Quickshell.iconPath(`steam_icon_${game[1]}`);
-        return Quickshell.iconPath((cls ? entryFor(cls) : null)?.icon ?? "", "application-x-executable");
+    // A window's icon: the dock's and bar's lookup, ../common/WindowApps.qml
+    Loader {
+        id: windowApps
+        source: `file://${Quickshell.shellPath("../common/WindowApps.qml")}`
     }
-
-    function entryFor(cls: string): var {
-        // Quickshell's lookup misses a reverse-DNS class whose file names the short one (org.cachyos.cachyos-pi, its
-        // StartupWMClass cachyos-pi) and the other way round: the last part of each compared
-        const tail = s => (s ?? "").toLowerCase().split(".").pop();
-        return DesktopEntries.byId(cls) ?? DesktopEntries.heuristicLookup(cls) ??
-            DesktopEntries.applications.values.find(e => tail(e.id) === tail(cls) || tail(e.startupClass) === tail(cls)) ?? null;
+    function iconFor(cls: string): string {
+        return Quickshell.iconPath(windowApps.item?.iconName(cls) ?? "", "application-x-executable");
     }
 
     GlobalShortcut {
