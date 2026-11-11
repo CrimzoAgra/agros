@@ -98,6 +98,11 @@ fi
 
 caelestia_setup() {
     # (run in an && list, so set -e is off in here: a failure said, not left silent)
+    # (what the overlay was before: a Caelestia already started on the same one isn't restarted, the shell's start at
+    # login builds it first when it's missing, execs.lua)
+    local dst="$HOME/.config/quickshell/caelestia" before after
+    overlay_state() { { find "$dst" -printf '%P %l\n' | sort; find "$dst" -type f -exec md5sum {} + | sort; } 2>/dev/null | md5sum; }
+    before=$(overlay_state)
     if "$HOME/.local/bin/caelestia-overlay"; then
         echo "Caelestia overlay (your changes to Caelestia) built."
     else
@@ -109,7 +114,10 @@ caelestia_setup() {
     # (by Quickshell's own list, as dotfiles-check: a shell its crash handler restarted shows no "-c caelestia" in ps).
     # Hyprland named (-i, its first one when this isn't run inside it): from an SSH login or a text console hyprctl
     # doesn't know it, and the restart failed with nothing said
-    if qs list --all 2>/dev/null | grep -q "/quickshell/caelestia/shell.qml" &&
+    after=$(overlay_state)
+    if [[ $after == "$before" ]]; then
+        echo "Caelestia overlay unchanged: Caelestia left as it is."
+    elif qs list --all 2>/dev/null | grep -q "/quickshell/caelestia/shell.qml" &&
         hyprctl -i "${HYPRLAND_INSTANCE_SIGNATURE:-0}" dispatch 'hl.dsp.exec_cmd("~/.local/bin/caelestia-restart")' >/dev/null 2>&1; then
         echo "Caelestia restarted with them."
     fi

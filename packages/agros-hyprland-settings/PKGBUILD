@@ -37,6 +37,13 @@ package() {
     done
     # Its session's browser is Firefox; AgrOS's is LibreWolf
     sed -i 's/^export BROWSER=firefox$/export BROWSER=librewolf/' "$skel/.config/uwsm/env"
+    # Its shell started on AgrOS's changes to it (caelestia-overlay) from the first login: else it came up on Caelestia's
+    # own config (no dock, the bar laid out differently) and jumped when agros-welcome rebuilt it and restarted it. Built
+    # first only when missing (a few seconds, that once); under the overlay's lock, so agros-welcome's build waits
+    sed -i 's|^\( *\)hl.exec_cmd("caelestia shell -d")$|\1hl.exec_cmd("[ -e ~/.config/quickshell/caelestia/shell.qml ] \|\| ~/.local/bin/caelestia-overlay; caelestia shell -d")|' \
+        "$skel/.config/hypr/hyprland/execs.lua"
+    grep -q 'caelestia-overlay; caelestia shell -d' "$skel/.config/hypr/hyprland/execs.lua" ||
+        { echo "Caelestia's execs.lua changed: its shell's start not found" >&2; return 1; }
     # 2. AgrOS's, over them
     cd "$_root"
     cp -r --no-preserve=ownership .config/. "$skel/.config/"
