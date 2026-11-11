@@ -30,7 +30,8 @@ dots.monitor({ output = "", mode = "preferred", position = "auto", scale = "auto
 -- the VM's window was resized it kept the old size (vm-screen-follow reloads when the kernel's changes)
 for _, m in ipairs(hl.get_monitors() or {}) do
     if m.name:match("^Virtual%-%d+$") then
-        local p = io.popen("head -qn1 /sys/class/drm/card*-" .. m.name .. "/modes 2>/dev/null")
+        -- (SYSFS: another /sys, for tests/monitor-desc.sh)
+        local p = io.popen("head -qn1 " .. (os.getenv("SYSFS") or "/sys") .. "/class/drm/card*-" .. m.name .. "/modes 2>/dev/null")
         local mode = p and p:read("l")
         if p then p:close() end
         dots.monitor({ output = m.name, mode = mode or "preferred", position = "auto", scale = 1 })
