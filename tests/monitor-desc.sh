@@ -28,10 +28,13 @@ dots = {}
 io.write(pcall(dofile, ".config/caelestia/user/monitors.lua") and "loaded\n" or "error\n")')
 [[ $out == $'rule []\nerror' ]] || { echo "FAIL: a broken host file left screens without a rule: $out"; exit 1; }
 # A screen with no rule of its own: its preferred resolution at its fastest rate there (not another resolution's
-# faster one, not the preferred 60); one this machine's host file names: left to that rule; a VM's (one rate there,
-# 60 being its preferred 59.94): no fixed mode (its scale-1 rule keeps "preferred"), so it follows its window's size
+# faster one, not the preferred 60); one this machine's host file names: left to that rule; a VM's: the kernel's
+# preferred mode (its window's size; Hyprland's own list is the one it had at connect), "preferred" without one, never
+# a fixed rate (one rate there, 60 being its preferred 59.94)
 echo 'dots.monitor({ output = "desc:Named One", mode = "1920x1080@60" })' >"$t/.config/caelestia/user/hosts/$(cat /proc/sys/kernel/hostname).lua"
-out=$(cd "$here" && HOME=$t lua -e '
+# (a /sys of its own: CI runs in a VM, whose real Virtual-1 has its own size)
+mkdir -p "$t/sys"
+screens() { cd "$here" && SYSFS=$t/sys HOME=$t lua -e '
 package.path = os.getenv("HOME") .. "/.config/caelestia/?.lua;" .. package.path
 local modes = { { width = 1920, height = 1080, refresh_rate = 60.0, preferred = true },
                 { width = 1920, height = 1080, refresh_rate = 143.98, preferred = false },
@@ -46,9 +49,13 @@ hl = { get_monitors = function() return { { name = "DP-1", description = "Fast O
        monitor = function(r) io.write(r.output, " ", tostring(r.mode), "\n") end, bind = function() end,
        dsp = { exec_cmd = function() end } }
 dots = {}
-dofile(".config/caelestia/user/monitors.lua")')
+dofile(".config/caelestia/user/monitors.lua")'; }
+out=$(screens)
 grep -qx "DP-1 1920x1080@143.98" <<<"$out" || fail "a screen with no rule of its own not at its fastest rate: $out"
 grep -qx "desc:Named One 1920x1080@60" <<<"$out" && ! grep -q "^DP-2 " <<<"$out" || fail "a screen the host file names got another rule: $out"
-! grep -v "^Virtual-1 preferred$" <<<"$out" | grep -q "^Virtual-1 " ||
-    fail "a screen with one rate got a fixed mode (a VM's then can't follow its window): $out"
+[[ $(grep "^Virtual-1 " <<<"$out") == "Virtual-1 preferred" ]] ||
+    fail "a VM's screen with no mode from the kernel not left at preferred: $out"
+mkdir -p "$t/sys/class/drm/card0-Virtual-1"; printf '1594x884\n4096x2160\n' >"$t/sys/class/drm/card0-Virtual-1/modes"
+[[ $(screens | grep "^Virtual-1 ") == "Virtual-1 1594x884" ]] ||
+    fail "a VM's screen not at the kernel's preferred mode (its window's size): $(screens)"
 echo "ok monitor-desc"
