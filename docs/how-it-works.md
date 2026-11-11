@@ -239,6 +239,9 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
 - **`.local/bin/caelestia-overlay`**: builds `~/.config/quickshell/caelestia` (Caelestia + the patches); also run by the
   pacman hook after every `caelestia-shell` update. Skipped patches go to `~/.local/state/caelestia-overlay-skipped`
   (reported by `dotfiles-check`)
+- **`.local/bin/caelestia-start`**: starts Caelestia at login (Caelestia's `execs.lua` runs it, so set by
+  `agros-hyprland-settings`), building the overlay first when it's missing; each start logged in
+  `~/.local/state/agros/caelestia-start.log`
 - **`.local/bin/caelestia-restart`**: restarts Caelestia with a clean environment (also Ctrl+Super+Alt+R), keeping
   Spotify hidden
 - **`.local/bin/caelestia-pin`**: pin apps to the launcher or dock from a picker

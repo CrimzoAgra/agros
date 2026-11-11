@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Starts Caelestia's shell at login on AgrOS's changes to it: Caelestia's own execs.lua runs this in place of its
+# "caelestia shell -d" (agros-hyprland-settings). The changes (~/.config/quickshell/caelestia, caelestia-overlay) are
+# built first when they're missing, so the first login comes up with the dock and the bar as they stay, not on
+# Caelestia's own config, rebuilt and restarted under you a minute later (agros-welcome). Under the overlay's own lock:
+# agros-welcome's build at that login waits for this one.
+# What happened is logged (~/.local/state/agros/caelestia-start.log): at login there's no terminal, and a shell that
+# didn't come up left nothing to go by
+log=${XDG_STATE_HOME:-$HOME/.local/state}/agros/caelestia-start.log
+mkdir -p "${log%/*}"
+# (the last 200 lines kept: it's added to at every login)
+[[ -f $log ]] && tail -n 200 "$log" >"$log.tmp" && mv -f "$log.tmp" "$log"
+{
+    echo "== $(date '+%F %T')"
+    if [[ -e $HOME/.config/quickshell/caelestia/shell.qml ]]; then
+        echo "overlay there"
+    else
+        "$HOME/.local/bin/caelestia-overlay" | tail -n 3
+        echo "overlay built: exit ${PIPESTATUS[0]}"
+    fi
+} >>"$log" 2>&1
+# (even when the build failed: Caelestia as it comes, rather than no bar at all)
+exec caelestia shell -d >>"$log" 2>&1
