@@ -14,6 +14,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
+import Quickshell.Hyprland
 import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Services.Mpris
@@ -22,7 +23,6 @@ ShellRoot {
     id: root
 
     readonly property string home: Quickshell.env("HOME")
-    readonly property string user: Quickshell.env("USER")
 
     readonly property color ink: "#0c1124"
     readonly property color sky: "#514dbd"
@@ -319,8 +319,15 @@ ShellRoot {
         running: true
         command: ["nmcli", "monitor"]
         stdout: SplitParser {
-            onRead: if (!root.weather) root.fetchWeather()
+            // (once the events settle: a reconnect prints 10-20 lines, each was a request to ip-api, rate-limited)
+            onRead: if (!root.weather) netSettle.restart()
         }
+    }
+    Timer {
+        id: netSettle
+
+        interval: 3000
+        onTriggered: root.fetchWeather()
     }
 
     Timer {
@@ -690,8 +697,9 @@ ShellRoot {
                     x: stage.width * 0.30
                     // Below the band along the top that Caelestia keeps for itself on an empty workspace (dragging its
                     // panels out: its dragThreshold, 80, and its border): the weather panel's tab and pencil were in it,
-                    // so the mouse never reached them
-                    y: Math.max(stage.height * 0.08, 120)
+                    // so the mouse never reached them. 120 screen pixels, not the stage's: scaled (1.5) or cropped (a wide
+                    // screen) the stage's 120 landed inside the band, or above the screen
+                    y: Math.max(stage.height * 0.08, (120 - stage.y) / stage.fit)
                     width: 290
                     spacing: 34
 
@@ -1089,18 +1097,17 @@ ShellRoot {
                     text: root.lines[clock.date.getHours() % root.lines.length]
                 }
 
-                // ---- Right column: name, clock, spidey-sense, media ----
+                // ---- Right column: clock, sixth sense, media ----
                 ColumnLayout {
                     x: stage.width * 0.555
                     y: stage.height * 0.05
                     width: 430
                     spacing: 0
 
+                    // (the name caption's room, kept empty: the clock stays where it was)
                     Caption {
-                        rotation: -2
-                        bg: root.paper
                         size: 20
-                        text: "My name is " + root.user + "."
+                        opacity: 0
                     }
 
                     RowLayout {
@@ -1143,14 +1150,15 @@ ShellRoot {
                         Layout.fillWidth: true
                         Layout.topMargin: 40
                         rotation: 1
-                        title: root.tingling ? "Spidey-sense tingling!" : "Spidey-sense"
+                        title: root.tingling ? "Sixth sense tingling!" : "Sixth sense"
                         titleBg: root.tingling ? root.red : root.yellow
                         accent: root.tingling ? root.red : root.sky
                         dots: root.magenta
 
-                        // Shake while tingling
+                        // Shake while tingling; not behind a fullscreen window (a game runs the GPU that hot, and the
+                        // widgets were redrawn under it the whole time)
                         SequentialAnimation on rotation {
-                            running: root.tingling
+                            running: root.tingling && !(Hyprland.focusedWorkspace?.hasFullscreen ?? false)
                             loops: Animation.Infinite
                             onStopped: sense.rotation = 1
                             NumberAnimation { to: -1.5; duration: 70 }

@@ -12,7 +12,8 @@ Press **Ctrl+Super+Alt+R** to restart the shell.
 
 ## The login screen doesn't appear
 
-Press **Ctrl+Alt+F2**, log in with your username and password, run `sudo login-reset`, then restart.
+Press **Ctrl+Alt+F2**, log in with your username and password, run `sudo login-reset`, then restart. That gives you
+a plain text login; `sudo login-reset --back` brings the AgrOS login screen back once it works again.
 
 ## An update broke something
 

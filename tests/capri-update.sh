@@ -68,7 +68,7 @@ for _ in {1..50}; do [[ -s $t/hyprctl ]] && break; sleep 0.1; done  # (in the ba
 [[ $(cat "$app/current/app.js") == mine ]] || fail "not the fork's code"
 [[ -x $app/current/node_modules/.bin/electron ]] || fail "no Electron"
 [[ -f $app/current/out/main/index.js ]] || fail "not built"
-grep -q "^Exec=$t/ho|me/.local/bin/capri$" "$t/ho|me/.local/share/applications/capri.desktop" || fail "no launcher entry"
+grep -qF "Exec=\"$t/ho|me/.local/bin/capri\"" "$t/ho|me/.local/share/applications/capri.desktop" || fail "no launcher entry"
 [[ -f "$t/ho|me/.local/share/icons/hicolor/256x256/apps/capri.png" ]] || fail "no icon"
 out=$(run) || fail "second run: $out"
 grep -q "up to date (v0.1.0)" <<<"$out" || fail "not up to date: $out"

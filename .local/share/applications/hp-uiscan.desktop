@@ -1,0 +1,12 @@
+# HP Scan with an icon that exists (hplip points at the Humanity theme, which nothing installs; this one wins)
+[Desktop Entry]
+Version=1.0
+Type=Application
+Terminal=false
+Name=HP Scan
+GenericName=Scanner
+Comment=HP Printer/Scanner Utility - Scan
+Exec=/usr/bin/hp-uiscan
+Icon=scanner
+Categories=Graphics;Scanning;
+Keywords=scan;hp;hplip;printer;

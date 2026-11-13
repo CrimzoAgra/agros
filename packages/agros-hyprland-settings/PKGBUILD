@@ -1,12 +1,12 @@
 # Maintainer: Filipe Agra
 # The desktop's settings for every new account (/etc/skel): Caelestia's own configs (pinned, what `caelestia install`
 # would put in your home), AgrOS's over them (Hyprland user modules, Caelestia's shell.json, the widgets, switcher,
-# Updates and Settings apps, launcher entries, LibreWolf and VSCodium settings, the user services), the default
-# wallpaper, and the links to AgrOS's programs (agros-scripts). Fonts and icons go system-wide.
+# Updates and Settings apps, launcher entries, LibreWolf and VSCodium settings, the user services), and the links to
+# AgrOS's programs (agros-scripts). Fonts and icons go system-wide.
 pkgname=agros-hyprland-settings
 pkgver=0
 pkgrel=1
-pkgdesc='AgrOS Hyprland + Caelestia settings for new users (/etc/skel), wallpaper, fonts and icons'
+pkgdesc='AgrOS Hyprland + Caelestia settings for new users (/etc/skel), fonts and icons'
 arch=('any')
 url='https://github.com/CrimzoAgra/agros'
 license=('GPL-3.0-or-later' 'OFL-1.1')
@@ -35,8 +35,6 @@ package() {
         src=${c%%|*} dest=${c#*|}
         cp -r --no-preserve=ownership "$srcdir/caelestia-dots/$src" "$skel/.config/$dest"
     done
-    # Its session's browser is Firefox; AgrOS's is LibreWolf
-    sed -i 's/^export BROWSER=firefox$/export BROWSER=librewolf/' "$skel/.config/uwsm/env"
     # Its shell started by caelestia-start: on AgrOS's changes to it from the first login (built first when missing),
     # else it came up on Caelestia's own config (no dock, the bar laid out otherwise) and jumped when agros-welcome
     # rebuilt it and restarted it; and each start logged
@@ -47,12 +45,13 @@ package() {
     # 2. AgrOS's, over them
     cd "$_root"
     cp -r --no-preserve=ownership .config/. "$skel/.config/"
+    # Caelestia's own wallpaper in the wallpaper folder, so its picker (and Random) have one to show
+    install -d "$skel/Pictures/Wallpapers"
+    ln -s /etc/xdg/quickshell/caelestia/assets/wallpaper.webp "$skel/Pictures/Wallpapers/caelestia.webp"
     rm -f "$skel/.config/autostart/cachyos-hello.desktop"  # (CachyOS Hello isn't installed)
     install -d "$skel/.local/share"
     cp -r --no-preserve=ownership .local/share/applications .local/share/firefox .local/share/lutris "$skel/.local/share/"
     # (lutris: the Rockstar Games Launcher's cover and banner, which Lutris has none of)
-    install -Dm644 Pictures/Wallpapers/wallpaper.jpg "$skel/Pictures/Wallpapers/wallpaper.jpg"
-    install -Dm644 Pictures/Wallpapers/wallpaper.jpg "$pkgdir/usr/share/backgrounds/agros/wallpaper.jpg"
     # 3. The links to AgrOS's programs and their data (agros-scripts; agros-links adds later ones at login)
     install -d "$skel/.local/bin"
     for f in .local/bin/*; do

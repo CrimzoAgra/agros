@@ -20,7 +20,23 @@ ShellRoot {
     property var theme: ({})
     readonly property var c: theme.colours ?? {}
     // (theme.json is rewritten at every login; install.sh also puts the user in the environment, in case it's broken)
-    readonly property string user: theme.user || Quickshell.env("CAELESTIA_GREETER_USER") || ""
+    readonly property string user: chosenUser || theme.user || Quickshell.env("CAELESTIA_GREETER_USER") || ""
+    // The people who can log in (uid 1000 and up, a login shell): with more than one, the pill by the session's
+    // opens their list (the last one to log in comes first; the wallpaper and colours stay the last one's)
+    property var users: []
+    property string chosenUser
+
+    function chooseUser(name: string): void {
+        if (busy || name === user || !users.includes(name))
+            return;
+        if (answering) { // (a prompt open for the last account: closed, not answered for the next one)
+            answering = false;
+            Greetd.cancelSession();
+        }
+        chosenUser = name;
+        password = "";
+        message = "";
+    }
     readonly property string wallpaper: theme.wallpaper ?? `${Quickshell.shellDir}/theme/wallpaper`
 
     function col(name: string, fallback: string): color {
@@ -102,6 +118,17 @@ ShellRoot {
             try {
                 root.theme = JSON.parse(text());
             } catch (e) {}
+        }
+    }
+
+    Process {
+        running: true
+        command: ["getent", "passwd"]
+        stdout: StdioCollector {
+            onStreamFinished: root.users = text.split("\n").map(l => l.split(":")).filter(f => {
+                const uid = parseInt(f[2]);
+                return f.length >= 7 && uid >= 1000 && uid < 60000 && !/(nologin|false)$/.test(f[6]);
+            }).map(f => f[0])
         }
     }
 
@@ -648,10 +675,22 @@ ShellRoot {
             anchors.margins: 32 * card.s
 
             Pill {
+                id: sessionPill
+
                 icon: "desktop_windows"
                 label: root.session.name
                 trailing: root.sessions.length > 1 ? "unfold_more" : ""
-                onClicked: root.sessionIdx = (root.sessionIdx + 1) % root.sessions.length
+                onClicked: if (root.sessions.length > 1) picker.toggle("session", sessionPill)
+            }
+
+            Pill {
+                id: userPill
+
+                visible: root.users.length > 1
+                icon: "person"
+                label: root.user
+                trailing: "unfold_more"
+                onClicked: picker.toggle("user", userPill)
             }
 
             Item {
@@ -671,6 +710,134 @@ ShellRoot {
             Pill {
                 icon: "power_settings_new"
                 onClicked: Quickshell.execDetached(["systemctl", "poweroff"])
+            }
+        }
+
+        // The session and account pills' lists: opened above the pill, the current one ticked; a click on one (or the
+        // arrow keys and Enter) picks it, a click anywhere else or Esc closes it, and typing goes back to the password
+        Item {
+            id: picker
+
+            property string kind // "session", "user", or "" when closed
+            property Item pill
+            property int highlighted
+            readonly property var items: kind === "session" ? root.sessions.map(s => s.name) : kind === "user" ? root.users : []
+            readonly property int current: kind === "session" ? root.sessionIdx : root.users.indexOf(root.user)
+
+            function toggle(k: string, p: Item): void {
+                if (kind === k) {
+                    close();
+                    return;
+                }
+                if (root.busy)
+                    return;
+                picker.kind = k;
+                picker.pill = p;
+                picker.highlighted = Math.max(0, picker.current);
+                pickerList.forceActiveFocus();
+            }
+            function close(): void {
+                picker.kind = "";
+                input.forceActiveFocus();
+            }
+            function pick(i: int): void {
+                if (kind === "session")
+                    root.sessionIdx = i;
+                else if (kind === "user")
+                    root.chooseUser(items[i]);
+                close();
+            }
+
+            anchors.fill: parent
+            visible: kind !== ""
+            z: 10
+
+            MouseArea {
+                anchors.fill: parent
+                onClicked: picker.close()
+            }
+
+            Rectangle {
+                id: pickerList
+
+                readonly property point at: picker.pill ? picker.pill.mapToItem(picker, 0, 0) : Qt.point(0, 0)
+
+                x: at.x
+                y: at.y - height - 10 * card.s
+                width: Math.max(picker.pill?.width ?? 0, pickerColumn.implicitWidth + 16 * card.s)
+                height: pickerColumn.implicitHeight + 16 * card.s
+                radius: 26 * card.s
+                color: Qt.alpha(root.surfaceContainer, 0.95)
+
+                Keys.onUpPressed: picker.highlighted = Math.max(0, picker.highlighted - 1)
+                Keys.onDownPressed: picker.highlighted = Math.min(picker.items.length - 1, picker.highlighted + 1)
+                Keys.onReturnPressed: picker.pick(picker.highlighted)
+                Keys.onEnterPressed: picker.pick(picker.highlighted)
+                Keys.onEscapePressed: picker.close()
+
+                // (a click between the rows doesn't close it)
+                MouseArea {
+                    anchors.fill: parent
+                }
+
+                ColumnLayout {
+                    id: pickerColumn
+
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.margins: 8 * card.s
+                    spacing: 2 * card.s
+
+                    Repeater {
+                        model: picker.items
+
+                        Rectangle {
+                            id: option
+
+                            required property string modelData
+                            required property int index
+
+                            Layout.fillWidth: true
+                            implicitWidth: optionRow.implicitWidth + 40 * card.s
+                            implicitHeight: 44 * card.s
+                            radius: height / 2
+                            color: picker.highlighted === index ? Qt.alpha(root.surfaceContainerHighest, 0.95) : "transparent"
+
+                            RowLayout {
+                                id: optionRow
+
+                                anchors.left: parent.left
+                                anchors.leftMargin: 16 * card.s
+                                anchors.verticalCenter: parent.verticalCenter
+                                spacing: 10 * card.s
+
+                                Icon {
+                                    text: "check"
+                                    size: 20 * card.s
+                                    color: root.primary
+                                    opacity: option.index === picker.current ? 1 : 0
+                                }
+
+                                Text {
+                                    renderType: Text.NativeRendering
+                                    text: option.modelData
+                                    color: root.fg
+                                    font.family: root.font
+                                    font.pixelSize: 17 * card.s
+                                }
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onEntered: picker.highlighted = option.index
+                                onClicked: picker.pick(option.index)
+                            }
+                        }
+                    }
+                }
             }
         }
 

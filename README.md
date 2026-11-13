@@ -7,7 +7,8 @@
 
 # AgrOS
 
-AgrOS is a ready-to-use Linux desktop built on [CachyOS](https://cachyos.org). Install it from the ISO and everything is
+AgrOS is a ready-to-use Linux desktop built on [CachyOS](https://cachyos.org). Install it from the ISO
+(**[download it here](https://sourceforge.net/projects/agros-iso/files/latest/download)**) and everything is
 already set up: the [Hyprland](https://hyprland.org) desktop with the [Caelestia](https://github.com/caelestia-dots/shell)
 shell, a dock, desktop widgets, your apps, gaming, and the settings that tie them together. There's no setup script to
 run afterwards.

@@ -1,0 +1,3 @@
+# Caelestia recolours the Papirus folder icons to the colour scheme with `sudo -n papirus-folders -C <colour> -u`:
+# admins may run exactly that without a password (a regular expression, sudo 1.9.10+: no other arguments)
+%wheel ALL=(root) NOPASSWD: /usr/bin/papirus-folders ^-C [a-z]+ -u$

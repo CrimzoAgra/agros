@@ -58,9 +58,24 @@ dst="$HOME/.config/quickshell/caelestia"
 
 [[ -d $src ]] || { echo "Caelestia not installed at $src"; exit 1; }
 mkdir -p "${dst%/*}"
-# One run at a time (the pacman hook and a Settings toggle can overlap), each in its own folder
+# One run at a time (the pacman hook and a Settings toggle can overlap), each in its own folder. Not taken again when
+# its caller holds it (CAELESTIA_REBUILDING: caelestia-restart --rebuild, caelestia-start, with the shell stopped)
 exec 9>"$dst.lock"
-flock 9
+[[ -n ${CAELESTIA_REBUILDING:-} ]] || flock 9
+# A Caelestia running from this folder (a Caelestia update from the Updates app, its pacman hook running this for each
+# user, inside the session): handed to caelestia-restart --rebuild, which stops it, runs this, and starts it again.
+# Swapped under it, Hyprland dropped the shell, and nothing started it again. Checked under the lock: a restart holds it
+# until its new shell is up. Its 3: built there and failed (the shell restarted: not built again under it). Not
+# handed over (no Hyprland to ask: nothing to drop the shell): built here
+if [[ -z ${CAELESTIA_REBUILDING:-} ]] && qs list --all 2>/dev/null | grep -qF "Config path: $dst/shell.qml"; then
+    exec 9>&-
+    r=0
+    "$HOME/.local/bin/caelestia-restart" --rebuild || r=$?
+    ((r == 0)) && { echo "Caelestia runs from it: rebuilt by caelestia-restart (stopped, rebuilt, started again)"; exit 0; }
+    ((r == 3)) && exit 1
+    exec 9>"$dst.lock"
+    flock 9
+fi
 tmp=$(mktemp -d "$dst.new.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT
 rmdir "$tmp" && cp -as "$src" "$tmp"
@@ -95,7 +110,9 @@ elif ((rc != 0)) && [[ ! -s $skipped ]]; then
     echo "The overlay failed, Caelestia runs without your changes: $(tail -1 <<<"$out")" >"$skipped"
     rm -rf "$tmp" && cp -as "$src" "$tmp"
 fi
-if [[ -s $skipped && -S /run/user/$(id -u)/bus ]]; then
+# (not with the shell stopped, CAELESTIA_REBUILDING: Caelestia is the notification server, so it went to nobody; said
+# by caelestia-restart once its new shell is up, and by dotfiles-check 30 s into a login)
+if [[ -s $skipped && -z ${CAELESTIA_REBUILDING:-} && -S /run/user/$(id -u)/bus ]]; then
     DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus notify-send -u critical -a Dotfiles -i dialog-warning \
         "Caelestia changed: some of your changes are off" "$(cat "$skipped")" || true
 fi

@@ -12,8 +12,7 @@ desktop (RTX 2060, external monitor). Things that depend on the hardware check f
 both. The files are laid out like `$HOME`; `packages/` turns them into pacman packages.
 
 **What's not in this repo:** your personal data, meaning logins, keys, your browser profile and bookmarks (they travel
-encrypted on your pen drive, see below), and copyrighted wallpapers. The default wallpaper
-(`Pictures/Wallpapers/wallpaper.jpg`) is original artwork made for AgrOS. The logo, three leaves drawn in one line width,
+encrypted on your pen drive, see below), and wallpapers: the default is Caelestia's own. The logo, three leaves drawn in one line width,
 is `agros-logo` (#bec4ee, `.local/share/icons/hicolor/scalable/apps`), installed with the icons in `/usr/share/icons`,
 so every install has it.
 
@@ -25,8 +24,9 @@ Laptop settings and lighting are in a separate repo: **legion-control-linux**.
    package list) and install as usual. There's no desktop to pick: the installer installs `agros-desktop`, AgrOS's
    meta package, from the `[agros]` repo, alongside CachyOS's base. pacman puts in exactly the final set of packages
    in one go; nothing is installed only to be taken away again, and nothing is built during the install.
-2. Reboot and log in. At your first login, `agros-welcome` does what's per user: Caelestia's overlay, the wallpaper and
-   its colours, LibreWolf's settings, the Spotify, Nuvio and ArtCraft Flatpaks with Spicetify, VSCodium's extensions
+2. Reboot and log in. At your first login, `caelestia-start` builds Caelestia's overlay and sets its wallpaper and
+   colours before the shell starts (`agros-welcome` does both if that failed, and moves the shell onto the overlay), and
+   `agros-welcome` does the rest of what's per user: LibreWolf's settings, the Spotify, Nuvio and ArtCraft Flatpaks with Spicetify, VSCodium's extensions
    and Claude Code's plugins.
 3. **The one thing you run:** its notification offers *Restore my accounts*. Plug in your pen drive and click it, or
    run `agros-personal`. It brings back your logins (Discord, Spotify, Nuvio, Proton VPN, Steam, Lutris's stores,
@@ -59,9 +59,9 @@ Server = https://crimzoagra.github.io/agros/$arch
 | `agros-desktop` | The meta package: every package the desktop is made of (Hyprland, Caelestia, the apps, PipeWire with its JACK, fonts, themes). Hardware apps are optional |
 | `agros-hyprland-settings` | The settings every new account gets (`/etc/skel`): Caelestia's own configs (its dots, pinned), AgrOS's over them (everything in `.config`), launcher entries, LibreWolf settings, the wallpaper; fonts and icons system-wide |
 | `agros-scripts` | The programs in `.local/bin` and the data they use, in `/usr/lib/agros`, linked into each home (`~/.local/bin`, `~/.local/share`; `agros-links` adds new ones at login, and copies in once each config file an update added to `/etc/skel`) |
-| `agros-system` | The update at every boot (downloaded at boot, installed at shutdown), pacman hooks that rebuild each user's Caelestia overlay and hyprbars and check the Hyprland config, Bluetooth after sleep, the ananicy rule, the keyring, the night light's and time zone's permissions (geoclue, polkit) |
+| `agros-system` | The update at every boot (downloaded at boot, installed at shutdown), pacman hooks that rebuild each user's Caelestia overlay and hyprbars and check the Hyprland config, Bluetooth after sleep, the ananicy rule, the keyring, the night light's and time zone's permissions (geoclue, polkit), folder icons that follow the colour scheme (a sudoers rule for `papirus-folders` alone), mDNS from Avahi alone (resolved's off: the two clashed over the computer's name), UFW's logging off (once) |
 | `agros-greeter` | The Caelestia-style login screen for greetd, its PAM service following the system's, `login-reset` |
-| `agros-boot` | The hidden boot menu, the faster splash with shutdown titles, screens in their best mode from boot |
+| `agros-boot` | The hidden boot menu in AgrOS's GRUB theme (`grub-theme/`, its pictures and fonts made by `make.sh`), the faster splash with shutdown titles, screens in their best mode from boot |
 | `agros-nvidia`, `agros-camera-switch` | NVIDIA driver loaded early; the Legion's camera switch |
 | `agros-welcome` | The first-login step above |
 | `agros-keyring` | The repo's signing key |
@@ -119,7 +119,7 @@ are installed as they are, and the overlay in `.local/share/caelestia-overlay` c
 [hyprland-plugins](https://github.com/hyprwm/hyprland-plugins)' hyprbars (BSD-3-Clause), patched by
 `.local/share/hyprbars/hyprbars.patch`, and [Lutris](https://github.com/lutris/lutris) (GPL-3.0), changed by
 `.local/share/lutris-overlay`. The Bangers font is under the SIL Open Font License 1.1 (`.local/share/fonts/OFL.txt`).
-The default wallpaper is original artwork made for AgrOS.
+The default wallpaper is Caelestia's own (`assets/wallpaper.webp` in its shell).
 
 ## Layout
 
@@ -135,7 +135,7 @@ The default wallpaper is original artwork made for AgrOS.
 | `.local/bin/` | Scripts (on the session's `PATH` through `.config/environment.d/10-local-bin.conf`) |
 | `.config/uwsm/env.d/` | `~/.local/bin` on the desktop's PATH (uwsm replaces environment.d's PATH with the login's); Qt's harmless Wayland text-input warnings silenced; `nvidia-vaapi.sh`: hardware video decoding in LibreWolf on the NVIDIA card, only when that card drives a screen; as its trade-off it sets `MOZ_DISABLE_RDD_SANDBOX=1`, so web video is decoded outside LibreWolf's RDD sandbox (the sandbox blocks the NVIDIA driver) |
 | `.config/systemd/user/` | User services: game-focus, tray-keeper, the update check, lutris-library |
-| `.local/share/applications/` | Launcher entries |
+| `.local/share/applications/` | Launcher entries (and fixed copies of a package's own, e.g. HP Scan's with an icon that exists) |
 
 ## Desktop Settings app
 
@@ -214,7 +214,8 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
     - A "safe triangle" for bar popouts: moving towards an open popout doesn't switch to the buttons on the way
     - Bluetooth pairing from the Bluetooth popout
     - A Scroll Lock icon (`ScrollLock.qml`, `LockStatus.qml`); Caps/Num Lock icons re-read the keyboard after login
-      and on keymap changes (no Caps Lock shown on at boot)
+      and on keymap changes (no Caps Lock shown on at boot; Caelestia's own fix, PR #1899, only covers remapped Caps
+      keys, so this stays)
     - The logo does nothing (no click)
   - Super menu (launcher):
     - Pin buttons; favourites at the top, then everything A-Z
@@ -225,6 +226,8 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
   - Notifications:
     - The sidebar slides down from the top when you hover the top edge above it, with notifications only (no
       divider, ending above the bottom-right panel); Super+K opens it too, merged with the bottom-right panel
+      (a Caelestia with its own shortcut mode for the sidebar, as main has, keeps it: only its choice of which opening
+      counts as by the key is replaced, as its own counts the top edge's)
       It closes without bouncing back, and hovering the edge doesn't open it while a notification pop-up is on screen
       (nor afterwards for a pointer that stayed there: move away and back)
     - One neutral colour whatever their urgency
@@ -234,16 +237,27 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
     screen from in front of it, out of focus and sharpening, from the centre outward); a wrong password said at once
     (its own PAM config, `assets/pam.d/passwd`, with nodelay on pam_unix and pam_faillock; pam_faillock still counts
     and locks out)
-  - Other: brightness only on built-in screens; the dashboard's calendar and weather in the system language; no volume
-    pop-up when the shell starts or the sound device changes
+  - Other: brightness only on built-in screens; the dashboard's calendar and weather in the system language
+    (`LANG`; Caelestia's own locale dates, PR #2213, follow `LC_TIME` for a language it has no translation for, so this
+    stays); no volume
+    pop-up when the shell starts or the sound device changes; a critical battery suspends instead of hibernating, and
+    so does the session menu's Hibernate (unless `shell.json`'s `session.commands.hibernate` sets another command): there's no swap to hibernate
+    into (zram only)
 - **`.local/bin/caelestia-overlay`**: builds `~/.config/quickshell/caelestia` (Caelestia + the patches); also run by the
-  pacman hook after every `caelestia-shell` update. Skipped patches go to `~/.local/state/caelestia-overlay-skipped`
-  (reported by `dotfiles-check`)
+  pacman hook after every `caelestia-shell` update. With a Caelestia running from the overlay (an update from the
+  Updates app, inside the session) it hands over to `caelestia-restart --rebuild`, which stops the shell, rebuilds and
+  starts it again: swapped under a running shell, the folder got it dropped by Hyprland. It checks under the overlay's
+  lock (`~/.config/quickshell/caelestia.lock`), which `caelestia-restart` and `caelestia-start` hold from the shell's
+  stop to its new start, so a rebuild waiting on one finds the shell up and hands over too. Skipped patches go to
+  `~/.local/state/caelestia-overlay-skipped` (reported by `dotfiles-check`)
 - **`.local/bin/caelestia-start`**: starts Caelestia at login (Caelestia's `execs.lua` runs it, so set by
   `agros-hyprland-settings`), building the overlay first when it's missing; each start logged in
   `~/.local/state/agros/caelestia-start.log`
 - **`.local/bin/caelestia-restart`**: restarts Caelestia with a clean environment (also Ctrl+Super+Alt+R), keeping
-  Spotify hidden
+  Spotify hidden. `--rebuild` (the Settings app's Caelestia changes) rebuilds the overlay while the shell is stopped:
+  rebuilt under the running shell, Hyprland dropped it. Exit 3 when that build failed (the shell started again on what
+  was there); the changes it skipped are said once the new shell is up (Caelestia is the notification server: said
+  during the build, they went to nobody). A shell that won't close in 5 s is killed outright
 - **`.local/bin/caelestia-pin`**: pin apps to the launcher or dock from a picker
 - **Night light** (`.config/gammastep/config.ini`): gammastep, which Caelestia's `execs.lua` starts at login with
   geoclue's demo agent (both in `agros-desktop`), turns the screens warmer after sunset (6500 K by day, 4000 K at
@@ -261,10 +275,11 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
   `agros-system`'s polkit rule (`/usr/share/polkit-1/rules.d/50-agros-timezone.rules`) lets an admin (wheel) at the
   machine change the time zone without the password, so the one at login never asks; for anyone else it's left as it
   is (`--no-ask-password`). No network or no answer: nothing changes. While it's on, the Time zone field only shows it
-- **`.config/quickshell/widgets/`**: desktop widgets styled after the Spider-Verse wallpaper
-  - Comic panels with halftone dots and the film's red/cyan misprint glitch, laid out in the sky around the falling
-    Miles
-  - A clock, weather with a 3-day forecast, a calendar, "Spidey-sense" CPU/RAM/GPU/SSD meters (they shake when the
+- **`.config/quickshell/widgets/`**: desktop widgets, designed around AgrOS's old Spider-Verse wallpaper and kept as they
+  are on Caelestia's (the default now)
+  - Comic panels with halftone dots and the film's red/cyan misprint glitch, laid out where the sky was around the
+    falling Miles
+  - A clock, weather with a 3-day forecast, a calendar, "Sixth sense" CPU/RAM/GPU/SSD meters (they shake when the
     PC runs hot), and a now-playing card with controls
   - Weather follows Caelestia's `services.weatherLocation` in `shell.json` (a city, or `lat,lon`; empty finds you by
     IP, as on a fresh install). The pencil by the weather panel's tab (with the mouse over it) types it there, as does
@@ -285,7 +300,10 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
   - Once the wallpaper shows, its elements come down onto the screen from in front of it (bigger and out of focus,
     shrinking and sharpening into place): the password bar first, then the rest from the centre outward
   - The wallpaper and colours are copied to it at every login (`greeter-theme-sync`)
-  - It logs in the account that ran setup only; another account logs in from a text console (Ctrl+Alt+F2)
+  - It shows the last account that logged in; with more than one account (uid 1000 and up, a login shell), the person
+    pill by the session's opens a list of them (the wallpaper and colours stay the last one's). The session pill opens
+    the sessions' list the same way: above the pill, the current one ticked, picked with a click or the arrow keys and
+    Enter, closed by Esc or a click elsewhere
   - A wrong password said at once: its PAM service, `/etc/pam.d/greetd`, is made by `greetd-pam` from `greetd.pam` and
     the system's own stack as it is (its auth lines, with nodelay on pam_unix and pam_faillock, which still counts and locks
     out; the keyring's lines kept), and made again after each `pambase` or `pam` update (a pacman hook), so it follows
@@ -293,8 +311,6 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
 - **`.config/spicetify/Themes/caelestia/user.css`**: Caelestia's Spotify theme (from its dots)
   with thin scrollbars; its colours (`color.ini`) are written by Caelestia
 - **`.config/hypr/xdph.conf`**: screen sharing without asking each time
-- **`Pictures/Wallpapers/`**: wallpaper (Spider-Man: Into the Spider-Verse still, © Sony Pictures; kept for personal
-  use)
 
 ## Windows and keys
 
@@ -471,7 +487,7 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
 - **At login** (`user/desktop.lua`): `widgets-start`, `greeter-theme-sync`, `console-clear` (no old
   text under the desktop at shutdown), `keyring-default`, `bluetooth-on`, `vm-screen-follow` (in a VM), `timezone-auto` (when on), the update check timer, and `dotfiles-check`
   after 30 s
-- **`.config/autostart/`**: CachyOS's welcome app and Polychromatic's
+- **`.config/autostart/`**: CachyOS's welcome app, Geoclue's demo agent (Caelestia starts it already) and Polychromatic's
   own autostart off (OpenRazer's service applies the
   lighting). Turning one on or off in the Settings app changes your copy here; `dotfiles-sync` commits it if it's in the repo
   already, else `dotfiles-sync add` it
@@ -635,7 +651,7 @@ installed kernel has the driver. The AUR packages and CachyOS's installer are bu
 
 ## Troubleshooting
 
-- **The login screen broke**: Ctrl+Alt+F2, log in, `sudo login-reset`
+- **The login screen broke**: Ctrl+Alt+F2, log in, `sudo login-reset` (a text login; `sudo login-reset --back` undoes it)
 - **Something stopped working after a Hyprland or Caelestia update**: run `dotfiles-check`. It lists Hyprland config
   errors (the config checked from disk with `Hyprland --verify-config`, by `hypr-config-check`: the running Hyprland's
   own list is cleared by every `hyprctl eval`) and outdated settings, Caelestia changes that no longer fit (skipped by the overlay), and parts that aren't

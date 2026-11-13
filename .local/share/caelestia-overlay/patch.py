@@ -545,6 +545,7 @@ def lock_cursor():
         SequentialAnimation on opacity {
             id: blink
 
+            running: textCursor.visible // (not while it checks the password, nor after too many tries)
             loops: Animation.Infinite
             NumberAnimation { to: 1; duration: 0 }
             PauseAnimation { duration: 530 }
@@ -697,7 +698,7 @@ def tray_click():
 def lock_refresh():
     # Caps/Num Lock badges: Caelestia reads the locks once at start, then only on those keys, so a wrong state at
     # login (Caps shown on when it's off) stays. Read them again when the keymap or config changes, and once more
-    # shortly after start, all inside the shell
+    # shortly after start, all inside the shell (Caelestia's main fix, PR #1899, binds a remapped Caps key only)
     rel = "services/Hypr.qml"
     s = read(rel)
     s = insert(s, "                root.reloadDynamicConfs();\n", "                extras.refreshDevices();\n", before=False)
@@ -1212,7 +1213,8 @@ def bar_menu():
 
 def dashboard_language():
     # The dashboard's calendar and weather tab in the system language (LANG), not the date format's (LC_TIME, which
-    # Qt.locale() follows), and the weather tab's heading with a 3-letter weekday like the rest
+    # Qt.locale() follows), and the weather tab's heading with a 3-letter weekday like the rest. Kept on main: its Tr.locale
+    # is LC_TIME's too for a LANG it has no translation for (en_GB)
     lang = 'Qt.locale((Quickshell.env("LANG") ?? "").split(".")[0])'
     imp = "import QtQuick.Layouts\n"
     cal = insert(read("modules/dashboard/dash/Calendar.qml"), imp, "import Quickshell\n", before=False)
@@ -1323,6 +1325,21 @@ def lock_intro():
         {first} {{
 """, f"lock {first} column")
     return {"modules/lock/LockSurface.qml": surface, "modules/lock/Center.qml": center, "modules/lock/Content.qml": content}
+
+
+def battery_suspend():
+    # A critical battery suspends instead of hibernating: AgrOS has no swap to hibernate into (zram only), so the
+    # hibernate call did nothing after its "Hibernating in 5 seconds" and the laptop died. The session menu's Hibernate
+    # button too, unless set to something else in shell.json (here: it reaches existing accounts, not only new ones)
+    rel = first("modules/BatteryMonitor.qml", "daemons/BatteryMonitor.qml")  # (main moved it)
+    s = swap(read(rel), "onTriggered: SessionManager.hibernate()", "onTriggered: SessionManager.suspend()", "the hibernate call")
+    s = swap(s, 'Toaster.toast(Tr.tr("Hibernating in 5 seconds"), Tr.tr("Hibernating to prevent data loss")',
+             'Toaster.toast(Tr.tr("Suspending in 5 seconds"), Tr.tr("Suspending to prevent data loss")', "the toast")
+    menu = "modules/session/Content.qml"
+    m = swap(read(menu), "        command: Config.session.commands.hibernate\n",
+             '        command: String(Config.session.commands.hibernate) === "hibernate" ? ["suspend"] : Config.session.commands.hibernate\n',
+             "the session menu's hibernate button")
+    return {rel: s, menu: m}
 
 
 def osd_quiet_start():
@@ -1438,7 +1455,8 @@ def face_quiet():
 
 def lock_power():
     # Sleep, restart and power off on the lock screen, bottom right like the login screen's (caelestia-greeter/shell.qml):
-    # round buttons over the dimmed wallpaper, fading in and out with the lock's content
+    # round buttons over the dimmed wallpaper, fading in and out with the lock's content. Kept on main: its
+    # lock.enableSessionControls shows logout/shutdown/hibernate/reboot only while hovering the resources card
     rel = "modules/lock/LockSurface.qml"
     s = read(rel)
     s = insert(s, "import QtQuick\n", "import QtQuick.Layouts\nimport Quickshell\n", before=False)
@@ -1596,6 +1614,7 @@ FEATURES = (
     ("Steam menu: installed games only", steam_installed_only),
     ("lock screen dimmed like the login screen", lock_tint),
     ("lock screen text cursor", lock_cursor),
+    ("critical battery suspends", battery_suspend),
     ("lock screen: a wrong password said at once", lock_instant_fail),
     ("Scroll Lock icon", scroll_lock),
     ("tray A-Z", tray_az),

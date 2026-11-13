@@ -70,6 +70,16 @@ for f in "$t"/cache/lutris-overlay/lutris/gui/widgets/cellrenderers.py "$t"/cach
     python3 -m py_compile "$f" || fail "${f##*/} doesn't compile"
 done
 run | grep -qi lutris || fail "the patched copy doesn't start"
+# Not rebuilt while the patched Lutris runs (its folder swapped under it): only once it has closed
+before=$(cat "$t/cache/lutris-overlay/stamp")
+(exec -a "python3 $t/cache/lutris-overlay/bin/lutris" sleep 30) & fake=$!
+settings rounded_covers
+run >/dev/null
+[[ $(cat "$t/cache/lutris-overlay/stamp") == "$before" ]] || fail "rebuilt under the running Lutris"
+kill "$fake"; wait "$fake" 2>/dev/null || true
+run >/dev/null
+[[ $(cat "$t/cache/lutris-overlay/stamp") != "$before" ]] || fail "not rebuilt once Lutris had closed"
+settings; run >/dev/null
 grep -q '"library-refresh"' "$t/cache/lutris-overlay/lutris/gui/application.py" || fail "the library-refresh action isn't in the build"
 HOME=$t python3 -I - "$t/cache/lutris-overlay" "$t" <<'P' || fail "the patched Lutris doesn't find Flathub's Steam in .local/share/Steam"
 import os, sys
@@ -207,4 +217,15 @@ run >/dev/null
 mkdir -p "$icons"; touch "$icons/steam.svg" "$t/cache/lutris/versions.json"
 run >/dev/null
 [[ -e $icons/steam.svg && -e $t/cache/lutris/versions.json ]] || fail "whole icons taken away"
-echo "ok lutris-overlay"
+
+# ...and on Lutris's main (the next release: a change there that breaks one shows here first, as Caelestia's main does in
+# caelestia-overlay); an optional one left out only warns, any other one failing fails here
+if timeout 120 git clone -q --depth 1 https://github.com/lutris/lutris "$t/lutris-main" 2>/dev/null; then
+    mkdir -p "$t/main-root" && cp -as "$t/lutris-main/lutris" "$t/main-root/lutris"
+    out=$(DOTS_SETTINGS=/bin/false python3 -I "$here/.local/share/lutris-overlay/patch.py" "$t/lutris-main/lutris" "$t/main-root" 2>&1) ||
+        fail "the overlay doesn't build on Lutris's main: $out"
+    n=$(grep -c WARNING <<<"$out" || true)
+    echo "ok lutris-overlay (on Lutris main: $n optional changes left out)"
+else
+    echo "ok lutris-overlay (SKIPPED: Lutris's main: offline)"
+fi

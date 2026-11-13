@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# caelestia-start: builds the overlay only when it's missing, starts the shell either way (even after a failed build),
-# and logs both
+# caelestia-start: builds the overlay only when it's missing, sets the wallpaper and colours the first time (before the
+# shell), starts the shell either way (even after a failed build), and logs them
 set -euo pipefail
 here=$(cd "$(dirname "$0")/.." && pwd)
 t=$(mktemp -d)
@@ -20,16 +20,26 @@ fail() { echo "FAIL caelestia-start: $1"; exit 1; }
 
 run
 [[ $(cat "$t/home/overlay-runs") == built ]] || fail "first login: the overlay wasn't built"
-[[ $(cat "$t/home/started") == "caelestia shell -d" ]] || fail "first login: the shell wasn't started"
+[[ $(tail -1 "$t/home/started") == "caelestia shell -d" ]] || fail "first login: the shell wasn't started last"
+grep -q '^caelestia scheme set -n dynamic$' "$t/home/started" || fail "first login: the colours weren't set"
+[[ -e $t/home/.local/state/agros/wallpaper-set ]] || fail "first login: the wallpaper's mark isn't there"
 grep -q 'overlay built: exit 0' "$log" || fail "first login: the build isn't logged"
 
 run
 [[ $(wc -l <"$t/home/overlay-runs") -eq 1 ]] || fail "next login: the overlay was built again"
-[[ $(wc -l <"$t/home/started") -eq 2 ]] || fail "next login: the shell wasn't started"
+[[ $(grep -c 'shell -d' "$t/home/started") -eq 2 ]] || fail "next login: the shell wasn't started"
+[[ $(grep -c '^caelestia wallpaper' "$t/home/started") -eq 1 ]] || fail "next login: the wallpaper was set again"
 grep -q 'overlay there' "$log" || fail "next login: not logged"
 
 rm -rf "$t/home/.config/quickshell/caelestia"
 FAIL=1 run
-[[ $(wc -l <"$t/home/started") -eq 3 ]] || fail "a failed build: the shell wasn't started anyway"
+[[ $(grep -c 'shell -d' "$t/home/started") -eq 3 ]] || fail "a failed build: the shell wasn't started anyway"
 grep -q 'overlay built: exit 1' "$log" || fail "a failed build: its exit code isn't logged"
+
+# An install from before the mark, with a wallpaper picked since (Caelestia's path.txt): not replaced
+rm "$t/home/.local/state/agros/wallpaper-set"; : >"$t/home/started"
+mkdir -p "$t/home/.local/state/caelestia/wallpaper"; echo /pics/mine.jpg >"$t/home/.local/state/caelestia/wallpaper/path.txt"
+run
+grep -q '^caelestia wallpaper' "$t/home/started" && fail "an existing install: its wallpaper replaced"
+[[ -e $t/home/.local/state/agros/wallpaper-set ]] || fail "an existing install: no mark"
 echo "ok caelestia-start"

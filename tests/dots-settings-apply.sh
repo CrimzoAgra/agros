@@ -9,7 +9,7 @@ fail() { echo "FAIL: $*"; exit 1; }
 home="$t/my home \$(touch $t/injected); x"
 mkdir -p "$home/.local/bin" "$t/bin"
 for s in after-games caelestia-overlay caelestia-restart; do
-    printf '#!/bin/sh\necho %s >>"%s/ran"\n' "$s" "$t" >"$home/.local/bin/$s"
+    printf '#!/bin/sh\necho %s "$@" >>"%s/ran"\n' "$s" "$t" >"$home/.local/bin/$s"
 done
 printf '#!/bin/sh\necho "hyprctl $*" >>"%s/ran"\n' "$t" >"$t/bin/hyprctl"
 chmod +x "$home/.local/bin/"* "$t/bin/hyprctl"
@@ -27,7 +27,7 @@ for how in ("caelestia", "hypr"):
         sys.exit(f"{how} failed")
 P
 for _ in {1..50}; do grep -q '^hyprctl' "$t/ran" 2>/dev/null && break; sleep 0.1; done  # (hypr's: in the background)
-[[ $(cat "$t/ran" 2>/dev/null) == $'caelestia-overlay\ncaelestia-restart\nafter-games\nhyprctl -i 0 reload' ]] ||
+[[ $(cat "$t/ran" 2>/dev/null) == $'caelestia-restart --rebuild\nafter-games\nhyprctl -i 0 reload' ]] ||
     fail "the scripts in a home with a space didn't run: $(cat "$t/ran" 2>/dev/null)"
 [[ ! -e $t/injected ]] || fail "part of the home folder's path ran as a command"
 echo "ok dots-settings-apply"

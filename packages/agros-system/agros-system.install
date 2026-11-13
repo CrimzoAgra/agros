@@ -1,3 +1,14 @@
+# UFW's logging off, once (where UFW is installed; its setting yours after): it logged a BLOCK line every 20 s for the
+# router's multicast queries, filling the journal
+quiet_ufw() {
+    local done=/var/lib/agros/ufw-logging-off
+    [[ -f /etc/ufw/ufw.conf && ! -e $done ]] || return 0
+    # (ufw's own command: it rewrites its LOG rules too, firewall on or off; the setting alone left them. Where it
+    # can't run (the installer's chroot), tried again at the next upgrade)
+    ufw logging off >/dev/null 2>&1 || return 0
+    mkdir -p "${done%/*}" && touch "$done"
+}
+
 # The services on, and the keyring's password changed with yours (passwd's PAM)
 post_install() {
     systemctl enable bluetooth.service paccache.timer auto-update.service auto-update-install.service >/dev/null 2>&1 || true
@@ -7,10 +18,12 @@ post_install() {
         echo '-password   optional     pam_gnome_keyring.so' >>/etc/pam.d/passwd
     fi
     systemctl daemon-reload >/dev/null 2>&1 || true
+    quiet_ufw
 }
 
 post_upgrade() {
     systemctl daemon-reload >/dev/null 2>&1 || true
+    quiet_ufw
 }
 
 pre_remove() {

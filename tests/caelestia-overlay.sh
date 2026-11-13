@@ -57,6 +57,9 @@ sidebar_edge_released() { # <Interactions.qml>
         grep -q '^        target: root.panels.notifications$' "$1" || echo "not held by a pop-up under a resting pointer"
 }
 r=$(sidebar_edge_released "$i"); [[ -z $r ]] || fail "the sidebar's hover edge not let go on every path: $r"
+# The sidebar's shortcut mode: added once on a Caelestia without its own (2.5.0)
+grep -q 'property bool sidebarShortcutActive' /etc/xdg/quickshell/caelestia/modules/drawers/Interactions.qml ||
+    [[ $(grep -c 'property bool sidebarShortcutActive' "$i") == 1 ]] || fail "the sidebar's shortcut mode not patched in"
 # Its grey card hangs from the top border when it slides down from the top: flush with it, top corners square
 c=$dst/modules/sidebar/Content.qml
 { grep -q 'topLeftRadius: 0' "$c" && grep -q 'topRightRadius: 0' "$c" && grep -q 'anchors.topMargin: 0' "$w"; } ||
@@ -264,6 +267,10 @@ if timeout 120 git clone -q --depth 1 https://github.com/caelestia-dots/shell "$
     cp -as "$t/head-src" "$t/head-dst"
     out=$(DOTS_SETTINGS=$t/bin/dots-settings python3 "$here/.local/share/caelestia-overlay/patch.py" "$t/head-src" "$t/head-dst" 2>&1) ||
         fail "patches no longer fit Caelestia's main: $(grep '^WARNING\|Traceback' <<<"$out")"
+    # ...and where it has a feature of its own the overlay steps aside: the sidebar's shortcut mode is its, not added twice
+    grep -q 'property bool sidebarShortcutActive' "$t/head-src/modules/drawers/Interactions.qml" &&
+        [[ $(grep -c 'property bool sidebarShortcutActive' "$t/head-dst/modules/drawers/Interactions.qml") == 1 ]] ||
+        fail "on Caelestia's main, the sidebar's shortcut mode not Caelestia's own"
     new=$(lint_new "$t/head-src" "$t/head-dst")
     [[ -z $new ]] || fail "on Caelestia's main, the patched QML uses what it doesn't have (qmllint): $new"
     echo "ok caelestia-overlay"

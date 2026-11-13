@@ -160,7 +160,9 @@ if [[ ${1:-} == --install ]]; then
     say "Installing updates, don't turn the computer off..."
     result failed "cut off before it finished"  # (until it says otherwise: shutdown's time limit, a power cut)
     # (SNAP_PAC_SKIP: snap-pac's own snapshots, over DBus, fail at shutdown like snapper's did; the one above covers it)
-    SNAP_PAC_SKIP=y pacman -Su --noconfirm 2>&1 | tee "$prev/out"
+    # (its messages in English: pacman's "error:" is what the reason below is found by; translated, "erro:" or
+    # "Fehler:", it was lost. Messages only: the hooks it runs keep the system's locale)
+    SNAP_PAC_SKIP=y LC_ALL='' LC_MESSAGES=C pacman -Su --noconfirm 2>&1 | tee "$prev/out"
     if ((PIPESTATUS[0])); then
         echo "!! the install failed: pacman's package lists put back as they were"
         result failed "$(grep -m1 '^error:' "$prev/out")"

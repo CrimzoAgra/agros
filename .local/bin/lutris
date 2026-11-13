@@ -23,7 +23,9 @@ stamp=$( { find "$src" -name '*.py' -printf '%T@ %s %P\n' | sort; cat "$overlay"
 # (a failed build is tried again after a day: the failure may have passed, a full disk)
 current() { [[ $(cat "$out/stamp" 2>/dev/null) == "$stamp" ]] ||
     [[ $(cat "$out.failed" 2>/dev/null) == "$stamp" && -n $(find "$out.failed" -mmin -1440 2>/dev/null) ]]; }
-if ! current; then
+# (not while the patched Lutris runs: its folder swapped under it, the running one went on importing from the new
+# build; this start only hands over to it anyway, and the next start after it closes rebuilds)
+if ! current && ! pgrep -u "$UID" -f "^python3? $out/bin/lutris" >/dev/null; then
     # One build at a time (the login start and a click can overlap); the second finds it done
     mkdir -p "${out%/*}"
     exec 9>"$out.lock"

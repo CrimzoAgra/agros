@@ -42,7 +42,8 @@ APPLY = {
     # passed as the scripts' $0, not written into them: a space or a $ in its path broke them, or ran as commands)
     "hypr": ["setsid", "-f", "sh", "-c", 'exec >/dev/null 2>&1; "$0/after-games"; '
              'hyprctl -i "${HYPRLAND_INSTANCE_SIGNATURE:-0}" reload', f"{HOME}/.local/bin"],
-    "caelestia": ["sh", "-c", '"$0/caelestia-overlay" && "$0/caelestia-restart"', f"{HOME}/.local/bin"],
+    # (rebuilt with the shell stopped, by caelestia-restart: under the running one, Hyprland dropped it)
+    "caelestia": [f"{HOME}/.local/bin/caelestia-restart", "--rebuild"],
     "mouse-dpi": [f"{HOME}/.local/bin/mouse-dpi"],
 }
 # Groups listing a patch's changes ("from" in the schema): the patch that lists them; each is setting <name>.<change>
@@ -296,7 +297,9 @@ def main(args):
         if setting["type"] == "choice" and value not in [o["value"] for o in setting["options"]]:
             sys.exit(f"{args[1]}: one of {', '.join(o['value'] for o in setting['options'])}")
         if "set" in setting:
-            subprocess.run(["sh", "-c", setting["set"]], env={**os.environ, "VALUE": str(value)}, check=True)
+            # (a yes/no as true or false, as get reads it, not Python's True)
+            value = json.dumps(value) if isinstance(value, bool) else str(value)
+            subprocess.run(["sh", "-c", setting["set"]], env={**os.environ, "VALUE": value}, check=True)
             return
         if "autostart" in setting:
             return autostart_set(setting["autostart"], value)

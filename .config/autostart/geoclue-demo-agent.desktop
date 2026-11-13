@@ -1,0 +1,5 @@
+[Desktop Entry]
+Type=Application
+Name=Geoclue Demo agent
+# (Caelestia starts it already, from its execs.lua: a second one only said "Another instance is running")
+Hidden=true
