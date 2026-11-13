@@ -29,6 +29,9 @@ package() {
     install -Dm644 -t "$pkgdir/usr/share/libalpm/hooks" agros-grub-quiet.hook agros-splash.hook
     install -Dm644 plymouth-title-font "$pkgdir/usr/lib/initcpio/install/plymouth-title-font"
     install -Dm644 agros-boot.tmpfiles "$pkgdir/usr/lib/tmpfiles.d/agros-boot.conf"
+    # AgrOS's GRUB theme (boot-menu sets it); make.sh, which made its pictures and fonts, isn't installed
+    install -Dm644 -t "$pkgdir/usr/share/grub/themes/agros" grub-theme/theme.txt grub-theme/*.png grub-theme/*.pf2
+    install -Dm644 -t "$pkgdir/usr/share/grub/themes/agros/icons" grub-theme/icons/*.png
     install -d "$pkgdir/usr/share/fonts"
     ln -s noto/NotoSans-Medium.ttf "$pkgdir/usr/share/fonts/Plymouth.ttf"
     ln -s noto/NotoSans-Bold.ttf "$pkgdir/usr/share/fonts/Plymouth-bold.ttf"

@@ -179,7 +179,10 @@ ClippingRectangle {
     }
 
     function togglePin(key: string): void {
-        Quickshell.execDetached([`${Quickshell.env("HOME")}/.local/bin/caelestia-pin`, "dock", key]);
+        // The pin as stored (it may be an older name for the app: caelestia-pin compares the text, so unpinning by the
+        // app's id added a second pin instead)
+        const stored = pins.find(p => p === key || keyFor(p) === key) ?? key;
+        Quickshell.execDetached([`${Quickshell.env("HOME")}/.local/bin/caelestia-pin`, "dock", stored]);
     }
 
     // Not named focus: that's every item's focus property, which a function of that name doesn't reliably replace
@@ -410,7 +413,15 @@ ClippingRectangle {
                     property real coverage: 0.77
                     property real reach: 0.62
 
+                    // (measured again when its icon changes: a kept cell, e.g. a game's icon that appears later)
+                    onIconSourceChanged: if (!modelData.sep) {
+                        measure.loadImage(iconSource);
+                        measure.requestPaint(); // (an icon it had loaded before sends no imageLoaded)
+                    }
+
                     Canvas {
+                        id: measure
+
                         visible: false
                         width: 1
                         height: 1

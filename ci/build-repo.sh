@@ -88,22 +88,35 @@ if [[ -z ${AGROS_SKIP_AUR:-} ]]; then
 fi
 
 # 2. CachyOS's installer, rebuilt against the libraries of today (CachyOS's own copy can lag behind an Arch update:
-# built for Boost 1.91, it didn't start once Arch moved to 1.92). Its version a ".4" above CachyOS's (raised with each
+# built for Boost 1.91, it didn't start once Arch moved to 1.92). Its version a ".5" above CachyOS's (raised with each
 # change of AgrOS's: an unchanged version keeps the published file); the live ISO installs it from [agros]
 # (calamares-online.sh). The partition names drawn in the theme's text colours, not black and grey (unreadable on
 # AgrOS's dark installer); the package list's highlight gone on a click on no row (Qt's single selection keeps it,
 # its extended one clears it); the language list's English names in the highlight's text colour on the highlighted
-# row (drawn in the list's own, they were lost in the highlight)
-# shortcut: plain text swaps, so a rewrite upstream undoes them quietly (nothing fails); check the Partitions and
-# Packages pages and the language list after a new CachyOS version
+# row (drawn in the list's own, they were lost in the highlight); GRUB only, the bootloader page's choice gone
+# Plain text swaps, each checked after (the build fails when one no longer fits)
 asb git clone -q --depth 1 --filter=blob:none --sparse https://github.com/CachyOS/CachyOS-PKGBUILDS.git "$work/cachyos-pkgbuilds"
 (cd "$work/cachyos-pkgbuilds" && asb git sparse-checkout set cachyos-calamares)
 cat >"$work/calamares-labels" <<'SH'
     sed -i -e 's/painter->setPen( Qt::black );/painter->setPen( palette().windowText().color() );/' -e 's/painter->setPen( Qt::gray );/painter->setPen( palette().placeholderText().color() );/' src/modules/partition/gui/PartitionLabelsView.cpp
     sed -i 's/^\( *\)ui->groupswidget->setModel( c->model() );$/&\n\1ui->groupswidget->setSelectionMode( QAbstractItemView::ExtendedSelection );/' src/modules/netinstall/NetInstallPage.cpp
     sed -i 's/^\( *index.data( Calamares::Locale::TranslationsModel::EnglishLabelRole ).toString()\) );$/\1, option.state \& QStyle::State_Selected ? QPalette::HighlightedText : QPalette::NoRole );/' src/modules/welcome/WelcomePage.cpp
+    # GRUB only: the bootloader page's choice (none: AgrOS's installer has no such page) read as GRUB where the compiled
+    # modules read it: the ZFS pool's GRUB compatibility, the partition page's GRUB settings and its BIOS hint, the
+    # boot partition made on erase-disk (agros-iso's agros-calamares-config does the same for the Python modules)
+    sed -i 's/gs->value( "packagechooser_bootloader" ).toString()/QStringLiteral( "grub" )/' \
+        src/modules/zfs/ZfsJob.cpp src/modules/partition/Config.cpp src/modules/partition/PartitionViewStep.cpp \
+        src/modules/partition/core/PartitionActions.cpp
+    # (each one checked: a CachyOS or Calamares change that moves a line fails the build, not a silent unchanged installer)
+    grep -q 'palette().windowText().color()' src/modules/partition/gui/PartitionLabelsView.cpp &&
+        grep -q 'palette().placeholderText().color()' src/modules/partition/gui/PartitionLabelsView.cpp &&
+        grep -q 'setSelectionMode( QAbstractItemView::ExtendedSelection )' src/modules/netinstall/NetInstallPage.cpp &&
+        grep -q 'QPalette::HighlightedText : QPalette::NoRole' src/modules/welcome/WelcomePage.cpp &&
+        grep -q 'bootloader = QStringLiteral( "grub" )' src/modules/zfs/ZfsJob.cpp &&
+        ! grep -rq 'packagechooser_bootloader' src/modules --include=*.cpp ||
+        { echo "AgrOS's changes to Calamares no longer fit (ci/build-repo.sh)"; return 1; }
 SH
-(cd "$work/cachyos-pkgbuilds/cachyos-calamares" && asb sed -i 's/^pkgrel=\([0-9]*\)$/pkgrel=\1.4/' PKGBUILD &&
+(cd "$work/cachyos-pkgbuilds/cachyos-calamares" && asb sed -i 's/^pkgrel=\([0-9]*\)$/pkgrel=\1.5/' PKGBUILD &&
     asb sed -i -e "/^prepare() {/{n;r $work/calamares-labels" -e '}' PKGBUILD &&
     asb env PKGDEST="$out" makepkg -s --noconfirm "${sign[@]}")
 

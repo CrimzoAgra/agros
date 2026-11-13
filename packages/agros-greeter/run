@@ -23,14 +23,17 @@ xkb() { sed -n "s/.*\"Xkb$1\"[[:space:]]*\"\([^\"]*\)\".*/\1/p" /etc/X11/xorg.co
 XKB_DEFAULT_LAYOUT=$(xkb Layout) XKB_DEFAULT_VARIANT=$(xkb Variant) XKB_DEFAULT_OPTIONS=$(xkb Options)
 export XKB_DEFAULT_LAYOUT="${XKB_DEFAULT_LAYOUT:-us}" XKB_DEFAULT_VARIANT XKB_DEFAULT_OPTIONS
 if [ -z "$XDG_RUNTIME_DIR" ]; then
-    XDG_RUNTIME_DIR=/tmp/caelestia-greeter-$(id -u)
-    mkdir -p "$XDG_RUNTIME_DIR" && chmod 700 "$XDG_RUNTIME_DIR"
-    export XDG_RUNTIME_DIR
+    # (a new private folder: a fixed name in /tmp could be made by someone else first)
+    XDG_RUNTIME_DIR=$(mktemp -d /tmp/caelestia-greeter-XXXXXX) && export XDG_RUNTIME_DIR
 fi
 # Wipe leftover boot text from this console, so it can't flash between screens
 clear_console() { printf '\033[H\033[2J\033[3J\033[?25l' >/dev/tty 2>/dev/null || true; }
 clear_console
-exec >>/var/log/caelestia-greeter.log 2>&1   # keep the text console clean
+# (the last 500 lines kept: it's added to at every boot, ~14 KB each, and nothing else trims it)
+log=/var/log/caelestia-greeter.log
+# (rewritten in place: the greeter user owns the file but can't make one beside it in /var/log)
+kept=$(tail -n 500 "$log" 2>/dev/null) && printf '%s\n' "$kept" >"$log"
+exec >>"$log" 2>&1   # keep the text console clean
 echo "=== $(date -Is) starting"
 
 # Safety net: if the login screen hasn't shown up after 20 s (crash, black screen), or closes without a login (a crash

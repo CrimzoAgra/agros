@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Every QML file parses (Qt's qmllint, syntax errors only: the imports of Quickshell and Caelestia it can't resolve here
-# aren't errors): the separate shells (widgets, switcher, settings, updates) and their shared colours (common/), the
+# Every QML file parses (Qt's qmllint, syntax errors only, duplicate ids among them: the imports of Quickshell and Caelestia it can't resolve here
+# aren't errors): the separate shells (widgets, switcher, settings, updates) and their shared colours (common/), the login screen, the
 # overlay's own components, and Caelestia's files as the overlay patches them (a patch that fits its anchors can still
 # leave broken QML, which only shows as a shell that doesn't start)
 set -euo pipefail
@@ -9,11 +9,13 @@ lint=$(command -v /usr/lib/qt6/bin/qmllint qmllint6 2>/dev/null | head -1) || tr
 [[ -n $lint ]] || { echo "skip qml-parse (no Qt 6 qmllint)"; exit 0; }
 syntax() {
     local out
-    out=$("$lint" "$1" 2>&1 | grep -A2 '\[syntax\]' || true)
+    # (its subkinds too, [syntax.duplicate-ids]: two items with one id, which doesn't load)
+    out=$("$lint" "$1" 2>&1 | grep -A2 -E '\[syntax(\.[a-z-]+)?\]' || true)
     [[ -z $out ]] || fail "${1#"$t"/} doesn't parse: $out"
 }
 
-for f in "$here"/.config/quickshell/*/shell.qml "$here"/.config/quickshell/common/*.qml "$here"/.local/share/caelestia-overlay/*.qml; do
+for f in "$here"/.config/quickshell/*/shell.qml "$here"/.config/quickshell/common/*.qml "$here"/.local/share/caelestia-overlay/*.qml \
+    "$here"/.local/share/caelestia-greeter/shell.qml; do
     [[ ${f##*/} == *-block.qml ]] && continue  # (fragments patch.py puts in Caelestia's files: checked there, below)
     syntax "$f"
 done

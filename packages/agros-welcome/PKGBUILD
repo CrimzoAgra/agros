@@ -3,7 +3,7 @@
 # ArtCraft Flatpaks with Spicetify, VSCodium's extensions and Claude Code's plugins), then the offer to restore your
 # accounts from your pen drive and to install the hardware apps and VMware (agros-welcome --system)
 pkgname=agros-welcome
-pkgver=1
+pkgver=2
 pkgrel=1
 pkgdesc='AgrOS first-login setup (per-user apps, Flatpaks) and account restore'
 arch=('any')

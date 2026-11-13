@@ -26,12 +26,15 @@ hyprctl() { command hyprctl -i "${HYPRLAND_INSTANCE_SIGNATURE:-0}" "$@"; }
 if [[ ${1:-} == --prebuild ]]; then
     # the Hyprland installed, from its headers: its ABI hash made the way Hyprland makes it (PluginAPI.hpp: the commit,
     # then each library's major.minor), the same as `hyprctl version`'s abiHash once it runs
-    h=/usr/include/hyprland/src/version.h
+    h=${HYPRBARS_VERSION_H:-/usr/include/hyprland/src/version.h}  # (the test: Hyprland main's)
     def() { grep -oP "#define $1\s+\"v?\K[^\"]+" "$h"; }
     mm() { def "$1" | cut -d. -f1,2; }
     hypr=$(def GIT_COMMIT_HASH)
     ver=$(def GIT_TAG)
-    abi="${hypr}_aq_$(mm AQUAMARINE_VERSION)_hu_$(mm HYPRUTILS_VERSION)_hg_$(mm HYPRGRAPHICS_VERSION)_hc_$(mm HYPRCURSOR_VERSION)_hlg_$(mm HYPRLANG_VERSION)"
+    abi="${hypr}_aq_$(mm AQUAMARINE_VERSION)_hu_$(mm HYPRUTILS_VERSION)_hg_$(mm HYPRGRAPHICS_VERSION)_hc_$(mm HYPRCURSOR_VERSION)"
+    # (hyprlang's only up to 0.57: Hyprland's main dropped it from the hash and from version.h, where its absence
+    # stopped this script, set -e, and the pacman hook with it)
+    grep -q "#define HYPRLANG_VERSION" "$h" && abi+="_hlg_$(mm HYPRLANG_VERSION)"
     build_id="$abi $(sha256sum "$patch" | cut -d" " -f1)"
     [[ -f $out && $(cat "$stamp" 2>/dev/null) == "$build_id" ]] && { echo "Already built for Hyprland $ver."; exit 0; }
     prebuild=true
@@ -105,8 +108,8 @@ git -C "$tmp/src" apply "$patch"
 make -C "$tmp/src/hyprbars" -s CXX=g++ all
 mkdir -p "${out%/*}"
 # A new file renamed over the old: Hyprland may have the old one loaded, and rewriting that in place can crash it
-install -m755 "$tmp/src/hyprbars/hyprbars.so" "$out.new"
-mv -f "$out.new" "$out"
+# (its own name: the update-time and login builds can overlap)
+install -m755 "$tmp/src/hyprbars/hyprbars.so" "$out.new.$$" && mv -f "$out.new.$$" "$out" || { rm -f "$out.new.$$"; exit 1; }
 echo "$build_id" >"$stamp"
 if $prebuild; then
     echo "hyprbars with the hover highlight is built for Hyprland $ver: it's loaded at the next login."

@@ -275,7 +275,7 @@ cat >"$apps/capri.desktop" <<EOF
 Name=Capri
 GenericName=Desktop companion
 Comment=Project Capricorn's construct, on your desktop: chat, game commentary, voice macros, a coding agent
-Exec=$HOME/.local/bin/capri
+Exec="$HOME/.local/bin/capri"
 Icon=capri
 Type=Application
 StartupNotify=false

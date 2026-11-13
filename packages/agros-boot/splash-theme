@@ -6,7 +6,7 @@ set -euo pipefail
 src=/usr/share/plymouth/themes/cachyos-bootanimation
 dst=/usr/share/plymouth/themes/cachyos-bootanimation-fast
 [[ -f $src/cachyos-bootanimation.plymouth ]] || { echo "No CachyOS boot animation: splash left as it is"; exit 0; }
-case $(sed -n 's/^LANG=\(..\).*/\1/p' /etc/locale.conf 2>/dev/null) in
+case $(sed -n "s/^LANG=[\"']\{0,1\}\(..\).*/\1/p" /etc/locale.conf 2>/dev/null) in
     pt) shut="A encerrar..." restart="A reiniciar..." ;;
     es) shut="Apagando..." restart="Reiniciando..." ;;
     fr) shut="Arrêt en cours..." restart="Redémarrage..." ;;

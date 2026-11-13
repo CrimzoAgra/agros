@@ -98,42 +98,50 @@ fi
 
 caelestia_setup() {
     # (run in an && list, so set -e is off in here: a failure said, not left silent)
-    # (what the overlay was before: a Caelestia already started on the same one isn't restarted, the shell's start at
-    # login builds it first when it's missing, execs.lua)
-    local dst="$HOME/.config/quickshell/caelestia" before after
-    overlay_state() { { find "$dst" -printf '%P %l\n' | sort; find "$dst" -type f -exec md5sum {} + | sort; } 2>/dev/null | md5sum; }
-    before=$(overlay_state)
-    if "$HOME/.local/bin/caelestia-overlay"; then
+    local dst="$HOME/.config/quickshell/caelestia"
+    # A Caelestia already running on the overlay: built for it by caelestia-start at this login (or a pacman hook since),
+    # left alone. Rebuilt under it, the swapped folder got the running shell dropped by Hyprland, with nothing to bring
+    # it back. Running without the changes (caelestia-start's build failed: Caelestia as it comes, from /etc/xdg or
+    # from the copy the failed build left, which the overlay's state file says): stopped, rebuilt and started again by
+    # caelestia-restart --rebuild (its notification, once the new shell is up, says if it fails again)
+    # (rc: a failure returned, so the step is tried again at the next login, not marked done)
+    local running='' ours='' failed='' rc=0 shells
+    shells=$(qs list --all 2>/dev/null)
+    grep -q "/quickshell/caelestia/shell.qml" <<<"$shells" && running=1
+    # (on the overlay: from its folder, not Caelestia's own in /etc/xdg)
+    grep -qF "Config path: $dst/shell.qml" <<<"$shells" && ours=1
+    grep -qs 'Caelestia runs without your changes' "${XDG_STATE_HOME:-$HOME/.local/state}/caelestia-overlay-skipped" && failed=1
+    if [[ -n $ours && -e $dst/shell.qml && -z $failed ]]; then
+        echo "Caelestia overlay (your changes to Caelestia) already running."
+    elif [[ -n $running ]]; then
+        if hyprctl -i "${HYPRLAND_INSTANCE_SIGNATURE:-0}" dispatch 'hl.dsp.exec_cmd("~/.local/bin/caelestia-restart --rebuild")' >/dev/null 2>&1; then
+            echo "Caelestia ran without your changes: rebuilding them, Caelestia restarted on them."
+        else
+            echo "!! Caelestia runs without your changes (run: ~/.local/bin/caelestia-restart --rebuild)"; rc=1
+        fi
+    elif [[ -e $dst/shell.qml && -z $failed ]]; then
+        # (built, by caelestia-start at this login, its shell not up yet: not built again under it as it comes up)
+        echo "Caelestia overlay (your changes to Caelestia) already built."
+    elif "$HOME/.local/bin/caelestia-overlay"; then
         echo "Caelestia overlay (your changes to Caelestia) built."
     else
-        echo "!! The Caelestia overlay didn't build (run: ~/.local/bin/caelestia-overlay)"
-    fi
-    # Run from the desktop: the running Caelestia keeps the files it loaded (it doesn't see the rebuilt overlay), so
-    # it's restarted onto the new ones. Started by Hyprland, with the desktop's environment: from elsewhere (an SSH
-    # login) it came up without the icon theme and app list, and the bar lost its logo and app icons
-    # (by Quickshell's own list, as dotfiles-check: a shell its crash handler restarted shows no "-c caelestia" in ps).
-    # Hyprland named (-i, its first one when this isn't run inside it): from an SSH login or a text console hyprctl
-    # doesn't know it, and the restart failed with nothing said
-    after=$(overlay_state)
-    if [[ $after == "$before" ]]; then
-        echo "Caelestia overlay unchanged: Caelestia left as it is."
-    elif qs list --all 2>/dev/null | grep -q "/quickshell/caelestia/shell.qml" &&
-        hyprctl -i "${HYPRLAND_INSTANCE_SIGNATURE:-0}" dispatch 'hl.dsp.exec_cmd("~/.local/bin/caelestia-restart")' >/dev/null 2>&1; then
-        echo "Caelestia restarted with them."
+        echo "!! The Caelestia overlay didn't build (run: ~/.local/bin/caelestia-overlay)"; rc=1
     fi
     # Only the first time (its own mark, not Caelestia's wallpaper file, which Caelestia may have written already): run
     # again (after a pull), it would replace the wallpaper and colours you've picked since
     local mark="$st/wallpaper-set"
     if [[ -e $mark ]]; then
         echo "Wallpaper and colours left as you have them."
-        return 0
+        return $rc
     fi
     # Then the colours from it (Caelestia starts on its fixed teal scheme). In that order: the dynamic scheme is refused
     # while no wallpaper is set ("No wallpaper set"), and a fresh install kept the teal accent.
     # Hyprland named for the CLI too (the same first one as -i 0): it asks Hyprland whether its config is Lua, and from an
     # SSH login or a text console wrote the window borders' colours to current.conf, which the Lua config doesn't read
     local sig=${HYPRLAND_INSTANCE_SIGNATURE:-$(hyprctl instances -j 2>/dev/null | jq -r '.[0].instance // empty' 2>/dev/null)}
-    if HYPRLAND_INSTANCE_SIGNATURE=$sig caelestia wallpaper -f "$HOME/Pictures/Wallpapers/wallpaper.jpg" 2>/dev/null; then
+    # Caelestia's own wallpaper (it shows it itself when none is set), set here so its colours can follow it
+    local wall=/etc/xdg/quickshell/caelestia/assets/wallpaper.webp
+    if HYPRLAND_INSTANCE_SIGNATURE=$sig caelestia wallpaper -f "$wall" 2>/dev/null; then
         if HYPRLAND_INSTANCE_SIGNATURE=$sig caelestia scheme set -n dynamic >/dev/null 2>&1; then
             echo "Wallpaper and colours set."
         else
@@ -141,8 +149,9 @@ caelestia_setup() {
         fi
         mkdir -p "${mark%/*}" && touch "$mark"
     else
-        echo "Wallpaper will be set from inside Caelestia (run: caelestia wallpaper -f ~/Pictures/Wallpapers/wallpaper.jpg)"
+        echo "Wallpaper will be set from inside Caelestia (run: caelestia wallpaper -f $wall)"
     fi
+    return $rc
 }
 
 # No window buttons drawn by GTK apps (LibreWolf too, and apps installed later): the title bars on floating windows have
@@ -310,14 +319,18 @@ exec > >(tee -a "$st/welcome.log") 2>&1
 echo "== agros-welcome $(date '+%F %T')"
 
 # Each step once, marked done; one that failed is tried again at the next login
+steps=()
 step() {
     local name=$1
     shift
+    steps+=("$name")
     [[ -e $st/done-$name ]] && return 0
     echo "-- $name"
     "$@" && touch "$st/done-$name"
 }
-# (the shell up first: the overlay's restart and the wallpaper talk to it)
+# (the shell up first: the overlay's restart and the wallpaper talk to it). caelestia-start's build waited for first,
+# under the overlay's lock: past the 60 s, this went on to build again, swapping the folder under the shell just started
+flock "$HOME/.config/quickshell/caelestia.lock" true 2>/dev/null
 for _ in $(seq 60); do qs list --all 2>/dev/null | grep -q /quickshell/caelestia/ && break; sleep 1; done
 step caelestia caelestia_setup
 # The live USB (the ISO's own session): only the desktop's look, nothing downloaded, no accounts to restore
@@ -326,6 +339,11 @@ step others others
 step librewolf librewolf_setup
 step flatpaks flatpaks
 step vscodium vscodium_setup
+# All of them done: not run at login any more (agros-welcome.service). One that failed (offline, LibreWolf open) keeps it
+# coming back until it works: the service used to stop at done-vscodium, written even when the Flatpaks had failed
+all_done=1
+for s in "${steps[@]}"; do [[ -e $st/done-$s ]] || all_done=; done
+[[ -n $all_done ]] && touch "$st/done"
 
 # The system's part (hardware apps, VMware) and your accounts: asked in one notification, run in a terminal
 if [[ ! -e $st/offered ]]; then

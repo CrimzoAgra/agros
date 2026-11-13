@@ -29,4 +29,22 @@ EOF
 rc=0; out=$(PATH=/nonexistent "$(command -v python3)" "$here/system/boot-video-mode" --check 2>/dev/null) || rc=$?
 ((rc == 3)) || fail "no screens: not exit 3 (crashed?): $rc"
 [[ $out == "no screens with EDID found" ]] || fail "modes read with no edid-decode: $out"
+# Two GPUs with the same connector name (card0-HDMI-A-1, card1-HDMI-A-1): one video= entry, not two
+out=$(python3 - "$here/system/boot-video-mode" <<'EOF'
+import importlib.machinery, importlib.util, os, sys, tempfile, types
+loader = importlib.machinery.SourceFileLoader("bvm", sys.argv[1])
+spec = importlib.util.spec_from_loader("bvm", loader)
+m = importlib.util.module_from_spec(spec)
+loader.exec_module(m)
+d = tempfile.mkdtemp()
+for c in ("card0-HDMI-A-1", "card1-HDMI-A-1"):
+    os.makedirs(f"{d}/{c}")
+    open(f"{d}/{c}/status", "w").write("connected\n")
+m.glob.glob = lambda p: [f"{d}/card0-HDMI-A-1/status", f"{d}/card1-HDMI-A-1/status"]
+m.subprocess.run = lambda *a, **k: types.SimpleNamespace(stdout="")
+m.best_mode = lambda out: (1920, 1080, 60.0)
+print(m.screens())
+EOF
+)
+[[ $out == "['video=HDMI-A-1:1920x1080@60']" ]] || fail "same connector on two GPUs: $out"
 echo "ok boot-video-mode-options"

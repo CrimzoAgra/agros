@@ -83,6 +83,7 @@ personal_drive() {
     local dev rm type mnt found=()
     while read -r dev rm type mnt; do
         [[ $rm == 1 && $type == part ]] || continue
+        mnt=$(printf '%b' "$mnt") # (lsblk -r writes a space in it as \x20)
         [[ -n $mnt ]] || mnt=$(udisksctl mount -b "$dev" 2>/dev/null | sed -n 's/^Mounted .* at \(.*\)$/\1/p')
         [[ -n $mnt && -d $mnt ]] && found+=("$mnt")
     done < <(lsblk -nrpo NAME,RM,TYPE,MOUNTPOINT 2>/dev/null)
@@ -161,11 +162,14 @@ EOF
     for s in "${PERSONAL_SKIP[@]}"; do skip+=(--exclude="$s"); done
     echo "Saving to $drive/$PERSONAL_FILE. Pick a long passphrase: it's all that keeps a lost drive's finder out."
     # tars one after the other (your home, the profile as librewolf/, the launchers whole, the staged), straight into gpg
+    # Each one has to work, or the save stops and the last one on the drive stays: only the group's last tar counted, so
+    # an unreadable file still said "Saved" over it. (tar's 1, a file that changed while read, still saved, isn't one)
+    tar_ok() { tar "$@"; (($? <= 1)); }
     if {
-        tar -C "$HOME" "${skip[@]}" -cf - "${paths[@]}"
-        ((${#lw[@]})) && tar -C "$prof" "${skip[@]}" --transform 's,^,librewolf/,' -cf - "${lw[@]}"
-        ((${#games[@]})) && tar -C "$HOME" -cf - "${games[@]}"
-        tar -C "$staged" -cf - "${onstage[@]}"
+        { ((${#paths[@]} == 0)) || tar_ok -C "$HOME" "${skip[@]}" -cf - "${paths[@]}"; } &&
+            { ((${#lw[@]} == 0)) || tar_ok -C "$prof" "${skip[@]}" --transform 's,^,librewolf/,' -cf - "${lw[@]}"; } &&
+            { ((${#games[@]} == 0)) || tar_ok -C "$HOME" -cf - "${games[@]}"; } &&
+            tar_ok -C "$staged" -cf - "${onstage[@]}"
     } | personal_gpg --symmetric --cipher-algo AES256 --s2k-mode 3 --s2k-digest-algo SHA512 --s2k-count 65011712 \
         -o "$drive/$PERSONAL_FILE.new"; then
         mv "$drive/$PERSONAL_FILE.new" "$drive/$PERSONAL_FILE"

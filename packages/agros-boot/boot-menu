@@ -44,7 +44,9 @@ boot_menu() {
     fi
     cp -n "$conf" "$conf.bak"
     local kv key value
-    for kv in GRUB_TIMEOUT_STYLE=hidden GRUB_TIMEOUT=1 GRUB_DEFAULT=0 GRUB_SAVEDEFAULT=false GRUB_DISABLE_OS_PROBER=false; do
+    # (AgrOS's theme: agros-boot's /usr/share/grub/themes/agros, in place of CachyOS's)
+    for kv in GRUB_TIMEOUT_STYLE=hidden GRUB_TIMEOUT=1 GRUB_DEFAULT=0 GRUB_SAVEDEFAULT=false GRUB_DISABLE_OS_PROBER=false \
+        GRUB_THEME=/usr/share/grub/themes/agros/theme.txt; do
         key=${kv%%=*} value=${kv#*=}
         if grep -qE "^#?\s*$key=" "$conf"; then
             sed -i -E "s|^#?\s*$key=.*|$key=$value|" "$conf"
@@ -60,7 +62,7 @@ boot_menu() {
     sed -i "/^[[:space:]]*echo[[:space:]].*message/d" /etc/grub.d/10_linux
     if [[ $(findmnt -no FSTYPE /) == btrfs ]] && command -v snapper >/dev/null; then
         # (not made, e.g. a /.snapshots already there: said, and the boot menu still made below)
-        snapper -c root list >/dev/null 2>&1 || snapper -c root create-config / ||
+        snapper --no-dbus -c root list >/dev/null 2>&1 || snapper --no-dbus -c root create-config / ||
             echo "!! Snapper's config for / couldn't be made: no snapshots before updates (see snapper create-config)"
         # Old snapshots cleared by snapper's own rules (its config's NUMBER_LIMIT...): without its timer, on plain Arch,
         # every update's snapshots piled up (CachyOS turns it on itself; on again changes nothing)

@@ -50,6 +50,8 @@ def screens():
         mode = best_mode(out)
         if mode:
             name = os.path.basename(conn).split("-", 1)[1]  # card1-HDMI-A-1 -> HDMI-A-1
+            if any(v.startswith(f"video={name}:") for v in video):
+                continue  # (two GPUs with the same connector name: the kernel only uses the first anyway)
             video.append(f"video={name}:{mode[0]}x{mode[1]}@{round(mode[2])}")
     return video
 

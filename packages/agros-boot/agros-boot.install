@@ -6,6 +6,12 @@ post_install() {
 
 post_upgrade() {
     systemctl daemon-reload >/dev/null 2>&1 || true
+    # GRUB on CachyOS's theme (installs from before AgrOS had its own): AgrOS's, once; a theme you set yourself is kept.
+    # Only GRUB that boots (boot-menu's own test: a machine moved to Limine keeps an old /etc/default/grub)
+    if [[ ! -f /etc/default/limine ]] && grep -q '^GRUB_THEME=.*/themes/cachyos/' /etc/default/grub 2>/dev/null && [[ -f /usr/share/grub/themes/agros/theme.txt ]]; then
+        sed -i 's|^GRUB_THEME=.*|GRUB_THEME=/usr/share/grub/themes/agros/theme.txt|' /etc/default/grub
+        grub-mkconfig -o /boot/grub/grub.cfg >/dev/null 2>&1 || echo "agros-boot: GRUB's menu not remade (run: sudo grub-mkconfig -o /boot/grub/grub.cfg)"
+    fi
 }
 
 pre_remove() {

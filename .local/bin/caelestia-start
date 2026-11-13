@@ -10,14 +10,30 @@ log=${XDG_STATE_HOME:-$HOME/.local/state}/agros/caelestia-start.log
 mkdir -p "${log%/*}"
 # (the last 200 lines kept: it's added to at every login)
 [[ -f $log ]] && tail -n 200 "$log" >"$log.tmp" && mv -f "$log.tmp" "$log"
+# Under the overlay's lock until the shell is up: an update's rebuild under way as you log in waited for, and one
+# waiting finds the shell running and hands over to caelestia-restart (not the folder swapped under it as it starts)
+mkdir -p "$HOME/.config/quickshell"
+exec 9>"$HOME/.config/quickshell/caelestia.lock"
+flock 9
 {
     echo "== $(date '+%F %T')"
     if [[ -e $HOME/.config/quickshell/caelestia/shell.qml ]]; then
         echo "overlay there"
     else
-        "$HOME/.local/bin/caelestia-overlay" | tail -n 3
+        CAELESTIA_REBUILDING=1 "$HOME/.local/bin/caelestia-overlay" | tail -n 3
         echo "overlay built: exit ${PIPESTATUS[0]}"
     fi
+    # The first time: Caelestia's wallpaper and its colours set before the shell starts (agros-welcome's mark, so it
+    # doesn't again). Set after, the shell had already shown its fallback and kept it, its colours from another
+    # wallpaper, and Qt's settings (icon theme) appeared after it had looked for them: Papirus never applied
+    mark=${log%/*}/wallpaper-set
+    # (a wallpaper Caelestia already has: an install from before the mark, its wallpaper picked since, kept)
+    [[ -s ${XDG_STATE_HOME:-$HOME/.local/state}/caelestia/wallpaper/path.txt ]] && touch "$mark"
+    if [[ ! -e $mark ]]; then
+        caelestia wallpaper -f /etc/xdg/quickshell/caelestia/assets/wallpaper.webp && caelestia scheme set -n dynamic &&
+            touch "$mark" && echo "wallpaper and colours set"
+    fi
 } >>"$log" 2>&1
-# (even when the build failed: Caelestia as it comes, rather than no bar at all)
-exec caelestia shell -d >>"$log" 2>&1
+# (even when the build failed: Caelestia as it comes, rather than no bar at all; it daemonizes and returns)
+caelestia shell -d >>"$log" 2>&1 9>&-
+for _ in $(seq 100); do qs list --all 2>/dev/null | grep -q "/quickshell/caelestia/shell.qml" && break; sleep 0.1; done

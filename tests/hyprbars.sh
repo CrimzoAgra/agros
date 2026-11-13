@@ -46,6 +46,27 @@ grep -q "^curl" "$t/calls" && fail "--prebuild waited for the network: $(cat "$t
 [[ $(cat "$lib/built-for") == "0_aq_0.0 $sum" ]] || fail "--prebuild offline changed the build's stamp"
 rm "$t/bin/curl" "$t/bin/git" "$t/bin/sleep"
 
+# Hyprland's main (the next release): --prebuild's hash still made the way its PluginAPI.hpp makes it, from the defines
+# its version.h.in has (main dropped hyprlang from both: the hook failed, set -e, on a define gone)
+hm=https://raw.githubusercontent.com/hyprwm/Hyprland/main/src
+if curl -fsS -m 30 "$hm/version.h.in" -o "$t/version.h.in" && curl -fsS -m 30 "$hm/plugins/PluginAPI.hpp" -o "$t/PluginAPI.hpp"; then
+    sed -E 's/"@GIT_TAG@"/"v9.8.7"/; s/"@GIT_COMMIT_HASH@"/"abc123"/; s/"@[A-Z_]+@"/"1.2.3"/; s/@[A-Z_]+@/0/' "$t/version.h.in" >"$t/version.h"
+    want=$(python3 - "$t/PluginAPI.hpp" <<'EOF'
+import re, sys
+m = re.search(r'std::format\("([^"]*_aq_[^"]*)",(.*?)\);', open(sys.argv[1]).read(), re.S)
+args = [a.strip() for a in m[2].split(",")] if m else []
+vals = ["abc123" if a == "GIT_COMMIT_HASH" else "1.2" if a.startswith("stripPatch(") else "?" + a for a in args]
+print(m[1].replace("{}", "{}").format(*vals) if m and m[1].count("{}") == len(vals) else "unparsed")
+EOF
+)
+    echo "$want $sum" >"$lib/built-for"
+    out=$(HOME=$t/home HYPRBARS_VERSION_H=$t/version.h "$here/.local/bin/hyprbars-build" --prebuild 2>&1) ||
+        fail "--prebuild on Hyprland main's version.h: $out"
+    grep -q "Already built" <<<"$out" || fail "--prebuild's hash isn't Hyprland main's ($want): $out"
+else
+    skipped+=("Hyprland main: offline")
+fi
+
 # The patch on this series' tag and on main
 ver=$(grep -oP 'GIT_TAG\s+"v\K[0-9.]+' /usr/include/hyprland/src/version.h)
 git clone -q --filter=blob:none https://github.com/hyprwm/hyprland-plugins.git "$t/src" 2>/dev/null ||

@@ -71,7 +71,8 @@ for path in steam.steamapps_paths:
         try:
             manifest = AppManifest(os.path.join(path, name))
             appid = manifest.steamid
-            if not manifest.is_installed() or appid in steam.excluded_appids or TOOLS.match(manifest.name or ""):
+            # (no name yet: Steam rewriting it mid-download; saved, its NULL name crashed every later run)
+            if not manifest.is_installed() or not manifest.name or appid in steam.excluded_appids or TOOLS.match(manifest.name):
                 continue
             if not ServiceGameCollection.get_game("steam", appid):
                 SteamGame.new_from_steam_game({"appid": appid, "name": manifest.name, "playtime_forever": 0}).save()
@@ -192,7 +193,7 @@ def key(name):
 copies = {}
 for game_id, name, installed, service in db.execute(
         "SELECT id, name, installed, service FROM games WHERE service IS NOT NULL ORDER BY service = 'steam' DESC, id"):
-    if key(name):  # (a name only of punctuation, "!": no telling its copies)
+    if key(name or ""):  # (a name only of punctuation, "!", or none: no telling its copies)
         copies.setdefault(key(name), []).append((game_id, installed))
 hide = [game_id for group in copies.values() if len(group) > 1
         for game_id, installed in group[0 if any(i for _, i in group) else 1:] if not installed]

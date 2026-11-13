@@ -1,0 +1,44 @@
+# AgrOS's GRUB theme (agros-boot; its pictures and fonts made by make.sh): the AgrOS banner on the desktop's dark
+# background, the menu under it in Rubik, the selected entry in a faint lavender pill. Rarely seen: the menu is hidden,
+# Esc in the first second shows it
+title-text: ""
+desktop-color: "#121318"
+
+# Nothing scaled, all centred and placed from the menu down: the same at any screen size and shape (a full-screen
+# background picture was stretched, which squeezed it on a 4:3 screen, or cropped, which blew it up on a wide one)
++ image {
+  left = 50%-230
+  top = 45%-230
+  width = 460
+  height = 125
+  file = "banner.png"
+}
+
++ boot_menu {
+  left = 50%-380
+  top = 45%
+  width = 760
+  height = 45%
+  item_font = "Rubik Regular 22"
+  item_color = "#8f8d99"
+  selected_item_color = "#e5e1e7"
+  icon_width = 32
+  icon_height = 32
+  item_icon_space = 16
+  item_height = 44
+  item_padding = 8
+  item_spacing = 8
+  selected_item_pixmap_style = "select_*.png"
+  scrollbar = false
+}
+
++ label {
+  left = 0
+  top = 45%-60
+  width = 100%
+  align = "center"
+  id = "__timeout__"
+  text = "Starting in %d s"
+  color = "#bec4ee"
+  font = "Rubik Regular 18"
+}

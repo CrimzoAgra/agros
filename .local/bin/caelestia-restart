@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
 # Restart Caelestia (from the overlay in ~/.config/quickshell/caelestia) with a clean desktop
 # environment: your login shell as $SHELL, none of the editor/Claude variables of whatever started this.
+#   caelestia-restart --rebuild   the overlay rebuilt while the shell is stopped (dots-settings): rebuilt under the
+#                                 running shell, its folder swapped beneath it, Hyprland dropped the shell
 # shellcheck disable=SC2046  # one variable name per word on purpose
 # Run from outside the desktop (an SSH login, a text console: dots-settings set there), Hyprland runs it instead (its
-# first one, -i 0), with the desktop's environment: from here the shell was killed and the new one couldn't start
+# first one, -i 0), with the desktop's environment: from here the shell was killed and the new one couldn't start.
+# (so from there a failed --rebuild isn't reported back: Hyprland runs it. Changes it skipped are said in a notification
+# once Caelestia is up, and by dotfiles-check at the next login)
 if [[ -z ${HYPRLAND_INSTANCE_SIGNATURE:-} || -z ${WAYLAND_DISPLAY:-} ]]; then
-    exec hyprctl -i "${HYPRLAND_INSTANCE_SIGNATURE:-0}" dispatch 'hl.dsp.exec_cmd("~/.local/bin/caelestia-restart")'
+    exec hyprctl -i "${HYPRLAND_INSTANCE_SIGNATURE:-0}" dispatch "hl.dsp.exec_cmd(\"~/.local/bin/caelestia-restart${1:+ $1}\")"
 fi
 unset $(env | grep -oE "^(CLAUDE[A-Z_]*|CLAUDECODE|ANTHROPIC[A-Z_]*|NODE_OPTIONS|VSCODE[A-Z_]*|ELECTRON[A-Z_]*|QS_APP_ID)=" | tr -d =)
 SHELL=$(getent passwd "$USER" | cut -d: -f7)  # your login shell, not the one this was started from
@@ -15,17 +19,51 @@ export SHELL
 if pgrep -f com.spotify.Client >/dev/null && ! hyprctl clients -j | jq -e 'any(.[]; .class | ascii_downcase == "spotify")' >/dev/null; then
     hyprctl eval 'dots.spotify_silent_set(true)' >/dev/null
 fi
+# Under the overlay's lock from the stop until the new shell is up: a rebuild waiting on it (an update's pacman hook) then
+# finds the shell running and hands over to this, rather than swapping the folder under the shell just started
+mkdir -p "$HOME/.config/quickshell"
+exec 9>"$HOME/.config/quickshell/caelestia.lock"
+flock 9
 # Every Caelestia running, by its process: the one from before the overlay existed runs from
 # /etc/xdg/quickshell/caelestia, which "qs -c caelestia kill" (now the overlay's) doesn't match, and two shells
 # doubled the room the bar keeps (maximised and tiled windows' gaps)
 for pid in $(qs list --all 2>/dev/null | awk '/Process ID:/ {pid = $3} /Config path: .*\/quickshell\/caelestia\/shell\.qml$/ {print pid}'); do
     qs kill --pid "$pid" >/dev/null 2>&1
 done
-# Until it's gone (at most 5 s): one still closing makes the new one (-n) not start at all
-for _ in $(seq 50); do qs list --all 2>/dev/null | grep -q "/quickshell/caelestia/shell.qml" || break; sleep 0.1; done
+# Until it's gone (at most 5 s): one still closing makes the new one (-n) not start at all. Still there: killed outright,
+# and if even that doesn't take, no rebuild (it would swap the folder under it)
+gone() { for _ in $(seq "$1"); do qs list --all 2>/dev/null | grep -q "/quickshell/caelestia/shell.qml" || return 0; sleep 0.1; done; return 1; }
+if ! gone 50; then
+    for pid in $(qs list --all 2>/dev/null | awk '/Process ID:/ {pid = $3} /Config path: .*\/quickshell\/caelestia\/shell\.qml$/ {print pid}'); do
+        kill -9 "$pid" 2>/dev/null
+    done
+    gone 20 || stuck=1
+fi
+rc=0
+if [[ ${1:-} == --rebuild && -n ${stuck:-} ]]; then
+    echo "caelestia-restart: Caelestia wouldn't stop: not rebuilt"; rc=3
+elif [[ ${1:-} == --rebuild ]]; then
+    # (a failure the exit status too, 3: the Settings app says "Applying it failed"; the shell started again all the
+    # same, and what it has then, none of your changes or the ones before, said once it's up, below; caelestia-overlay
+    # tells 3 from "not handed over")
+    CAELESTIA_REBUILDING=1 "$HOME/.local/bin/caelestia-overlay" >/dev/null || { echo "caelestia-restart: the overlay didn't build (said once Caelestia is up)"; rc=3; }
+fi
 # From home: apps opened from the launcher and dock start in Caelestia's folder (Thunar opens there)
 cd "$HOME" || exit 1
 # In a systemd scope of its own: started from an app's terminal (VS Code...), it would otherwise be in that app's
 # scope, and closing or force-quitting the app would take the shell down with it
-systemd-run --user --scope --quiet --collect --unit="caelestia-$(date +%s)" setsid qs -c caelestia -n -d >/dev/null 2>&1
+systemd-run --user --scope --quiet --collect --unit="caelestia-$(date +%s)" setsid qs -c caelestia -n -d >/dev/null 2>&1 9>&-
+# (the lock kept until it's up, at most 10 s)
+for _ in $(seq 100); do qs list --all 2>/dev/null | grep -q "/quickshell/caelestia/shell.qml" && break; sleep 0.1; done
+exec 9>&-
+# A rebuild's skipped changes said now, the new shell (the notification server) up: said during the build, with it
+# stopped, it went to nobody (a few tries: its notifications come up just after it shows in qs list)
+skipped=${XDG_STATE_HOME:-$HOME/.local/state}/caelestia-overlay-skipped
+if [[ ${1:-} == --rebuild && -s $skipped ]]; then
+    for _ in $(seq 10); do
+        notify-send -u critical -a Dotfiles -i dialog-warning "Caelestia changed: some of your changes are off" "$(cat "$skipped")" 2>/dev/null && break
+        sleep 0.5
+    done
+fi
 # Tray icons of apps that don't re-add them, and Spotify's window: ~/.local/bin/tray-keeper
+exit $rc

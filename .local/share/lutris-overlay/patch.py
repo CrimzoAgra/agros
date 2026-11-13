@@ -86,7 +86,8 @@ def add_games_bulk(""")
     for rel in ("services/steam.py", "services/egs.py", "services/ea_app.py", "services/battlenet.py"):
         edit(rel, "from lutris.database.games import add_game, ", "from lutris.database.games import add_game, add_or_revive, ")
         pad = "            " if rel.endswith("steam.py") else "        "
-        edit(rel, f"{pad}if existing_game:\n{pad}    return\n", f"{pad}if existing_game and existing_game[\"installed\"]:\n{pad}    return\n")
+        ret = next((r for r in ("return\n", "return None\n") if f"{pad}if existing_game:\n{pad}    {r}" in read(rel)), "return\n")
+        edit(rel, f"{pad}if existing_game:\n{pad}    {ret}", f"{pad}if existing_game and existing_game[\"installed\"]:\n{pad}    {ret}")
         edit(rel, "add_game(\n", "add_or_revive(existing_game,\n")
 
 
@@ -291,15 +292,15 @@ def rounded_covers():
 # opening Lutris later shows it. The tray icon is turned on for it (a fresh Lutris has it off): with no icon there'd be
 # no way back to the window
 def start_hidden():
-    edit("gui/application.py", """            self.install_ui_delegate = self.window
-            self.window.present()
-""", """            self.install_ui_delegate = self.window
-            if os.environ.pop("LUTRIS_START_HIDDEN", None) == "1":
+    edit("gui/application.py", """            self.window.present()
+            self.start_runtime_updates()
+""", """            if os.environ.pop("LUTRIS_START_HIDDEN", None) == "1":
                 if not self.has_tray_icon():
                     settings.write_setting("show_tray_icon", True)
                     self.set_tray_icon()
             else:
                 self.window.present()
+            self.start_runtime_updates()
 """)
 
 

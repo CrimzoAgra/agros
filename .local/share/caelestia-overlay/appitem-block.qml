@@ -4,7 +4,9 @@
     readonly property string appId: root.modelData?.id ?? ""
     readonly property bool menuPinned: appId !== "" && Strings.testRegexList(GlobalConfig.launcher.favouriteApps, appId)
     readonly property real pinButtonsWidth: pinButtons.width - Tokens.padding.extraSmall
-    readonly property bool dockPinned: appId !== "" && dockPins.includes(appId)
+    // The pin as stored: an older name for the app counts too (as the dock matches them)
+    readonly property string dockPin: dockPins.find(p => p === appId || (DesktopEntries.byId(p) ?? DesktopEntries.heuristicLookup(p))?.id === appId) ?? ""
+    readonly property bool dockPinned: appId !== "" && dockPin !== ""
 
     function toggleMenuPin(): void {
         const apps = GlobalConfig.launcher.favouriteApps;
@@ -12,7 +14,7 @@
     }
 
     function toggleDockPin(): void {
-        Quickshell.execDetached([`${Quickshell.env("HOME")}/.local/bin/caelestia-pin`, "dock", appId]);
+        Quickshell.execDetached([`${Quickshell.env("HOME")}/.local/bin/caelestia-pin`, "dock", dockPin || appId]);
     }
 
     FileView {

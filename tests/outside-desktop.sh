@@ -47,7 +47,6 @@ out=$("${outside[@]}" "$here/.local/bin/dotfiles-check" 2>&1) || true
 [[ $out == *"Title bar plugin not loaded"* ]] && fail "the loaded title bar plugin said not loaded: $out"
 
 : >"$log"
-mkdir -p "$HOME/Pictures/Wallpapers" && : >"$HOME/Pictures/Wallpapers/wallpaper.jpg"
 printf '#!/bin/sh\n' >"$HOME/.local/bin/caelestia-overlay" && chmod +x "$HOME/.local/bin/caelestia-overlay"
 "${outside[@]}" bash -c \
     'source "$1/.local/bin/agros-welcome"; caelestia_setup' _ "$here" >/dev/null 2>&1 </dev/null

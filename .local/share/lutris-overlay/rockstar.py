@@ -141,10 +141,14 @@ class RockstarService(SignInService):
         return url.startswith("https://signin.rockstargames.com/signin")
 
     def _names(self, data):
+        # (its keys only, for the log: the rest is the account's, its name and email)
+        def _shape(d):
+            return sorted(d) if isinstance(d, dict) else type(d).__name__
+
         names = self.owned_names(data.get("data")) if "data" in data else None
         if names is None:
             logger.error("Rockstar: the games list couldn't be read: %s",
-                         data.get("error") or "no gamesOwned in %s" % json.dumps(data.get("data"))[:500])
+                         data.get("error") or "no gamesOwned among %s" % _shape(data.get("data")))
         return names
 
     def _by_key(self):

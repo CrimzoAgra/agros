@@ -2,7 +2,8 @@
 # AgrOS's system parts: the update at every boot (downloaded at boot, installed at shutdown), pacman's hooks that keep
 # each user's Caelestia overlay, hyprbars and Hyprland config check in step with updates, Bluetooth back on after sleep,
 # the desktop shell at normal CPU priority, the keyring unlocked with the login password, a VMware VM's screen
-# following its window, the night light's location (geoclue) and the automatic time zone without a password (polkit)
+# following its window, the night light's location (geoclue), the automatic time zone without a password (polkit),
+# folder icons in the colour scheme's colour (papirus-folders, sudoers), mDNS from Avahi alone, UFW's logging off
 pkgname=agros-system
 pkgver=r30.35da937
 pkgrel=1
@@ -35,4 +36,7 @@ package() {
     install -Dm644 "$_root/system/ananicy/dotfiles.rules" "$pkgdir/etc/ananicy.d/99-agros/agros.rules"
     install -Dm644 "$_root/system/geoclue/agros.conf" "$pkgdir/etc/geoclue/conf.d/90-agros.conf"
     install -Dm644 "$_root/system/polkit/agros-timezone.rules" "$pkgdir/usr/share/polkit-1/rules.d/50-agros-timezone.rules"
+    install -dm750 "$pkgdir/etc/sudoers.d"  # (as sudo has it: 755 made pacman warn at every install)
+    install -Dm440 "$_root/system/sudoers/agros-papirus-folders" "$pkgdir/etc/sudoers.d/50-agros-papirus-folders"
+    install -Dm644 "$_root/system/resolved/agros.conf" "$pkgdir/usr/lib/systemd/resolved.conf.d/50-agros.conf"
 }
