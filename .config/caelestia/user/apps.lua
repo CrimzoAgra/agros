@@ -71,9 +71,32 @@ local function is_game(win)
     local tags = type(win.tags) == "table" and table.concat(win.tags, " ") or (win.tags or "")
     return (" " .. tags .. " "):find("[ ]game%*?[ ]") ~= nil
 end
+-- A store launcher's window (EA app, Ubisoft Connect...): under Proton it gets the games' class, and so their tag. By
+-- its program, as game-focus finds one: the list is ~/.local/bin/store-launchers (AgrOS's, updated with it; this file
+-- is your account's copy), read once per config load; a line found as "\<line>" in its command line, lowercase, with
+-- "/" and the breaks between arguments read as "\"
+local launchers
+local function store_launcher(pid)
+    if not launchers then
+        launchers = {}
+        local p = io.popen((os.getenv("HOME") or "") .. "/.local/bin/store-launchers 2>/dev/null")
+        for l in p and p:lines() or function() end do
+            if l ~= "" then launchers[#launchers + 1] = "\\" .. l end
+        end
+        if p then p:close() end
+    end
+    local cmd = "\\" .. (proc(pid, "cmdline") or ""):lower():gsub("[/%z]", "\\")
+    for _, l in ipairs(launchers) do
+        if cmd:find(l, 1, true) then return true end
+    end
+    return false
+end
 -- dots.is_game: any game (Proton, Lutris/umu, gamescope, native Steam), also a native one before the tag below is on
--- (windows.lua and titlebars.lua's own window.open handlers can run first)
-function dots.is_game(win) return win ~= nil and (is_game(win) or steam_game_id(win.pid) ~= nil) end
+-- (windows.lua and titlebars.lua's own window.open handlers can run first); not a store launcher's window. The same
+-- as game-focus's is_game (after-games, --game-open)
+function dots.is_game(win)
+    return win ~= nil and (is_game(win) or steam_game_id(win.pid) ~= nil) and not store_launcher(win.pid)
+end
 hl.on("window.open", function(win)
     if win and not is_game(win) and steam_game_id(win.pid) then
         hl.dispatch(hl.dsp.window.tag({ tag = "+game", window = win }))
@@ -109,7 +132,7 @@ hl.window_rule({ match = { tag = "game" }, no_anim = true })
 -- (it shows when Lutris starts a game while Steam runs) kept it behind the game, and a Wine game gets mouse movement only
 -- while focused: the camera didn't turn
 local function focus_game(win)
-    if win and (is_game(win) or steam_game_id(win.pid)) then hl.dispatch(hl.dsp.focus({ window = win })) end
+    if dots.is_game(win) then hl.dispatch(hl.dsp.focus({ window = win })) end
 end
 hl.on("window.open", focus_game)
 -- Only on the workspace you're on: the floating/tiling switch re-sends a game's fullscreen state, which took you to it

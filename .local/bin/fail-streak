@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# fail-streak <file> [<what>]: one more run in a row that <what> failed (another <what> than the file's starts again at
+# 1), the count printed. The scripts' one count of a failure that keeps coming back, so it's given up on rather than
+# tried for good (capri-update's flaky download or merge, agros-welcome's VSCodium step). A success, or giving up,
+# clears it: rm -f <file>
+f=${1:?usage: fail-streak <file> [<what>]} n=0
+[[ -f $f && $(cut -f1 "$f") == "${2:-}" ]] && n=$(cut -f2 "$f")
+[[ $n =~ ^[0-9]+$ ]] || n=0
+n=$((n + 1))
+mkdir -p "$(dirname "$f")" && printf '%s\t%s\n' "${2:-}" "$n" >"$f"
+echo "$n"

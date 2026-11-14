@@ -2,6 +2,7 @@
 # game-focus against a fake Hyprland event socket: one update per burst of events (not one per chunk), none for a
 # window's title change alone, and one within 0.25 s however long events keep coming
 set -euo pipefail
+# shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 python3 -I - "$here/.local/bin/game-focus" "$t" <<'P'
 import importlib.machinery, importlib.util, os, socket, sys, threading, time

@@ -2,6 +2,7 @@
 # dotfiles-check's "is this shell running": by the configs Quickshell lists, missing ones reported; no repo to
 # compare the system files with doesn't call them out of date
 set -uo pipefail
+# shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 # (always in a home of its own, XDG_STATE_HOME unset: it checks the Hyprland config, writing down the errors; Hyprland a
 # stand-in, its config fine)
@@ -72,6 +73,36 @@ grep -q "pacman's lock was left behind" <<<"$out" || fail "pacman's stale lock n
 echo "ok 2026-11-05 22:10 " >"$t/au/install-result"
 out=$(chk)
 grep -q "failed to install" <<<"$out" && fail "an install that went fine reported: $out"
+# The boot's AUR builds that failed: said while what they meant to build is older than that; not once Updates built
+# it; and not beside the update held back for the same failure (one message per cause)
+mkdir -p "$t/au/aur"; echo "a build failed" >"$t/au/aur/failed"; echo "equibop 1.1-1" >"$t/au/aur/wanted"
+# shellcheck disable=SC2016  # (expanded by the stand-in)
+printf '#!/bin/sh
+[ "$1" = -Q ] || exit 1
+case $2 in equibop) echo "equibop $EQUIBOP" ;; qt6-base) echo "qt6-base ${QT:-6.9.0-1}" ;; python) echo "python ${PY:-3.13.7-1}" ;; *) exit 1 ;; esac
+' >"$t/pacman"
+chmod +x "$t/pacman"
+[[ $(EQUIBOP=1.0-1 chk) == *"couldn't build AUR apps (a build failed): still waiting: equibop;"* ]] || fail "the failed AUR builds not said: $(EQUIBOP=1.0-1 chk)"
+[[ $(EQUIBOP=1.1-1 chk) != *"couldn't build AUR apps"* ]] || fail "the failed AUR builds said after Updates built them"
+# (a run that failed before it planned anything, the AUR out of reach: nothing known to be waiting, nothing said)
+rm "$t/au/aur/wanted"
+[[ $(EQUIBOP=1.0-1 chk) != *"couldn't build AUR apps"* ]] || fail "a whole run's failure with nothing planned said as AUR apps waiting"
+echo "equibop 1.1-1" >"$t/au/aur/wanted"
+# (what a build or a package's install script wrote never reaches the notification as it is: no Markdown link, image
+# or HTML)
+printf '%s\n' 'equibop: it needs ![x](https://e.vil/i.png) <img src=x> [a](b)' >"$t/au/aur/failed"
+out=$(EQUIBOP=1.0-1 chk)
+line=$(grep "couldn.t build AUR apps" <<<"$out"); [[ -n $line && $line != *[\<\>\[\]\!]* ]] || fail "a build's text reached the notification as it is: $out"
+echo "a build failed" >"$t/au/aur/failed"
+# The held update: only what's still waiting named (Qt's installed since by Updates, Python's not)
+printf '%s\n' "qt6-base 6.9.0-1 -> 6.10.0-1" "python 3.13.7-1 -> 3.14.0-1" >"$t/au/held"
+out=$(EQUIBOP=1.0-1 chk)
+[[ $out == *"held back (a new qt6-base, python;"* && $out != *"couldn't build AUR apps"* ]] || fail "the held update and its failed build said twice: $out"
+out=$(EQUIBOP=1.0-1 QT=6.10.0-1 chk)
+[[ $out == *"held back (a new python;"* ]] || fail "the held update names what's installed since: $out"
+out=$(EQUIBOP=1.0-1 QT=6.10.0-1 PY=3.14.0-1 chk)
+[[ $out != *"held back"* ]] || fail "the held update said with everything installed: $out"
+rm -r "$t/pacman" "$t/au/aur" "$t/au/held"
 # Who holds pacman's lock: pgrep -x finds them by name (a stand-in here, its pids those of processes named in their
 # command line as the real ones would be: perl's $0); pacman on other lists (checkupdates' --dbpath) or only querying
 # (-Qu) isn't one, so the lock is still said to be left behind; pacman installing, PackageKit's or pamac's daemon is

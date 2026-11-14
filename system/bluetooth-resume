@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# systemd sleep hook (installed to /usr/lib/systemd/system-sleep/ by system/bluetooth-setup.sh).
+# systemd sleep hook (installed by agros-system to /usr/lib/systemd/system-sleep/agros-bluetooth-resume).
 # Waking from sleep resets the USB controllers: the Bluetooth adapter comes back as a new device, switched off.
 # Before sleep: note whether Bluetooth was on. After waking: if it was, switch it back on once the adapter is back.
 state=/run/bluetooth-was-powered

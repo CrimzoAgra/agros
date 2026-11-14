@@ -2,6 +2,7 @@
 # game-focus's placement: a fullscreen game sharing its workspace moves to a free one in tiling mode only, and
 # switching from floating to tiling moves one that stayed put; on a second, scaled screen too
 set -euo pipefail
+# shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 mkdir -p "$t/.local/state"
 HOME=$t python3 -I - "$here/.local/bin/game-focus" "$t" <<'P'

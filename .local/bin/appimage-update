@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Updates the AppImages installed by appimage-open from their GitHub releases (auto-update runs it at boot).
 #   appimage-update               every installed AppImage whose launcher entry names its GitHub repo
-#   appimage-update <owner/repo>  install or update that one (agros-welcome)
+#   appimage-update <owner/repo>  install or update that one
 #   appimage-update --check       only list the ones with a newer version ("<owner/repo>: update available", update-apps)
 # Takes the latest release's Linux x86_64 AppImage, checked against the release's SHA256SUMS when it has one.
 # An app already on that version (same checksum, or same size when there are no checksums) is left alone.
@@ -44,7 +44,7 @@ for f in "$HOME"/.local/share/applications/*.desktop; do
     grep -q "^# Made by ~/.local/bin/appimage-open" "$f" || continue
     repo=$(sed -nE 's|^X-AppImage-Website=https?://github\.com/([^/]+/[^/#?]+).*|\1|p' "$f" | head -1)
     [[ -n $repo ]] || continue
-    # (one repo asked for, setup: only that one, with its installed file, so one on the latest version is left alone)
+    # (one repo asked for: only that one, with its installed file, so one on the latest version is left alone)
     (($#)) && [[ ${repo%.git} != "$1" ]] && continue
     found=1
     update "${repo%.git}" "$(sed -n 's/^X-AppImage-Path=//p' "$f" | head -1)" || status=1

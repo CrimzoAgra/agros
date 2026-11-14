@@ -3,6 +3,7 @@
 # without it, as here) still gets its initramfs, the modules optional: mkinitcpio run on its MODULES line, for the
 # running kernel, into a throwaway image
 set -euo pipefail
+# shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 line=$(sed -n 's/^MODULES+=/MODULES=/p' "$here/packages/agros-nvidia/90-agros-nvidia-early.conf")
 [[ $line == MODULES=\(*nvidia*\) ]] || fail "the drop-in's MODULES line not found: $line"

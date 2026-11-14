@@ -3,20 +3,55 @@
 # (Windows and the auto-update snapshots are listed there). Works with GRUB and Limine. Also takes away the
 # motherboard's own 1 s wait before the boot loader (its boot menu key, e.g. F11, still works): a second less of
 # the motherboard's start-up, when the graphics card's fans run at full speed.
-# Run by agros-boot's install (/usr/lib/agros/boot-menu); again by hand: sudo /usr/lib/agros/boot-menu
+# Run by agros-boot's install (/usr/lib/agros/boot-menu), by AgrOS's installer once GRUB is set up (agros-iso's
+# shellprocess@greetd); again by hand: sudo /usr/lib/agros/boot-menu
+#   boot-menu --grub-quiet   only GRUB's "Loading Linux..." lines taken out of its script (agros-grub-quiet.hook, after
+#                            each GRUB update: its package puts them back)
+#   boot-menu --note         only noted as run (agros-boot's upgrade, on an install from before the note)
+# Each run noted in /var/lib/agros/boot-menu.sum (this script's checksum; failed: an empty note where there was none):
+# agros-boot's upgrades run it again only when it changed, as each run puts its settings back over yours.
+# A boot loader not set up yet (the installer's package step, before its bootloader and grubcfg steps): nothing done,
+# exit 1, so the copy of the settings kept before AgrOS (.agros-orig) is CachyOS's, not the grub package's own
+# (AGROS_ROOT: another root, the tests' throwaway one: its files only, and the boot tools must be stand-ins, never the
+# machine's own: refused when one is found in the system's folders)
 set -euo pipefail
-[[ $EUID -eq 0 ]] || { echo "Run with sudo"; exit 1; }
+r=${AGROS_ROOT:-}
+if [[ -n $r ]]; then
+    for x in efibootmgr grub-mkconfig limine-update snapper systemctl findmnt; do
+        p=$(command -v "$x") && p=$(readlink -f "$p") || continue
+        [[ $p == /usr/* || $p == /bin/* || $p == /sbin/* ]] && { echo "AGROS_ROOT set but $x is the system's ($p)"; exit 1; }
+    done
+else
+    [[ $EUID -eq 0 ]] || { echo "Run with sudo"; exit 1; }
+fi
+grub_quiet() { sed -i "/^[[:space:]]*echo[[:space:]].*message/d" "$r/etc/grub.d/10_linux"; }
+# No text on screen while it boots or shuts down, behind the splash: the kernel options that hide it (quiet, splash,
+# loglevel=3...: boot-video-mode's QUIET, the one place that edits Limine's and GRUB's kernel options line), the ones
+# missing added (a value of yours for one kept). Exit 0: some added, the boot entries to be made again
+quiet_boot() {
+    local rc=0
+    "$r/usr/lib/agros/boot-video-mode/boot-video-mode" --quiet-boot >/dev/null || rc=$?
+    ((rc == 0 || rc == 3)) || echo "!! The kernel options that hide the boot's text couldn't be set (exit $rc)"
+    return "$rc"
+}
+[[ ${1:-} != --grub-quiet ]] || { grub_quiet; exit; }
+stamp=$r/var/lib/agros/boot-menu.sum
+note() {
+    mkdir -p "${stamp%/*}" || return
+    if (($1 == 0)); then sha256sum <"${BASH_SOURCE[0]}" >"$stamp"; elif [[ ! -f $stamp ]]; then : >"$stamp"; fi
+}
+[[ ${1:-} != --note ]] || { note 0; exit; }
+trap 'note $?' EXIT
 
 # Limine (CachyOS's default on newer installs): boot CachyOS straight away with no menu;
 # pressing Esc (any key) in the first second shows the menu (snapshots and Windows are listed there; there's no
 # setting that boots at once and can still be interrupted, so 1 s is the shortest)
 limine_menu() {
-    local conf="" c kv key
-    for c in /boot/limine.conf /boot/limine/limine.conf /boot/EFI/limine/limine.conf /efi/limine.conf; do
-        test -f "$c" && { conf=$c; break; }
-    done
-    [[ -n $conf ]] || { echo "No limine.conf found, boot menu left as is."; return; }
-    cp -n "$conf" "$conf.bak"
+    local conf kv key
+    conf=$("$r/usr/lib/agros/boot-loader" --limine) || { echo "No limine.conf found (not set up yet?), boot menu left as is."; exit 1; }
+    cp -n "$conf" "$conf.agros-orig"  # (as it was before AgrOS, once: its own name, not a .bak of yours)
+    # (its default_entry left as CachyOS set it, GRUB_DEFAULT=0's counterpart: remember_last_entry: no makes it the one
+    # booted, as GRUB_SAVEDEFAULT=false does; entry 1 may be a folder of entries, not CachyOS)
     for kv in "timeout: 1" "quiet: yes" "remember_last_entry: no"; do
         key=${kv%%:*}
         if grep -qE "^\s*$key:" "$conf"; then
@@ -26,41 +61,46 @@ limine_menu() {
         fi
     done
     echo "Limine: boots CachyOS directly, Esc shows the menu ($conf)."
+    # Its kernel options (in /etc/default/limine, which limine-update makes the entries from; as it was before AgrOS
+    # kept once, for agros-boot's removal)
+    [[ -f $r/etc/default/limine ]] || return 0
+    cp -n "$r/etc/default/limine" "$r/etc/default/limine.agros-orig"
+    if quiet_boot; then
+        limine-update || echo "!! Limine's entries not made again (run: sudo limine-update)"
+    fi
 }
 
 boot_menu() {
     # CachyOS uses GRUB or Limine: hide the menu (press Esc during boot to show it), always boot CachyOS,
     # list Windows if there is one, and show the auto-update snapshots in the menu.
-    # Limine when its settings file is there (as boot-video-mode decides; GRUB may still be installed on a machine moved
-    # to Limine), else GRUB
-    if [[ -f /etc/default/limine ]] || { pacman -Q limine >/dev/null 2>&1 && ! command -v grub-mkconfig >/dev/null; }; then
-        limine_menu
-        return
-    fi
-    local conf=/etc/default/grub
-    if [[ ! -f $conf ]] || ! command -v grub-mkconfig >/dev/null; then
-        echo "No GRUB or Limine here, boot menu left as is."
-        return
-    fi
-    cp -n "$conf" "$conf.bak"
+    # (which one: boot-loader, as boot-video-mode and agros-boot's install decide it)
+    case $("$r/usr/lib/agros/boot-loader") in
+        limine) limine_menu; return ;;
+        grub) ;;
+        *) echo "No GRUB or Limine here, boot menu left as is."; return ;;
+    esac
+    local conf=$r/etc/default/grub
+    [[ -f $r/boot/grub/grub.cfg ]] || { echo "GRUB isn't set up yet (no /boot/grub/grub.cfg), boot menu left as is."; exit 1; }
+    # (as it was before AgrOS, once: its own name, not a .bak of yours; agros-boot's removal puts its settings back)
+    cp -n "$conf" "$conf.agros-orig"
     local kv key value
     # (AgrOS's theme: agros-boot's /usr/share/grub/themes/agros, in place of CachyOS's)
     for kv in GRUB_TIMEOUT_STYLE=hidden GRUB_TIMEOUT=1 GRUB_DEFAULT=0 GRUB_SAVEDEFAULT=false GRUB_DISABLE_OS_PROBER=false \
         GRUB_THEME=/usr/share/grub/themes/agros/theme.txt; do
         key=${kv%%=*} value=${kv#*=}
-        if grep -qE "^#?\s*$key=" "$conf"; then
-            sed -i -E "s|^#?\s*$key=.*|$key=$value|" "$conf"
+        # (the line in use only: a commented-out one next to it, as CachyOS's #GRUB_THEME=, made a second, the same)
+        if grep -qE "^\s*$key=" "$conf"; then
+            sed -i -E "s|^\s*$key=.*|$key=$value|" "$conf"
         else
             echo "$kv" | tee -a "$conf" >/dev/null
         fi
     done
-    # No kernel messages on screen while it boots (CachyOS's GRUB leaves "quiet" out; Limine's entries have it)
-    grep -qE "^GRUB_CMDLINE_LINUX_DEFAULT=.*\bquiet\b" "$conf" ||
-        sed -i -E "s/^(GRUB_CMDLINE_LINUX_DEFAULT=['\"])/\1quiet /" "$conf"
+    # No text on screen while it boots or shuts down (CachyOS's GRUB leaves "quiet" out); the menu's made below anyway
+    quiet_boot || true
     # GRUB's own "Loading Linux ..." lines too: out of its script now, and again after each GRUB update (agros-boot's
     # pacman hook, agros-grub-quiet.hook)
-    sed -i "/^[[:space:]]*echo[[:space:]].*message/d" /etc/grub.d/10_linux
-    if [[ $(findmnt -no FSTYPE /) == btrfs ]] && command -v snapper >/dev/null; then
+    grub_quiet
+    if [[ $(findmnt -no FSTYPE "$r/") == btrfs ]] && command -v snapper >/dev/null; then
         # (not made, e.g. a /.snapshots already there: said, and the boot menu still made below)
         snapper --no-dbus -c root list >/dev/null 2>&1 || snapper --no-dbus -c root create-config / ||
             echo "!! Snapper's config for / couldn't be made: no snapshots before updates (see snapper create-config)"
@@ -70,10 +110,13 @@ boot_menu() {
             echo "!! snapper-cleanup.timer couldn't be turned on: old snapshots aren't cleared (systemctl enable snapper-cleanup.timer)"
         systemctl enable grub-btrfsd.service 2>/dev/null || true
     fi
-    grub-mkconfig -o /boot/grub/grub.cfg
+    grub-mkconfig -o "$r/boot/grub/grub.cfg"
 }
 
 boot_menu
-if command -v efibootmgr >/dev/null && [[ -d /sys/firmware/efi ]]; then
+if command -v efibootmgr >/dev/null && [[ -d $r/sys/firmware/efi ]]; then
+    # (the wait it had, noted once, for agros-boot's removal to put back)
+    [[ -e $r/var/lib/agros/efi-timeout ]] || { mkdir -p "$r/var/lib/agros" &&
+        efibootmgr | sed -n 's/^Timeout: \([0-9]*\) seconds\{0,1\}$/\1/p' >"$r/var/lib/agros/efi-timeout"; } || true
     efibootmgr -q -t 0 && echo "Motherboard: no wait before the boot loader." || echo "Motherboard wait left as is (the firmware refused)."
 fi

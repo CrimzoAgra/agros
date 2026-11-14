@@ -188,7 +188,8 @@ ClippingRectangle {
     // Not named focus: that's every item's focus property, which a function of that name doesn't reliably replace
     function focusWindow(win: HyprlandToplevel): void {
         // dots.focus_window (~/.config/caelestia/user/windows.lua) also brings a floating window to the front. Lua
-        // commands only, here and in the overlay's other files: this config is Lua, and Caelestia drops Hypr.usingLua
+        // commands only (hyprctl eval, Hypr.dispatch with hl.dsp...), here and in the overlay's other files: AgrOS's
+        // Hyprland config is always Lua, so there's no Hypr.usingLua check for the old syntax
         Quickshell.execDetached(["hyprctl", "eval", `dots.focus_window("0x${win.address}")`]);
     }
 

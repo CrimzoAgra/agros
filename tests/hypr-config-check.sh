@@ -3,10 +3,8 @@
 # run as the pacman hook runs it (no XDG_RUNTIME_DIR: Hyprland refuses to start) it gets a runtime folder of its own,
 # and Hyprland refusing to run at all is "couldn't check", not the config's error; the config told it's only a check
 set -uo pipefail
-here=$(cd "$(dirname "$0")/.." && pwd)
-t=$(mktemp -d)
-trap 'rm -rf "$t"' EXIT
-fail() { echo "FAIL: $*"; exit 1; }
+# shellcheck source=lib.sh source-path=SCRIPTDIR
+. "$(dirname "$0")/lib.sh"
 mkdir -p "$t/bin" "$t/home"
 cat >"$t/bin/Hyprland" <<H
 #!/bin/sh
@@ -30,7 +28,7 @@ run >/dev/null || fail "a good config failed"
 [[ -e $t/state/hypr-config-check ]] && fail "the old errors stayed once it's fine"
 [[ $(cat "$t/env") == "$t/run 1" ]] || fail "not told it's only a check (DOTS_VERIFY_CONFIG), or the session's runtime folder not used: $(cat "$t/env")"
 
-# As from the pacman hook (runuser: no XDG_RUNTIME_DIR): a runtime folder of its own, removed after
+# As from the pacman hook with you not logged in (no runtime folder): a runtime folder of its own, removed after
 BROKEN=1 run >/dev/null 2>&1  # (errors written down before: they stay until a real check says otherwise)
 out=$(XDG_RUNTIME_DIR='' HOME=$t/home XDG_STATE_HOME=$t/state PATH=$t/bin:$PATH env -u XDG_RUNTIME_DIR \
     "$here/.local/bin/hypr-config-check") || fail "without XDG_RUNTIME_DIR the check failed: $out"

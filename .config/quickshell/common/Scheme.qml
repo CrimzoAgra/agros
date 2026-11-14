@@ -10,7 +10,8 @@ Scope {
 
     property var colours: ({})
     readonly property var fallback: ({
-            error: "f97386",
+            error: "ffb4ab",
+            onError: "690005",
             errorContainer: "8c1d18",
             onErrorContainer: "f9dedc",
             onPrimary: "373e61",

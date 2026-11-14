@@ -2,6 +2,7 @@
 # lutris-library with XDG_CACHE_HOME set: the patched Lutris (~/.local/bin/lutris builds it there) is found, so a
 # Battle.net sign-in counts and the account's games join
 set -euo pipefail
+# shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 export HOME=$t XDG_DATA_HOME=$t/.local/share XDG_CACHE_HOME=$t/xdg-cache XDG_CONFIG_HOME=$t/.config
 export DBUS_SESSION_BUS_ADDRESS=unix:path=$t/no-bus

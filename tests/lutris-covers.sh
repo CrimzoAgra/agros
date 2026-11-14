@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # lutris-covers' cover checks on made-up pictures: Steam's padded cover is caught, a real one isn't, a corrupt or wide
-# one needs a new cover (no network: nothing is downloaded); a turned-down key stops the run
+# one needs a new cover (no network: nothing is downloaded); a turned-down key stops the run, it, offline, 429 and 5xx
+# exit 1; a permanent error marks the game tried
 set -euo pipefail
+# shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 mkdir -p "$t/.config/dots" "$t/steam/covers"; echo test-key >"$t/.config/dots/steamgriddb.key"
 HOME=$t python3 -I - "$here/.local/bin/lutris-covers" "$t" <<'P'
@@ -40,7 +42,28 @@ covers.find_cover, covers.needs_cover = refused, lambda item: True
 sys.modules["lutris.database.games"] = types.SimpleNamespace(get_games=lambda: [{"slug": "a"}, {"slug": "b"}])
 sys.modules["lutris.gui.views.store_item"] = types.SimpleNamespace(StoreItem=lambda *a: None)
 sys.modules["lutris.services.base"] = types.SimpleNamespace(LutrisCoverartMedium=lambda: None)
-covers.main()
+sys.modules["lutris.settings"] = types.SimpleNamespace(COVERART_PATH=f"{t}/coverart")
+assert covers.main() == 1, "a turned-down key exited 0"
 assert asked == ["a"] and not os.path.exists(covers.TRIED), asked
+# Offline: every game asked, none marked tried, and 1 (the wrapper doesn't mark the library checked)
+def offline(game):
+    asked.append(game["slug"])
+    raise urllib.error.URLError("offline")
+covers.find_cover, asked[:] = offline, []
+assert covers.main() == 1 and asked == ["a", "b"] and not os.path.exists(covers.TRIED), asked
+# Too many requests, a server error: as offline, asked again next time
+for code in (429, 503):
+    def busy(game, code=code):
+        asked.append(game["slug"])
+        raise urllib.error.HTTPError("https://x", code, "Busy", {}, None)
+    covers.find_cover, asked[:] = busy, []
+    assert covers.main() == 1 and asked == ["a", "b"] and not os.path.exists(covers.TRIED), (code, asked)
+# A permanent error (HTTP 403, a picture that's neither PNG nor JPEG): marked tried, not rerun at every start
+def forbidden(game):
+    if game["slug"] == "a":
+        raise urllib.error.HTTPError("https://x", 403, "Forbidden", {}, None)
+    raise ValueError("not a PNG or JPEG")
+covers.find_cover = forbidden
+assert covers.main() == 0 and open(covers.TRIED).read().split() == ["a", "b"], open(covers.TRIED).read()
 P
 echo "ok lutris-covers"

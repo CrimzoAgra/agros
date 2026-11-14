@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Links each AgrOS program and its data folder into your home (~/.local/bin/<name>, ~/.local/share/<folder>), where the
 # desktop's configs and scripts look for them. New accounts get them from /etc/skel; this adds ones that came with a
-# package update since. Never over a file of your own: only missing ones, and links that point into AgrOS. Run at
-# every login (agros-links.service).
+# package update since. Never over a file of your own: only missing ones, and links that point into AgrOS. Also
+# AgrOS's settings an update added or changed (below). Run at every login (agros-links.service).
 set -uo pipefail
 lib=${AGROS_LIB:-/usr/lib/agros}
 link() {  # link <target> <link>
@@ -14,22 +14,59 @@ link() {  # link <target> <link>
     mkdir -p "${2%/*}" && ln -s "$1" "$2"
 }
 for f in "$lib"/bin/*; do [[ -f $f ]] && link "$f" "$HOME/.local/bin/${f##*/}"; done
-for d in "$lib"/share/*/; do d=${d%/}; link "$d" "$HOME/.local/share/${d##*/}"; done
+# (none: the glob left as it is, not linked as a folder named "*")
+for d in "$lib"/share/*/; do d=${d%/}; [[ -e $d ]] && link "$d" "$HOME/.local/share/${d##*/}"; done
 # Links into AgrOS whose program a package update took away
 for l in "$HOME"/.local/bin/* "$HOME"/.local/share/*; do
     [[ -L $l && $(readlink "$l") == "$lib"/* && ! -e $l ]] && rm -f "$l"
 done
-# Config files a package update brought into /etc/skel/.config (fetch's, LibreWolf's overrides inside a folder you
-# already have): copied in once, at the first login after. Never over one of yours, and one you delete stays deleted
-# (the files already offered are kept)
-skel=${AGROS_SKEL:-/etc/skel}/.config seen=${XDG_STATE_HOME:-$HOME/.local/state}/agros/configs-seen
-mkdir -p "${seen%/*}" && touch "$seen"
+# Files a package update brought into /etc/skel/.config (fetch's, LibreWolf's overrides inside a folder you already
+# have) and its launcher entries (/etc/skel/.local/share/applications): copied in once, at the first login after. Never
+# over one of yours, and one you delete stays deleted (the files already offered are kept, by their path from .config,
+# a launcher by its path from home). Not the rest of ~/.local/share: lutris-library adds Lutris's covers its own way
+root=${AGROS_SKEL:-/etc/skel} state=${XDG_STATE_HOME:-$HOME/.local/state}/agros
+seen=$state/configs-seen
+mkdir -p "$state" && : >>"$seen"
 declare -A had
 while IFS= read -r n; do had[$n]=1; done <"$seen"
-while IFS= read -r -d '' f; do
-    n=${f#"$skel"/} to=$HOME/.config/${f#"$skel"/}
-    [[ ${had[$n]-} ]] && continue
-    [[ -e $to || -L $to ]] || { mkdir -p "$(dirname "$to")" && cp -P "$f" "$to"; }
-    echo "$n" >>"$seen"
-done < <(find "$skel" \( -type f -o -type l \) -print0 2>/dev/null)
+for part in .config .local/share/applications; do
+    skel=$root/$part
+    while IFS= read -r -d '' f; do
+        to=$HOME/$part/${f#"$skel"/} n=${f#"$root"/}
+        [[ $part == .config ]] && n=${f#"$skel"/}
+        [[ ${had[$n]-} ]] && continue
+        [[ -e $to || -L $to ]] || { mkdir -p "$(dirname "$to")" && cp -P "$f" "$to"; }
+        echo "$n" >>"$seen"
+    done < <(find "$skel" \( -type f -o -type l \) -print0 2>/dev/null)
+done
+# Settings an update changed (/usr/share/agros/skel-versions: every version each has had, all but those yours to
+# change): yours replaced while it's one of those (you never edited it), else kept, with AgrOS's new one beside it as
+# <file>.agros-new and said once
+versions=${AGROS_SKEL_VERSIONS:-/usr/share/agros/skel-versions} offered=$state/settings-offered
+sum() { sha256sum <"$1" | cut -d' ' -f1; }
+declare -A known told
+new=() offer=()
+if [[ -r $versions ]]; then
+    : >>"$offered"
+    while read -r s n; do known[$s $n]=1; done <"$versions"
+    while IFS= read -r l; do told[$l]=1; done <"$offered"
+    while read -r _ n; do
+        f=$root/$n to=$HOME/$n
+        # (a link, of AgrOS's or yours, left as it is)
+        [[ -f $f && ! -L $f && -f $to && ! -L $to ]] || continue
+        cmp -s "$f" "$to" && continue
+        s=$(sum "$f")
+        if [[ ${known[$(sum "$to") $n]-} ]]; then
+            # (written beside it, then moved over it: never half-written; its mode as yours was)
+            cp "$f" "$to.agros-tmp" && chmod --reference="$to" "$to.agros-tmp" && mv -f "$to.agros-tmp" "$to"
+        elif [[ ! ${told[$s $n]-} ]]; then
+            cp "$f" "$to.agros-new" && new+=("$n") && offer+=("$s $n")
+        fi
+    done < <(awk '!x[substr($0, 67)]++' "$versions")
+fi
+# (in the background: Caelestia, the notification server, isn't up yet; agros-links.service keeps it alive). Marked as
+# said only once it was: one that never got through is said at the next login
+((${#new[@]})) && { "$(dirname "$(readlink -f "$0")")/dots-warn" "AgrOS updated settings you've changed" \
+    "Yours kept, AgrOS's new version beside each as .agros-new: ${new[*]}" &&
+    printf '%s\n' "${offer[@]}" >>"$offered"; } &
 exit 0

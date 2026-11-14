@@ -1,10 +1,13 @@
 # agros-system: for every AgrOS user (agros-each-user)
 # A Hyprland update (or one of the libraries it's built on): the config checked against it straight away, its errors
-# written down for dotfiles-check (hypr-config-check), so a renamed API is said at once, not found at the next login
+# written down for dotfiles-check (hypr-config-check), so a renamed API is said at once, not found at the next login.
+# agros-scripts too: a new hypr-config-check checks again (Hyprland --verify-config, a few seconds per user; nothing
+# shown, its result only written down)
 [Trigger]
 Operation = Install
 Operation = Upgrade
 Type = Package
+Target = agros-scripts
 Target = hyprland
 Target = hyprland-git
 Target = aquamarine

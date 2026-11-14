@@ -3,6 +3,7 @@
 # pushed by the next run (it said "nothing to commit" and left it); a rebase or a conflicted merge left open by hand
 # gets nothing committed on top
 set -euo pipefail
+# shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t GIT_CONFIG_GLOBAL=/dev/null
 git init -q --bare -b main "$t/remote.git"
@@ -10,6 +11,7 @@ git clone -q "$t/remote.git" "$t/a" 2>/dev/null; git clone -q "$t/remote.git" "$
 for r in a b; do git -C "$t/$r" checkout -q -b main 2>/dev/null || true; done
 echo 1 >"$t/a/one"; echo 3 >"$t/a/three"; git -C "$t/a" add -A; git -C "$t/a" commit -qm one; git -C "$t/a" push -q -u origin main
 git -C "$t/b" pull -q origin main; git -C "$t/b" branch -q -u origin/main
+# shellcheck source=/dev/null  # (functions cut out of dotfiles-sync)
 source <(sed -n '/^shared() {/,/^# push <repo>/p; /^push() {/,/^}/p' "$here/.local/bin/dotfiles-sync")
 # (the files made here, as the bookmarks: "--", committed as they are)
 # The other machine pushed meanwhile; this one has a change to sync
@@ -44,7 +46,7 @@ push "$t/b" "" -- three >"$t/out" 2>&1; out=$(cat "$t/out")  # (not in a subshel
     fail "a clashing edit in progress left the folder half-merged: $(git -C "$t/b" status --porcelain)"
 [[ $(cat "$t/b/one") == a2 && $(git -C "$t/b" show HEAD:three) == 3d && -z $(git -C "$t/b" log --oneline '@{u}..') ]] ||
     fail "the sync itself not pulled and pushed: $out"
-git -C "$t/b" stash show -p | grep -q '^+mine' || fail "the edit in progress not kept in the stash"
+grep -q '^+mine' <<<"$(git -C "$t/b" stash show -p)" || fail "the edit in progress not kept in the stash"
 [[ $(push "$t/b" "" -- three 2>&1) == *"nothing to commit"* ]] || fail "the next sync refused after a clashing edit"
 git -C "$t/b" stash drop -q
 # The commit failing (no name and email set yet, a hook): said, failed, nothing pushed or set aside as an edit in

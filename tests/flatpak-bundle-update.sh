@@ -2,7 +2,9 @@
 # flatpak-bundle-update's version check: a release over the pre-release of the same number is newer, the same or an
 # older one isn't
 set -euo pipefail
+# shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
+# shellcheck source=/dev/null  # (a function cut out of flatpak-bundle-update)
 source <(sed -n '/^newer() {/,/^}/p' "$here/.local/bin/flatpak-bundle-update")
 newer 0.1.34 0.1.33 || fail "0.1.34 not newer than 0.1.33"
 newer 0.1.33 0.1.33-alpha || fail "0.1.33 not newer than 0.1.33-alpha"
@@ -72,4 +74,22 @@ out=$(PATH=$t/bin:$PATH "$here/.local/bin/flatpak-bundle-update" --install-fetch
 { [[ $(grep -c -- '--reinstall --bundle' "$t/installs2") == 2 && $out == *"com.x.A: updated to 2"* && $out == *"com.x.B: updated to 3"* ]] &&
     grep -q -- "--system -y --noninteractive --reinstall --bundle $t/b.flatpak" "$t/installs2"; } ||
     fail "--install-fetched didn't reinstall both apps: $out / $(cat "$t/installs2" 2>/dev/null)"
+# --install: found already installed as the update finds an app's repo, among the ones installed from a file only: one
+# whose metainfo names a repo with the same start (o/app-other), or a Flathub app's that links to it, isn't it; its
+# own is, whatever the case and a .git
+cat >"$t/bin/flatpak" <<F
+#!/bin/bash
+case "\$*" in
+    list*) cat "$t/list" ;;
+    *--show-location*) echo "$t/loc/\${*: -1}" ;;
+esac
+F
+meta() { mkdir -p "$t/loc/$1/files/share/metainfo"; echo "<url type=\"homepage\">https://github.com/$2</url>" >"$t/loc/$1/files/share/metainfo/$1.metainfo.xml"; }
+meta com.x.Other o/app-other; meta com.x.Flathub o/app
+printf 'com.x.Other\tother-origin\tuser\ncom.x.Flathub\tflathub\tsystem\n' >"$t/list"
+out=$(PATH=$t/bin:$PATH "$here/.local/bin/flatpak-bundle-update" --install o/app 2>&1) || true
+[[ $out != *"already installed"* ]] || fail "--install o/app found o/app-other or a Flathub app installed"
+meta com.x.App O/App.git; printf 'com.x.App\tapp-origin\tuser\n' >>"$t/list"
+out=$(PATH=$t/bin:$PATH "$here/.local/bin/flatpak-bundle-update" --install o/app 2>&1) || true
+[[ $out == "o/app: already installed" ]] || fail "--install o/app didn't find it installed: $out"
 echo "ok flatpak-bundle-update"

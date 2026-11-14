@@ -1,6 +1,24 @@
+# (AGROS_ROOT: another root, the tests' throwaway one; / when pacman runs this)
+_r=${AGROS_ROOT:-}
 post_install() {
     systemd-tmpfiles --create /usr/lib/tmpfiles.d/agros-camera-switch.conf >/dev/null 2>&1 || true
     systemctl enable camera-switch.service >/dev/null 2>&1 || true
 }
-post_upgrade() { systemctl try-restart camera-switch.service >/dev/null 2>&1 || true; }
+# The running one restarted on the new version, by systemd's own hooks once the transaction is over: marked here, then
+# its daemon-reload (the new unit read) and its enqueue-marked (the restart). A restart from here ran on the old unit
+post_upgrade() {
+    systemctl -q is-active camera-switch.service 2>/dev/null &&
+        systemctl set-property camera-switch.service Markers=+needs-restart >/dev/null 2>&1
+    true
+}
 pre_remove() { systemctl disable --now camera-switch.service >/dev/null 2>&1 || true; }
+# (the switch's saved position: made by its tmpfiles, gone with it). The camera back (taken out with the switch off, it
+# stayed out until replugged or rebooted): its daemon stopped and its udev rule gone by now, so nothing takes it out again
+post_remove() {
+    rm -rf "$_r/var/lib/camera-switch"
+    for d in "$_r"/sys/bus/usb/devices/*; do
+        [ "$(cat "$d/idVendor" 2>/dev/null):$(cat "$d/idProduct" 2>/dev/null)" = 04f2:b83e ] &&
+            echo 1 >"$d/authorized" 2>/dev/null
+    done
+    true
+}

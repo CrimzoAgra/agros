@@ -1,0 +1,366 @@
+#!/usr/bin/env bash
+# The kinds of update, and how each is listed and run: the one place the Updates app's update-apps and the boot's
+# auto-update (as each AgrOS user) both use. Its updates and --list never run as root; its queries (--qt-now,
+# --runtime-target, --runtimes-now, --built-on) do, from auto-update and auto-update-aur.
+#   update-kinds --list              what's waiting, one per line: kind<TAB>name<TAB>old<TAB>new. Kinds: system, aur,
+#                                    firmware, flatpak, appimage, capri, proton, dev; an "offline" line when the package
+#                                    servers can't be reached
+#   update-kinds [--boot] <kind>...  update those kinds (firmware, flatpak, appimage, capri, proton, dev; system and AUR
+#                                    are update-apps' paru and the boot's auto-update), each under "== <title>"; exit 1
+#                                    when one failed. --boot (auto-update's, per user): only the user's own Flatpaks
+#                                    (root does the system's, and those from a file under its hold), Capri only checked.
+#                                    One run at a time per user (the boot's and Updates'): the second waits
+#   update-kinds --qt-now            the Qt installed ("qt6-base <ver> qt6-declarative <ver> ", "none" for one missing):
+#                                    what Quickshell and Caelestia must be built for (update-apps, auto-update)
+#   update-kinds --runtime-target    the runtimes (below) a "name old -> new" list on stdin changes: "<name> <new> ..."
+#                                    (nothing when the part of its version that counts doesn't change)
+#   update-kinds --runtimes-now      the runtimes installed, "<name> <version>" each
+#   update-kinds --built-on [<dbpath>]   what's built on the runtimes a "name old -> new" list on stdin changes, one per
+#                                    line (all of them: the callers keep those from the AUR). update-apps and the boot's
+#                                    auto-update-aur both rebuild those
+#   (STEAM_ROOT: another Steam folder, the tests'; Lutris's from XDG_DATA_HOME, XDG_CONFIG_HOME)
+set -uo pipefail
+helpers=$(dirname "$(readlink -f "$0")")
+
+# Each one's version without its package release; "none" when it isn't installed (an edition without qt6-declarative)
+if [[ ${1:-} == --qt-now ]]; then
+    for p in qt6-base qt6-declarative; do
+        v=$(pacman -Q "$p" 2>/dev/null | awk '{ sub(/-[^-]*$/, "", $2); print $2 }')
+        printf '%s %s ' "$p" "${v:-none}"
+    done
+    exit 0
+fi
+# The runtimes a new version of breaks what's built on them (the one list: the boot's AUR builds rebuild those for it
+# before it's installed, and auto-update holds it back without them; update-apps rebuilds them after its paru):
+# "<package> <the part of its version that counts: its first N numbers, 0 all> <what's built on it: required, pacman's
+# Required By; or a folder, %s the part that counts of the version installed>"
+#   Qt: Quickshell, Caelestia and qtengine use its private parts, which hold only for its exact version (a package
+#   rebuild of the same version doesn't count)
+#   Python: a package's modules are in /usr/lib/python3.N, which the next minor version doesn't look in
+runtimes() { printf '%s\n' "qt6-base 0 required" "qt6-declarative 0 required" "python 2 /usr/lib/python%s/"; }
+# counts <version> <N>: the part of a version that counts (its package release left out)
+counts() { local v=${1%-*}; ((!$2)) || v=$(cut -d. -f1-"$2" <<<"$v"); echo "$v"; }
+# changed: the runtimes whose version that counts changes in a "name old -> new" list (stdin): "<name> <old> <new>
+# <N> <what's built on it>" each
+changed() {
+    local name old new n parts on
+    while read -r name old _ new _; do
+        while read -r n parts on; do
+            [[ $n == "$name" && $(counts "$old" "$parts") != "$(counts "$new" "$parts")" ]] &&
+                echo "$name $old $new $parts $on"
+        done < <(runtimes)
+    done
+}
+case ${1:-} in
+    --runtime-target) changed | while read -r name _ new _; do printf '%s %s ' "$name" "$new"; done; exit 0 ;;
+    --runtimes-now) runtimes | while read -r n _; do pacman -Q "$n" 2>/dev/null; done; exit 0 ;;
+    --built-on)
+        db=()
+        [[ -n ${2:-} ]] && db=(--dbpath "$2")
+        changed | while read -r name old _ parts on; do
+            if [[ $on == required ]]; then
+                LC_ALL=C pacman -Qi "${db[@]}" "$name" 2>/dev/null |
+                    awk '/^Required By/ { on = 1; sub(/^[^:]*:/, "") } /^[A-Z][^:]*:/ && !/^Required By/ { on = 0 } on'
+            else
+                pacman -Qoq "${db[@]}" "${on//%s/$(counts "$old" "$parts")}" 2>/dev/null
+            fi
+        done | tr ' ' '\n' | sed '/^$/d; /^None$/d' | sort -u
+        exit 0 ;;
+esac
+capri_current="${XDG_DATA_HOME:-$HOME/.local/share}/capri/current"
+# (the user's own tools: not on PATH at boot)
+PATH=$HOME/.cargo/bin:$HOME/.local/bin:$PATH
+# (the AUR's build scripts, npm's, rustup's: a user's, never root's)
+((EUID)) || { echo "update-kinds: not as root" >&2; exit 1; }
+
+# Proton builds, where Steam and Lutris look for them: "<launcher> <folder>" each. Steam's compatibilitytools.d;
+# Lutris's Wine runners (lutris.conf's runner_dir, else its data folder's runners: as Lutris finds them). Lutris's
+# config is ~/.config/lutris when that's there, else its data folder (Lutris's own rule)
+lutris_data=${XDG_DATA_HOME:-$HOME/.local/share}/lutris
+lutris_conf=${XDG_CONFIG_HOME:-$HOME/.config}/lutris
+[[ -d $lutris_conf ]] || lutris_conf=$lutris_data
+proton_places() {
+    local r
+    r=$(sed -n 's/^runner_dir *= *//p' "$lutris_conf/lutris.conf" 2>/dev/null | head -1)
+    echo "steam ${STEAM_ROOT:-$HOME/.steam/root}/compatibilitytools.d"
+    echo "lutris ${r:-$lutris_data/runners}/wine"
+}
+# Each family: "<family> <its release API> <its folders' pattern>" (GE-Proton: GloriousEggroll's GitHub; dwproton:
+# Dawn Winery's Forgejo at dawn.wine, the same API. Lutris's own "dw-proton" runner, from lutris.net's list, is a
+# folder without a version, dw-proton-x86_64: Lutris installs it once and never updates it, so its version file says
+# which it is)
+proton_families() {
+    printf '%s\n' "GE-Proton https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases/latest GE-Proton*" \
+        "dwproton https://dawn.wine/api/v1/repos/dawn-winery/dwproton/releases/latest dw*proton*"
+}
+# proton_latest <api>: "<tag> <tarball URL> <its .sha512sum URL>" of the latest release (x86_64)
+proton_latest() {
+    curl -fsSL --connect-timeout 10 -m 60 "$1" 2>/dev/null | jq -r '[.tag_name,
+        ([.assets[].browser_download_url | select(test("x86_64\\.tar\\.(gz|xz)$"))][0] // ""),
+        ([.assets[].browser_download_url | select(test("x86_64\\.sha512sum$"))][0] // "")] | @tsv' 2>/dev/null |
+        awk -F'\t' '$1 != "" && $2 != "" { print $1, $2, $3 }'
+}
+# proton_dirs <pattern>: the family's folders in $tools
+proton_dirs() { local d; for d in "$tools"/$1; do [[ -d $d ]] && echo "${d##*/}"; done; }
+# proton_ver <folder>: its release (its version file's "<time> <release>", else the folder's name), without -x86_64
+proton_ver() {
+    local v
+    v=$(awk '{ print $2; exit }' "$tools/$1/version" 2>/dev/null)
+    v=${v:-$1}
+    echo "${v%-x86_64}"
+}
+# proton_newest <pattern>: the newest release there
+proton_newest() { local d; proton_dirs "$1" | while read -r d; do proton_ver "$d"; done | sort -V | tail -1; }
+proton_has() { local d; while read -r d; do [[ $(proton_ver "$d") == "$1" ]] && return 0; done < <(proton_dirs "$2"); return 1; }
+proton_any() { local d; while read -r _ d; do [[ -d $d ]] && return 0; done < <(proton_places); return 1; }
+
+list_proton() {
+    local fam api pat where tag label
+    while read -r fam api pat; do
+        tag=
+        while read -r where tools; do
+            [[ -n $(proton_dirs "$pat") ]] || continue
+            [[ -n $tag ]] || read -r tag _ < <(proton_latest "$api") || break
+            label=$fam; [[ $where == lutris ]] && label="$fam (Lutris)"
+            proton_has "$tag" "$pat" || printf 'proton\t%s\t%s\t%s\n' "$label" "$(proton_newest "$pat")" "$tag"
+        done < <(proton_places)
+    done < <(proton_families)
+}
+
+# The names games use, each without a trailing -x86_64 (Lutris newer than 0.5.22 (its development version) names a GE
+# build without it): Steam's (each
+# game's, and the default, "0"), config.vdf's CompatToolMapping, by the name in a tool's compatibilitytool.vdf; and
+# Lutris's, the Wine version (a folder's name) in a game's config or the Wine runner's default (runners/wine.yml), under
+# "wine:", for both places (Lutris lists Steam's compatibilitytools.d too)
+proton_used() {
+    local f files=()
+    {
+        [[ $1 == steam ]] && awk -F'"' '/"CompatToolMapping"/ { on = 1; next } on && /\{/ { d++ } on && /\}/ { if (!--d) exit } on && $2 == "name" { print $4 }' \
+            "${tools%/*}/config/config.vdf" 2>/dev/null
+        # (only those there: gawk stops at a file it can't open)
+        for f in "$lutris_conf"/games/*.yml "$lutris_conf/runners/wine.yml"; do [[ -f $f ]] && files+=("$f"); done
+        ((${#files[@]})) && awk '/^[^ #]/ { on = /^wine:/ } on && /^ +version:/ { sub(/^ +version: */, ""); gsub(/["\047 ]/, ""); print }' "${files[@]}"
+    } | sed 's/-x86_64$//'
+}
+# proton_name <launcher> <folder>: the name it's known by: Steam's, its compatibilitytool.vdf's (else the folder's)
+proton_name() {
+    local n=
+    [[ $1 == steam ]] && n=$(awk -F'"' '/"compat_tools"/ { on = 1; next } on && NF >= 3 { print $2; exit }' "$tools/$2/compatibilitytool.vdf" 2>/dev/null)
+    echo "${n:-$2}"
+}
+# proton_in_use <launcher> <folder> <used>: a game (or a default) is on it, by its own name or its folder's
+proton_in_use() {
+    local n
+    for n in "$(proton_name "$1" "$2")" "$2"; do grep -qxF -- "${n%-x86_64}" <<<"$3" && return 0; done
+    return 1
+}
+# proton_running <folder>: something runs from it (its real path: Steam's is under the ~/.steam/root link; by the
+# text, not a pattern; ps read whole: grep -q stopping it early read as "not running" under pipefail)
+proton_running() { local r; r=$(readlink -f "$tools/$1") && grep -qF -- "$r/" <<<"$(ps -eo args= 2>/dev/null)"; }
+
+# say <icon> <title> <text>: on your desktop. From the boot's run (--boot: root's, which runs this as you) handed to it
+# on fd 3, and said once you're logged in; else now, in the background (the notification server may be starting)
+say() {
+    if $boot && { printf '%s\t%s\t%s\n' "$1" "$2" "${3//$'\n'/ }" >&3; } 2>/dev/null; then return 0; fi
+    "$helpers/notify-when-up" -a Updates -i "$1" "$2" "$3" </dev/null >/dev/null 2>&1 8>&- &
+}
+
+# (in a folder this installed: the only ones it removes. One you put there yourself, or Lutris did, is yours)
+mine=.agros-installed
+# (a download unpacking in $tools when this is cut off: removed on the way out, and one an earlier run left behind
+# (a power cut) at the next)
+proton_tmp=
+trap 'rm -rf "${proton_tmp:-}"' EXIT
+trap 'exit 143' TERM INT HUP
+update_proton() {
+    local fam api pat where tag url sums top want d used label rc=0 steam_new='' lutris_new='' lutris_kept='' lutris_old new_here
+    while read -r fam api pat; do
+        tag=
+        while read -r where tools; do
+            [[ -n $(proton_dirs "$pat") ]] || continue
+            find "$tools" -maxdepth 1 -name '.agros-proton.*' -mmin +360 -exec rm -rf {} + 2>/dev/null
+            label=$fam; [[ $where == lutris ]] && label="$fam (Lutris)"
+            if [[ -z $tag ]]; then
+                read -r tag url sums < <(proton_latest "$api") || { echo "$fam: can't reach its releases"; rc=1; break; }
+            fi
+            new_here='' lutris_old=''
+            if ! proton_has "$tag" "$pat"; then
+                # (its checksum list required: not installed unchecked)
+                [[ -n $sums ]] || { echo "$label: $tag has no checksum file, not installed"; rc=1; continue; }
+                # (in the same folder, so the finished one is moved in whole; a dot so Steam and Lutris skip it meanwhile)
+                # shortcut: downloaded again for each place that has the family, fine while both rarely do
+                proton_tmp=$(mktemp -d "$tools/.agros-proton.XXXXXX") || { rc=1; continue; }
+                echo "$label: downloading $tag"
+                if curl -fsSL --connect-timeout 10 -m 120 -o "$proton_tmp/sums" "$sums" &&
+                    curl -fL --connect-timeout 10 --speed-limit 1000 --speed-time 60 -m 3600 -sS -o "$proton_tmp/${url##*/}" "$url" &&
+                    want=$(awk -v n="${url##*/}" '$2 == n || $2 == "*" n { print $1; exit }' "$proton_tmp/sums") && [[ -n $want ]] &&
+                    [[ $(sha512sum "$proton_tmp/${url##*/}" | cut -d' ' -f1) == "$want" ]]; then
+                    if mkdir "$proton_tmp/x" && tar -xf "$proton_tmp/${url##*/}" -C "$proton_tmp/x" --no-same-owner &&
+                        top=$(ls "$proton_tmp/x") && [[ $top != *$'\n'* && -d $proton_tmp/x/$top && ! -e $tools/$top ]] &&
+                        touch "$proton_tmp/x/$top/$mine" && mv -T "$proton_tmp/x/$top" "$tools/$top"; then
+                        echo "$label: installed $top"
+                        new_here=$top
+                        [[ $where == steam ]] && steam_new+=" $top"
+                    else
+                        echo "$label: $tag couldn't be unpacked, not installed"; rc=1
+                    fi
+                else
+                    echo "$label: $tag's download failed or doesn't match its checksum, not installed"
+                    rc=1
+                fi
+                rm -rf "${proton_tmp:?}"
+                proton_tmp=
+            fi
+            # The old ones out: only those this installed, not the newest, not one a game (or the default) is on, not
+            # one running
+            proton_has "$tag" "$pat" || continue
+            used=$(proton_used "$where")
+            while read -r d; do
+                [[ $(proton_ver "$d") == "$tag" ]] && continue
+                if proton_in_use "$where" "$d" "$used"; then
+                    [[ $where == lutris ]] && lutris_old+=" $d"
+                    continue
+                fi
+                [[ -e $tools/$d/$mine ]] || continue
+                proton_running "$d" && continue
+                rm -rf "${tools:?}/$d" && echo "$label: removed $d (no game uses it)"
+            done < <(proton_dirs "$pat")
+            # (Lutris: which games stay on this family's old one, per family)
+            if [[ $where == lutris && -n $new_here ]]; then
+                lutris_new+=" $new_here"
+                [[ -z $lutris_old ]] || lutris_kept+=" Your games on$lutris_old keep it until you pick $new_here."
+            fi
+        done < <(proton_places)
+    done < <(proton_families)
+    # Steam lists its tools at start: said, not restarted for you (a game may be running); only while yours runs
+    if [[ -n $steam_new ]]; then
+        pgrep -u "$(id -u)" -x steam >/dev/null && say steam "New Proton:$steam_new" "Restart Steam to pick it in a game's settings"
+        echo "Restart Steam to see:$steam_new"
+    fi
+    # Lutris's games stay on the Wine version they name (never switched for you): how to pick the new one
+    if [[ -n $lutris_new ]]; then
+        local how="Restart Lutris, then pick it in a game's Configure, Runner options, Wine version.$lutris_kept"
+        say lutris "New Proton in Lutris:$lutris_new" "$how"
+        echo "Lutris:$lutris_new. $how"
+    fi
+    return $rc
+}
+
+# Developer tools, the user's own: npm's global packages only where its prefix is in your home (/usr's are pacman's)
+npm_home() { command -v npm >/dev/null && [[ $(npm config get prefix 2>/dev/null) == "$HOME"/* ]]; }
+list_dev() {
+    npm_home && timeout 2m npm outdated -g --json 2>/dev/null |
+        jq -r 'to_entries[] | ["dev", "npm " + .key, .value.current, .value.latest] | @tsv' 2>/dev/null
+    command -v rustup >/dev/null && timeout 2m rustup check 2>/dev/null |
+        sed -n 's/^\([^ ]*\) - Update available : \([^ ]*\) .* -> \([^ ]*\) .*/dev\trust \1\t\2\t\3/p'
+    true
+}
+update_dev() {
+    local rc=0 p
+    if npm_home; then
+        for p in $(timeout 2m npm outdated -g --json 2>/dev/null | jq -r 'keys[]' 2>/dev/null); do
+            timeout 30m npm install -g "$p@latest" || rc=1
+        done
+    fi
+    if command -v uv >/dev/null && [[ -n $(uv tool list 2>/dev/null) ]]; then timeout 30m uv tool upgrade --all || rc=1; fi
+    if command -v rustup >/dev/null && [[ -n $(rustup toolchain list 2>/dev/null | grep -v '^no installed') ]]; then
+        timeout 30m rustup update --no-self-update || rc=1
+    fi
+    if [[ -s $HOME/.cargo/.crates2.json ]] && command -v cargo >/dev/null; then
+        if command -v cargo-install-update >/dev/null; then timeout 30m cargo install-update -a || rc=1
+        else echo "cargo: the programs cargo installed aren't updated (cargo install cargo-update does that)"; fi
+    fi
+    if command -v pipx >/dev/null && [[ -n $(pipx list --short 2>/dev/null) ]]; then timeout 30m pipx upgrade-all || rc=1; fi
+    return $rc
+}
+
+# Firmware, through fwupd (its metadata, from LVFS, signed: refreshed at boot by auto-update): "<device id>\t<name>\t
+# <version>\t<new version>" each with one
+fw_waiting() {
+    timeout 1m fwupdmgr get-updates --json --no-unreported-check --no-metadata-check 2>/dev/null |
+        jq -r '.Devices[]? | select(.Releases[0]) | [.DeviceId, .Name, .Version, .Releases[0].Version] | @tsv' 2>/dev/null
+}
+list_firmware() {
+    command -v fwupdmgr >/dev/null || return 0
+    fw_waiting | while IFS=$'\t' read -r _ name old new; do printf 'firmware\t%s\t%s\t%s\n' "$name" "$old" "$new"; done
+    true
+}
+update_firmware() {
+    command -v fwupdmgr >/dev/null || return 0
+    local before left
+    before=$(fw_waiting | cut -f1)
+    # (fwupd's own checks stand: on battery below its level it refuses. 2: nothing to update)
+    timeout 1h fwupdmgr update -y --no-reboot-check --no-unreported-check
+    case $? in 0 | 2) ;; *) return 1 ;; esac
+    # Its exit says nothing of a device it skipped (it needs AC power, the battery too low) or one whose flash failed:
+    # one that still offers the same update wasn't updated (a UEFI one staged for the next restart offers none)
+    left=$(awk -F'\t' 'NR == FNR { b[$1]; next } $1 in b { print $2 }' <(printf '%s\n' "$before") <(fw_waiting) |
+        paste -sd, | sed 's/,/, /g')
+    [[ -z $left ]] || { echo "Firmware not installed: $left (fwupd's reason above)"; return 1; }
+    [[ -z $before ]] || echo "A UEFI or BIOS update, if there was one, is applied at the next restart"
+}
+
+if [[ ${1:-} == --list ]]; then
+    # Repo packages (checkupdates: a copy of the database, no root; it fails with 1, "none" is 2: offline, an "offline"
+    # line instead of an empty list that reads as up to date)
+    rc=0
+    repo=$(checkupdates 2>/dev/null) || rc=$?
+    if ((rc == 1)); then printf 'offline\t\t\t\n'; exit 0; fi
+    [[ -n $repo ]] && while read -r name old _ new; do printf 'system\t%s\t%s\t%s\n' "$name" "$old" "$new"; done <<<"$repo"
+    # (in English: paru translates "[ignored]", and under another language the ignored ones were listed as waiting)
+    LC_ALL=C paru -Qua 2>/dev/null | "$helpers/updates-pending" | while read -r name old _ new _; do
+        printf 'aur\t%s\t%s\t%s\n' "$name" "$old" "$new"
+    done
+    list_firmware
+    flatpak remote-ls --updates --columns=application,version 2>/dev/null | while IFS=$'\t' read -r name new; do
+        old=$(LC_ALL=C flatpak info "$name" 2>/dev/null | sed -n 's/^ *Version: //p' | head -1)
+        printf 'flatpak\t%s\t%s\t%s\n' "$name" "$old" "$new"
+    done
+    # Flatpaks installed from a downloaded file (no repo): their GitHub releases
+    "$helpers/flatpak-bundle-update" --check 2>/dev/null |
+        sed -n 's/^\(.*\): update available (\(.*\) -> \(.*\))$/flatpak\t\1\t\2\t\3/p'
+    # Capri, when she's installed (capri-update's build): her fork or the original's release moved on
+    [[ -e $capri_current ]] && "$helpers/capri-update" --check 2>/dev/null |
+        sed -n 's/^capri: update available (\(.*\))$/capri\tcapri\t\t\1/p'
+    "$helpers/appimage-update" --check 2>/dev/null | sed -n 's/^\(.*\): update available (\(.*\))$/appimage\t\1\t\t\2/p'
+    list_proton
+    list_dev
+    exit 0
+fi
+
+boot=false
+[[ ${1:-} == --boot ]] && { boot=true; shift; }
+# One run at a time per user: the boot's (auto-update, as you) and Updates' worked on the same Proton folders at once
+# (each downloading it, one failing to unpack it or nesting it in the other's) and ran npm, rustup and cargo twice. The
+# second waits for the first (its lock: fd 8, held here alone: closed for every kind below, so no helper, nor what it
+# leaves running in the background (capri-update's notice, a reload), holds it past this run. Bash keeps its own copy
+# of it, closed for what it runs)
+lock=${XDG_STATE_HOME:-$HOME/.local/state}/agros/update-kinds.lock
+mkdir -p "${lock%/*}" && exec 8>>"$lock" || exit 1
+flock -n 8 || { echo "Waiting for the other update run (the boot's, or Updates') to finish..."; flock 8; }
+status=0
+for kind; do
+    case $kind in
+        firmware) command -v fwupdmgr >/dev/null || continue; echo; echo "== Firmware"; update_firmware ;;
+        flatpak)
+            command -v flatpak >/dev/null || continue  # (none on this machine: nothing to update, not a problem)
+            echo; echo "== Flatpaks"
+            if $boot; then
+                timeout 30m flatpak update --user -y --noninteractive
+            else
+                timeout 1h flatpak update -y
+                rc=$?
+                "$helpers/flatpak-bundle-update" && ((!rc))  # (and those from a downloaded file)
+            fi ;;
+        appimage) echo; echo "== AppImages"; "$helpers/appimage-update" ;;
+        capri)
+            [[ -e $capri_current ]] || continue
+            echo; echo "== Capri"
+            # (at boot only whether her fork or the original's release moved on: merged, built and tested from Updates)
+            if $boot; then "$helpers/capri-update" --check; else "$helpers/capri-update"; fi ;;
+        proton) proton_any || continue; echo; echo "== Proton"; update_proton ;;
+        dev) echo; echo "== Developer tools"; update_dev ;;
+        *) echo "update-kinds: no kind $kind" >&2; false ;;
+    esac || status=1
+done 8>&-
+exit $status

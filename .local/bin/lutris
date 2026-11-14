@@ -11,10 +11,12 @@
 # First on the PATH, so the launcher, menu entries and lutris: links all start this. The patched copy is built into
 # ~/.cache/lutris-overlay (links to the installed files, the changed ones copied) the first time after Lutris or the
 # changes update. If a change no longer fits a new Lutris, it starts unchanged and says so (once)
-# Lutris not installed (apps not chosen in setup): nothing to start, and no "your changes are off" for a copy of nothing
+# Lutris not installed (removed): nothing to start, and no "your changes are off" for a copy of nothing
 [[ -x /usr/bin/lutris ]] || { echo "Lutris isn't installed" >&2; exit 1; }
 overlay="$HOME/.local/share/lutris-overlay"
 out="${XDG_CACHE_HOME:-$HOME/.cache}/lutris-overlay"
+# (in the background: dots-warn waits for the notification server, and Lutris starting with the desktop shouldn't)
+warn="$(dirname "$(readlink -f "$0")")/dots-warn"
 # Rebuilt when Lutris (its files: any package or version of it), the changes, or which of them are on (Settings app:
 # the lutris.* settings) change
 src=$(python3 -Ic 'import sysconfig; print(sysconfig.get_path("purelib"))')/lutris
@@ -31,7 +33,7 @@ if ! current && ! pgrep -u "$UID" -f "^python3? $out/bin/lutris" >/dev/null; the
     exec 9>"$out.lock"
     flock 9
     if ! current; then
-        tmp=$(mktemp -d "$out.new.XXXXXX") err= loads=
+        tmp=$(mktemp -d "$out.new.XXXXXX") err='' loads=''
         mkdir -p "$tmp/bin" && cp -as "$src" "$tmp/lutris" && cp /usr/bin/lutris "$tmp/bin/" &&
             ln -s /usr/share "$tmp/share" &&  # its data (/usr/share/lutris), which it looks for next to its folder
             err=$(python3 -I "$overlay/patch.py" "$src" "$tmp" 2>&1) &&
@@ -40,31 +42,33 @@ if ! current && ! pgrep -u "$UID" -f "^python3? $out/bin/lutris" >/dev/null; the
                   tail -1; exit "${PIPESTATUS[0]}") && echo "$stamp" >"$tmp/stamp" && rm -f "$out.failed" &&
             { if [[ -e $out ]]; then mv -T --exchange "$tmp" "$out"; else mv -T "$tmp" "$out"; fi; } || {
             echo "$stamp" >"$out.failed"
-            notify-send -u critical -a Dotfiles -i dialog-warning "Lutris changed: your changes are off" "${loads:-${err:-the copy could not be made}}"
+            setsid -f "$warn" "Lutris changed: your changes are off" "${loads:-${err:-the copy could not be made}}" >/dev/null 2>&1 9>&-
         }
         # Optional changes left out (the rest is on)
         warned=$(grep '^WARNING' <<<"$err" | sed 's/^WARNING: //')
-        [[ -n $warned && ! -e $out.failed ]] && notify-send -u critical -a Dotfiles -i dialog-warning "Lutris changed: some of your changes are off" "$warned"
+        [[ -n $warned && ! -e $out.failed ]] && setsid -f "$warn" "Lutris changed: some of your changes are off" "$warned" >/dev/null 2>&1 9>&-
         rm -rf "$tmp"
     fi
     exec 9>&-
 fi
 # Steam games start Steam through steam-start (in the tray, not its window) when it's closed. Only when there's no
 # Steam runner config yet: one you made in Lutris stays
-runners="$HOME/.local/share/lutris/runners"
+data="${XDG_DATA_HOME:-$HOME/.local/share}/lutris"  # (where Lutris keeps it, as lutris-covers reads it)
+runners="$data/runners"
 [[ -e $runners/steam.yml ]] || { mkdir -p "$runners" &&
     printf 'steam:\n  runner_executable: %s\n' "$HOME/.local/bin/steam-start" >"$runners/steam.yml"; }
 # Lutris's icons (its runtime's: the stores' badges on the covers) come file by file at its first start and count as
 # done even with some failed (no network yet), never fetched again: missing Steam's, they go with the runtime list
 # (fetched again only 6 hours after the last), so this start fetches both
-icons="$HOME/.local/share/lutris/runtime/icons"
+icons="$data/runtime/icons"
 [[ -d $icons && ! -e $icons/hicolor/scalable/apps/steam.svg ]] &&
     rm -rf "$icons" "${XDG_CACHE_HOME:-$HOME/.cache}/lutris/versions.json"
 # Real covers for games with none, a wide one or Steam's padded one (lutris-covers, from SteamGridDB with its key), in
 # the background, when the library changed since the last look
 checked="${XDG_CACHE_HOME:-$HOME/.cache}/lutris/covers-checked"
 # (detached: a child of this script would become Lutris's after the exec below, and a zombie once it ended)
-[[ ~/.local/share/lutris/pga.db -nt $checked ]] && ( { nice "$HOME/.local/bin/lutris-covers"; touch "$checked"; } &>/dev/null & )
+# (marked checked only when it got through: offline, the next start looks again)
+[[ $data/pga.db -nt $checked ]] && ( { nice "$(dirname "$(readlink -f "$0")")/lutris-covers" && touch "$checked"; } &>/dev/null & )
 # The copy of /usr/bin/lutris loads the lutris folder next to its own (the patched one)
 # (a failure mark from another stamp goes: lutris-library reads it as "the patched Lutris isn't running")
 [[ $(cat "$out/stamp" 2>/dev/null) == "$stamp" ]] && { rm -f "$out.failed"; exec "$out/bin/lutris" "$@"; }  # an older build mixed with a newer Lutris could crash

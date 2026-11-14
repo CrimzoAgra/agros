@@ -3,6 +3,7 @@
 # and once it has ended, the next click runs a new one: a background job the update left running (git gc after paru's
 # AUR pulls) doesn't keep its lock, taking the next click for "an update started earlier is still running"
 set -euo pipefail
+# shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 cmd=$(sed -n "s/^ *command: \[\"sh\", \"-c\", '\(.*\)',\$/\1/p" "$here/.config/quickshell/updates/shell.qml")
 [[ $cmd == *flock* ]] || fail "the Updates app's command not found"

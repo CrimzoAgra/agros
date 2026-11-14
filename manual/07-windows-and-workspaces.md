@@ -9,6 +9,8 @@ Windows behave the way they do on Windows:
   maximise; drag a maximised window to un-maximise it.
 - Resize by dragging any edge or corner.
 - Minimised windows stay in the dock, dimmed. Click them, or press Alt+Tab, to bring them back.
+- In the Alt+Tab switcher, the **×** in a window's corner closes it (as its own close button would), and the switcher
+  stays open.
 
 ### Floating or tiling
 
@@ -23,6 +25,10 @@ Workspaces are like Windows' virtual desktops. You have ten: **Super+1** to **Su
 at the top of the bar show which ones hold windows. Hover a dot for a live preview.
 
 On a laptop, swipe sideways on the touchpad to move between them.
+
+**Super+Tab** shows every workspace that holds windows. The **×** in a workspace's corner tidies it away: its windows
+move to the nearest workspace that has windows (the one before it, if the ones before and after are as near), and you
+stay where you are.
 
 ### More than one screen
 

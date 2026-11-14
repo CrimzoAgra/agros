@@ -3,9 +3,8 @@
 # new release, keeps her build when a release conflicts with the fork, doesn't build or fails its check (and doesn't
 # retry it), --check; her folder from the old Capri (another original) cloned again
 set -uo pipefail
-here=$(cd "$(dirname "$0")/.." && pwd)
-t=$(mktemp -d); trap 'rm -rf "$t"' EXIT
-fail() { echo "FAIL: $*"; exit 1; }
+# shellcheck source=lib.sh source-path=SCRIPTDIR
+. "$(dirname "$0")/lib.sh"
 g() { git -C "$1" -c user.name=t -c user.email=t@t "${@:2}"; }
 
 # The original: a release; the fork: that plus a change of its own
@@ -43,11 +42,11 @@ elif [ -e T/game ]; then echo "$* with a game open" >>T/hyprctl
 else echo "$*" >>T/hyprctl; fi
 EOF
 printf '#!/bin/sh\nrm -f %s/game\n' "$t" >"$t/bin/sleep"
-# git: notes when it could ask for a GitHub login in the terminal (the private fork with none: setup --yes waited on it)
+# git: notes when it could ask for a GitHub login in the terminal (the private fork with none: an unattended run waited on it)
 printf '#!/bin/sh\n[ "$GIT_TERMINAL_PROMPT" = 0 ] || echo "$*" >>"%s/prompts"\nexec %s "$@"\n' "$t" "$(command -v git)" >"$t/bin/git"
 chmod +x "$t/bin/"*
 fork=$t/fork
-run() { HOME="$t/ho|me" HYPRLAND_INSTANCE_SIGNATURE= XDG_DATA_HOME= XDG_STATE_HOME= CLAUDE_CONFIG_DIR= CODEX_HOME= AGY_CONFIG_DIR= PATH=$t/bin:$PATH CAPRI_FORK=$fork CAPRI_UPSTREAM=$t/up \
+run() { HOME="$t/ho|me" HYPRLAND_INSTANCE_SIGNATURE='' XDG_DATA_HOME='' XDG_STATE_HOME='' CLAUDE_CONFIG_DIR='' CODEX_HOME='' AGY_CONFIG_DIR='' PATH=$t/bin:$PATH CAPRI_FORK=$fork CAPRI_UPSTREAM=$t/up \
     NPMFAIL=$t/npmfail "$here/.local/bin/capri-update" "$@" 2>&1; }
 cur() { readlink "$t/ho|me/.local/share/capri/current"; }
 app="$t/ho|me/.local/share/capri"
@@ -147,7 +146,7 @@ printf 'aaa bbb\nAn older failure.\n' >"$failedf"
 echo 't' >"$t/up/other.js"; g "$t/up" commit -qam ten; g "$t/up" tag -f v0.9.0 >/dev/null
 out=$(run --check) && fail "a moved tag was taken: $out"
 grep -q "v0.9.0 was moved" <<<"$out" && grep -q "v0.9.0 was moved" "$failedf" || fail "a moved tag wasn't said: $out"
-{ head -1 "$failedf" | tr ';' '\n' | grep -qx "aaa bbb" && grep -q "An older failure" "$failedf"; } ||
+{ grep -qx "aaa bbb" <<<"$(head -1 "$failedf" | tr ';' '\n')" && grep -q "An older failure" "$failedf"; } ||
     fail "the moved tag overwrote what failed before: $(cat "$failedf")"
 out=$(run) && fail "an update over a moved tag reported success: $out"
 [[ $(cur) == "$fifth" ]] || fail "switched with a release tag moved"

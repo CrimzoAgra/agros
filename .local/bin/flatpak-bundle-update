@@ -63,6 +63,22 @@ install_from() {
     return $ok
 }
 
+# repo_of <app id> <user|system>: the GitHub owner/repo of an app installed from a file. The app's own metainfo
+# (<id>.metainfo.xml, else any), its source or home page link first; any other github.com link (a library's, a
+# translator's) only when it has neither
+repo_of() {
+    local loc meta type repo=
+    loc=$(flatpak info --"$2" --show-location "$1" 2>/dev/null) || return 1
+    meta=("$loc"/files/share/metainfo/"$1".{metainfo,appdata}.xml)
+    [[ -e ${meta[0]} || -e ${meta[1]} ]] || meta=("$loc"/files/share/metainfo/*.xml)
+    for type in vcs-browser homepage ''; do
+        repo=$(grep -ohE "${type:+<url type=\"$type\">https?://}github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+" "${meta[@]}" \
+            2>/dev/null | head -1 | sed -E 's|.*github\.com/||; s|\.git$||')
+        [[ -n $repo ]] && break
+    done
+    [[ -n $repo ]] && echo "$repo"
+}
+
 if [[ ${1:-} == --install-fetched ]]; then
     # (each "<user|system>\t<file>\t<app id>\t<version>", as --fetch listed them)
     while IFS=$'\t' read -r inst file app new; do
@@ -73,12 +89,14 @@ if [[ ${1:-} == --install-fetched ]]; then
 fi
 
 if [[ ${1:-} == --install ]]; then
-    # Already installed (from a file: its metainfo names this repo, as the update below finds it): updates do the rest
-    if grep -qsi "github\.com/${2:?owner/repo}" ~/.local/share/flatpak/app/*/current/active/files/share/metainfo/*.xml \
-        /var/lib/flatpak/app/*/current/active/files/share/metainfo/*.xml; then
-        echo "$2: already installed"
-        exit 0
-    fi
+    # Already installed from a file (its repo found as the update below finds it): updates do the rest. The repo
+    # exactly, whatever the case: owner/repo-other isn't it, nor a Flathub app whose metainfo links to it
+    : "${2:?owner/repo}"
+    while IFS=$'\t' read -r app origin inst; do
+        [[ $origin == *-origin ]] || continue
+        repo=$(repo_of "$app" "$inst") || continue
+        [[ ${repo,,} == "${2,,}" ]] && { echo "$2: already installed"; exit 0; }
+    done < <(flatpak list --app --columns=application,origin,installation)
     api=$(latest_release "$2") || { echo "$2: can't reach GitHub"; exit 1; }
     install_from "$api" user && echo "$2: installed $(jq -r .tag_name <<<"$api")"
     exit
@@ -86,18 +104,7 @@ fi
 
 while IFS=$'\t' read -r app origin inst; do
     [[ $origin == *-origin ]] || continue # installed from a file: Flatpak names its remote "<name>-origin"
-    loc=$(flatpak info --"$inst" --show-location "$app" 2>/dev/null) || continue
-    # Its repo: the app's own metainfo (<id>.metainfo.xml, else any), its source or home page link first; any other
-    # github.com link (a library's, a translator's) only when it has neither
-    meta=("$loc"/files/share/metainfo/"$app".{metainfo,appdata}.xml)
-    [[ -e ${meta[0]} || -e ${meta[1]} ]] || meta=("$loc"/files/share/metainfo/*.xml)
-    repo=
-    for type in vcs-browser homepage ''; do
-        repo=$(grep -ohE "${type:+<url type=\"$type\">https?://}github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+" "${meta[@]}" \
-            2>/dev/null | head -1 | sed -E 's|.*github\.com/||; s|\.git$||')
-        [[ -n $repo ]] && break
-    done
-    [[ -n $repo ]] || continue
+    repo=$(repo_of "$app" "$inst") || continue
     old=$(LC_ALL=C flatpak info --"$inst" "$app" | sed -n 's/^ *Version: //p')
     # No version to compare: any release would look newer, reinstalled on every run
     [[ -n $old ]] || { echo "$app: no version, skipped"; continue; }

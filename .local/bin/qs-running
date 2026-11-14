@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# qs-running <text>...: a Quickshell is running whose entry in "qs list --all" has one of these in it (its config,
+# e.g. "/quickshell/caelestia/shell.qml" or "Config path: <folder>/shell.qml"). The scripts' one way to ask: qs's
+# output read whole first, as grep -q quitting early got qs a SIGPIPE, which pipefail took for "not running"
+l=$(qs list --all 2>/dev/null)
+for p; do [[ $l == *"$p"* ]] && exit 0; done
+exit 1

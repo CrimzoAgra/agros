@@ -1,24 +1,66 @@
 #!/usr/bin/env bash
 # The CachyOS boot animation without its closing animation (the login screen comes ~4 s sooner), with titles at
 # shutdown and restart in the system language: made from the installed CachyOS theme, set as the splash, and the boot
-# images made again. Run by agros-boot's install, and after each update of the CachyOS theme (agros-splash.hook)
+# images made again. Run by agros-boot's install. --update (agros-boot's upgrade, and after each update of the CachyOS
+# theme: agros-splash.hook): the theme made again, into the boot images only when it changed and is the one in use.
+# --remove (agros-boot's removal): CachyOS's splash back, and out of the boot images if it was the one in use.
+# --no-initramfs (with any): the boot images not made here (agros-boot's install scripts: mkinitcpio's own pacman hook
+# makes them once, after the transaction, as agros-boot ships a file in usr/lib/initcpio)
+# On an AMD GPU, CachyOS's own plain splash (cachyos), as its installer sets there: the boot animation breaks on amdgpu
+# (CachyOS's calamares, plymouthcfg's plymouth_theme_amdgpu); the faster one, set before, is moved off
+# (AGROS_ROOT: another root, the tests' throwaway one)
 set -euo pipefail
-src=/usr/share/plymouth/themes/cachyos-bootanimation
-dst=/usr/share/plymouth/themes/cachyos-bootanimation-fast
+r=${AGROS_ROOT:-}
+src=$r/usr/share/plymouth/themes/cachyos-bootanimation
+dst=$r/usr/share/plymouth/themes/cachyos-bootanimation-fast
+mode='' init=1
+for a; do case $a in --no-initramfs) init= ;; *) mode=$a ;; esac; done
+# The boot images made again, with the command this system makes them with (Limine's limine-mkinitcpio, which also puts
+# them where Limine boots them; else mkinitcpio -P); failed: said, with that command to run
+initramfs() {
+    [[ -n $init ]] || return 0
+    local cmd=(mkinitcpio -P)
+    command -v limine-mkinitcpio >/dev/null && cmd=(limine-mkinitcpio)
+    "${cmd[@]}" || { echo "The boot images weren't made again (run: sudo ${cmd[*]})"; return 1; }
+}
+# An AMD GPU: as CachyOS's installer tells (chwd --check amd); without chwd, an AMD display device in sysfs
+amd_gpu() {
+    if command -v chwd >/dev/null; then chwd --check amd >/dev/null 2>&1; return; fi
+    grep -qsx 0x1002 "$r"/sys/class/drm/card*/device/vendor
+}
+if [[ $mode == --remove ]]; then
+    if [[ $(plymouth-set-default-theme 2>/dev/null) == cachyos-bootanimation-fast ]]; then
+        plymouth-set-default-theme cachyos-bootanimation 2>/dev/null || plymouth-set-default-theme -r
+        # (boot images that failed: the theme still taken away, the failure the exit status)
+        initramfs || rc=$?
+    fi
+    rm -rf "$dst"
+    exit "${rc:-0}"
+fi
+if amd_gpu; then
+    [[ $(plymouth-set-default-theme 2>/dev/null) == cachyos-bootanimation-fast ]] || exit 0
+    plymouth-set-default-theme cachyos || { echo "No CachyOS splash for AMD GPUs (cachyos): splash left as it is"; exit 0; }
+    initramfs
+    exit
+fi
 [[ -f $src/cachyos-bootanimation.plymouth ]] || { echo "No CachyOS boot animation: splash left as it is"; exit 0; }
-case $(sed -n "s/^LANG=[\"']\{0,1\}\(..\).*/\1/p" /etc/locale.conf 2>/dev/null) in
+case $(sed -n "s/^LANG=[\"']\{0,1\}\(..\).*/\1/p" "$r/etc/locale.conf" 2>/dev/null) in
     pt) shut="A encerrar..." restart="A reiniciar..." ;;
     es) shut="Apagando..." restart="Reiniciando..." ;;
     fr) shut="Arrêt en cours..." restart="Redémarrage..." ;;
     de) shut="Wird heruntergefahren..." restart="Neustart..." ;;
     *) shut="Shutting Down..." restart="Restarting..." ;;
 esac
+old=$(cat "$dst/cachyos-bootanimation-fast.plymouth" 2>/dev/null) || true
 mkdir -p "$dst"
 sed -e 's/^Name=cachyos-bootanimation$/Name=cachyos-bootanimation-fast/' \
     -e '/^\[boot-up\]/,/^\[/ s/^UseEndAnimation=true/UseEndAnimation=false/' \
     -e 's/^TitleFont=.*/TitleFont=Noto Sans Medium 26/' \
     -e "/^\[shutdown\]\$/a _Title=$shut" -e "/^\[reboot\]\$/a _Title=$restart" \
     "$src/cachyos-bootanimation.plymouth" >"$dst/cachyos-bootanimation-fast.plymouth"
-[[ ${1:-} == --theme-only ]] && exit 0
-plymouth-set-default-theme cachyos-bootanimation-fast
-if command -v limine-mkinitcpio >/dev/null; then limine-mkinitcpio; else mkinitcpio -P; fi
+case $mode in
+    --update) [[ $(cat "$dst/cachyos-bootanimation-fast.plymouth") != "$old" &&
+        $(plymouth-set-default-theme 2>/dev/null) == cachyos-bootanimation-fast ]] || exit 0 ;;
+    *) plymouth-set-default-theme cachyos-bootanimation-fast ;;
+esac
+initramfs

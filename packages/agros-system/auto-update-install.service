@@ -8,7 +8,10 @@ Description=Install the system update downloaded at boot
 # before systemd-user-sessions, that made the login screen wait at boot for a slow or "nofail" boot partition (up to
 # 90 s); /boot is after local-fs.target (so still mounted when this stops) unless "nofail", and the install itself
 # checks it's mounted
-After=local-fs.target network.target
+# After udisks2 and the system bus too: fwupd finds the EFI partition, where a UEFI update is staged, through udisks2,
+# which otherwise stopped first (and fwupdtool said "installed" with nothing staged)
+After=local-fs.target network.target dbus.service udisks2.service
+Wants=udisks2.service
 Before=auto-update.service systemd-user-sessions.service
 RequiresMountsFor=/var/lib/pacman /var/cache/pacman
 
@@ -17,9 +20,11 @@ Type=oneshot
 RemainAfterExit=yes
 ExecStart=/usr/bin/true
 ExecStop=/usr/lib/agros/auto-update --install
-# A kernel or NVIDIA driver update rebuilds the boot image: minutes. Its own limit, 30 min; shutdown's (the targets'
-# JobTimeoutSec, also 30 min, then forced) is made longer below, so it can't cut this off first
-TimeoutStopSec=30min
+# Its own limit, 60 min (auto-update --install counts on it): firmware first, never cut off by a limit of its own (a
+# flash killed midway could leave a device unusable), then the packages, started only with their 30 min left (a kernel
+# or NVIDIA driver update rebuilds the boot image: minutes), else put off to the next shutdown. Shutdown's own (the
+# targets' JobTimeoutSec, 30 min, then forced) is made longer, 75 min, so it can't cut this off first
+TimeoutStopSec=60min
 
 [Install]
 WantedBy=multi-user.target

@@ -8,7 +8,8 @@
 local taken, named = {}, {}
 function dots.monitor(rule)
     local prefix = (rule.output or ""):match("^desc:(.+)$")
-    for _, m in ipairs(prefix and hl.get_monitors() or {}) do
+    -- (all: a screen that's off too, so its rule is there when it's turned on)
+    for _, m in ipairs(prefix and hl.get_monitors({ all = true }) or {}) do
         -- (two screens of one model: each rule gets the next one)
         if (m.description or ""):sub(1, #prefix) == prefix and not taken[m.description] then
             taken[m.description] = true
@@ -16,7 +17,7 @@ function dots.monitor(rule)
             break
         end
     end
-    named[rule.output or ""] = true
+    named[rule.output or ""] = rule  -- (its fields: the lid's rule for a panel starts from them)
     hl.monitor(rule)
 end
 
@@ -28,7 +29,7 @@ dots.monitor({ output = "", mode = "preferred", position = "auto", scale = "auto
 -- A VM's screen (Virtual-1...): 1, as it has no physical size for "auto" to go by (it took 2 in VMware). Its size the
 -- kernel's preferred mode, not Hyprland's "preferred": Hyprland reads a screen's modes once, when it connects, so after
 -- the VM's window was resized it kept the old size (vm-screen-follow reloads when the kernel's changes)
-for _, m in ipairs(hl.get_monitors() or {}) do
+for _, m in ipairs(hl.get_monitors({ all = true }) or {}) do
     if m.name:match("^Virtual%-%d+$") then
         -- (SYSFS: another /sys, for tests/monitor-desc.sh)
         local p = io.popen("head -qn1 " .. (os.getenv("SYSFS") or "/sys") .. "/class/drm/card*-" .. m.name .. "/modes 2>/dev/null")
@@ -57,7 +58,7 @@ end
 -- 144 Hz screens, and the screen would resync at login. A rule of its own by name (screens plugged in later get theirs
 -- with the config reload workspaces.lua does); after the host file, so its screens keep their rules. Only when there is
 -- a faster one: else "preferred" stays, which a VM's screen needs to follow its window (vm-screen-follow)
-for _, m in ipairs(hl.get_monitors() or {}) do
+for _, m in ipairs(hl.get_monitors({ all = true }) or {}) do
     local preferred, best
     for _, md in ipairs(m.available_modes or {}) do
         if md.preferred then preferred = md; break end
@@ -70,44 +71,151 @@ for _, m in ipairs(hl.get_monitors() or {}) do
         end
     end
     if best and best ~= preferred then
-        hl.monitor({ output = m.name, mode = string.format("%dx%d@%.2f", best.width, best.height, best.refresh_rate),
-                     position = "auto", scale = "auto" })
+        named[m.name] = { mode = string.format("%dx%d@%.2f", best.width, best.height, best.refresh_rate),
+                          position = "auto", scale = "auto" }
+        hl.monitor({ output = m.name, mode = named[m.name].mode, position = "auto", scale = "auto" })
+    end
+end
+
+-- Screens set in the Settings app (Screens page), by their full description (make, model and serial):
+-- screens.<description>.mode ("1920x1080@143.98"), .scale ("1.5"), .position ("1920x0"), .enabled; each one left
+-- empty keeps the rule above (the host file's, the fastest refresh rate). screens.main: that one at 0x0 (the first
+-- screen: workspaces 1-10), the others to its right unless given a position (here, or by the host file). After the
+-- rules above, so these win, and before the lid's, which starts from them
+local mine, main = {}, dots.setting("screens.main") or ""
+for key, value in pairs(dots.settings("screens.")) do
+    local desc, field = key:match("^screens%.(.+)%.(%a+)$")
+    if desc then
+        mine[desc] = mine[desc] or {}
+        mine[desc][field] = value
     end
 end
 
 -- Laptop lid closed with another screen connected: the laptop's own panel (eDP, LVDS or DSI) off, as logind leaves it
 -- on then (docked: it doesn't suspend), with workspaces on a dark panel and the pointer wandering onto it. Off by a rule
--- like the ones above: its windows go to the other screen's empty workspaces, and come back when the lid opens
--- (workspaces.lua, as for any screen unplugged). Closed with no other screen: left to logind (it suspends). Last in this
--- file, so neither the host file's rule for the panel nor the refresh rate one above turns it back on at a reload
--- (screens plugged in, or the lid itself). dots.lid(closed, output): output only to try it on a screen that isn't a
--- panel
+-- like the ones here: its windows go to the other screen's empty workspaces, and come back when the lid opens
+-- (workspaces.lua, as for any screen unplugged). Closed with no other screen: left to logind (it suspends). output:
+-- only to try it on a screen that isn't a panel
 local function lid_closed()
     local p = io.popen("cat /proc/acpi/button/lid/*/state 2>/dev/null")
     local state = p and p:read("a") or ""
     if p then p:close() end
     return state:find("closed", 1, true) ~= nil
 end
-function dots.lid(closed, output)
-    local panels, others = {}, false
+local function is_panel(m, output)
+    if output then return m.name == output end
+    return m.name:match("^eDP") or m.name:match("^LVDS") or m.name:match("^DSI")
+end
+-- Which screens are off, the one place that decides it, for the Settings app's rules and the lid's alike: the panels a
+-- closed lid turns off (lid), and the screens the Settings app has off (set), never the last one left showing (a
+-- panel under a closed lid isn't showing: docked, lid shut, the other screen turned off left both dark; the lid opened,
+-- a panel turned off in the Settings app stays off)
+local function screens_off(closed, output)
+    local list, lid, set, others = {}, {}, {}, false
     for _, m in ipairs(hl.get_monitors({ all = true }) or {}) do
-        if output and m.name == output or not output and (m.name:match("^eDP") or m.name:match("^LVDS") or m.name:match("^DSI")) then
-            panels[#panels + 1] = m
-        elseif m.enabled ~= false and m.name ~= "FALLBACK" then  -- (Hyprland's stand-in with no screen at all)
-            others = true
+        if m.name ~= "FALLBACK" then  -- (Hyprland's stand-in with no screen at all)
+            list[#list + 1] = m
+            others = others or not is_panel(m, output)
         end
     end
-    -- Only ever off (at every load the lid is closed at). Not "on" for a panel that's off: no rule here leaves it to the
-    -- others, which turn it on as they set it up; one with nothing but "on" replaced them (the host file's mode and scale)
-    if not (closed and others) then return end
-    for _, m in ipairs(panels) do
-        hl.monitor({ output = m.name, disabled = true })
-        -- (a host file's rule for it by make and model would win over one by name)
-        if named["desc:" .. (m.description or "")] then hl.monitor({ output = "desc:" .. m.description, disabled = true }) end
+    local left, wanted = {}, 0  -- (the screens the lid leaves; how many of them the Settings app has off)
+    for _, m in ipairs(list) do
+        if closed and others and is_panel(m, output) then
+            lid[m.name] = true
+        else
+            left[#left + 1] = m
+            if (mine[m.description or ""] or {}).enabled == false then wanted = wanted + 1 end
+        end
+    end
+    -- Every one left set off: one stays on, the same one whatever order Hyprland lists them in: the main screen, else
+    -- the laptop's panel, else the first by name
+    local keep
+    if wanted > 0 and wanted == #left then
+        table.sort(left, function(a, b) return a.name < b.name end)
+        for _, m in ipairs(left) do
+            if main ~= "" and m.description == main then keep = m; break end
+            if not keep and is_panel(m) then keep = m end
+        end
+        keep = keep or left[1]
+    end
+    for _, m in ipairs(left) do
+        if m ~= keep and (mine[m.description or ""] or {}).enabled == false then set[m.name] = true end
+    end
+    return lid, set
+end
+
+local off = {}  -- (the screens this load or the lid turned off: name to its desc: rule, or false)
+local _, set_off = screens_off(lid_closed())
+for _, m in ipairs(hl.get_monitors({ all = true }) or {}) do
+    -- (no description: nothing to name it by, a desc: rule with none would match every screen)
+    local s = (m.description or "") ~= "" and mine[m.description] or {}
+    local applied = (m.description or "") ~= "" and (named["desc:" .. m.description] or named[m.name]) or {}
+    -- (text, or not set: anything else, from a hand edit of settings.json, is left out; a mode the screen doesn't
+    -- have, gone with a firmware or cable change, too: the rule that applied stays)
+    local mode = type(s.mode) == "string" and s.mode ~= "" and s.mode or nil
+    if mode then
+        local found = false
+        for _, md in ipairs(type(m.available_modes) == "table" and m.available_modes or {}) do
+            found = found or string.format("%dx%d@%.2f", md.width, md.height, md.refresh_rate) == mode
+        end
+        mode = found and mode or nil
+    end
+    local position = type(s.position) == "string" and s.position ~= "" and s.position or nil
+    -- A main screen: it at 0x0, the others where the host file puts them (not at 0x0: that's the main's now), else to
+    -- its right
+    local placed = applied.position ~= nil and applied.position ~= "auto" and applied.position ~= "0x0"
+    if main ~= "" and not position and not (placed and m.description ~= main) then
+        position = m.description == main and "0x0" or "auto-right"
+    end
+    if (m.description or "") ~= "" and (next(s) or position) then
+        -- (from the rule that applied to it, so what's left empty here stays as it was)
+        local rule = {}
+        for k, v in pairs(applied) do rule[k] = v end
+        rule.output = "desc:" .. m.description
+        rule.mode = mode or rule.mode or "preferred"
+        rule.scale = tonumber(s.scale) or rule.scale or "auto"
+        rule.position = position or rule.position or "auto"
+        rule.disabled = set_off[m.name] or nil
+        if rule.disabled then off[m.name] = rule.output end
+        named[rule.output] = rule
+        hl.monitor(rule)
+    end
+end
+
+-- The lid opened or closed (and every load with it closed): each screen whose turn changed set as screens_off says.
+-- Last in this file, so neither the host file's rule for the panel nor the refresh rate one above turns it back on at
+-- a reload (screens plugged in or unplugged: the lid itself sets its rules without one, below)
+function dots.lid(closed, output)
+    local lid, set = screens_off(closed, output)
+    for _, m in ipairs(hl.get_monitors({ all = true }) or {}) do
+        if lid[m.name] or set[m.name] and off[m.name] == nil then
+            -- Off, by a rule by its name. With no rule by its name before, this one is made from the one that applied (by
+            -- make and model, else any screen's): turned on again below, Hyprland starts from it, so the screen comes
+            -- back with its mode and scale, not Hyprland's defaults. A rule for it by make and model (the host file's,
+            -- the Settings app's) off too, and on again after the one by name: the latest rule matching a screen is the
+            -- one applied
+            local desc = (m.description or "") ~= "" and named["desc:" .. m.description] and "desc:" .. m.description
+            local rule = {}
+            for k, v in pairs(not named[m.name] and named[desc or ""] or {}) do rule[k] = v end
+            rule.output, rule.disabled = m.name, true
+            hl.monitor(rule)
+            if desc then hl.monitor({ output = desc, disabled = true }) end
+            off[m.name] = desc or false
+        elseif not lid[m.name] and not set[m.name] and off[m.name] ~= nil then
+            -- On again, only the screens turned off here (a screen this never turned off gets no rule: one by name with
+            -- nothing but "on" would be the latest to match it, over the host file's desc: rule). Hyprland's hl.monitor
+            -- starts from the rule already there for that same output (the off one above), so its mode and scale stay;
+            -- the desc: one last, as the latest rule that matches a screen is the one it applies
+            hl.monitor({ output = m.name, disabled = false })
+            if off[m.name] then hl.monitor({ output = off[m.name], disabled = false }) end
+            off[m.name] = nil
+        end
     end
 end
 if lid_closed() then dots.lid(true) end
--- (a monitor rule set after the config has loaded does nothing until the next load: the lid reloads it, and the line
--- above reads it then; opened, that load has no rule turning the panel off)
-hl.bind("switch:on:Lid Switch", hl.dsp.exec_cmd("hyprctl reload"), { locked = true })
-hl.bind("switch:off:Lid Switch", hl.dsp.exec_cmd("hyprctl reload"), { locked = true })
+-- The switch sets the rule at once, no reload: a reload takes a game out of fullscreen, so it waited for the game, the
+-- panel left on (or off) till then. Hyprland 0.57's hl.monitor applies a rule added after the load at the next frame
+-- (its monitor rules' scheduled check, not a config reload); the screens changing then has workspaces.lua's reload
+-- (after any game, one at a time), and that load reads the lid
+hl.bind("switch:on:Lid Switch", function() dots.lid(true) end, { locked = true })
+hl.bind("switch:off:Lid Switch", function() dots.lid(false) end, { locked = true })

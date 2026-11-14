@@ -1,18 +1,23 @@
 # Maintainer: Filipe Agra
-# AgrOS's system parts: the update at every boot (downloaded at boot, installed at shutdown), pacman's hooks that keep
-# each user's Caelestia overlay, hyprbars and Hyprland config check in step with updates, Bluetooth back on after sleep,
+# AgrOS's system parts: the update at every boot (downloaded and AUR apps built at boot, installed at shutdown, firmware too), pacman's hooks that keep
+# each user's Caelestia overlay, hyprbars and Hyprland config check in step with updates, Bluetooth and the screens back on after sleep,
 # the desktop shell at normal CPU priority, the keyring unlocked with the login password, a VMware VM's screen
 # following its window, the night light's location (geoclue), the automatic time zone without a password (polkit),
-# folder icons in the colour scheme's colour (papirus-folders, sudoers), mDNS from Avahi alone, UFW's logging off
+# folder icons in the colour scheme's colour (papirus-folders, sudoers), mDNS from Avahi alone, UFW's logging off, wired
+# links that keep dropping stepped down (EEE off, then 1 Gbps)
 pkgname=agros-system
-pkgver=r30.35da937
+pkgver=0
 pkgrel=1
 pkgdesc='AgrOS system parts: boot-time updates, per-user pacman hooks, Bluetooth resume, ananicy rule, keyring'
 arch=('any')
 url='https://github.com/CrimzoAgra/agros'
 license=('GPL-3.0-or-later')
-depends=('agros-scripts' 'pacman-contrib' 'bluez' 'bluez-utils' 'gnome-keyring' 'libsecret' 'sudo' 'curl' 'flatpak')
-optdepends=('snapper: a snapshot before each update' 'ananicy-cpp: the shell rule')
+# (fwupd: firmware updates; base-devel and bubblewrap: the boot's AUR builds, in a sandbox, as an account of their own
+# (agros-aur, sysusers.d); passt: that sandbox's own network, pasta; iproute2 and jq: the host's addresses closed off in it)
+depends=('agros-scripts' 'pacman-contrib' 'bluez' 'bluez-utils' 'gnome-keyring' 'libsecret' 'sudo' 'curl' 'flatpak'
+         'iproute2' 'ethtool' 'fwupd' 'base-devel' 'bubblewrap' 'passt' 'git' 'jq')
+optdepends=('snapper: a snapshot before each update' 'ananicy-cpp: the shell rule'
+            'networkmanager: the changes to a wired link that keeps dropping kept in its profile')
 install=agros-system.install
 backup=('etc/vmware-tools/tools.conf')
 _root=$(realpath "${startdir}/../..")
@@ -23,8 +28,11 @@ pkgver() {
 
 package() {
     cd "$startdir"
-    install -Dm755 auto-update "$pkgdir/usr/lib/agros/auto-update"
-    install -Dm644 -t "$pkgdir/usr/lib/systemd/system" auto-update.service auto-update-install.service
+    install -Dm755 -t "$pkgdir/usr/lib/agros" auto-update auto-update-aur
+    install -Dm644 agros-aur.sysusers "$pkgdir/usr/lib/sysusers.d/agros-aur.conf"
+    install -Dm644 -t "$pkgdir/usr/lib/systemd/system" auto-update.service auto-update-install.service \
+        agros-wired-link.service
+    install -Dm755 "$_root/system/wired-link-watch" "$pkgdir/usr/lib/agros/wired-link-watch"
     local t
     for t in poweroff reboot halt kexec; do
         install -Dm644 auto-update-timeout.conf "$pkgdir/usr/lib/systemd/system/$t.target.d/agros-auto-update.conf"
@@ -33,6 +41,7 @@ package() {
     install -Dm755 agros-branding "$pkgdir/usr/share/libalpm/scripts/agros-branding"
     install -Dm644 vmware-tools.conf "$pkgdir/etc/vmware-tools/tools.conf"
     install -Dm755 "$_root/system/bluetooth-resume" "$pkgdir/usr/lib/systemd/system-sleep/agros-bluetooth-resume"
+    install -Dm755 "$_root/system/screens-resume" "$pkgdir/usr/lib/systemd/system-sleep/agros-screens-resume"
     install -Dm644 "$_root/system/ananicy/dotfiles.rules" "$pkgdir/etc/ananicy.d/99-agros/agros.rules"
     install -Dm644 "$_root/system/geoclue/agros.conf" "$pkgdir/etc/geoclue/conf.d/90-agros.conf"
     install -Dm644 "$_root/system/polkit/agros-timezone.rules" "$pkgdir/usr/share/polkit-1/rules.d/50-agros-timezone.rules"

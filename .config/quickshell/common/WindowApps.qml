@@ -1,3 +1,5 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import Quickshell
 import Quickshell.Hyprland
@@ -60,8 +62,10 @@ Scope {
 
             running: true
             stdout: StdioCollector {
+                id: out
+
                 onStreamFinished: {
-                    root.answers = Object.assign({}, root.answers, { [proc.cls]: text.trim() });
+                    root.answers = Object.assign({}, root.answers, { [proc.cls]: out.text.trim() });
                     Qt.callLater(proc.destroy);
                 }
             }

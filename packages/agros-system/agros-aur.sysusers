@@ -1,0 +1,3 @@
+# The boot's AUR builds' own account (auto-update-aur): a system account, no login, no password, owning nothing but the
+# build folder each run makes it (its home, gone between runs). Never a person's: none of their processes can reach it
+u agros-aur - "AgrOS AUR builds" /var/lib/auto-update/aur-build -

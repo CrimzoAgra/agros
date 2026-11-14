@@ -3,7 +3,6 @@
 # lets only one of her run). --hidden: started put away, only her tray icon (at login: user/apps.lua).
 # $CAPRI_RUN: a start script of your own run instead, e.g. for a checkout of her code you work on (set it in your
 # session's environment: user/apps.lua binds her key and starts her at login when it's there, as for her build).
-# Setup copies this file over yours.
 [[ -n ${CAPRI_RUN:-} ]] && exec "$CAPRI_RUN" "$@"
 app="${XDG_DATA_HOME:-$HOME/.local/share}/capri/current"
 [[ -x $app/node_modules/.bin/electron ]] || { echo "Capri isn't installed: run capri-update" >&2; exit 1; }

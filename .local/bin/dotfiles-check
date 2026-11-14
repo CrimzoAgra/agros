@@ -7,6 +7,7 @@
 # (not on the live USB: it isn't set up as an install, so its "problems" would only be noise)
 [[ -d /run/archiso ]] && exit 0
 problems=()
+helpers=$(dirname "$(readlink -f "$0")")  # (the shared helpers, beside this)
 # Hyprland named (its first one when run from an SSH login or a text console: there hyprctl didn't know it, so config
 # errors went unseen and the title bar plugin was said not to be loaded)
 hyprctl() { command hyprctl -i "${HYPRLAND_INSTANCE_SIGNATURE:-0}" "$@"; }
@@ -17,7 +18,7 @@ hyprctl() { command hyprctl -i "${HYPRLAND_INSTANCE_SIGNATURE:-0}" "$@"; }
 # lines naming a config file only (<file>.lua:<line>:, where an eval's start with its code), when the check found
 # nothing (it can't see what fails only in the running session)
 hc="${XDG_STATE_HOME:-$HOME/.local/state}/hypr-config-check"
-"${0%/*}/hypr-config-check" >/dev/null 2>&1
+"$helpers/hypr-config-check" >/dev/null 2>&1
 if [[ -s $hc ]]; then
     problems+=("Hyprland config errors: $(head -3 "$hc") (hypr-config-check)")
 else
@@ -62,59 +63,67 @@ grep -rqF 'name: "refreshDevices"' /etc/xdg/quickshell/caelestia 2>/dev/null ||
 # Quickshell uses Qt's private parts: a Qt version it wasn't rebuilt for can stop the shells from starting (the Qt it
 # was built for: written down by update-apps, which rebuilds it)
 # (update-apps compares them, as it writes them)
-"${0%/*}/update-apps" --qt-stale &&
+"$helpers/update-apps" --qt-stale &&
     problems+=("Qt was updated after Quickshell: run Updates (it rebuilds Quickshell and Caelestia for it)")
 # (both folders named by the tests only)
 au=${AUTO_UPDATE_DIR:-/var/lib/auto-update}
 pacdb=${PACMAN_DB_DIR:-/var/lib/pacman}
-# a Qt update the boot's install held back for that (auto-update): Updates does it with the rebuild
-# (its lines "<package> <old> -> <new>", as pacman -Qu said them: said only while one isn't installed yet. Updates
-# installs them, but only the next shutdown's install takes the file away)
-held_waiting() {
-    local name new have
-    while read -r name _ _ new; do
-        [[ -n $new ]] || continue
+# (what the boot's update wrote down, plain text alone in the notification, which renders Markdown, links and images:
+# its reasons can carry a build's or a package script's words)
+plain() { tr -cd "A-Za-z0-9 @._+=:,;/()'\n-"; }
+# behind <file>: the packages of its "<name> <version>" lines (each line's first and last word) not at that version
+# yet (older, or not installed), comma-separated
+behind() {
+    local name ver have
+    while read -r name ver; do
+        ver=${ver##* }
+        [[ -n $ver ]] || continue
         have=$(pacman -Q "$name" 2>/dev/null | awk '{print $2}')
-        [[ -n $have && $(vercmp "$have" "$new") -ge 0 ]] || return 0
-    done <"$au/held"
-    return 1
+        [[ -n $have && $(vercmp "$have" "$ver") -ge 0 ]] || echo "$name"
+    done <"$1" | plain | paste -sd, | sed 's/,/, /g'
 }
-[[ -s $au/held ]] && held_waiting &&
-    problems+=("The automatic update was held back (a new Qt needs Quickshell rebuilt with it): run Updates")
+# a Qt or Python update the boot's install held back, its rebuild of what's built on it failed (auto-update): Updates
+# does it with the rebuild
+# (its lines "<package> <old> -> <new>", as pacman -Qu said them: those not installed yet named, and said only while
+# one is. Updates installs them, but only the next shutdown's install takes the file away)
+held=$([[ -s $au/held ]] && behind "$au/held")
+[[ -n $held ]] &&
+    problems+=("The automatic update was held back (a new $held; the boot couldn't rebuild the AUR apps built on it: see /var/log/auto-update.log): run Updates")
+# the boot's AUR builds that failed (auto-update-aur's "<base>: <why>" each, or why none was built): those apps wait,
+# the rest installs without them. Not beside the held update (the same failure), and only while one it meant to build
+# ("<name> <version>" in wanted) is still older than that, those named: Updates built it since, or the run failed
+# before it planned any (the AUR out of reach: nothing known to be waiting, the next boot tries again), nothing to say
+aur_left=$([[ -z $held && -s $au/aur/failed && -s $au/aur/wanted ]] && behind "$au/aur/wanted")
+[[ -n $aur_left ]] &&
+    problems+=("The automatic update couldn't build AUR apps ($(plain <"$au/aur/failed" | paste -sd';' | sed 's/;/; /g')): still waiting: $aur_left; run Updates")
+# AUR apps the shutdown's install left out, pacman refusing them (a conflict, a file conflict, a missing dependency:
+# auto-update's "<when> <pacman's error>", then "<name> <version>" each): said while one isn't at that version yet
+if read -r aiwhen aiat aiwhy 2>/dev/null <"$au/aur-install-failed"; then
+    ai_left=$(behind <(tail -n +2 "$au/aur-install-failed"))
+    [[ -n $ai_left ]] &&
+        problems+=("The automatic update couldn't install AUR apps at shutdown ($ai_left, $aiwhen $aiat${aiwhy:+: $(plain <<<"$aiwhy")}): the rest installed; run Updates")
+fi
+# firmware the shutdown couldn't install (fwupd's reason, e.g. the battery too low): tried again at the next one
+read -r fwwhen fwat fwwhy 2>/dev/null <"$au/firmware-failed" &&
+    problems+=("A firmware update failed to install at shutdown ($fwwhen $fwat${fwwhy:+: $(plain <<<"$fwwhy")}): it's tried again at the next one, or run Updates")
 # the install at shutdown failed (auto-update --install writes down how it went: "failed <date> <why>"); tried again
 # at the next shutdown, but it fails the same way until it's looked at
 read -r how when at why 2>/dev/null <"$au/install-result"
 [[ ${how:-} == failed ]] &&
-    problems+=("The automatic update failed to install at shutdown ($when $at${why:+: $why}): see /var/log/auto-update.log, or run Updates")
+    problems+=("The automatic update failed to install at shutdown ($when $at${why:+: $(plain <<<"$why")}): see /var/log/auto-update.log, or run Updates")
 # nothing installed at shutdown several times in a row (its boot download never finishing: a short session, a download
 # that fails every boot; something else using pacman still running): "<shutdowns> <since> <the last one's why>",
 # written down beside how the last real install went
 read -r skips since skipwhy 2>/dev/null <"$au/skipped"
 [[ ${skips:-} =~ ^[0-9]+$ ]] && ((skips >= 3)) &&
-    problems+=("The automatic update hasn't installed for $skips shutdowns in a row (since $since; the last: ${skipwhy:-the boot download unfinished}): see /var/log/auto-update.log, or run Updates")
+    problems+=("The automatic update hasn't installed for $skips shutdowns in a row (since $since; the last: $(plain <<<"${skipwhy:-the boot download unfinished}")): see /var/log/auto-update.log, or run Updates")
 # a lock the boot's download left (shutdown cut it off): the next boot's download takes it out, but meanwhile nothing
 # was downloaded (not while that download is running: it's its own)
 [[ -e $au/db/db.lck ]] && ! systemctl is-active -q auto-update 2>/dev/null &&
     problems+=("The automatic update's download left a lock ($au/db/db.lck): it's removed at the next boot")
 # pacman's own lock with nothing running that takes it (one cut off: a crash, a power cut): every install and update
-# fails on it, the one at shutdown too. What takes it: pacman (paru, yay and the shutdown install run it) and the
-# programs built on its library (pamac's daemon, PackageKit's). pacman-key and paccache don't. (The one list of them,
-# and lock_holder: packages/agros-system/auto-update has the same two: tests/auto-update-install.sh checks they match)
-pacman_holders='pacman|paru|yay|pamac|pamac-daemon|packagekitd|octopi-helper'
-# lock_holder: one of them running that may hold pacman's lock ("<pid> <its command>"; exit 1: none). Not pacman on
-# other lists (--dbpath elsewhere: checkupdates', the boot's download) nor one only querying (-Q..., paru -Qua)
-lock_holder() {
-    local p args dbpath=' --dbpath[ =]([^ ]+)' query=' (-Q[A-Za-z]*|--query) '
-    for p in $(pgrep -x "$pacman_holders"); do
-        args=" $(tr '\0' ' ' <"/proc/$p/cmdline" 2>/dev/null)"
-        [[ $args =~ $dbpath && ${BASH_REMATCH[1]%/} != "$pacdb" ]] && continue
-        [[ $args =~ $query ]] && continue
-        echo "$p${args% }"
-        return 0
-    done
-    return 1
-}
-[[ -e $pacdb/db.lck ]] && ! lock_holder >/dev/null &&
+# fails on it, the one at shutdown too. What takes it: pacman-lock-holder's list, beside this (auto-update's too)
+[[ -e $pacdb/db.lck ]] && ! "$helpers/pacman-lock-holder" "$pacdb" >/dev/null &&
     problems+=("pacman's lock was left behind ($pacdb/db.lck): nothing installs until it's removed (sudo rm $pacdb/db.lck, with no update running)")
 
 # Caelestia's own Hyprland config (~/.config/hypr, what `caelestia install` put there): nothing refreshes it, so an
@@ -123,15 +132,14 @@ lock_holder() {
 # files alone. Never `caelestia update`: its own system update goes past Updates' Qt rebuild, and a new Qt left
 # Quickshell unable to start. As a notification: once per new version, low urgency
 notes=()
-if hypr_new=$(FETCH_TIMEOUT=10 "${0%/*}/caelestia-hypr-refresh" --check 2>/dev/null); then
+if hypr_new=$(FETCH_TIMEOUT=10 "$helpers/caelestia-hypr-refresh" --check 2>/dev/null); then
     notes+=("Caelestia's Hyprland config (~/.config/hypr) has an update: run caelestia-hypr-refresh (those files only; one you've edited is kept, its new version written beside it as .new)")
 fi
 
 # The shells and services
-running=$(qs list --all 2>/dev/null)
 for c in caelestia switcher widgets; do
     # By the configs Quickshell says are running (one its crash handler restarted shows no -c in ps)
-    grep -q "/quickshell/$c/shell.qml" <<<"$running" || problems+=("Not running: qs -c $c")
+    "$helpers/qs-running" "/quickshell/$c/shell.qml" || problems+=("Not running: qs -c $c")
 done
 for s in game-focus tray-keeper; do
     systemctl --user is-active -q "$s" || problems+=("Not running: $s ($(systemctl --user is-active "$s"))")
@@ -155,7 +163,7 @@ if ((${#notes[@]})); then
     printf '%s\n' "${notes[@]}"
     seen="${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles-check-hypr-notified"
     if [[ ${1:-} == --notify && $(cat "$seen" 2>/dev/null) != "$hypr_new" ]]; then
-        notify-send -u low -a Dotfiles -i system-software-update "Caelestia's Hyprland config has an update" \
+        "$helpers/notify-when-up" -u low -a Dotfiles -i system-software-update "Caelestia's Hyprland config has an update" \
             "Run caelestia-hypr-refresh: those files only (no system update); one you've edited is kept, its new version beside it as .new" &&
             { mkdir -p "${seen%/*}"; echo "$hypr_new" >"$seen"; }
     fi
@@ -163,7 +171,7 @@ fi
 ((${#problems[@]})) || exit 0
 printf '%s\n' "${problems[@]}"
 if [[ ${1:-} == --notify ]]; then
-    notify-send -u critical -a Dotfiles -i dialog-warning "Something in your setup needs a look" \
+    "$helpers/dots-warn" "Something in your setup needs a look" \
         "$(printf '• %s\n' "${problems[@]}")
 (probably after a Hyprland or Caelestia update; run dotfiles-check for the list)"
 fi

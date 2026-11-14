@@ -2,6 +2,7 @@
 # firefox-bookmarks-export on a made-up LibreWolf profile: folders and escaping, a profile kept elsewhere (full path),
 # and an empty profile writes nothing
 set -euo pipefail
+# shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 prof=$t/.config/librewolf/librewolf/test.default
 mkdir -p "$prof"
@@ -28,13 +29,13 @@ P
 out=$t/bookmarks.html
 db full
 HOME=$t "$here/.local/bin/firefox-bookmarks-export" "$out" >/dev/null
-# --profile (setup and dotfiles-sync): the same profile, here only marked Default=1 (no [Install] section)
+# --profile (agros-welcome, agros-personal and dotfiles-sync): the same profile, here only marked Default=1 (no [Install] section)
 [[ $(HOME=$t "$here/.local/bin/firefox-bookmarks-export" --profile) == "$prof" ]] || fail "--profile found another profile"
 (cd "$t" && HOME=$t "$here/.local/bin/firefox-bookmarks-export" plain.html >/dev/null) && [[ -s $t/plain.html ]] || fail "a bare file name as the output wasn't written"
 [[ $(HOME=$t "$here/.local/bin/firefox-bookmarks-export" --help 2>&1) == *"--profile"* && ! -e ./--help ]] || fail "--help not the usage"
 grep -q 'HREF="https://a.example/?x=1&amp;y=&quot;2&quot;"' "$out" || fail "URL not escaped"
 grep -q '>Tom &amp; Jerry</A>' "$out" || fail "title not escaped"
-grep -A2 '<H3[^>]*>Games</H3>' "$out" | grep -q 'b.example' || fail "folder lost its bookmark"
+grep -q 'b.example' <<<"$(grep -A2 '<H3[^>]*>Games</H3>' "$out")" || fail "folder lost its bookmark"
 grep -q 'Other Bookmarks' "$out" && fail "empty Other Bookmarks folder written"
 # Not a UTF-8 locale (Python's own UTF-8 mode off): written as UTF-8 all the same, as the file says it is (it failed on
 # the first accented title)

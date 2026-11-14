@@ -1,5 +1,5 @@
-# agros-boot: GRUB's "Loading Linux..." lines out of its script again after each GRUB update (before grub's own hook
-# makes the menu)
+# agros-boot: GRUB's "Loading Linux..." lines out of its script again after each GRUB update (its package puts them
+# back); the menu has them gone the next time it's made (grub-mkconfig: grub ships no pacman hook that makes it)
 [Trigger]
 Operation = Install
 Operation = Upgrade
@@ -9,4 +9,4 @@ Target = grub
 [Action]
 Description = Hiding GRUB loading messages (agros-boot)...
 When = PostTransaction
-Exec = /usr/bin/sed -i /^[[:space:]]*echo[[:space:]].*message/d /etc/grub.d/10_linux
+Exec = /usr/lib/agros/boot-menu --grub-quiet

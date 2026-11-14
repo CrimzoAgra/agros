@@ -4,9 +4,10 @@
 # nothing is readable on the drive, a wrong passphrase brings nothing back, and it won't save into the repo. Without
 # the drive: signing in refused with no terminal, the weather's place asked
 set -euo pipefail
+# shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 repo=$t/repo drive=$t/drive; mkdir -p "$repo/.local/bin" "$drive" "$t/mods"
-cp "$here/.local/bin/firefox-bookmarks-export" "$here/.local/bin/agros-personal" "$repo/.local/bin/"
+cp "$here/.local/bin/firefox-bookmarks-export" "$here/.local/bin/agros-personal" "$here/.local/bin/json-edit" "$repo/.local/bin/"
 export GNUPGHOME=$t/gnupg; mkdir -m 700 "$GNUPGHOME"
 echo "correct horse battery staple" >"$t/pass"; export PERSONAL_PASSFILE=$t/pass
 run() {  # <home> <function> [unused] [drive folder]: agros-personal's function (personal_main: the restore)

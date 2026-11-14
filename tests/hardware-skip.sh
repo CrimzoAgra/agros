@@ -3,6 +3,7 @@
 # bluetooth-on with no adapter (bluetoothctl would wait for bluetoothd forever), camera-test with no camera, mouse-dpi
 # without Solaar. With the hardware there, they're used
 set -euo pipefail
+# shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 mkdir -p "$t/bin"
 for c in rfkill bluetoothctl mpv solaar sleep; do
@@ -54,6 +55,7 @@ here, t = sys.argv[1:]
 loader = importlib.machinery.SourceFileLoader("ds", f"{here}/.local/bin/dots-settings")
 ds = importlib.util.module_from_spec(importlib.util.spec_from_loader("ds", loader))
 loader.exec_module(ds)
+ds.CACHE, ds.CAELESTIA_DIR = f"{t}/caelestia-options.json", f"{t}/caelestia"  # (not your home's)
 ds.SCHEMA, ds.SETTINGS = f"{here}/.local/share/dots-settings/schema.json", f"{t}/settings.json"
 json.dump({"input.mouse_dpi": "12345"}, open(ds.SETTINGS, "w"))
 s = ds.all_settings(ds.schema())["input.mouse_dpi"]

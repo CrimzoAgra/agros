@@ -7,6 +7,7 @@
 set -euo pipefail
 personal_dir=
 mode=restore
+helpers=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")  # (the shared helpers beside this, not links not added yet)
 case ${1:-} in
     -h | --help) sed -n '2,7s/^# \{0,1\}//p' "$0"; exit 0 ;;
     --save) mode=save; shift ;;
@@ -76,8 +77,8 @@ personal_gpg() {
     fi
 }
 
-# The folder to use on your pen drive: --personal/--save-personal's own, else the removable drive plugged in (mounted
-# here if it isn't; with several, the one with the file on it). Nothing found: nothing printed
+# The folder to use on your pen drive: the one named (agros-personal [--save] <folder>), else the removable drive
+# plugged in (mounted here if it isn't; with several, the one with the file on it). Nothing found: nothing printed
 personal_drive() {
     [[ -n ${personal_dir:-} ]] && { echo "$personal_dir"; return; }
     local dev rm type mnt found=()
@@ -98,7 +99,8 @@ personal_open() {
     local p
     for p in librewolf equibop spotify protonvpn-app steam; do pgrep -x "$p" >/dev/null && echo "$p"; done
     pgrep -f '(^|/)lutris( |$)' >/dev/null && echo lutris
-    flatpak ps --columns=application 2>/dev/null | grep -qx com.nuvio.media.desktop && echo nuvio
+    # (its list read whole: grep -q quitting early got flatpak a SIGPIPE, which pipefail took for not open)
+    grep -qx com.nuvio.media.desktop <<<"$(flatpak ps --columns=application 2>/dev/null)" && echo nuvio
     return 0
 }
 
@@ -204,7 +206,7 @@ personal_restore() {
     # LibreWolf's files into its profile here; none yet (LibreWolf never started): left out, said below
     if [[ -n $prof ]]; then to=(--transform "s,^librewolf/,${prof#"$HOME"/}/,")
     else to=(--exclude='librewolf'); fi
-    # what it replaces, backed up first (as setup's files step does)
+    # what it replaces, backed up first
     backup="$HOME/.dotfiles-backup/$(date +%Y%m%d-%H%M%S)-personal"
     while IFS= read -r name; do
         [[ $name == */ || $name == weather-location || $name == lutris-launchers.json ]] && continue
@@ -228,17 +230,18 @@ personal_restore() {
     [[ -s $meta/lutris-launchers.json ]] && personal_launchers "$meta/lutris-launchers.json"
     rm -rf "$meta"
     if [[ -n $loc && -f $shell ]]; then
-        jq --indent 4 --arg l "$loc" '.services.weatherLocation = $l' "$shell" >"$shell.tmp" && mv "$shell.tmp" "$shell"
+        "$helpers/json-edit" "$shell" --indent 4 --arg l "$loc" '.services.weatherLocation = $l' ||
+            echo "!! $shell isn't valid JSON: the weather place not restored"
     fi
     [[ -d $backup ]] && echo "Replaced files backed up to $backup."
     [[ -n $prof ]] || echo "LibreWolf has no profile yet: start it once and close it, then agros-personal."
     # Capri: her fork is private, so an install without your GitHub login couldn't fetch her. With it back now, she's
     # installed (a failure said, the restore still done)
-    if [[ ! -e ${XDG_DATA_HOME:-$HOME/.local/share}/capri/current && -x $HOME/.local/bin/capri-update ]] &&
+    if [[ ! -e ${XDG_DATA_HOME:-$HOME/.local/share}/capri/current && -x $helpers/capri-update ]] &&
         command -v gh >/dev/null && gh auth status >/dev/null 2>&1; then
         echo "Installing Capri (your GitHub login is back)..."
         gh auth setup-git >/dev/null 2>&1 || true
-        "$HOME/.local/bin/capri-update" || echo "!! Capri didn't install: run capri-update"
+        "$helpers/capri-update" || echo "!! Capri didn't install: run capri-update"
     fi
     echo "Accounts back. Log out and in (the keyring): it opens with the password you logged in with on your old PC."
 }
@@ -286,7 +289,7 @@ personal_sign_in() {
         read -rp "$name: Enter opens it, s skips " r || return 0
         [[ $r == [sS]* ]] && continue
         # shellcheck disable=SC2086  # the command and its arguments, split
-        setsid -f "$HOME/.local/bin/app-launch" $cmd >/dev/null 2>&1
+        setsid -f "$helpers/app-launch" $cmd >/dev/null 2>&1
         read -rp "  Signed in? Enter for the next one " r || return 0
     done
 }
@@ -299,8 +302,8 @@ personal_weather() {
     read -rp "Weather widget's place, a city or lat,lon (Enter keeps ${loc:-"finding it from your connection"}) " r || return 0
     [[ -n $r ]] || return 0
     # (shell.json not readable as JSON, edited by hand: said, the step goes on to the apps)
-    { jq --indent 4 --arg l "$r" '.services.weatherLocation = $l' "$shell" >"$shell.tmp" && mv "$shell.tmp" "$shell"; } ||
-        { rm -f "$shell.tmp"; echo "!! $shell isn't valid JSON: the weather place not set"; }
+    "$helpers/json-edit" "$shell" --indent 4 --arg l "$r" '.services.weatherLocation = $l' ||
+        echo "!! $shell isn't valid JSON: the weather place not set"
 }
 
 # (sourced, by the tests: only the functions)

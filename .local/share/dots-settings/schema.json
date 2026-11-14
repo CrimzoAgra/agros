@@ -62,7 +62,14 @@
               "apply": "hypr"
             }
           ]
-        },
+        }
+      ]
+    },
+    {
+      "id": "input",
+      "title": "Mouse and keyboard",
+      "icon": "mouse",
+      "groups": [
         {
           "title": "Mouse",
           "settings": [
@@ -111,6 +118,879 @@
               "type": "bool",
               "default": false,
               "apply": "hypr"
+            },
+            {
+              "key": "input.sensitivity",
+              "label": "Pointer speed",
+              "description": "Faster or slower than the mouse moves it (0: as it is). With a Logitech mouse, its DPI above changes it for games too.",
+              "type": "number",
+              "min": -1,
+              "max": 1,
+              "step": 0.05,
+              "default": 0,
+              "apply": "hypr"
+            },
+            {
+              "key": "input.natural_scroll",
+              "label": "Natural scrolling",
+              "description": "The wheel moves the page, not the view: rolling it down scrolls up, as on a phone.",
+              "type": "bool",
+              "default": false,
+              "apply": "hypr"
+            }
+          ]
+        },
+        {
+          "title": "Touchpad",
+          "settings": [
+            {
+              "key": "input.touchpad_natural_scroll",
+              "label": "Natural scrolling",
+              "description": "Two fingers move the page, as on a phone (off: the other way, as with a mouse wheel).",
+              "type": "bool",
+              "default": true,
+              "apply": "hypr"
+            },
+            {
+              "key": "input.tap_to_click",
+              "label": "Tap to click",
+              "description": "A tap is a click (two fingers: right click).",
+              "type": "bool",
+              "default": true,
+              "apply": "hypr"
+            },
+            {
+              "key": "caelestia-vars.touchpadDisableTyping",
+              "label": "Off while typing",
+              "description": "The touchpad ignores your palm while you type.",
+              "type": "bool",
+              "default": true,
+              "apply": "hypr"
+            },
+            {
+              "key": "caelestia-vars.touchpadScrollFactor",
+              "label": "Scrolling speed",
+              "description": "How far two fingers scroll.",
+              "type": "number",
+              "default": 0.3,
+              "apply": "hypr",
+              "min": 0.05,
+              "max": 2,
+              "step": 0.05
+            }
+          ]
+        },
+        {
+          "title": "Keyboard",
+          "settings": [
+            {
+              "key": "input.kb_layout",
+              "label": "Layout",
+              "description": "The keyboard layout, as the installer set it (the login screen uses it too): us, pt, de... Several, comma-separated (us,pt), with a key to switch between them in Options below. Asks for your password.",
+              "type": "text",
+              "default": "us",
+              "apply": "hypr",
+              "get": "xkb() { sed -n \"s/.*\\\"Xkb$1\\\" *\\\"\\([^\\\"]*\\)\\\".*/\\1/p\" /etc/X11/xorg.conf.d/00-keyboard.conf 2>/dev/null; }; xkb Layout",
+              "set": "xkb() { sed -n \"s/.*\\\"Xkb$1\\\" *\\\"\\([^\\\"]*\\)\\\".*/\\1/p\" /etc/X11/xorg.conf.d/00-keyboard.conf 2>/dev/null; }; localectl set-x11-keymap \"$VALUE\" \"$(xkb Model)\" \"\" \"$(xkb Options)\""
+            },
+            {
+              "key": "input.kb_variant",
+              "label": "Variant",
+              "description": "A variant of the layout (Dvorak, no dead keys...). Asks for your password.",
+              "type": "choice",
+              "open": true,
+              "default": "",
+              "apply": "hypr",
+              "get": "xkb() { sed -n \"s/.*\\\"Xkb$1\\\" *\\\"\\([^\\\"]*\\)\\\".*/\\1/p\" /etc/X11/xorg.conf.d/00-keyboard.conf 2>/dev/null; }; xkb Variant",
+              "options_cmd": "xkb() { sed -n \"s/.*\\\"Xkb$1\\\" *\\\"\\([^\\\"]*\\)\\\".*/\\1/p\" /etc/X11/xorg.conf.d/00-keyboard.conf 2>/dev/null; }; printf \"\\tNone\\n\"; localectl list-x11-keymap-variants \"$(xkb Layout)\" 2>/dev/null",
+              "set": "xkb() { sed -n \"s/.*\\\"Xkb$1\\\" *\\\"\\([^\\\"]*\\)\\\".*/\\1/p\" /etc/X11/xorg.conf.d/00-keyboard.conf 2>/dev/null; }; localectl set-x11-keymap \"$(xkb Layout)\" \"$(xkb Model)\" \"$VALUE\" \"$(xkb Options)\""
+            },
+            {
+              "key": "input.kb_options",
+              "label": "Options",
+              "description": "Extra keyboard options, comma-separated: grp:alt_shift_toggle switches layouts with Alt+Shift, caps:escape makes Caps Lock an Escape. Asks for your password.",
+              "type": "text",
+              "default": "",
+              "apply": "hypr",
+              "get": "xkb() { sed -n \"s/.*\\\"Xkb$1\\\" *\\\"\\([^\\\"]*\\)\\\".*/\\1/p\" /etc/X11/xorg.conf.d/00-keyboard.conf 2>/dev/null; }; xkb Options",
+              "set": "xkb() { sed -n \"s/.*\\\"Xkb$1\\\" *\\\"\\([^\\\"]*\\)\\\".*/\\1/p\" /etc/X11/xorg.conf.d/00-keyboard.conf 2>/dev/null; }; localectl set-x11-keymap \"$(xkb Layout)\" \"$(xkb Model)\" \"$(xkb Variant)\" \"$VALUE\""
+            },
+            {
+              "key": "input.repeat_rate",
+              "label": "Key repeat rate",
+              "description": "Characters a second while a key is held.",
+              "type": "number",
+              "integer": true,
+              "min": 1,
+              "max": 100,
+              "step": 1,
+              "default": 35,
+              "apply": "hypr"
+            },
+            {
+              "key": "input.repeat_delay",
+              "label": "Key repeat delay",
+              "description": "Milliseconds a key is held before it repeats.",
+              "type": "number",
+              "integer": true,
+              "min": 100,
+              "max": 1000,
+              "step": 10,
+              "default": 250,
+              "apply": "hypr"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "screens",
+      "title": "Screens",
+      "icon": "desktop_windows",
+      "groups": [
+        {
+          "title": "Arrangement",
+          "settings": [
+            {
+              "key": "screens.main",
+              "label": "Main screen",
+              "description": "At the top left: it gets workspaces 1-10, and the windows of a screen unplugged. The others go to its right, unless they have a position of their own.",
+              "type": "choice",
+              "default": "",
+              "apply": "hypr",
+              "options_cmd": "printf '\\tAutomatic\\n'; hyprctl -j monitors all 2>/dev/null | jq -r '.[] | select(.name != \"FALLBACK\") | \"\\(.description)\\t\\(.name): \\(.model)\"'",
+              "open": true
+            }
+          ]
+        },
+        {
+          "title": "Screens",
+          "from": "screens"
+        }
+      ]
+    },
+    {
+      "id": "look",
+      "title": "Look",
+      "icon": "palette",
+      "groups": [
+        {
+          "title": "Wallpaper",
+          "settings": [
+            {
+              "key": "look.wallpaper",
+              "label": "Wallpaper",
+              "description": "Pictures in Pictures/Wallpapers (add your own there). The colours follow it with the Dynamic scheme.",
+              "type": "image",
+              "open": true,
+              "get": "cat ~/.local/state/caelestia/wallpaper/path.txt 2>/dev/null",
+              "options_cmd": "find -L ~/Pictures/Wallpapers -maxdepth 2 -type f \\( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' \\) 2>/dev/null | sort",
+              "set": "caelestia wallpaper -f \"$VALUE\""
+            }
+          ]
+        },
+        {
+          "title": "Colours",
+          "settings": [
+            {
+              "key": "look.scheme",
+              "label": "Colour scheme",
+              "description": "Dynamic: colours taken from the wallpaper.",
+              "type": "choice",
+              "open": true,
+              "get": "jq -r .name ~/.local/state/caelestia/scheme.json 2>/dev/null",
+              "options_cmd": "caelestia scheme list -n | awk '{print $0 \"\\t\" toupper(substr($0,1,1)) substr($0,2)}'",
+              "set": "caelestia scheme set -n \"$VALUE\""
+            },
+            {
+              "key": "look.mode",
+              "label": "Light or dark",
+              "type": "choice",
+              "options": [
+                {
+                  "value": "light",
+                  "label": "Light"
+                },
+                {
+                  "value": "dark",
+                  "label": "Dark"
+                }
+              ],
+              "get": "jq -r .mode ~/.local/state/caelestia/scheme.json 2>/dev/null",
+              "set": "caelestia scheme set -m \"$VALUE\""
+            },
+            {
+              "key": "look.variant",
+              "label": "Colour style",
+              "description": "How colours are picked from the wallpaper or scheme: Tonal spot is calm, Vibrant and Expressive bolder.",
+              "type": "choice",
+              "open": true,
+              "get": "jq -r .variant ~/.local/state/caelestia/scheme.json 2>/dev/null",
+              "options_cmd": "caelestia scheme list -v | awk '{print $0 \"\\t\" toupper(substr($0,1,1)) substr($0,2)}'",
+              "set": "caelestia scheme set -v \"$VALUE\""
+            },
+            {
+              "key": "caelestia-shell.services.smartScheme",
+              "label": "Light or dark from the wallpaper",
+              "description": "A new wallpaper switches light and dark to suit it."
+            }
+          ]
+        },
+        {
+          "title": "Fonts (the shell's)",
+          "settings": [
+            {
+              "key": "caelestia-shell.appearance.font.body.family",
+              "label": "Text",
+              "type": "choice",
+              "open": true,
+              "options_cmd": "fc-list : family | cut -d, -f1 | sort -u",
+              "preview": "font"
+            },
+            {
+              "key": "caelestia-shell.appearance.font.title.family",
+              "label": "Titles",
+              "type": "choice",
+              "open": true,
+              "options_cmd": "fc-list : family | cut -d, -f1 | sort -u",
+              "preview": "font"
+            },
+            {
+              "key": "caelestia-shell.appearance.font.mono.family",
+              "label": "Monospace",
+              "type": "choice",
+              "open": true,
+              "options_cmd": "fc-list : family | cut -d, -f1 | sort -u",
+              "preview": "font"
+            },
+            {
+              "key": "caelestia-shell.appearance.font.scale",
+              "label": "Text size",
+              "description": "Every text in the shell, bigger or smaller.",
+              "min": 0.5,
+              "max": 2,
+              "step": 0.05
+            }
+          ]
+        },
+        {
+          "title": "Windows",
+          "settings": [
+            {
+              "key": "caelestia-vars.windowGapsIn",
+              "label": "Gap between windows",
+              "description": "Pixels between tiled windows.",
+              "type": "number",
+              "default": 5,
+              "apply": "hypr",
+              "integer": true,
+              "min": 0,
+              "max": 40,
+              "step": 1
+            },
+            {
+              "key": "caelestia-vars.windowGapsOut",
+              "label": "Gap at the screen's edges",
+              "description": "Pixels between windows and the screen's edges.",
+              "type": "number",
+              "default": 10,
+              "apply": "hypr",
+              "integer": true,
+              "min": 0,
+              "max": 60,
+              "step": 1
+            },
+            {
+              "key": "caelestia-vars.singleWindowGapsOut",
+              "label": "Gap around a window alone",
+              "description": "Pixels around the only tiled window on a workspace.",
+              "type": "number",
+              "default": 20,
+              "apply": "hypr",
+              "integer": true,
+              "min": 0,
+              "max": 80,
+              "step": 1
+            },
+            {
+              "key": "caelestia-vars.windowBorderSize",
+              "label": "Border",
+              "description": "The border's width around windows, in pixels.",
+              "type": "number",
+              "default": 1,
+              "apply": "hypr",
+              "integer": true,
+              "min": 0,
+              "max": 10,
+              "step": 1
+            },
+            {
+              "key": "caelestia-vars.windowRounding",
+              "label": "Rounded corners",
+              "description": "How round windows' corners are, in pixels (0: square).",
+              "type": "number",
+              "default": 15,
+              "apply": "hypr",
+              "integer": true,
+              "min": 0,
+              "max": 40,
+              "step": 1
+            },
+            {
+              "key": "caelestia-vars.blurEnabled",
+              "label": "Blur behind see-through windows",
+              "type": "bool",
+              "default": true,
+              "apply": "hypr"
+            },
+            {
+              "key": "caelestia-vars.shadowEnabled",
+              "label": "Shadows",
+              "type": "bool",
+              "default": true,
+              "apply": "hypr"
+            }
+          ]
+        },
+        {
+          "title": "Shell",
+          "settings": [
+            {
+              "key": "caelestia-shell.appearance.transparency.enabled",
+              "label": "See-through shell",
+              "description": "The bar and panels let the wallpaper show through."
+            },
+            {
+              "key": "caelestia-shell.appearance.transparency.base",
+              "label": "How see-through",
+              "description": "Lower: more see-through."
+            },
+            {
+              "key": "caelestia-shell.appearance.rounding.scale",
+              "label": "Rounded corners",
+              "description": "How round the shell's corners are."
+            },
+            {
+              "key": "caelestia-shell.border.thickness",
+              "label": "Screen frame",
+              "description": "The frame around the screen's edges, in pixels.",
+              "min": 0,
+              "max": 40
+            },
+            {
+              "key": "caelestia-shell.border.rounding",
+              "label": "Frame corners",
+              "description": "How round the frame's inner corners are.",
+              "min": 0,
+              "max": 60
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "bar",
+      "title": "Bar",
+      "icon": "view_sidebar",
+      "groups": [
+        {
+          "title": "Bar",
+          "settings": [
+            {
+              "key": "caelestia-shell.bar.persistent",
+              "label": "Always shown",
+              "description": "Off: it hides, and shows when the pointer reaches the screen's left edge."
+            },
+            {
+              "key": "caelestia-shell.bar.showOnHover",
+              "label": "Shows on hover",
+              "description": "The pointer at the screen's edge brings it out while it's hidden."
+            },
+            {
+              "key": "caelestia-shell.bar.excludedScreens",
+              "label": "Screens without a bar",
+              "description": "Their names in JSON, like [\"HDMI-A-1\"] (Screens page)."
+            }
+          ]
+        },
+        {
+          "title": "Workspaces",
+          "settings": [
+            {
+              "key": "caelestia-shell.bar.workspaces.shown",
+              "label": "Workspaces shown",
+              "min": 1,
+              "max": 10
+            },
+            {
+              "key": "caelestia-shell.bar.workspaces.showWindows",
+              "label": "App icons",
+              "description": "The icons of the apps open on each workspace."
+            },
+            {
+              "key": "caelestia-shell.bar.workspaces.maxWindowIcons",
+              "label": "Most app icons per workspace",
+              "min": 1,
+              "max": 10
+            },
+            {
+              "key": "caelestia-shell.bar.workspaces.activeIndicator",
+              "label": "Mark the current one"
+            },
+            {
+              "key": "caelestia-shell.bar.workspaces.occupiedBg",
+              "label": "Highlight ones with windows"
+            },
+            {
+              "key": "caelestia-shell.bar.workspaces.showUnoccupied",
+              "label": "Empty ones too"
+            },
+            {
+              "key": "caelestia-shell.bar.workspaces.perMonitor",
+              "label": "Each screen its own",
+              "description": "Each screen shows the workspaces on it."
+            }
+          ]
+        },
+        {
+          "title": "Clock and tray",
+          "settings": [
+            {
+              "key": "caelestia-shell.bar.clock.showDate",
+              "label": "Date"
+            },
+            {
+              "key": "caelestia-shell.bar.clock.showSeconds",
+              "label": "Seconds"
+            },
+            {
+              "key": "caelestia-shell.bar.clock.showIcon",
+              "label": "Clock icon"
+            },
+            {
+              "key": "caelestia-shell.bar.tray.compact",
+              "label": "Compact tray",
+              "description": "Tray icons behind one button."
+            },
+            {
+              "key": "caelestia-shell.bar.tray.background",
+              "label": "Tray background"
+            },
+            {
+              "key": "caelestia-shell.bar.tray.recolour",
+              "label": "Tray icons in the scheme's colours"
+            }
+          ]
+        },
+        {
+          "title": "Scrolling on the bar",
+          "settings": [
+            {
+              "key": "caelestia-shell.bar.scrollActions.workspaces",
+              "label": "On the workspaces: switch workspace"
+            },
+            {
+              "key": "caelestia-shell.bar.scrollActions.volume",
+              "label": "On the right half: volume"
+            },
+            {
+              "key": "caelestia-shell.bar.scrollActions.brightness",
+              "label": "On the left half: brightness"
+            }
+          ]
+        },
+        {
+          "title": "Pop-ups on hover",
+          "settings": [
+            {
+              "key": "caelestia-shell.bar.popouts.activeWindow",
+              "label": "Window title"
+            },
+            {
+              "key": "caelestia-shell.bar.popouts.tray",
+              "label": "Tray"
+            },
+            {
+              "key": "caelestia-shell.bar.popouts.statusIcons",
+              "label": "Status icons"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "panels",
+      "title": "Panels",
+      "icon": "dashboard",
+      "groups": [
+        {
+          "title": "Dashboard (top edge)",
+          "settings": [
+            {
+              "key": "caelestia-shell.dashboard.enabled",
+              "label": "Dashboard"
+            },
+            {
+              "key": "caelestia-shell.dashboard.showOnHover",
+              "label": "Opens on hover",
+              "description": "The pointer at the top edge opens it."
+            },
+            {
+              "key": "caelestia-shell.dashboard.showMedia",
+              "label": "Media tab"
+            },
+            {
+              "key": "caelestia-shell.dashboard.showPerformance",
+              "label": "Performance tab"
+            },
+            {
+              "key": "caelestia-shell.dashboard.showWeather",
+              "label": "Weather"
+            },
+            {
+              "key": "caelestia-shell.dashboard.showClockSeconds",
+              "label": "Seconds on its clock"
+            },
+            {
+              "key": "caelestia-shell.dashboard.performance.showCpu",
+              "label": "Processor"
+            },
+            {
+              "key": "caelestia-shell.dashboard.performance.showGpu",
+              "label": "Graphics card"
+            },
+            {
+              "key": "caelestia-shell.dashboard.performance.showMemory",
+              "label": "Memory"
+            },
+            {
+              "key": "caelestia-shell.dashboard.performance.showStorage",
+              "label": "Storage"
+            },
+            {
+              "key": "caelestia-shell.dashboard.performance.showNetwork",
+              "label": "Network"
+            },
+            {
+              "key": "caelestia-shell.dashboard.performance.showBattery",
+              "label": "Battery"
+            }
+          ]
+        },
+        {
+          "title": "Sidebar and quick settings (right edge)",
+          "settings": [
+            {
+              "key": "caelestia-shell.sidebar.enabled",
+              "label": "Sidebar",
+              "description": "Notifications history and more."
+            },
+            {
+              "key": "caelestia-shell.sidebar.showOnHover",
+              "label": "Opens on hover"
+            },
+            {
+              "key": "caelestia-shell.utilities.enabled",
+              "label": "Quick settings",
+              "description": "Super+K."
+            },
+            {
+              "key": "caelestia-shell.utilities.cards.quickToggles",
+              "label": "Quick toggles"
+            },
+            {
+              "key": "caelestia-shell.utilities.cards.recorder",
+              "label": "Screen recorder"
+            },
+            {
+              "key": "caelestia-shell.utilities.cards.keepAwake",
+              "label": "Keep awake"
+            }
+          ]
+        },
+        {
+          "title": "Volume and brightness pop-up",
+          "settings": [
+            {
+              "key": "caelestia-shell.osd.enabled",
+              "label": "Shown on change"
+            },
+            {
+              "key": "caelestia-shell.osd.enableBrightness",
+              "label": "Brightness too"
+            },
+            {
+              "key": "caelestia-shell.osd.enableMicrophone",
+              "label": "Microphone too"
+            },
+            {
+              "key": "caelestia-shell.osd.hideDelay",
+              "label": "Shown for (ms)",
+              "min": 500,
+              "max": 10000,
+              "step": 100
+            }
+          ]
+        },
+        {
+          "title": "Desktop",
+          "settings": [
+            {
+              "key": "caelestia-shell.background.desktopClock.enabled",
+              "label": "Clock on the desktop"
+            },
+            {
+              "key": "caelestia-shell.background.visualiser.enabled",
+              "label": "Music visualiser",
+              "description": "Bars on the wallpaper moving with what plays."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "launcher",
+      "title": "Launcher",
+      "icon": "apps",
+      "groups": [
+        {
+          "title": "Super menu",
+          "settings": [
+            {
+              "key": "caelestia-shell.launcher.showOnHover",
+              "label": "Opens on hover",
+              "description": "The pointer at the bottom edge opens it."
+            },
+            {
+              "key": "caelestia-shell.launcher.maxShown",
+              "label": "Apps shown at once",
+              "min": 3,
+              "max": 20
+            },
+            {
+              "key": "caelestia-shell.launcher.useFuzzy.apps",
+              "label": "Forgiving search",
+              "description": "Finds apps with typos too."
+            },
+            {
+              "key": "caelestia-shell.launcher.enableDangerousActions",
+              "label": "Power actions",
+              "description": "Shut down, reboot and log out from its > actions."
+            },
+            {
+              "key": "caelestia-shell.launcher.vimKeybinds",
+              "label": "Vim keys",
+              "description": "Ctrl+J and Ctrl+K move through it."
+            },
+            {
+              "key": "caelestia-shell.launcher.favouriteApps",
+              "label": "Pinned apps"
+            },
+            {
+              "key": "caelestia-shell.launcher.hiddenApps",
+              "label": "Hidden apps",
+              "description": "Apps left out of it: patterns in JSON, like [\"^vim$\"]."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "notifs",
+      "title": "Notifications",
+      "icon": "notifications",
+      "groups": [
+        {
+          "title": "Notifications",
+          "settings": [
+            {
+              "key": "caelestia-shell.notifs.expire",
+              "label": "Go away by themselves"
+            },
+            {
+              "key": "caelestia-shell.notifs.defaultExpireTimeout",
+              "label": "Shown for (ms)",
+              "min": 1000,
+              "max": 30000,
+              "step": 500
+            },
+            {
+              "key": "caelestia-shell.notifs.fullscreen",
+              "label": "Over fullscreen apps and games"
+            },
+            {
+              "key": "caelestia-shell.notifs.actionOnClick",
+              "label": "A click opens it",
+              "description": "A click on a notification does its main action (opens the chat...)."
+            },
+            {
+              "key": "caelestia-shell.notifs.openExpanded",
+              "label": "Shown expanded"
+            }
+          ]
+        },
+        {
+          "title": "Toasts (small notices at the bottom)",
+          "settings": [
+            {
+              "key": "caelestia-shell.utilities.toasts.nowPlaying",
+              "label": "Now playing"
+            },
+            {
+              "key": "caelestia-shell.utilities.toasts.kbLimit",
+              "label": "Keyboard shortcuts blocked"
+            },
+            {
+              "key": "caelestia-shell.utilities.toasts.configLoaded",
+              "label": "Shell settings reloaded"
+            },
+            {
+              "key": "caelestia-shell.utilities.maxToasts",
+              "label": "Most at once",
+              "min": 1,
+              "max": 10
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "session",
+      "title": "Lock and session",
+      "icon": "lock",
+      "groups": [
+        {
+          "title": "Lock screen",
+          "settings": [
+            {
+              "key": "caelestia-shell.lock.enabled",
+              "label": "Lock screen",
+              "description": "Caelestia's lock screen (Super+L)."
+            },
+            {
+              "key": "caelestia-shell.lock.useWallpaper",
+              "label": "Wallpaper behind it"
+            },
+            {
+              "key": "caelestia-shell.lock.hideNotifs",
+              "label": "Hide notifications on it"
+            },
+            {
+              "key": "caelestia-shell.lock.recolourLogo",
+              "label": "Logo in the scheme's colours"
+            },
+            {
+              "key": "caelestia-shell.lock.enableFprint",
+              "label": "Fingerprint"
+            },
+            {
+              "key": "caelestia-shell.lock.enableHowdy",
+              "label": "Face (Howdy)"
+            }
+          ]
+        },
+        {
+          "title": "Idle and sleep",
+          "settings": [
+            {
+              "key": "caelestia-shell.general.idle.lockBeforeSleep",
+              "label": "Lock before sleep"
+            },
+            {
+              "key": "caelestia-shell.general.idle.inhibitWhenAudio",
+              "label": "Stay awake while sound plays"
+            },
+            {
+              "key": "caelestia-shell.general.idle.timeouts",
+              "label": "When the screen turns off and the PC sleeps"
+            }
+          ]
+        },
+        {
+          "title": "Session menu",
+          "settings": [
+            {
+              "key": "caelestia-shell.session.enabled",
+              "label": "Session menu",
+              "description": "Power off, reboot, log out (Super+Shift+L... see Shortcuts)."
+            },
+            {
+              "key": "caelestia-shell.session.vimKeybinds",
+              "label": "Vim keys"
+            },
+            {
+              "key": "caelestia-shell.general.showOverFullscreen",
+              "label": "Over fullscreen apps and games",
+              "description": "The session menu and launcher open over a fullscreen game or video."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "region",
+      "title": "Region and services",
+      "icon": "public",
+      "groups": [
+        {
+          "title": "Region",
+          "settings": [
+            {
+              "key": "caelestia-shell.services.weatherLocation",
+              "label": "Weather place",
+              "description": "A city, or lat,lon. Empty: found from your connection."
+            },
+            {
+              "key": "caelestia-shell.services.weatherUnits",
+              "label": "Weather temperature"
+            },
+            {
+              "key": "caelestia-shell.services.sensorUnits",
+              "label": "Sensor temperature"
+            },
+            {
+              "key": "caelestia-shell.services.clockFormat",
+              "label": "Clock"
+            },
+            {
+              "key": "caelestia-shell.services.dataUnits",
+              "label": "Data sizes"
+            }
+          ]
+        },
+        {
+          "title": "Services",
+          "settings": [
+            {
+              "key": "caelestia-shell.services.defaultPlayer",
+              "label": "Media player",
+              "description": "The player the media keys and dashboard control first."
+            },
+            {
+              "key": "caelestia-shell.services.audioIncrement",
+              "label": "Volume step",
+              "description": "How much a volume key or scroll changes it.",
+              "min": 0.01,
+              "max": 0.25,
+              "step": 0.01
+            },
+            {
+              "key": "caelestia-shell.services.maxVolume",
+              "label": "Loudest volume",
+              "description": "1: 100%. Above it boosts quiet sound (and can distort).",
+              "min": 1,
+              "max": 1.5,
+              "step": 0.05
+            },
+            {
+              "key": "caelestia-shell.services.gpuType",
+              "label": "Graphics card for the dashboard"
+            },
+            {
+              "key": "caelestia-shell.general.battery.criticalLevel",
+              "label": "Battery critical at (%)",
+              "min": 1,
+              "max": 20
             }
           ]
         }
@@ -237,7 +1117,7 @@
     },
     {
       "id": "keys",
-      "title": "Keyboard",
+      "title": "Shortcuts",
       "icon": "keyboard",
       "groups": [
         {
@@ -358,8 +1238,50 @@
         {
           "title": "Caelestia",
           "from": "caelestia-keys"
+        },
+        {
+          "title": "Fixed (Caelestia's own, not changeable)",
+          "from": "binds"
+        }
+      ]
+    },
+    {
+      "id": "caelestia",
+      "title": "All Caelestia options",
+      "icon": "settings",
+      "groups": [
+        {
+          "title": "Caelestia",
+          "from": "caelestia-options"
         }
       ]
     }
-  ]
+  ],
+  "caelestia-managed": {
+    "caelestia-shell.launcher.favouriteApps": {
+      "readonly": true,
+      "note": "Pinned from the Super menu (its > Pin to Super menu)."
+    },
+    "caelestia-shell.launcher.actions": {
+      "note": "AgrOS adds Update apps and the two Pin actions here: keep them in the list."
+    },
+    "caelestia-shell.bar.entries": {
+      "note": "AgrOS's dock is the \"dock\" entry: leave it in for the dock."
+    },
+    "caelestia-shell.general.logo": {
+      "note": "AgrOS's logo (agros-logo)."
+    },
+    "caelestia-shell.services.weatherLocation": {
+      "note": "Also set by the place picker (Caelestia's Settings, Language & region), and the time zone can follow it."
+    },
+    "caelestia-shell.general.idle.timeouts": {
+      "note": "AgrOS's: screen off after 10 minutes, sleep after 30 (5 and 15 on battery)."
+    },
+    "caelestia-shell.session.commands.hibernate": {
+      "note": "AgrOS's overlay sleeps instead where hibernating can't work."
+    },
+    "caelestia-shell.paths.wallpaperDir": {
+      "note": "The Look page's wallpapers come from Pictures/Wallpapers."
+    }
+  }
 }

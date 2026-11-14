@@ -6,6 +6,7 @@
 Operation = Install
 Operation = Upgrade
 Type = Package
+Target = agros-scripts
 Target = hyprland
 Target = hyprland-git
 Target = aquamarine

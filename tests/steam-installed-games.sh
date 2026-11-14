@@ -3,6 +3,7 @@
 # Steam's tools and half-downloaded games left out, a name with quotes read whole; no Steam at all: null (the menu
 # hides nothing), and Flathub's Steam read when it's the only one
 set -euo pipefail
+# shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 run() { HOME=$t python3 -I "$here/.local/bin/steam-installed-games"; }
 manifest() { printf '"AppState"\n{\n\t"appid"\t\t"%s"\n\t"name"\t\t"%s"\n\t"StateFlags"\t\t"%s"\n}\n' "$2" "$3" "$4" >"$1/appmanifest_$2.acf"; }

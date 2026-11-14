@@ -2,6 +2,7 @@
 # caelestia-pin <dock> <app id> (the dock's and the Super menu's pin buttons): pins and unpins, keeps the rest of
 # shell.json, loses no click of several at once, and starts a pins file that isn't a list again
 set -euo pipefail
+# shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 pin() { HOME=$t "$here/.local/bin/caelestia-pin" "$@"; }
 pins=$t/.config/quickshell/sidedock/pins.json shell=$t/.config/caelestia/shell.json
@@ -19,15 +20,23 @@ for i in 1 2 3 4 5 6; do pin dock "app$i" & done; wait
 echo '{"a": 1}' >"$pins"
 pin dock foot
 [[ $(jq -c . "$pins") == '["foot"]' ]] || fail "a pins file that isn't a list: $(cat "$pins")"
+# An empty one: started again as [], not every pin refused
+: >"$pins"
+pin dock foot
+[[ $(jq -c . "$pins") == '["foot"]' ]] || fail "an empty pins file: $(cat "$pins")"
 
 
-# The dock's drag to reorder: the order written, under the pin clicks' lock (waits for one under way), and only a list
+# The dock's drag to reorder: the order written, under the pin clicks' lock (waits for one under way, merged with what
+# it wrote), and only a list
+# (the one under way changes the file as it ends: not waited for, the order went first and that change over it)
 pin dock firefox
-hold=$(mktemp -u); flock "$pins.lock" sh -c "touch '$hold'; sleep 1" & holder=$!
+hold=$(mktemp -u)
+flock "$pins.lock" sh -c "touch '$hold'; sleep 1; echo '[\"foot\", \"firefox\", \"zed\"]' >'$pins'" & holder=$!
 for _ in {1..50}; do [[ -e $hold ]] && break; sleep 0.05; done
 pin dock --order '["firefox", "foot"]'
 wait $holder; rm -f "$hold"
-[[ $(jq -c . "$pins") == '["firefox","foot"]' ]] || fail "the dock's order not written: $(cat "$pins")"
+[[ $(jq -c . "$pins") == '["firefox","foot","zed"]' ]] || fail "the dock's order not written after the change under way: $(cat "$pins")"
+echo '["firefox", "foot"]' >"$pins"
 pin dock --order '{"not": "a list"}' 2>/dev/null && fail "something not a list taken as the order"
 [[ $(jq -c . "$pins") == '["firefox","foot"]' ]] || fail "something not a list written as the order: $(cat "$pins")"
 # Two JSON documents (only the last one judged before): refused, the pins as they were
@@ -66,17 +75,18 @@ pin x thunar
     fail "favourites: $(cat "$shell")"
 pin x foot
 [[ $(jq -c .launcher.favouriteApps "$shell") == '["thunar"]' ]] || fail "favourite unpin: $(cat "$shell")"
-# The weather location's writer of the same file (common/PlacePicker.qml's setLocation, the widget's and Settings') takes the same lock: a pin change under
-# way when it writes isn't lost, nor its own
-# shellcheck disable=SC2016  # (the QML's own text, as written there)
-cmd=$(grep -o 'f="$HOME/.config/caelestia/shell.json"; exec 9>[^`]*' "$here/.config/quickshell/common/PlacePicker.qml")
-[[ -n $cmd ]] || fail "the weather widget's writer not found"
+# The weather location's writer of the same file (common/PlacePicker.qml's setLocation, the widget's and Settings':
+# json-edit, as the pins) takes the same lock: a pin change under way when it writes isn't lost, nor its own
+# (its command's program, whatever the arguments' layout)
+grep -Eq 'execDetached\(\[[^]]*/json-edit[`"]' "$here/.config/quickshell/common/PlacePicker.qml" ||
+    fail "the weather widget's writer isn't json-edit"
 echo '{"launcher": {"favouriteApps": ["foot"]}}' >"$shell"
 # shellcheck disable=SC2016  # (the stand-in's own)
 flock "$shell.lock" sh -c 'sleep 0.6; jq ".launcher.favouriteApps += [\"thunar\"]" "$1" >"$1.tmp" && mv "$1.tmp" "$1"' _ "$shell" &
 pinning=$!
 sleep 0.2
-HOME=$t sh -c "$cmd" sh Lisbon
+# shellcheck disable=SC2016  # (jq's own variable)
+"$here/.local/bin/json-edit" "$shell" --indent 4 --arg l Lisbon '.services.weatherLocation = $l'
 wait $pinning
 [[ $(jq -c '[.launcher.favouriteApps, .services.weatherLocation]' "$shell") == '[["foot","thunar"],"Lisbon"]' ]] ||
     fail "the weather widget's and a pin's changes to shell.json not both kept: $(cat "$shell")"

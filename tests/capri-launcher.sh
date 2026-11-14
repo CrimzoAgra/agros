@@ -2,6 +2,7 @@
 # ~/.local/bin/capri: her build started from its folder, through XWayland on Hyprland, its output in ~/.cache/capri.log,
 # which is moved to capri.log.1 once past 5 MB (each start adds to it); $CAPRI_RUN run instead when set; not installed: said
 set -uo pipefail
+# shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 export HOME="$t/ho me" XDG_DATA_HOME='' XDG_CACHE_HOME='' CAPRI_RUN=''
 out=$(HYPRLAND_INSTANCE_SIGNATURE='' "$here/.local/bin/capri" 2>&1) && fail "started with her not installed"

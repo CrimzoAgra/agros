@@ -21,5 +21,6 @@ behind() {
 udevadm monitor --udev --subsystem-match=drm | while read -r _ _ action _; do
     [[ $action == change ]] || continue
     sleep 0.3  # (a resize sends several at once)
-    if behind; then hyprctl reload >/dev/null; fi
+    # (hypr-reload: after any game, a reload takes a game out of fullscreen)
+    if behind; then "$(dirname "$(readlink -f "$0")")/hypr-reload"; fi
 done

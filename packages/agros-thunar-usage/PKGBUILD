@@ -1,0 +1,28 @@
+# Maintainer: Filipe Agra
+# Thunar: a bar in the status bar, beside the free space, showing how full the folder's drive is (each window its own
+# drive). A Thunar plugin (thunar-usage.c), loaded into Thunar
+pkgname=agros-thunar-usage
+# (its version from the commits that touch it, as agros-vmware's: compiled, so CI can't tell a change from a rebuild)
+pkgver=0
+pkgrel=1
+pkgdesc="AgrOS: a disk usage bar in Thunar's status bar"
+arch=('x86_64')
+url='https://github.com/CrimzoAgra/agros'
+license=('GPL-3.0-or-later')
+depends=('thunar')
+source=('thunar-usage.c')
+sha256sums=('SKIP')
+
+pkgver() {
+    cd "$startdir" && printf '1.r%s.%s' "$(git rev-list --count HEAD -- .)" "$(git log -1 --format=%h -- .)"
+}
+
+build() {
+    # shellcheck disable=SC2046  # (pkg-config's flags, split into words on purpose)
+    gcc $CFLAGS $LDFLAGS -shared -fPIC -Wl,-z,defs -o agros-thunar-usage.so thunar-usage.c \
+        $(pkg-config --cflags --libs thunarx-3)
+}
+
+package() {
+    install -Dm755 agros-thunar-usage.so "$pkgdir/usr/lib/thunarx-3/agros-thunar-usage.so"
+}

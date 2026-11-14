@@ -1,32 +1,61 @@
 # greetd pointed at the login screen (its own config kept as config.toml.agros-orig), its PAM service made from the
 # system's (greetd-pam) with the keyring's lines, the user it shows by default, and greetd on
-_first_user() { getent passwd | awk -F: '$3 >= 1000 && $3 < 60000 && $7 !~ /(nologin|false)$/ {print $1; exit}'; }
+# (AGROS_ROOT: another root, the tests' throwaway one; / when pacman runs this)
+_r=${AGROS_ROOT:-}
+_dm=$_r/var/lib/agros/display-manager
 
 post_install() {
-    local g=/etc/greetd/caelestia-greeter cfg=/etc/greetd/config.toml u
+    local g=$_r/etc/greetd/caelestia-greeter cfg=$_r/etc/greetd/config.toml pam=$_r/etc/pam.d/greetd u
     systemd-tmpfiles --create /usr/lib/tmpfiles.d/agros-greeter.conf >/dev/null 2>&1 || true
     [[ -f $cfg && ! -f $cfg.agros-orig ]] && cp "$cfg" "$cfg.agros-orig"
     install -m644 "$g/greetd-config.toml" "$cfg"
     "$g/greetd-pam" >/dev/null 2>&1 || echo "agros-greeter: greetd's PAM service left as it was (greetd-pam couldn't follow the system's)"
-    if [[ -f /etc/pam.d/greetd ]] && ! grep -q pam_gnome_keyring /etc/pam.d/greetd; then
+    if [[ -f $pam ]] && ! grep -q pam_gnome_keyring "$pam"; then
         printf '%s\n' '-auth       optional     pam_gnome_keyring.so' \
-            '-session    optional     pam_gnome_keyring.so auto_start' >>/etc/pam.d/greetd
+            '-session    optional     pam_gnome_keyring.so auto_start' >>"$pam"
     fi
-    # Who it shows should its theme break: the first account (the one made in the installer), until someone logs in
-    u=$(_first_user)
+    # Who it shows should its theme break: the first account (the one made in the installer; agros-each-user's list of
+    # the AgrOS users), until someone logs in. Its theme made as them through agros-each-user --as (setpriv: runuser's
+    # PAM opened a logind session for them)
+    u=$("$_r/usr/lib/agros/bin/agros-each-user" --list | head -1)
     if [[ -n $u ]] && ! grep -q '^CAELESTIA_GREETER_USER=' "$g/env"; then
         echo "CAELESTIA_GREETER_USER=$u" >>"$g/env"
-        [[ -e $g/theme/theme.json ]] || runuser -u "$u" -- "$g/make-theme.sh" "$g/theme" "$u" >/dev/null 2>&1 || true
+        [[ -e $g/theme/theme.json ]] || "$_r/usr/lib/agros/bin/agros-each-user" --as "$u" "$g/make-theme.sh" "$g/theme" "$u" >/dev/null 2>&1 || true
     fi
+    # (the display manager it takes over from, noted once: its removal turns that one back on)
+    local dm
+    dm=$(readlink "$_r/etc/systemd/system/display-manager.service" 2>/dev/null) && dm=${dm##*/}
+    [[ -n $dm && $dm != greetd.service && ! -e $_dm ]] &&
+        mkdir -p "${_dm%/*}" && echo "$dm" >"$_dm"
     systemctl enable -f greetd.service >/dev/null 2>&1 || true
 }
 
 post_upgrade() {
     systemd-tmpfiles --create /usr/lib/tmpfiles.d/agros-greeter.conf >/dev/null 2>&1 || true
-    /etc/greetd/caelestia-greeter/greetd-pam >/dev/null 2>&1 || true
+    "$_r/etc/greetd/caelestia-greeter/greetd-pam" >/dev/null 2>&1 || true
 }
 
 post_remove() {
-    [[ -f /etc/greetd/config.toml.agros-orig ]] && mv /etc/greetd/config.toml.agros-orig /etc/greetd/config.toml
+    local cfg=$_r/etc/greetd/config.toml pam=$_r/etc/pam.d/greetd dm
+    # greetd's own config back. None kept (there was none to keep): greetd's stock one written, its text login, rather
+    # than one pointing at a file just removed with this package (greetd then shows nothing at all): the login screen
+    # (/etc/greetd/caelestia-greeter), or login-reset's text login into hyprland-session
+    if [[ -f $cfg.agros-orig ]]; then
+        mv "$cfg.agros-orig" "$cfg"
+    elif grep -qE 'caelestia-greeter|hyprland-session|login-reset' "$cfg" 2>/dev/null; then
+        printf '%s\n' '[terminal]' 'vt = 1' '' '[default_session]' 'command = "agreety --cmd /bin/sh"' 'user = "greeter"' >"$cfg"
+    fi
+    # greetd's own PAM service back (greetd-pam's greetd.orig), while greetd is still here
+    [[ -f $pam.orig && -f $pam ]] && mv "$pam.orig" "$pam"
+    # The display manager on before it back on (where it's still installed), in greetd's place. None noted (greetd was
+    # the one before, as an AgrOS install has it): greetd stays, with its text login, said with how to choose another
+    if dm=$(cat "$_dm" 2>/dev/null); then
+        systemctl enable -f "$dm" >/dev/null 2>&1 || echo "agros-greeter: $dm not turned back on (greetd stays the login screen)"
+        rm -f "$_dm"
+    else
+        echo "agros-greeter: greetd stays the login screen, as its text login (agreety). Another one: sudo systemctl enable -f <it>.service (sddm, gdm, lightdm...)"
+    fi
+    # What the login screen made itself: its wallpaper and colours, its state and cache
+    rm -rf "$_r/etc/greetd/caelestia-greeter/theme" "$_r/var/lib/caelestia-greeter" "$_r/var/cache/caelestia-greeter"
     true
 }

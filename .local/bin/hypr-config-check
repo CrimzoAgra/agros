@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Checks the Hyprland config against the Hyprland installed, without starting it (Hyprland --verify-config): run by the
-# pacman hook system/pacman-hooks/hypr-config-check.hook.in after a Hyprland update, so an API it renamed is found
+# pacman hook packages/agros-system/agros-hypr-config-check.hook after a Hyprland update, so an API it renamed is found
 # then, not at the next login with binds missing. Its errors go to ~/.local/state/hypr-config-check, which
 # dotfiles-check reports (and this prints); none: that file goes. Exit 0: it loads; 1: errors; 2: couldn't check
 # (Hyprland refused to run here: its file left as it was)
@@ -8,8 +8,9 @@ set -uo pipefail
 state="${XDG_STATE_HOME:-$HOME/.local/state}/hypr-config-check"
 mkdir -p "${state%/*}"
 cd ~ || exit 1  # (it writes a log in the folder it's run from: from pacman, that's /)
-# Hyprland won't run without a runtime folder, and from the pacman hook (runuser, sudo, at shutdown) there's none: its
-# "XDG_RUNTIME_DIR is not set" was taken for the config's error. One of its own then, gone after
+# Hyprland won't run without a runtime folder, and from the pacman hook (agros-each-user: /run/user/<uid>, not there
+# when you're not logged in; sudo, at shutdown) there's none: its "XDG_RUNTIME_DIR is not set" was taken for the
+# config's error. One of its own then, gone after
 if [[ -z ${XDG_RUNTIME_DIR:-} || ! -d ${XDG_RUNTIME_DIR:-} ]]; then
     XDG_RUNTIME_DIR=$(mktemp -d) || exit 2
     export XDG_RUNTIME_DIR

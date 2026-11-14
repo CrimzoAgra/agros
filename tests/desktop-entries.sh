@@ -3,11 +3,12 @@
 # hints), and every Exec quoted as the spec has it: an argument quoted whole ("--window-title=Phone Link"), not in part
 # (--window-title="Phone Link": some launchers take the quotes as part of it)
 set -euo pipefail
+# shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 for f in "$here"/.local/share/applications/*.desktop; do
     if command -v desktop-file-validate >/dev/null; then
         out=$(desktop-file-validate "$f" 2>&1) || fail "${f##*/} isn't a valid desktop entry: $out"
-        if grep -v ': hint: ' <<<"$out" | grep -q .; then fail "${f##*/}: $out"; fi
+        if grep -q . <<<"$(grep -v ': hint: ' <<<"$out")"; then fail "${f##*/}: $out"; fi
     fi
     while IFS= read -r exec; do
         # (each argument: a run of anything but spaces and quotes, or a quoted string; a quote inside one is wrong)

@@ -1,4 +1,5 @@
-// Updates: a window in Caelestia's style listing what's waiting (system and AUR apps, Flatpaks, AppImages), with
+// Updates: a window in Caelestia's style listing what's waiting (system and AUR apps, firmware, Flatpaks, AppImages,
+// Proton builds, developer tools), with
 // "Update all", which runs ~/.local/bin/update-apps and shows its progress.
 //   qs -c updates -n                  open it (Super menu: "Updates")
 //   UPDATES_START=1 qs -c updates -n  open it and start updating (the "Update now" notification)
@@ -38,8 +39,10 @@ ShellRoot {
     readonly property bool offline: items.some(i => i.kind === "offline")
     readonly property var groups: [
         { title: "System and apps", kinds: ["system", "aur", "capri"] },
+        { title: "Firmware", kinds: ["firmware"] },
         { title: "Flatpaks", kinds: ["flatpak"] },
-        { title: "AppImages", kinds: ["appimage"] }
+        { title: "AppImages", kinds: ["appimage"] },
+        { title: "Proton and developer tools", kinds: ["proton", "dev"] }
     ]
 
     function check(): void {
@@ -230,7 +233,7 @@ ShellRoot {
                         text: root.phase === "updating" ? (root.step || "Starting") + (root.step === "Flatpaks" ? " (system ones may ask for your password)" : "")
                             : root.phase === "done" && root.failed ? "Something didn't update; the details are below"
                             : root.phase === "done" ? "All done"
-                            : "System, AUR apps, Flatpaks and AppImages"
+                            : "System, AUR apps, firmware, Flatpaks, AppImages, Proton and developer tools"
                         font.family: "Rubik"
                         font.pixelSize: 13
                         color: root.c("onSurfaceVariant")
@@ -334,7 +337,7 @@ ShellRoot {
                                                 Text {
                                                     visible: !row.icon
                                                     anchors.centerIn: parent
-                                                    text: row.modelData.kind === "flatpak" ? "deployed_code" : row.modelData.kind === "appimage" ? "apps" : "package_2"
+                                                    text: row.modelData.kind === "flatpak" ? "deployed_code" : row.modelData.kind === "appimage" ? "apps" : row.modelData.kind === "firmware" ? "memory" : row.modelData.kind === "proton" ? "sports_esports" : row.modelData.kind === "dev" ? "terminal" : "package_2"
                                                     font.family: "Material Symbols Rounded"
                                                     font.pixelSize: 22
                                                     color: root.c("onSurfaceVariant")

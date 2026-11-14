@@ -3,6 +3,7 @@
 # makes them so): extracting a link extracts only the link, so the entry couldn't be read (a crash, nothing installed)
 # and the icon was lost. A fake AppImage extracts as the real runtime does (a pattern per path part, links as links)
 set -euo pipefail
+# shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 mkdir -p "$t/home" "$t/bin" "$t/img/usr/share/applications" "$t/img/usr/share/icons/hicolor/256x256/apps"
 printf '[Desktop Entry]\nName=Demo\nExec=demo %%U\nIcon=demo\nType=Application\n' >"$t/img/usr/share/applications/demo.desktop"
@@ -27,6 +28,7 @@ for d, dirs, files in os.walk(img):
 EOF
 chmod +x "$t/Demo-x86_64.AppImage"
 cp "$t/Demo-x86_64.AppImage" "$t/again.AppImage"  # (installing moves it: a copy for the second home below)
+export NOTIFY_WHEN_UP_TRIES=1  # (its notifications in the background: not tried for a minute after the test)
 for c in pacman notify-send update-desktop-database sudo pkexec; do printf '#!/bin/sh\nexit 1\n' >"$t/bin/$c"; done
 chmod +x "$t"/bin/*
 HOME=$t/home PATH=$t/bin:$PATH python3 "$here/.local/bin/appimage-open" --install "$t/Demo-x86_64.AppImage" ||

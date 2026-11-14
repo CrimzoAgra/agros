@@ -12,5 +12,5 @@ if ! command -v steam >/dev/null; then
 fi
 # Already running: it takes the arguments (and the shader fix needs Steam closed)
 pgrep -u "$(id -u)" -x steam >/dev/null && exec steam -silent "$@"
-"$HOME/.local/bin/nvidia-shader-fix" --install
+"$(dirname "$(readlink -f "$0")")/nvidia-shader-fix" --install
 exec systemd-run --user --scope --quiet --collect --unit="app-steam-$$" steam -silent "$@"

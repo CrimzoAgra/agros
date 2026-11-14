@@ -48,13 +48,27 @@
 #     login screen
 #   - Super+K also opens the notification sidebar, merged with the utilities panel below it (one shape, like the
 #     launcher and the dashboard); that panel can stay open with the sidebar
+#   - bar: the dock's place kept when it's off (the workspaces, tray and clock stay put)
+#   - a critical battery suspends instead of hibernating (no swap to hibernate into: zram only); the session menu's
+#     Hibernate button suspends too
+#   - lock screen: a wrong password said at once, not after about 2 s
+#   - lock screen: sleep, restart and power off buttons, bottom right like the login screen's
+#   - no warnings about a missing account picture (~/.face)
 # Quickshell uses this folder instead of /etc/xdg/... because it's in ~/.config.
 # The changes live in ~/.local/share/caelestia-overlay (patch.py + QML files).
 # Re-run after Caelestia updates (a pacman hook does this automatically).
 # If a change no longer fits a new Caelestia version, the original files are kept for it.
+# Nothing it's built from changed since the last build (Caelestia's files, this script, patch.py and the overlay's
+# files, the Settings app's caelestia.* switches): left as it is, the shell not restarted (the pacman hook runs this on
+# every AgrOS update). A restart needed while a game is open waits until it closes.
+#   caelestia-overlay --running   exit 0 if a Caelestia runs from the overlay (the scripts' one way to ask)
 set -euo pipefail
 src=/etc/xdg/quickshell/caelestia
 dst="$HOME/.config/quickshell/caelestia"
+helpers=$(dirname "$(readlink -f "$0")")  # (the shared helpers, beside this)
+# A Caelestia running from this folder (its path resolved too, for a HOME through a link)
+running() { "$helpers/qs-running" "Config path: $dst/shell.qml" "Config path: $(realpath -m "$dst")/shell.qml"; }
+if [[ ${1:-} == --running ]]; then running; exit; fi
 
 [[ -d $src ]] || { echo "Caelestia not installed at $src"; exit 1; }
 mkdir -p "${dst%/*}"
@@ -62,25 +76,45 @@ mkdir -p "${dst%/*}"
 # its caller holds it (CAELESTIA_REBUILDING: caelestia-restart --rebuild, caelestia-start, with the shell stopped)
 exec 9>"$dst.lock"
 [[ -n ${CAELESTIA_REBUILDING:-} ]] || flock 9
+# What the build is made from, as one checksum: Caelestia's files (name, size, time), this script, patch.py and the
+# overlay's files, and the caelestia.* settings patch.py reads (DOTS_SETTINGS: the tests' settings command)
+share=$HOME/.local/share/caelestia-overlay
+stamp=$( {
+    find "$src/" -printf '%P %s %T@\n' | sort
+    find "$share/" -type f ! -path '*/__pycache__/*' -print0 | sort -z | xargs -0r cat
+    cat "$(readlink -f "$0")"
+    "${DOTS_SETTINGS:-$helpers/dots-settings}" values 2>/dev/null |
+        jq -c 'with_entries(select(.key | startswith("caelestia.")))' 2>/dev/null || true
+} | sha256sum | cut -d' ' -f1)
+if [[ -e $dst/shell.qml && $(cat "$dst/.agros-built" 2>/dev/null) == "$stamp" ]]; then
+    echo "Caelestia overlay up to date: nothing to rebuild"
+    exit 0
+fi
 # A Caelestia running from this folder (a Caelestia update from the Updates app, its pacman hook running this for each
 # user, inside the session): handed to caelestia-restart --rebuild, which stops it, runs this, and starts it again.
 # Swapped under it, Hyprland dropped the shell, and nothing started it again. Checked under the lock: a restart holds it
 # until its new shell is up. Its 3: built there and failed (the shell restarted: not built again under it). Not
-# handed over (no Hyprland to ask: nothing to drop the shell): built here
-if [[ -z ${CAELESTIA_REBUILDING:-} ]] && qs list --all 2>/dev/null | grep -qF "Config path: $dst/shell.qml"; then
+# handed over and gone by then (no Hyprland to ask): built here; still running: not built. A game open: caelestia-restart
+# waits for it to close, in the background, one restart for every request during that game
+if [[ -z ${CAELESTIA_REBUILDING:-} ]] && running; then
     exec 9>&-
     r=0
-    "$HOME/.local/bin/caelestia-restart" --rebuild || r=$?
-    ((r == 0)) && { echo "Caelestia runs from it: rebuilt by caelestia-restart (stopped, rebuilt, started again)"; exit 0; }
+    "$helpers/caelestia-restart" --rebuild || r=$?
+    ((r == 0)) && { echo "Caelestia runs from it: handed to caelestia-restart --rebuild (stops it, rebuilds, starts it again)"; exit 0; }
     ((r == 3)) && exit 1
     exec 9>"$dst.lock"
     flock 9
+    # (hyprctl failed but the shell's still there: never swapped under it)
+    if running; then
+        echo "Caelestia runs from it and couldn't be restarted: not rebuilt (log out and back in)" >&2
+        exit 1
+    fi
 fi
 tmp=$(mktemp -d "$dst.new.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT
 rmdir "$tmp" && cp -as "$src" "$tmp"
 rc=0
-out=$(python3 "$HOME/.local/share/caelestia-overlay/patch.py" "$src" "$tmp" 2>&1) || rc=$?
+out=$(python3 "$share/patch.py" "$src" "$tmp" 2>&1) || rc=$?
 printf '%s\n' "$out"
 # Patches that no longer fit: kept for dotfiles-check, and said now if you're logged in (this also runs from the
 # pacman hook, where nobody reads the output)
@@ -111,11 +145,17 @@ elif ((rc != 0)) && [[ ! -s $skipped ]]; then
     rm -rf "$tmp" && cp -as "$src" "$tmp"
 fi
 # (not with the shell stopped, CAELESTIA_REBUILDING: Caelestia is the notification server, so it went to nobody; said
-# by caelestia-restart once its new shell is up, and by dotfiles-check 30 s into a login)
-if [[ -s $skipped && -z ${CAELESTIA_REBUILDING:-} && -S /run/user/$(id -u)/bus ]]; then
-    DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus notify-send -u critical -a Dotfiles -i dialog-warning \
-        "Caelestia changed: some of your changes are off" "$(cat "$skipped")" || true
+# by caelestia-restart once its new shell is up, and by dotfiles-check 30 s into a login). In the background: dots-warn
+# waits for the notification server, which a pacman hook shouldn't. The session's bus as this environment says (a pacman
+# hook's agros-each-user sets it), /run/user/<uid>'s only when it doesn't
+bus=${DBUS_SESSION_BUS_ADDRESS:-unix:path=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/bus}
+sock=${bus#unix:path=}
+if [[ -s $skipped && -z ${CAELESTIA_REBUILDING:-} && ($bus != unix:path=* || -S ${sock%%,*}) ]]; then
+    DBUS_SESSION_BUS_ADDRESS=$bus setsid -f "$helpers/dots-warn" \
+        "Caelestia changed: some of your changes are off" "$(cat "$skipped")" >/dev/null 2>&1 </dev/null || true
 fi
+# (a failed build not marked built: tried again next time)
+$failed || echo "$stamp" >"$tmp/.agros-built"
 # Swapped in one step: the folder is never missing
 if [[ -e $dst ]]; then mv -T --exchange "$tmp" "$dst"; else mv -T "$tmp" "$dst"; fi
 if $failed; then exit 1; fi

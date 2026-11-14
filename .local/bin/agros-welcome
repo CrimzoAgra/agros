@@ -8,7 +8,8 @@
 # Log: ~/.local/state/agros/welcome.log
 set -uo pipefail
 st=${XDG_STATE_HOME:-$HOME/.local/state}/agros
-bin=$HOME/.local/bin
+# The shared helpers and AgrOS's other programs beside this, not links agros-links may not have added yet
+helpers=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")") qs_running=$helpers/qs-running
 
 # Claude Code's plugins, as "GitHub repo of its marketplace|plugin@marketplace"
 CLAUDE_PLUGINS=(
@@ -105,16 +106,16 @@ caelestia_setup() {
     # from the copy the failed build left, which the overlay's state file says): stopped, rebuilt and started again by
     # caelestia-restart --rebuild (its notification, once the new shell is up, says if it fails again)
     # (rc: a failure returned, so the step is tried again at the next login, not marked done)
-    local running='' ours='' failed='' rc=0 shells
-    shells=$(qs list --all 2>/dev/null)
-    grep -q "/quickshell/caelestia/shell.qml" <<<"$shells" && running=1
-    # (on the overlay: from its folder, not Caelestia's own in /etc/xdg)
-    grep -qF "Config path: $dst/shell.qml" <<<"$shells" && ours=1
+    local running='' ours='' failed='' rc=0
+    "$qs_running" /quickshell/caelestia/shell.qml && running=1
+    # (on the overlay: from its folder, not Caelestia's own in /etc/xdg; caelestia-overlay's own check)
+    "$helpers/caelestia-overlay" --running && ours=1
     grep -qs 'Caelestia runs without your changes' "${XDG_STATE_HOME:-$HOME/.local/state}/caelestia-overlay-skipped" && failed=1
     if [[ -n $ours && -e $dst/shell.qml && -z $failed ]]; then
         echo "Caelestia overlay (your changes to Caelestia) already running."
     elif [[ -n $running ]]; then
-        if hyprctl -i "${HYPRLAND_INSTANCE_SIGNATURE:-0}" dispatch 'hl.dsp.exec_cmd("~/.local/bin/caelestia-restart --rebuild")' >/dev/null 2>&1; then
+        # (outside the desktop, caelestia-restart has Hyprland run it, with the desktop's environment)
+        if "$helpers/caelestia-restart" --rebuild >/dev/null 2>&1; then
             echo "Caelestia ran without your changes: rebuilding them, Caelestia restarted on them."
         else
             echo "!! Caelestia runs without your changes (run: ~/.local/bin/caelestia-restart --rebuild)"; rc=1
@@ -122,7 +123,7 @@ caelestia_setup() {
     elif [[ -e $dst/shell.qml && -z $failed ]]; then
         # (built, by caelestia-start at this login, its shell not up yet: not built again under it as it comes up)
         echo "Caelestia overlay (your changes to Caelestia) already built."
-    elif "$HOME/.local/bin/caelestia-overlay"; then
+    elif "$helpers/caelestia-overlay"; then
         echo "Caelestia overlay (your changes to Caelestia) built."
     else
         echo "!! The Caelestia overlay didn't build (run: ~/.local/bin/caelestia-overlay)"; rc=1
@@ -162,27 +163,30 @@ window_buttons() {
 
 # Your VSCodium extensions (list in .config/VSCodium/extensions.txt, kept up to date by dotfiles-sync; open replacements
 # for the Microsoft-only ones: basedpyright for Pylance, clangd for the C/C++ tools)
+# (one failed: the step's failure, so it's tried again at the next login, at most three in a row (vscodium_setup))
 vscode_extensions() {
-    local list="$HOME/.config/VSCodium/extensions.txt" ext
+    local list="$HOME/.config/VSCodium/extensions.txt" ext rc=0
     command -v codium >/dev/null && [[ -f $list ]] || return 0
     while read -r ext; do
         [[ -n $ext ]] || continue
-        codium --install-extension "$ext" >/dev/null 2>&1 || echo "!! VSCodium extension failed: $ext"
+        codium --install-extension "$ext" >/dev/null 2>&1 || { echo "!! VSCodium extension failed: $ext"; rc=1; }
     done <"$list"
-    echo "VSCodium extensions installed."
+    ((rc == 0)) && echo "VSCodium extensions installed."
+    return $rc
 }
 
 # Claude Code comes with its VS Code extension (in extensions.txt); ~/.local/bin/claude runs its CLI
 claude_plugins() {
-    local claude="$HOME/.local/bin/claude" entry repo_m plugin
+    local claude="$HOME/.local/bin/claude" entry repo_m plugin rc=0
     "$claude" --version >/dev/null 2>&1 || { echo "Claude Code isn't installed: skipping its plugins"; return 0; }
     for entry in "${CLAUDE_PLUGINS[@]}"; do
         IFS='|' read -r repo_m plugin <<<"$entry"
         "$claude" plugin marketplace add "$repo_m" >/dev/null 2>&1 || true # already added is fine
-        "$claude" plugin install "$plugin" --scope user >/dev/null 2>&1 || echo "!! Claude plugin failed: $plugin"
+        "$claude" plugin install "$plugin" --scope user >/dev/null 2>&1 || { echo "!! Claude plugin failed: $plugin"; rc=1; }
     done
-    echo "Claude Code plugins installed."
+    ((rc == 0)) && echo "Claude Code plugins installed."
     claude_notify_hook
+    return $rc
 }
 
 # A notification when Claude Code finishes an answer: ~/.local/bin/claude-notify as its Stop hook, added to
@@ -190,7 +194,7 @@ claude_plugins() {
 # of another shape than Claude Code's (not an object, hooks or its Stop list odd) is left untouched, and said; never
 # failing the step
 claude_notify_hook() {
-    local f="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json" cmd="$HOME/.local/bin/claude-notify" new
+    local f="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json" cmd="$HOME/.local/bin/claude-notify"
     mkdir -p "${f%/*}" || return 0
     [[ -s $f ]] || echo '{}' >"$f" || return 0
     if ! jq -e 'type == "object" and ((.hooks // {}) | type == "object" and ((.Stop // []) | type == "array"
@@ -200,9 +204,9 @@ claude_notify_hook() {
         return 0
     fi
     jq -e --arg c "$cmd" 'any(.hooks.Stop[]?.hooks[]?; .command == $c)' "$f" >/dev/null 2>&1 && return 0
-    # (written in place: a link stays one)
-    if new=$(jq --indent 2 --arg c "$cmd" '.hooks.Stop = (.hooks.Stop // []) + [{hooks: [{type: "command", command: $c}]}]' "$f") &&
-        printf '%s\n' "$new" >"$f"; then
+    # (json-edit: replaced whole, never half-written; a link stays one, the file keeps its mode)
+    if "$helpers/json-edit" "$f" --indent 2 --arg c "$cmd" \
+        '.hooks.Stop = (.hooks.Stop // []) + [{hooks: [{type: "command", command: $c}]}]'; then
         echo "Claude Code's notification hook (claude-notify) added."
     else
         echo "!! Claude Code's notification hook couldn't be added to $f"
@@ -216,13 +220,13 @@ librewolf_setup() {
     local settings="$HOME/.local/share/firefox/settings.js" prof pid
     command -v librewolf >/dev/null && [[ -f $settings ]] || return 0
     pgrep -x librewolf >/dev/null && { echo "LibreWolf is open: its settings are applied at the next login"; return 1; }
-    prof=$("$bin/firefox-bookmarks-export" --profile 2>/dev/null)
+    prof=$("$helpers/firefox-bookmarks-export" --profile 2>/dev/null)
     if [[ -z $prof ]]; then
         librewolf --headless about:blank >/dev/null 2>&1 &
         pid=$!
         for _ in $(seq 30); do
             sleep 1
-            prof=$("$bin/firefox-bookmarks-export" --profile 2>/dev/null)
+            prof=$("$helpers/firefox-bookmarks-export" --profile 2>/dev/null)
             [[ -n $prof && -f $prof/prefs.js ]] && break
         done
         sleep 2
@@ -259,18 +263,11 @@ librewolf_theme() {
     done
     sleep 2
     kill "$pid" 2>/dev/null; wait "$pid" 2>/dev/null
-    python3 - "$prof/extensions.json" "$id" <<'EOF' || echo "!! The Lagoon theme isn't turned on: pick it in LibreWolf's settings, Appearance"
-import json, sys
-path, lagoon = sys.argv[1:]
-d = json.load(open(path))
-themes = [a for a in d["addons"] if a.get("type") == "theme"]
-if not any(a["id"] == lagoon for a in themes):
-    sys.exit(1)
-for a in themes:
-    a["active"] = a["id"] == lagoon
-    a["userDisabled"] = not a["active"]
-json.dump(d, open(path, "w"))
-EOF
+    # Lagoon the one theme on (json-edit: replaced whole, never left half-written); not listed: left as it is
+    [[ -s $prof/extensions.json ]] && "$helpers/json-edit" "$prof/extensions.json" --arg id "$id" '
+        if any(.addons[]; .type == "theme" and .id == $id) | not then error("Lagoon not installed") else . end
+        | .addons |= map(if .type == "theme" then .active = (.id == $id) | .userDisabled = (.id != $id) else . end)' \
+        2>/dev/null || echo "!! The Lagoon theme isn't turned on: pick it in LibreWolf's settings, Appearance"
     # The add-on startup cache still names the old theme, and LibreWolf draws that one (Lagoon only listed as on):
     # without it LibreWolf rebuilds it from extensions.json
     rm -f "$prof/addonStartup.json.lz4"
@@ -278,7 +275,23 @@ EOF
 
 # VSCodium's extensions (Claude Code's among them: its CLI is ~/.local/bin/claude), then Claude Code's plugins and its
 # notification hook
-vscodium_setup() { vscode_extensions && claude_plugins; }
+# (the plugins tried even when an extension failed: Claude Code's may be there all the same)
+# A failure is tried again at the next login (offline), not for good: one extension or plugin gone from its store
+# failed the step at every login. Failing a third login in a row (as capri-update does a failure that keeps coming
+# back), it's said and counts as done
+vscodium_setup() {
+    local rc=0 n tries="$st/vscodium-failed"
+    vscode_extensions || rc=1
+    claude_plugins || rc=1
+    ((rc)) || { rm -f "$tries"; return 0; }
+    n=$("$helpers/fail-streak" "$tries")
+    if ((n >= 3)); then
+        echo "!! VSCodium extensions or Claude plugins failed $n logins in a row: not tried again (install them by hand)"
+        rm -f "$tries"
+        return 0
+    fi
+    return 1
+}
 
 # Flatpaks: Spotify for you (so Spicetify can change it), then Spicetify; Nuvio and ArtCraft from their GitHub
 # releases' .flatpak files (flatpak-bundle-update keeps them updated: they have no Flatpak repo)
@@ -286,8 +299,8 @@ flatpaks() {
     local ok=0
     flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo || ok=1
     flatpak install --user -y --noninteractive flathub com.spotify.Client || { echo "!! Spotify (Flatpak) failed"; ok=1; }
-    "$bin/flatpak-bundle-update" --install NuvioMedia/NuvioDesktop || ok=1
-    "$bin/flatpak-bundle-update" --install storytold/craft-launcher || ok=1
+    "$helpers/flatpak-bundle-update" --install NuvioMedia/NuvioDesktop || ok=1
+    "$helpers/flatpak-bundle-update" --install storytold/craft-launcher || ok=1
     if command -v spicetify >/dev/null; then
         spicetify -q config >/dev/null 2>&1 || true
         spicetify -q config spotify_path "$HOME/.local/share/flatpak/app/com.spotify.Client/current/active/files/extra/share/spotify" \
@@ -301,15 +314,18 @@ flatpaks() {
 # theme in your colours, Lutris's store launchers, the tablet and Razer services
 others() {
     window_buttons
-    local eq="$HOME/.config/equibop/settings/settings.json"
+    local eq="$HOME/.config/equibop/settings/settings.json" rc=0
     if command -v equibop >/dev/null; then
-        mkdir -p "${eq%/*}"; [[ -s $eq ]] || echo '{}' >"$eq"
-        jq '.enabledThemes = ((.enabledThemes // []) + ["caelestia.theme.css"] | unique)' "$eq" >"$eq.tmp" && mv "$eq.tmp" "$eq" || rm -f "$eq.tmp"
+        # (an empty one started as {}: json-edit leaves an empty file alone, and the theme was never added. Failed: the
+        # step tried again at the next login, not marked done)
+        { [[ -s $eq ]] || { mkdir -p "${eq%/*}" && echo '{}' >"$eq"; }; } &&
+            "$helpers/json-edit" "$eq" '.enabledThemes = ((.enabledThemes // []) + ["caelestia.theme.css"] | unique)' ||
+            { echo "!! Equibop's theme couldn't be turned on ($eq)"; rc=1; }
     fi
-    [[ -x /usr/bin/lutris ]] && { "$bin/lutris-library" >/dev/null 2>&1 || echo "!! lutris-library failed"; }
+    [[ -x /usr/bin/lutris ]] && { "$helpers/lutris-library" >/dev/null 2>&1 || echo "!! lutris-library failed"; }
     installed opentabletdriver && systemctl --user enable --now opentabletdriver.service 2>/dev/null
     installed openrazer-daemon && systemctl --user enable --now openrazer-daemon.service 2>/dev/null
-    true
+    return $rc
 }
 
 # (sourced, by the tests: only the functions)
@@ -331,7 +347,7 @@ step() {
 # (the shell up first: the overlay's restart and the wallpaper talk to it). caelestia-start's build waited for first,
 # under the overlay's lock: past the 60 s, this went on to build again, swapping the folder under the shell just started
 flock "$HOME/.config/quickshell/caelestia.lock" true 2>/dev/null
-for _ in $(seq 60); do qs list --all 2>/dev/null | grep -q /quickshell/caelestia/ && break; sleep 1; done
+for _ in $(seq 60); do "$qs_running" /quickshell/caelestia/ && break; sleep 1; done
 step caelestia caelestia_setup
 # The live USB (the ISO's own session): only the desktop's look, nothing downloaded, no accounts to restore
 [[ -d /run/archiso ]] && { echo "== live system: done $(date '+%F %T')"; exit 0; }
@@ -345,17 +361,25 @@ all_done=1
 for s in "${steps[@]}"; do [[ -e $st/done-$s ]] || all_done=; done
 [[ -n $all_done ]] && touch "$st/done"
 
-# The system's part (hardware apps, VMware) and your accounts: asked in one notification, run in a terminal
+# The system's part (hardware apps, VMware) and your accounts: asked in one notification, run in a terminal. Sent by
+# notify-when-up once Caelestia (the notification server) takes it, and marked offered once it's answered or closed
+# (its buttons wait for that): one sent to nobody, or still unanswered when the session ended, is offered again at the
+# next login
 if [[ ! -e $st/offered ]]; then
-    touch "$st/offered"
+    if [[ -n $all_done ]]; then
+        text="Everything is installed."
+    else
+        text="Some of the setup didn't finish: it's tried again at the next login (details: $st/welcome.log)."
+    fi
+    text+=" Plug in your pen drive to restore your accounts (logins, keys, browser profile). Later: run agros-personal, or agros-welcome --system for the hardware apps and VMware."
     setsid -f bash -c '
-        a=$(notify-send -a AgrOS -i system-software-install -u critical -A restore="Restore my accounts" \
-            -A system="Install hardware apps and VMware" -A later="Later" "Welcome to AgrOS" \
-            "Everything is installed. Plug in your pen drive to restore your accounts (logins, keys, browser profile). Later: run agros-personal, or agros-welcome --system for the hardware apps and VMware." 2>/dev/null)
+        a=$("$1/notify-when-up" -a AgrOS -i system-software-install -u critical -A restore="Restore my accounts" \
+            -A system="Install hardware apps and VMware" -A later="Later" "Welcome to AgrOS" "$2") || exit 1
+        touch "$3"
         case $a in
             restore) exec foot -T "AgrOS: your accounts" sh -c "\"$1/agros-personal\"; echo; read -rp \"Enter closes this window \" _" ;;
             system) exec foot -T "AgrOS: hardware apps and VMware" sh -c "\"$1/agros-welcome\" --system; echo; read -rp \"Enter closes this window \" _" ;;
         esac
-    ' _ "$bin" >/dev/null 2>&1 </dev/null
+    ' _ "$helpers" "$text" "$st/offered" >/dev/null 2>&1 </dev/null
 fi
 echo "== done $(date '+%F %T')"

@@ -222,6 +222,42 @@ local function place(w)
     if min then return min, true end
     if (ws.id or 0) > 0 then return ws.id, false end
 end
+-- Where cleaning workspace i sends its windows: the nearest other workspace in has (number -> true: those with
+-- windows), the previous one when the previous and next are as near; nil when there's none
+function dots.merge_target(i, has)
+    local best
+    for n in pairs(has) do
+        local d, b = math.abs(n - i), best and math.abs(best - i)
+        if n ~= i and (not best or d < b or (d == b and n < best)) then best = n end
+    end
+    return best
+end
+
+-- The Super+Tab switcher's × on a workspace: hyprctl eval 'dots.clean_workspace(3)' moves column 3's windows (each
+-- screen's, minimised ones too) to the same screen's workspace of dots.merge_target's column, not following them
+function dots.clean_workspace(i)
+    local folded = #screens() >= 2
+    local function col(id) return folded and column(id) or id end
+    local wins, has = {}, {}
+    for _, w in ipairs(hl.get_windows() or {}) do
+        local id, min = place(w)
+        if id then
+            has[col(id)] = true
+            if col(id) == i then wins[#wins + 1] = { window = w, to = id - col(id), minimised = min } end
+        end
+    end
+    local to = dots.merge_target(i, has)
+    if not to then return end
+    -- (the focus passing to another window as the active one leaves mustn't move the pointer)
+    ;(dots.without_warps or function(fn) fn() end)(function()
+        for _, e in ipairs(wins) do
+            local n = e.to + to
+            hl.dispatch(hl.dsp.window.move({ window = e.window, follow = false,
+                                             workspace = e.minimised and "special:minimised-" .. n or n }))
+        end
+    end)
+end
+
 -- Windows to their new workspaces; a window kept to move back that's still where it was put follows (another screen
 -- gone, or the screens renumbered, moves it again)
 local function apply(moves, saved)
@@ -286,13 +322,13 @@ local function renumber(now)
     save(saved)
 end
 
--- (after any game: a reload takes a game out of fullscreen; after-games returns at once when none is open)
+-- (hypr-reload: after any game, a reload takes a game out of fullscreen)
 -- One reload at a time: a screen plugged in sends two or three events, each reloading on its own otherwise (the reload
 -- reads the screens as they are by then, so the ones that find it busy have nothing left to do); then what a
 -- returning screen had comes back
 local function reload(wait)
-    hl.exec_cmd("sleep " .. wait .. "; flock -n \"${XDG_RUNTIME_DIR:-/tmp}/hypr-screens.lock\" sh -c '~/.local/bin/after-games;"
-                .. " hyprctl reload; hyprctl eval \"dots.screens_changed()\"'")
+    hl.exec_cmd("sleep " .. wait .. "; flock -n \"${XDG_RUNTIME_DIR:-/tmp}/hypr-screens.lock\" sh -c '~/.local/bin/hypr-reload;"
+                .. " hyprctl eval \"dots.screens_changed()\"'")
 end
 
 -- After the reload for a screen plugged in (its workspace rules exist by then): the windows merged away from it go

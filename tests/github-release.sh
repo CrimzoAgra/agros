@@ -2,6 +2,7 @@
 # The GitHub release checks appimage-update and flatpak-bundle-update share (curl stubbed: a made-up release): the
 # x86_64 file picked, its checksum found by exact name or not at all, a download that doesn't match refused
 set -euo pipefail
+# shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 source "$here/.local/share/github-release/lib.sh"
 mkdir -p "$t/srv" "$t/bin" "$t/dl"

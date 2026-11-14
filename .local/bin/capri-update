@@ -19,12 +19,13 @@ src="$dir/src"
 fork=${CAPRI_FORK:-https://github.com/CrimzoAgra/capri-overlay.git}
 upstream=${CAPRI_UPSTREAM:-https://github.com/nunezValen/CapriDesktop.git}
 failed="${XDG_STATE_HOME:-$HOME/.local/state}/capri-update-failed"  # the combinations that failed (;), then why
+helpers=$(dirname "$(readlink -f "$0")")  # (the shared helpers, beside this)
 check=false
 [[ ${1:-} == --check ]] && check=true
 # At boot it runs from the system's update, outside the desktop: its notifications go to your session's bus
-export DBUS_SESSION_BUS_ADDRESS=${DBUS_SESSION_BUS_ADDRESS:-unix:path=/run/user/$(id -u)/bus}
-# The private fork with no GitHub login (gh auth login) fails rather than asking for one in the terminal: setup --yes
-# waited on that prompt
+export DBUS_SESSION_BUS_ADDRESS=${DBUS_SESSION_BUS_ADDRESS:-unix:path=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/bus}
+# The private fork with no GitHub login (gh auth login) fails rather than asking for one in the terminal: an
+# unattended run (the boot update) waited on that prompt
 export GIT_TERMINAL_PROMPT=0
 # A stalled download given up on (as hyprbars-build's: one hung for minutes at a login), not waited on: at boot the
 # update holds shutdown off until it's done, and the update check (update-apps --check) would never finish
@@ -39,7 +40,11 @@ check_build() {
     grep -rlE '^(<<<<<<<|>>>>>>>) ' src package.json && { echo "conflict markers left"; return 1; }
     npm run -s typecheck && npm run -s test --if-present
 }
-warn() { notify-send -a Capri -i dialog-warning "$1" "$2" 2>/dev/null; echo "capri: $1: $2" >&2; }
+# (notify-when-up: once the notification server is up, in the background; normal urgency, from Capri)
+warn() {
+    setsid -f "$helpers/notify-when-up" -u normal -a Capri -i dialog-warning "$1" "$2" >/dev/null 2>&1 9>&-
+    echo "capri: $1: $2" >&2
+}
 # (versionsort.suffix: a pre-release, v1.1.0-beta, before its release; git's version order otherwise puts it after
 # v1.1.0, kept for good). LC_ALL=C: its messages read below ("would clobber", "unrelated histories") in English, not
 # translated (a pt_PT session)
@@ -51,12 +56,19 @@ git() { LC_ALL=C command git -C "$src" -c user.name=capri-update -c user.email=c
 $check && [[ ! -d $src/.git ]] && exit 0
 lock="${XDG_STATE_HOME:-$HOME/.local/state}/capri-update.lock"
 mkdir -p "${lock%/*}"
-exec 9>"$lock"
-if $check; then
-    flock -n 9 || exit 0
-elif ! flock -n 9; then
-    echo "capri: waiting for the other capri-update to finish..."
-    flock 9
+# (a run fail() started again holds it already, on the fd 9 it kept across its exec: opened again, it was let go of and
+# another run could slip in)
+# (the variable alone isn't enough: fd 9 must really be the lock, not a stray CAPRI_UPDATE_LOCKED in the environment)
+if [[ -n ${CAPRI_UPDATE_LOCKED:-} && /proc/$$/fd/9 -ef $lock ]]; then
+    unset CAPRI_UPDATE_LOCKED
+else
+    exec 9>"$lock"
+    if $check; then
+        flock -n 9 || exit 0
+    elif ! flock -n 9; then
+        echo "capri: waiting for the other capri-update to finish..."
+        flock 9
+    fi
 fi
 
 # Her folder from before the new Capri, a clone of the old one (capri-overlay on mochiiwuff/capri-desktop: another
@@ -96,7 +108,8 @@ if ! out=$(git fetch --prune upstream 'refs/tags/v*:refs/tags/v*' 2>&1); then
     exit 1
 fi
 # (fetched again after that tag was taken out: said no more; what else is written down stays)
-if head -1 "$failed" 2>/dev/null | tr ';' '\n' | grep -q '^moved '; then
+# (here-strings, read whole: grep -q quitting early got the pipe's writer a SIGPIPE, which pipefail took for no match)
+if grep -q '^moved ' <<<"$(head -1 "$failed" 2>/dev/null | tr ';' '\n')"; then
     rest=$(head -1 "$failed" | tr ';' '\n' | grep -v '^moved ' | sed '/^$/d' | paste -sd';')
     if [[ -z $rest ]]; then
         rm -f "$failed"
@@ -117,7 +130,7 @@ on=$(git tag -l 'v*' --points-at "${have#* }" 2>/dev/null | head -1)
 [[ -n $on ]] && git merge-base --is-ancestor "$on" origin/main && on=  # (in my fork already: that's the last one)
 base=$(git describe --tags --abbrev=0 --match 'v*' origin/main 2>/dev/null)
 # failed_before <fork release>: that combination failed (fail writes them down, ";" between, then why)
-failed_before() { head -1 "$failed" 2>/dev/null | tr ';' '\n' | grep -qxF "$1"; }
+failed_before() { grep -qxF "$1" <<<"$(head -1 "$failed" 2>/dev/null | tr ';' '\n')"; }
 # pick: sets tag and want (the commits of my fork and the release: what her build is marked with) to the first of them
 # that didn't fail
 pick() {
@@ -164,7 +177,7 @@ fail() {
     rm -rf "${new:-}"
     if [[ ${2:-} != again ]] && pick; then
         warn "Capri not on $failed_tag" "$1 She gets my changes with $tag instead."
-        CAPRI_UPDATE_FELL_BACK=1 exec "$0"
+        CAPRI_UPDATE_FELL_BACK=1 CAPRI_UPDATE_LOCKED=1 exec "$0"
     fi
     if [[ -n $have ]]; then warn "Capri not updated" "$1 She stays on the version she has."
     else warn "Capri not installed" "$1"; fi
@@ -173,17 +186,14 @@ fail() {
 # flaky <why>: what may go by itself (a download cut off) is tried again next time, as fail's "again"; failing the same
 # way a third run in a row with the same combination, it's that combination's own (fail: not tried again, another
 # release tried), not left failing for good with no other release tried
-retries="${failed}-retries"  # <combination><TAB><runs in a row it failed so>
+retries="${failed}-retries"  # (fail-streak's, beside this file: the combination, the runs in a row it failed so)
 flaky() {
-    local n=0
-    [[ $(cut -f1 "$retries" 2>/dev/null) == "$want" ]] && n=$(cut -f2 "$retries")
-    n=$((n + 1))
+    local n
+    n=$("$helpers/fail-streak" "$retries" "$want")
     if ((n >= 3)); then
         rm -f "$retries"
         fail "$1 (the same, $n runs in a row)"
     fi
-    mkdir -p "${retries%/*}"
-    printf '%s\t%s\n' "$want" "$n" >"$retries"
     fail "$1" again
 }
 # (-f: drops what a run cut off mid-merge left, which the merge would refuse to go over)
@@ -283,10 +293,8 @@ Categories=Utility;
 Keywords=capri;claude;edgerunners;cyberpunk;companion;
 EOF
 # Her key is bound only once she's installed (user/apps.lua): the desktop's config loaded again on her first install,
-# so it works now, not from the next login (capri-update from the desktop). After any game, as the Settings
-# app's (a reload takes a game out of fullscreen); after-games beside this file (setup runs it before the files step).
-# Hyprland named, as after-games does: from an SSH login or a text console the reload failed with nothing said.
-# (without the lock: waiting through a game it held off every capri-update)
-[[ -n $old ]] || setsid -f sh -c '"$1/after-games"; hyprctl -i "${HYPRLAND_INSTANCE_SIGNATURE:-0}" reload' _ "${0%/*}" >/dev/null 2>&1 9>&-
+# so it works now, not from the next login (capri-update from the desktop), by hypr-reload beside this file (after any
+# game). (without the lock: waiting through a game it held off every capri-update)
+[[ -n $old ]] || setsid -f "$helpers/hypr-reload" >/dev/null 2>&1 9>&-
 echo "capri: $tag installed (with my changes: $build)"
 exit "$rc"  # (1: on another release than the newest, which failed: said above)

@@ -5,23 +5,24 @@
 # suggestions before it cancels. The workings in common/PlacePicker.qml (Caelestia's settings use the same), the field in
 # the widget
 set -euo pipefail
+# shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 qml=$here/.config/quickshell/widgets/shell.qml
 pick=$here/.config/quickshell/common/PlacePicker.qml
 # shellcheck disable=SC2016  # (QML's own ${...}, matched as written)
 { grep -q 'geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=20' "$pick" &&
-    grep -A2 'id: suggestDelay' "$qml" | grep -q 'interval: 250' &&
+    grep -q 'interval: 250' <<<"$(grep -A2 'id: suggestDelay' "$qml")" &&
     grep -q 'if (id !== root.suggestId)' "$pick" &&
     grep -q 'const loc = `${Number(p.latitude).toFixed(4)},${Number(p.longitude).toFixed(4)}`;' "$pick" &&
     grep -q 'fetchForecast(id, root.places.name, coords\[0\], coords\[1\]);' "$qml" &&
     grep -q 'name: root.townName(p)' "$pick" &&
-    grep -A1 'if (loc === root.location)' "$pick" | grep -q 'root.changed();' &&
-    grep -A2 'function onChanged(): void {' "$qml" | grep -q 'root.fetchWeather();' &&
+    grep -q 'root.changed();' <<<"$(grep -A1 'if (loc === root.location)' "$pick")" &&
+    grep -q 'root.fetchWeather();' <<<"$(grep -A2 'function onChanged(): void {' "$qml")" &&
     grep -q 'Keys.onEscapePressed: root.places.suggestions.length > 0 ? cityEdit.closeSuggestions() : cityEdit.finish(false)' "$qml"; } ||
     fail "the location suggestions not wired as they should be"
 # A new list of suggestions (a reply for what's typed now) drops the pick made in the one before: Enter then takes what's
 # typed, not whichever place came to sit at that row
-grep -A3 'function onSuggestionsChanged(): void {' "$qml" | grep -q 'cityEdit.picked = -1;' ||
+grep -q 'cityEdit.picked = -1;' <<<"$(grep -A3 'function onSuggestionsChanged(): void {' "$qml")" ||
     fail "a pick kept over a new list of suggestions"
 # ...nor one from a list for an earlier text, still on screen while the new one is on its way (or never comes, offline):
 # Up/Down and Enter use the list only while it's for what's typed
@@ -31,7 +32,7 @@ grep -A3 'function onSuggestionsChanged(): void {' "$qml" | grep -q 'cityEdit.pi
     grep -q 'root.suggestedFor = q;' "$pick"; } || fail "a suggestion for an earlier text can be picked"
 # A picked place's name read after its forecast was asked for (at login): asked again, so the tab shows the name, not
 # the coordinates, until the next refresh half an hour later
-sed -n '/id: placeNamesFile/,/^    }/p' "$pick" | grep -q 'root.changed();' ||
+grep -q 'root.changed();' <<<"$(sed -n '/id: placeNamesFile/,/^    }/p' "$pick")" ||
     fail "the place names read after the first forecast was asked for leave the tab named by coordinates"
 command -v node >/dev/null || { echo "ok widgets-location (SKIPPED: no node to run placeLabel)"; exit 0; }
 fn=$(sed -n '/^    function placeLabel(p: var): string {$/,/^    }$/p' "$pick" | sed 's/(p: var): string {/(p) {/')

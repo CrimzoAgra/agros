@@ -2,6 +2,7 @@
 # Closing a game closes its clients: the store launcher left in its Wine prefix (not while something of the prefix has
 # a window on a workspace; its own minimised window, tagged like a game under Proton, doesn't count), and Steam when it's only in its tray
 set -euo pipefail
+# shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 cleanup() {  # (also when a check failed)
     local p

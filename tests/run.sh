@@ -4,7 +4,10 @@
 here=$(cd "$(dirname "$0")" && pwd)
 failed=0
 tests=("$@")
-((${#tests[@]})) || tests=($(cd "$here" && ls -- *.sh | grep -vx -e run.sh -e lib.sh | sed 's/\.sh$//') boot-video-mode)
+if ((!${#tests[@]})); then
+    for f in "$here"/*.sh; do f=${f##*/}; [[ $f == run.sh || $f == lib.sh ]] || tests+=("${f%.sh}"); done
+    tests+=(boot-video-mode)
+fi
 for t in "${tests[@]}"; do
     case $t in
         boot-video-mode) out=$(python3 "$here/../system/boot-video-mode" --test 2>&1 </dev/null) && out="ok boot-video-mode" ;;

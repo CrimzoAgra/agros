@@ -4,13 +4,17 @@ The list of settings, their defaults and how each one applies: ~/.local/share/do
 (only the ones that differ from the default): ~/.config/dots/settings.json. Hyprland's config reads them from
 ~/.config/dots/settings.lua (dots.setting(key) in hypr-user.lua), written here on every change; scripts from `values`.
   dots-settings schema               the pages with each setting's current value, as JSON (for the app)
-  dots-settings values               every setting's current value, as JSON (for scripts)
+  dots-settings values               every setting's current value, as JSON (for scripts; not Caelestia's options
+                                     nor the screens', which get has)
+  dots-settings now                  every setting's current value, Caelestia's and the screens' too, as JSON: the
+                                     Settings app's look every few seconds (no option lists, no shortcut list)
   dots-settings get KEY              one setting's current value, as JSON
   dots-settings set KEY VALUE        change it (VALUE as JSON: true, "tiling"...) and apply it
   dots-settings set KEY VALUE --later  change it, and print how to apply it (to apply several changes once)
   dots-settings apply HOW            apply: hypr (reload Hyprland's config; game-focus re-reads its settings then),
                                      caelestia (rebuild and restart it), mouse-dpi (set it on the mouse); lutris changes
-                                     apply when Lutris next starts
+                                     apply when Lutris next starts. Prints "deferred" when hypr or caelestia waits
+                                     for a game to close
   dots-settings lua                  write settings.lua again (Hyprland's config does when the schema is newer)
 A setting with "get"/"set" shell commands in the schema lives elsewhere (the window mode: ~/.local/state/window-mode);
 "set" gets the value in $VALUE. A group with "from" lists the changes of a patch that can be turned off, from the
@@ -20,7 +24,20 @@ your copy says Hidden=true, as GNOME's startup settings do it (turning one off w
 "caelestia-keys" lists Caelestia's shortcuts (the kb* variables of ~/.config/hypr/variables.lua, by its sections),
 except those hypr-vars.lua turns off (its other keys are their defaults), which reads your changes back as
 caelestia-keys.<variable>.
-A "keys" setting is a list of shortcuts ("SUPER + M"; a modifier alone for Caelestia's "mod + 0-9" ones)."""
+A "keys" setting is a list of shortcuts ("SUPER + M"; a modifier alone for Caelestia's "mod + 0-9" ones).
+Kinds of setting ("type"): bool, choice (its "options", or "options_cmd": a command listing them, one per line, "value"
+or "value<TAB>label"; "open": a value not listed is kept), keys, number ("min", "max", "step", "integer"), text
+("pattern": a regular expression the whole value must match, "format": how it's said when it doesn't), json
+(any JSON value: Caelestia's lists), image (a choice shown as pictures: the wallpaper). "readonly": shown, not changed.
+Caelestia's own options: a key caelestia-shell.<option> (its shell.json) or caelestia-tokens.<option> (its
+shell-tokens.json, sizes and timings): type, default and choices come from the installed Caelestia
+(caelestia-options.qml), so the schema only gives the label and description, and one Caelestia no longer has isn't
+shown; "from": "caelestia-options" lists every one of them, by area. Saved in Caelestia's file (through json-edit),
+which Caelestia watches: they apply at once. The default is AgrOS's own value where it ships one (/etc/skel), else
+Caelestia's. caelestia-vars.<variable>: one of Caelestia's Hyprland variables (gaps, borders...), through
+hypr-vars.lua like its shortcuts. "from": "screens" lists the connected screens' settings (screens.<description>.mode,
+scale, position, enabled; screens.main), read by user/monitors.lua; "from": "binds" the shortcuts no setting changes
+(Hyprland's list of binds), to show and to find clashes with."""
 import fcntl
 import json
 import os
@@ -28,23 +45,34 @@ import pwd
 import re
 import subprocess
 import sys
+import tempfile
 
-HOME = pwd.getpwuid(os.getuid()).pw_dir  # not $HOME: run through runuser (a pacman hook), that may be root's
+HOME = pwd.getpwuid(os.getuid()).pw_dir  # not $HOME: run as you from root (sudo, su), it may be root's
 SCHEMA = f"{HOME}/.local/share/dots-settings/schema.json"
 CONFIG = f"{HOME}/.config/dots"
 SETTINGS = f"{CONFIG}/settings.json"
 
+# The other scripts used: beside this file, not links agros-links may not have added yet
+HERE = os.path.dirname(os.path.realpath(__file__))
+# Caelestia's own settings files, by the first part of a setting's key (caelestia-shell.bar.persistent), and AgrOS's
+# copies of them, as each new account gets them
+CAELESTIA_FILES = {"caelestia-shell": "shell.json", "caelestia-tokens": "shell-tokens.json"}
+CAELESTIA_DIR = f"{HOME}/.config/caelestia"
+SHIPPED_DIR = "/etc/skel/.config/caelestia"
+# Where the installed Caelestia's options are read from (its config plugin), and Qt's qml tool to read them with
+CAELESTIA_CONFIG = "/usr/lib/qt6/qml/Caelestia/Config"
+QML = "/usr/lib/qt6/bin/qml"
+OPTIONS_QML = f"{HOME}/.local/share/dots-settings/caelestia-options.qml"
+CACHE = f"{HOME}/.cache/dots-settings/caelestia-options.json"
+
 # How changes take effect
 APPLY = {
-    # After any game (a reload takes a fullscreen game out of fullscreen), on its own: the Settings app isn't held up
-    # until the game closes (it couldn't be opened again meanwhile, and its other changes waited). Hyprland named, as
-    # after-games does: set from an SSH login or a text console, the reload failed with nothing said. (The home folder
-    # passed as the scripts' $0, not written into them: a space or a $ in its path broke them, or ran as commands)
-    "hypr": ["setsid", "-f", "sh", "-c", 'exec >/dev/null 2>&1; "$0/after-games"; '
-             'hyprctl -i "${HYPRLAND_INSTANCE_SIGNATURE:-0}" reload', f"{HOME}/.local/bin"],
+    # On its own (hypr-reload: after any game): the Settings app isn't held up until the game closes (it couldn't be
+    # opened again meanwhile, and its other changes waited)
+    "hypr": ["setsid", "-f", f"{HERE}/hypr-reload", "--tell"],
     # (rebuilt with the shell stopped, by caelestia-restart: under the running one, Hyprland dropped it)
-    "caelestia": [f"{HOME}/.local/bin/caelestia-restart", "--rebuild"],
-    "mouse-dpi": [f"{HOME}/.local/bin/mouse-dpi"],
+    "caelestia": [f"{HERE}/caelestia-restart", "--rebuild"],
+    "mouse-dpi": [f"{HERE}/mouse-dpi"],
 }
 # Groups listing a patch's changes ("from" in the schema): the patch that lists them; each is setting <name>.<change>
 PATCHES = {
@@ -177,13 +205,356 @@ def _caelestia_keys():
     return groups
 
 
-def schema():
+def words(name):
+    """A name as words: showOnHover -> "Show on hover\""""
+    w = re.sub(r"(?<=[a-z0-9])([A-Z])", r" \1", name).lower()
+    return w[:1].upper() + w[1:]
+
+
+def enum_values():
+    """Caelestia's choices (its enums), by type name: from its config plugin's type list"""
+    try:
+        with open(f"{CAELESTIA_CONFIG}/caelestia-config.qmltypes") as f:
+            text = f.read()
+    except OSError:
+        return {}
+    out = {}
+    for part in text.split("\n    Component {")[1:]:
+        name = re.search(r'name: "([^"]+)"', part)
+        values = re.search(r"Enum \{.*?values: \[(.*?)\]", part, re.S)
+        if name and values:
+            out[name.group(1) + "::Enum"] = re.findall(r'"(\w+)"', values.group(1))
+    return out
+
+
+def caelestia_options():
+    """{"caelestia-shell": [option...], "caelestia-tokens": [...]}, each {key, type, default, globalOnly, options (a
+    choice's)}, from the installed Caelestia: read by caelestia-options.qml, kept in ~/.cache until Caelestia (or the
+    reader) changes. {} without Caelestia, Qt's qml tool, or with a Caelestia too old to describe its options: the rest
+    still works"""
+    stamp = []
+    for name in ("caelestia-config.qmltypes", "libcaelestia-configplugin.so", "../lib/libcaelestia-config.so"):
+        try:
+            st = os.stat(f"{CAELESTIA_CONFIG}/{name}")
+            stamp.append([name, st.st_mtime_ns, st.st_size])
+        except OSError:
+            pass
+    if not stamp:
+        return {}
+    # The reader and this script too: a fixed one reads again rather than keep what the old one got
+    for path in (OPTIONS_QML, os.path.realpath(__file__)):
+        try:
+            st = os.stat(path)
+        except OSError:
+            return {}  # (no reader: nothing to read with, nothing cached)
+        stamp.append([os.path.basename(path), st.st_mtime_ns, st.st_size])
+    try:
+        with open(CACHE) as f:
+            cached = json.load(f)
+        if cached["stamp"] == stamp:
+            return cached["options"]
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    # Offscreen, in a throwaway config folder: no window, and Caelestia's config there is empty (its defaults)
+    with tempfile.TemporaryDirectory() as tmp:
+        env = {**os.environ, "QT_QPA_PLATFORM": "offscreen", "QT_FORCE_STDERR_LOGGING": "1",
+               **{v: tmp for v in ("XDG_CONFIG_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME")}}
+        try:
+            out = subprocess.run([QML, OPTIONS_QML], env=env, capture_output=True, text=True, timeout=30).stderr
+        except (OSError, subprocess.TimeoutExpired):
+            return {}  # (not cached: a hung or missing qml tool may work next time)
+        try:
+            options = json.loads(next(l for l in out.splitlines() if "OPTIONS " in l).split("OPTIONS ", 1)[1])
+            enums = enum_values()
+            for o in options["shell"] + options["tokens"]:
+                if o["type"] in enums:
+                    o["options"] = enums[o["type"]]
+            options = {"caelestia-shell": options["shell"], "caelestia-tokens": options["tokens"]}
+        except (StopIteration, ValueError, KeyError, TypeError):
+            # Cached, under the same stamp, only when this Caelestia is too old to describe its options (it has no
+            # descriptorFor): that stays so until it changes. Any other failure is tried again next time
+            if not re.search(r"'descriptorFor' of object .* is not a function", out):
+                return {}
+            options = {}
+    os.makedirs(os.path.dirname(CACHE), exist_ok=True)
+    tmp = f"{CACHE}.{os.getpid()}.tmp"
+    with open(tmp, "w") as f:
+        json.dump({"stamp": stamp, "options": options}, f)
+    os.replace(tmp, CACHE)
+    return options
+
+
+_files = {}
+
+
+def caelestia_file(prefix, shipped=False):
+    """Caelestia's settings file (yours, or AgrOS's copy) as JSON; {} when missing or not JSON (a hand edit)"""
+    path = f"{SHIPPED_DIR if shipped else CAELESTIA_DIR}/{CAELESTIA_FILES[prefix]}"
+    if path not in _files:
+        try:
+            with open(path) as f:
+                _files[path] = json.load(f)
+        except (OSError, ValueError):
+            _files[path] = {}
+    return _files[path] if isinstance(_files[path], dict) else {}
+
+
+MISSING = object()
+
+
+def at(data, path):
+    for part in path.split("."):
+        if not isinstance(data, dict) or part not in data:
+            return MISSING
+        data = data[part]
+    return data
+
+
+def caelestia_setting(prefix, o):
+    """A setting for one of Caelestia's options: the control its type needs. Its key's prefix says the file"""
+    path, t = o["key"], o["type"]
+    s = {"key": f"{prefix}.{path}", "path": path, "caelestia_default": o["default"]}
+    if t == "bool":
+        s["type"] = "bool"
+    elif t in ("int", "double", "qreal", "float"):
+        s["type"] = "number"
+        s["integer"] = t == "int"
+        last = path.rsplit(".", 1)[-1]
+        if last.lower().endswith("scale"):
+            s.update(min=0.25, max=3, step=0.05)
+        elif re.search(r"opacity|transparency\.", path):
+            s.update(min=0, max=1, step=0.05)
+    elif "options" in o:
+        s["type"] = "choice"
+        s["options"] = [{"value": v, "label": words(v)} for v in o["options"]]
+        if isinstance(o["default"], int) and 0 <= o["default"] < len(o["options"]):
+            s["caelestia_default"] = o["options"][o["default"]]
+    elif t == "QString":
+        s["type"] = "text"
+    else:
+        s["type"] = "json"  # (lists, and lists of entries: edited as JSON)
+    return s
+
+
+def caelestia_value(s, value):
+    """A value from Caelestia's file as the setting shows it: a choice by its name (the file may have its number, or
+    another case), MISSING for one of the wrong kind"""
+    if value is MISSING:
+        return value
+    if s["type"] == "choice" and s.get("open"):
+        return value if isinstance(value, str) else MISSING
+    if s["type"] == "choice":
+        names = [o["value"] for o in s["options"]]
+        if isinstance(value, int) and not isinstance(value, bool) and 0 <= value < len(names):
+            return names[value]
+        return next((n for n in names if isinstance(value, str) and n.lower() == value.lower()), MISSING)
+    if s["type"] == "number":
+        return value if isinstance(value, (int, float)) and not isinstance(value, bool) else MISSING
+    if s["type"] == "bool":
+        return value if isinstance(value, bool) else MISSING
+    if s["type"] == "text":
+        return value if isinstance(value, str) else MISSING
+    return value
+
+
+def caelestia_fill(s, option):
+    """A schema setting for a Caelestia option (or a generated one) with what the installed Caelestia says: its type,
+    choices and default; the default AgrOS's own where it ships one"""
+    gen = caelestia_setting(s["key"].split(".", 1)[0], option)
+    for k, v in gen.items():
+        s.setdefault(k, v)
+    s["path"], s["caelestia_default"] = gen["path"], gen["caelestia_default"]
+    shipped = caelestia_value(s, at(caelestia_file(s["key"].split(".", 1)[0], True), s["path"]))
+    s["default"] = s["caelestia_default"] if shipped is MISSING else shipped
+    s["shipped"] = shipped is not MISSING
+    return s
+
+
+def caelestia_groups(options, managed):
+    """Every Caelestia option, by area (bar, bar.workspaces...): the "All Caelestia options" page"""
+    groups = {}
+    for prefix, opts in options.items():
+        for o in opts:
+            parts = o["key"].split(".")
+            area = parts[:2] if len(parts) > 2 else parts[:1]
+            title = ": ".join([words(area[0])] + [words(a).lower() for a in area[1:]])
+            if prefix == "caelestia-tokens":
+                title = f"Sizes and timings: {title[:1].lower()}{title[1:]}"
+            s = caelestia_fill({"key": f"{prefix}.{o['key']}"}, o)
+            label = " ".join(words(p).lower() for p in parts[len(area):] or parts[-1:])
+            s["label"] = label[:1].upper() + label[1:]
+            s["description"] = s["key"].split(".", 1)[1]
+            s.update(managed.get(s["key"], {}))
+            groups.setdefault(title, {"title": title, "settings": [], "collapsed": True})["settings"].append(s)
+    return list(groups.values())
+
+
+def caelestia_vars():
+    """Caelestia's Hyprland variables as they are without the Settings app: ~/.config/hypr/variables.lua's, hypr-vars.lua's
+    over them; only plain values (a number, true/false, "text")"""
+    out = {}
+    for path in (f"{HOME}/.config/hypr/variables.lua", f"{HOME}/.config/caelestia/hypr-vars.lua"):
+        try:
+            with open(path) as f:
+                text = f.read()
+        except OSError:
+            continue
+        for var, raw in re.findall(r"^\s*(\w+)\s*=\s*(.*?),?\s*(?:--.*)?$", text, re.M):
+            if raw in ("true", "false"):
+                out[var] = raw == "true"
+            elif re.fullmatch(r"-?\d+", raw):
+                out[var] = int(raw)
+            elif re.fullmatch(r"-?\d*\.\d+", raw):
+                out[var] = float(raw)
+            elif re.fullmatch(r'"[^"\\]*"', raw):
+                out[var] = raw[1:-1]
+    return out
+
+
+def hyprctl(*args):
+    """Hyprland's answer (JSON) to a question; None with no Hyprland running. Named as the other scripts name it (its
+    first one, -i 0, from outside the desktop): from an SSH login or a text console no screens or binds were found"""
+    sig = os.environ.get("HYPRLAND_INSTANCE_SIGNATURE") or "0"
+    try:
+        return json.loads(subprocess.run(["hyprctl", "-i", sig, "-j", *args], capture_output=True, text=True, timeout=5).stdout)
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return None
+
+
+SCALES = ["1", "1.25", "1.5", "1.6", "1.75", "2"]
+
+
+def screens_groups():
+    """The connected screens' settings (on or off ones), by their full description: one machine's own screens, so its
+    serial too (two of one model each have theirs). Read by user/monitors.lua; empty means as AgrOS sets it"""
+    monitors = [m for m in hyprctl("monitors", "all") or [] if m.get("description") and m.get("name") != "FALLBACK"]
+    if not monitors:
+        return [{"title": "Screens", "settings": [], "empty": "No screens found (not in a Hyprland session)"}]
+    groups = []
+    for m in monitors:
+        d = m["description"]
+        modes = list(dict.fromkeys(x.removesuffix("Hz") for x in m.get("availableModes", [])))
+        now = f"{m['width']}x{m['height']} at {m['refreshRate']:.0f} Hz, scale {m['scale']:g}" if not m.get("disabled") \
+            else "off"
+        groups.append({"title": f"{m['name']}: {m['make']} {m['model']} (now {now})", "settings": [
+            {"key": f"screens.{d}.enabled", "label": "On", "type": "bool", "default": True, "apply": "hypr",
+             "description": "Off: nothing is shown on it (the last screen showing stays on: a laptop's panel under its"
+                            " closed lid doesn't count)."},
+            {"key": f"screens.{d}.mode", "label": "Resolution and refresh rate", "type": "choice", "default": "",
+             "apply": "hypr", "description": "Automatic: its own resolution at the fastest refresh rate it has there.",
+             "options": [{"value": "", "label": "Automatic"}] + [{"value": x, "label": x.replace("@", " at ") + " Hz"}
+                                                                  for x in modes]},
+            {"key": f"screens.{d}.scale", "label": "Scale", "type": "choice", "default": "", "apply": "hypr",
+             "description": "How big everything is drawn on it. Automatic: from its size and resolution.",
+             "options": [{"value": "", "label": "Automatic"}] + [{"value": x, "label": f"{float(x):.0%}"}
+                                                                  for x in SCALES]},
+            # (checked here: a typo reached Hyprland's monitor rule)
+            {"key": f"screens.{d}.position", "label": "Position", "type": "text", "default": "", "apply": "hypr",
+             "placeholder": "Automatic", "pattern": r"(\d+x\d+)?", "format": "whole pixels as WxH, like 1920x0",
+             "description": "Its top left corner, in pixels at its scale: 1920x0 is to the right of a 1920-wide screen at"
+                            " 0x0. Empty: to the right of the others. Not left of or above 0x0: Proton games then aim"
+                            " the mouse somewhere else than the pointer."},
+        ]})
+    return groups
+
+
+def binds_group(settings, saved):
+    """The shortcuts no setting changes (Caelestia's fixed ones: arrows, media keys...), from Hyprland's list, so they
+    show with the rest and a clash with one does too"""
+    mods = [(64, "SUPER"), (4, "CTRL"), (8, "ALT"), (1, "SHIFT")]
+
+    def norm(keys):  # (as the Settings app compares them: modifiers in any order, any case)
+        parts = [{"control": "ctrl"}.get(p, p) for p in re.split(r"\s*\+\s*", keys.strip().lower())]
+        return "+".join(sorted(parts[:-1]) + parts[-1:])
+    taken = set()
+    for s in settings.values():
+        if s["type"] == "keys":
+            for k in current(s, saved):
+                taken.update(norm(f"{k} + {d}") for d in "1234567890") if s.get("modifier") else taken.add(norm(k))
+    rows = {}
+    for b in hyprctl("binds") or []:
+        if b.get("submap"):
+            continue
+        keys = " + ".join([m for bit, m in mods if b.get("modmask", 0) & bit] + [b.get("key") or f"code:{b.get('keycode')}"])
+        if norm(keys) in taken or keys.startswith("switch:"):
+            continue
+        what = re.sub(r"^HL\.Dispatcher\((\w+)\).*|^(\w+):.*", r"\1\2", b.get("dispatcher", ""))
+        what = b.get("description") or {
+            "exec_cmd": "Runs a command", "global": "A shell action", "focus": "Focus", "move": "Move the window",
+            "drag": "Drag the window", "resize": "Resize the window", "function": "A desktop action"}.get(what, words(what))
+        label = f"{what} ({b['key']})" if b.get("key", "").lower() in ("left", "right", "up", "down") else what
+        row = rows.setdefault(label, {"key": f"binds.{len(rows)}", "label": label, "type": "keys", "readonly": True,
+                                      "default": []})
+        row["default"].append(keys)
+    return list(rows.values())
+
+
+_options = {}
+
+
+def options_from(cmd):
+    """A choice's options from a command: one per line, "value" or "value<TAB>label". Each command run once (the three
+    font settings share fc-list's)"""
+    if cmd not in _options:
+        out = subprocess.run(["sh", "-c", cmd], capture_output=True, text=True).stdout
+        _options[cmd] = [{"value": v, "label": l or os.path.basename(v)} for v, _, l in
+                         (line.partition("\t") for line in out.splitlines() if line.strip())]
+    return _options[cmd]
+
+
+def schema(live=True, lists=True):
+    """The pages, every group's settings listed. live: also what asks Hyprland or the installed Caelestia (screens,
+    binds, Caelestia's options): not for "lua", which Hyprland's own config runs (Hyprland would wait on it, and it on
+    Hyprland). lists: also the choices' option lists from commands (fonts, wallpapers...) and Hyprland's other
+    shortcuts: only what the app shows needs them; the values don't (those choices are open ones)"""
     with open(SCHEMA) as f:
         pages = json.load(f)
+    options = caelestia_options() if live else {}
+    found = {f"{prefix}.{o['key']}": o for prefix, opts in options.items() for o in opts}
+    managed = pages.pop("caelestia-managed", {})  # (AgrOS's say on some of Caelestia's options: a note, read only)
+    hypr_vars = caelestia_vars()
+    generated = []  # (the "All Caelestia options" groups)
+
+    def expand(group):
+        source = group.get("from")
+        if source == "caelestia-keys":
+            return caelestia_keys()
+        if source == "caelestia-options":
+            groups = caelestia_groups(options, managed)
+            generated.extend(groups)
+            return groups
+        if source == "screens":
+            return screens_groups() if live else []
+        if source:
+            group.setdefault("settings", [])  # (filled below; binds last: it needs every other shortcut)
+        return [group]
+
     for page in pages["pages"]:
-        page["groups"] = [g for group in page["groups"]
-                          for g in (caelestia_keys() if group.get("from") == "caelestia-keys" else [group])]
-    for group in (g for page in pages["pages"] for g in page["groups"] if "from" in g):
+        page["groups"] = [g for group in page["groups"] for g in expand(group)]
+        for group in (g for g in page["groups"] if "from" not in g):
+            kept = []
+            for s in group["settings"]:
+                prefix, _, name = s["key"].partition(".")
+                if prefix in CAELESTIA_FILES and "path" not in s:
+                    if s["key"] not in found:
+                        continue  # (not an option of the Caelestia installed)
+                    caelestia_fill(s, found[s["key"]])
+                    s.update(managed.get(s["key"], {}))
+                if prefix == "caelestia-vars" and name in hypr_vars:
+                    s["default"] = hypr_vars[name]
+                if "options_cmd" in s:
+                    s["options"] = options_from(s["options_cmd"]) if live and lists else []
+                kept.append(s)
+            group["settings"] = kept
+    # An option on a page of its own too: its constraints (range, choices) hold in "All Caelestia options" as well, so
+    # both copies, and the one set and get find, are checked alike
+    curated = {s["key"]: s for page in pages["pages"] for g in page["groups"] if not any(g is x for x in generated)
+               for s in g["settings"] if "path" in s}
+    for s in (s for g in generated for s in g["settings"] if s["key"] in curated):
+        c = curated[s["key"]]
+        s.update({k: c[k] for k in ("type", "min", "max", "step", "integer", "open", "options", "pattern", "format",
+                                      "placeholder") if k in c})
+    for group in (g for page in pages["pages"] for g in page["groups"] if g.get("from") in ("autostart", *PATCHES)):
         name = group["from"]
         if name == "autostart":
             group["settings"] = autostart_settings()
@@ -195,6 +566,11 @@ def schema():
             changes = []
         group["settings"] = [{"key": f"{name}.{c['id']}", "label": c["label"][:1].upper() + c["label"][1:],
                               "type": "bool", "default": True, "apply": name} for c in changes]
+    binds = [g for page in pages["pages"] for g in page["groups"] if g.get("from") == "binds"]
+    if binds and live and lists:
+        rows = binds_group(all_settings(pages), stored())
+        for group in binds:
+            group["settings"] = rows
     return pages
 
 
@@ -217,11 +593,19 @@ def current(setting, saved):
     if "get" in setting:
         out = subprocess.run(["sh", "-c", setting["get"]], capture_output=True, text=True).stdout.strip()
         return out if setting["type"] != "bool" else out == "true"
+    if "path" in setting:
+        # Caelestia's: as in your file, else Caelestia's own default (what it uses then)
+        value = caelestia_value(setting, at(caelestia_file(setting["key"].split(".", 1)[0]), setting["path"]))
+        return setting["caelestia_default"] if value is MISSING else value
     value = saved.get(setting["key"], setting["default"])
     # Saved before the setting changed (an option gone, another type): its default, as shown and as applied
-    if setting["type"] == "choice" and value not in [o["value"] for o in setting["options"]]:
+    if setting["type"] == "choice" and not setting.get("open") and value not in [o["value"] for o in setting.get("options", [])]:
         return setting["default"]
     if setting["type"] == "bool" and not isinstance(value, bool):
+        return setting["default"]
+    if setting["type"] == "number" and (isinstance(value, bool) or not isinstance(value, (int, float))):
+        return setting["default"]
+    if setting["type"] == "text" and not isinstance(value, str):
         return setting["default"]
     if setting["type"] == "keys":
         if not (isinstance(value, list) and all(isinstance(v, str) for v in value)):
@@ -244,16 +628,27 @@ def lua_value(value):
         return "true" if value else "false"
     if isinstance(value, (int, float)):
         return repr(value)
-    # A JSON string is a valid Lua string, if its non-ASCII stays as it is (Lua has no \uXXXX escapes)
-    return json.dumps(value, ensure_ascii=False)
+    return lua_string(value)
+
+
+def lua_string(text):
+    """A Lua string literal: \\ and " escaped, control characters as \\ddd (three digits: a digit after can't join
+    it), UTF-8 kept as it is (Lua has no \\uXXXX; json.dumps' escapes broke the whole file)"""
+    return '"' + "".join(f"\\{ord(c):03d}" if ord(c) < 32 or ord(c) == 127 else "\\" + c if c in '\\"' else c
+                         for c in text) + '"'
 
 
 def write_lua(settings):
     saved = stored()
-    # Only the ones kept here: Lua has no use for the window mode or autostart entries. Caelestia's shortcuts only when
-    # changed: written with their defaults, a Caelestia update's new default would never reach them
-    lines = [f"    [{json.dumps(k)}] = {lua_value(current(s, saved))}," for k, s in settings.items()
-             if "get" not in s and "autostart" not in s and (not k.startswith("caelestia-keys.") or k in saved)]
+    # Only the ones kept here: Lua has no use for the window mode, autostart entries or Caelestia's options (its own
+    # files). Caelestia's shortcuts and variables only when changed: written with their defaults, a Caelestia update's
+    # new default would never reach them
+    lines = [f"    [{lua_string(k)}] = {lua_value(current(s, saved))}," for k, s in settings.items()
+             if not {"get", "autostart", "path", "readonly"} & s.keys() and not k.startswith("screens.")
+             and (not k.startswith(("caelestia-keys.", "caelestia-vars.")) or k in saved)]
+    # The screens' only as changed, those of a screen not connected (nor listed: "lua" doesn't ask Hyprland) too, for
+    # when it is
+    lines += [f"    [{lua_string(k)}] = {lua_value(v)}," for k, v in sorted(saved.items()) if k.startswith("screens.")]
     os.makedirs(CONFIG, exist_ok=True)
     # (its own temporary file: "lua", run by Hyprland's config, and a "set" at once wrote the same one, and could leave
     # half of each; UTF-8, as its strings keep their non-ASCII, whatever the locale)
@@ -268,18 +663,68 @@ def apply(how):
     # Its failure is this command's (the Settings app shows it)
     if how in APPLY and subprocess.run(APPLY[how], stdout=subprocess.DEVNULL).returncode != 0:
         sys.exit(f"Applying it ({how}) failed")
+    # A game open: Hyprland's reload and Caelestia's restart wait until it closes (each says so in a notification);
+    # "deferred" printed, so the Settings app doesn't say it applied right away
+    if how in ("hypr", "caelestia") and subprocess.run([f"{HERE}/game-focus", "--game-open"], stdout=subprocess.DEVNULL,
+                                                        stderr=subprocess.DEVNULL).returncode == 0:
+        print("deferred")
+
+
+def check(key, setting, value):
+    """Why the value can't be the setting's, or None"""
+    kind = setting["type"]
+    if setting.get("readonly"):
+        return f"{key}: {setting.get('note') or 'not changed here'}"
+    if kind == "bool" and not isinstance(value, bool):
+        return f"{key}: true or false"
+    if kind == "keys" and not (isinstance(value, list) and all(isinstance(v, str) for v in value)):
+        return f"{key}: a list of shortcuts"
+    if kind == "keys" and setting.get("modifier") and len(value) > 1:
+        return f"{key}: one modifier (it + 0-9)"
+    if kind in ("choice", "image") and not setting.get("open") and value not in [o["value"] for o in setting["options"]]:
+        return f"{key}: one of {', '.join(o['value'] for o in setting['options'])}"
+    if kind == "number":
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or setting.get("integer") and value != int(value):
+            return f"{key}: a {'whole ' if setting.get('integer') else ''}number"
+        if not setting.get("min", value) <= value <= setting.get("max", value):
+            return f"{key}: from {setting['min']:g} to {setting['max']:g}"
+    if kind in ("text", "choice", "image") and not isinstance(value, str):
+        return f"{key}: text"
+    if kind == "text" and "pattern" in setting and not re.fullmatch(setting["pattern"], value):
+        return f"{key}: {setting.get('format', 'not in its form')}"
+    if kind == "json" and "path" in setting and type(value) is not type(setting["caelestia_default"]):
+        return f"{key}: a {'list' if isinstance(setting['caelestia_default'], list) else type(setting['caelestia_default']).__name__}" \
+               f" in JSON, like {json.dumps(setting['caelestia_default'])[:60]}"
+    return None
+
+
+def caelestia_set(setting, value):
+    """Written to Caelestia's file, which it watches (no restart). Back to the default: the option left out, unless AgrOS
+    ships its own value (then that one written), so a Caelestia update's new default reaches it"""
+    path = setting["path"].split(".")
+    if value == setting["caelestia_default"] and not setting.get("shipped"):
+        edit = ["--argjson", "p", json.dumps(path), "delpaths([$p])"]
+    else:
+        edit = ["--argjson", "p", json.dumps(path), "--argjson", "v", json.dumps(value), "setpath($p; $v)"]
+    target = f"{CAELESTIA_DIR}/{CAELESTIA_FILES[setting['key'].split('.', 1)[0]]}"
+    if subprocess.run([f"{HERE}/json-edit", target, "--indent", "4", *edit]).returncode != 0:
+        sys.exit(f"{setting['key']}: {target} couldn't be changed (is it valid JSON?)")
 
 
 def main(args):
-    pages = schema()
-    settings = all_settings(pages)
     cmd = args[0] if args else ""
+    if cmd == "apply" and len(args) == 2:
+        return apply(args[1])
+    # ("values": for scripts, at login and from pacman hooks too: only the settings kept here, quickly; the option
+    # lists only for the app's pages, a set's own setting fetching its own)
+    pages = schema(live=cmd in ("schema", "get", "set", "now"), lists=cmd == "schema")
+    settings = all_settings(pages)
     if cmd == "schema":
         now = values(settings)
-        for s in settings.values():
-            s["value"] = now[s["key"]]
+        for s in (s for page in pages["pages"] for group in page["groups"] for s in group["settings"]):
+            s["value"] = now[s["key"]]  # (every copy of one listed twice)
         print(json.dumps(pages))
-    elif cmd == "values":
+    elif cmd in ("values", "now"):
         print(json.dumps(values(settings)))
     elif cmd == "get" and len(args) == 2 and args[1] in settings:
         print(json.dumps(current(settings[args[1]], stored())))
@@ -288,42 +733,43 @@ def main(args):
             setting, value = settings[args[1]], json.loads(args[2])
         except ValueError:
             sys.exit(f"{args[1]}: the value as JSON (true, \"tiling\"...)")
-        if setting["type"] == "bool" and not isinstance(value, bool):
-            sys.exit(f"{args[1]}: true or false")
-        if setting["type"] == "keys" and not (isinstance(value, list) and all(isinstance(v, str) for v in value)):
-            sys.exit(f"{args[1]}: a list of shortcuts")
-        if setting["type"] == "keys" and setting.get("modifier") and len(value) > 1:
-            sys.exit(f"{args[1]}: one modifier (it + 0-9)")
-        if setting["type"] == "choice" and value not in [o["value"] for o in setting["options"]]:
-            sys.exit(f"{args[1]}: one of {', '.join(o['value'] for o in setting['options'])}")
+        if "options_cmd" in setting and not setting.get("open"):
+            setting["options"] = options_from(setting["options_cmd"])  # (checked against them)
+        if setting["type"] == "number" and setting.get("integer") and isinstance(value, float) and value == int(value):
+            value = int(value)  # (35.0 from the app's slider: 35)
+        problem = check(args[1], setting, value)
+        if problem:
+            sys.exit(problem)
+        if "path" in setting:
+            return caelestia_set(setting, value)
         if "set" in setting:
             # (a yes/no as true or false, as get reads it, not Python's True)
-            value = json.dumps(value) if isinstance(value, bool) else str(value)
-            subprocess.run(["sh", "-c", setting["set"]], env={**os.environ, "VALUE": value}, check=True)
-            return
-        if "autostart" in setting:
+            shown = json.dumps(value) if isinstance(value, bool) else str(value)
+            if subprocess.run(["sh", "-c", setting["set"]], env={**os.environ, "VALUE": shown}).returncode != 0:
+                sys.exit(f"{setting['label']}: not changed")
+        elif "autostart" in setting:
             return autostart_set(setting["autostart"], value)
-        os.makedirs(CONFIG, exist_ok=True)
-        # One change at a time (the Settings app and a terminal at once): each reads the file the last one wrote, none lost
-        lock = open(f"{CONFIG}/.settings.lock", "w")
-        fcntl.flock(lock, fcntl.LOCK_EX)
-        saved = stored()
-        if value == setting["default"]:
-            saved.pop(args[1], None)
         else:
-            saved[args[1]] = value
-        with open(f"{SETTINGS}.tmp", "w") as f:
-            json.dump(saved, f, indent=2, sort_keys=True)
-        os.replace(f"{SETTINGS}.tmp", SETTINGS)
-        write_lua(settings)
-        lock.close()
+            os.makedirs(CONFIG, exist_ok=True)
+            # One change at a time (the Settings app and a terminal at once): each reads the file the last one wrote,
+            # none lost
+            lock = open(f"{CONFIG}/.settings.lock", "w")
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            saved = stored()
+            if value == setting["default"]:
+                saved.pop(args[1], None)
+            else:
+                saved[args[1]] = value
+            with open(f"{SETTINGS}.tmp", "w") as f:
+                json.dump(saved, f, indent=2, sort_keys=True)
+            os.replace(f"{SETTINGS}.tmp", SETTINGS)
+            write_lua(settings)
+            lock.close()
         how = setting.get("apply", "")
         if args[3:] == ["--later"]:
             print(how)
         else:
             apply(how)
-    elif cmd == "apply" and len(args) == 2:
-        apply(args[1])
     elif cmd == "lua":
         write_lua(settings)
     else:

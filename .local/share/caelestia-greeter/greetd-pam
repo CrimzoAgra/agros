@@ -2,7 +2,7 @@
 # Makes the login screen's PAM service, /etc/pam.d/greetd, from greetd.pam (beside this) and the system's own PAM
 # stack as it is now: its "auth include" lines replaced by what they include (system-local-login, system-login,
 # system-auth...), with nodelay on pam_unix and pam_faillock (each asks for a ~2 s pause after a wrong password; the
-# rest, pam_faillock's counting and lockout included, as the system has it). Run by the login screen's install.sh and,
+# rest, pam_faillock's counting and lockout included, as the system has it). Run by agros-greeter's install and,
 # after each pambase or pam update, by its pacman hook, so it follows the system's changes (sudo and the text consoles
 # keep the system's files, untouched).
 #   greetd-pam           write /etc/pam.d/greetd (the keyring's lines there kept after it; greetd's own kept once as

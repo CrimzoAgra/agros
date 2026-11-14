@@ -2,6 +2,7 @@
 # dots-settings' saved choices: a broken settings.json (not JSON, or not an object) reads as the defaults instead of
 # failing every read; a value that isn't JSON is refused with a message; a change keeps the other saved ones
 set -euo pipefail
+# shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 python3 -I - "$here" "$t" <<'P'
 import contextlib, importlib.machinery, importlib.util, io, json, sys
@@ -9,6 +10,8 @@ here, t = sys.argv[1:]
 loader = importlib.machinery.SourceFileLoader("ds", f"{here}/.local/bin/dots-settings")
 ds = importlib.util.module_from_spec(importlib.util.spec_from_loader("ds", loader))
 loader.exec_module(ds)
+ds.CACHE, ds.CAELESTIA_DIR = f"{t}/caelestia-options.json", f"{t}/caelestia"  # (not your home's)
+ds.OPTIONS_QML = f"{here}/.local/share/dots-settings/caelestia-options.qml"  # (the repo's, not your home's)
 ds.SCHEMA, ds.CONFIG, ds.SETTINGS = f"{here}/.local/share/dots-settings/schema.json", t, f"{t}/settings.json"
 ds.PATCHES = {"caelestia": f"{here}/.local/share/caelestia-overlay/patch.py", "lutris": f"{here}/.local/share/lutris-overlay/patch.py"}
 settings = ds.all_settings(ds.schema())

@@ -4,6 +4,7 @@
 # The store launchers: listed under Launchers (installed or not, one entry each), unhidden; Steam's installed, opening
 # the system's Steam, else Flathub's
 set -euo pipefail
+# shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 export HOME=$t XDG_DATA_HOME=$t/.local/share XDG_CACHE_HOME=$t/.cache XDG_CONFIG_HOME=$t/.config
 # (no session bus: the Lutris you have open isn't told to refresh for a test)
@@ -65,7 +66,7 @@ run
 python3 -Ic 'import sqlite3, sys; c = sqlite3.connect(sys.argv[1]); c.execute("DELETE FROM service_games WHERE service = '"'battlenet'"'"); c.commit()' "$t/.local/share/lutris/pga.db"
 run
 [[ $(q) == hsb,s2 ]] || { echo "FAIL: games taken out while the Battle.net list was being reloaded: $(q)"; exit 1; }
-# Lutris never run (setup on a fresh install): its folders and database made, the launchers listed for its first window
+# Lutris never run (agros-welcome on a fresh install): its folders and database made, the launchers listed for its first window
 rm -rf "$t/.local/share/lutris" "$t/.cache/lutris" "$t/.config/lutris"
 run
 # (with no ~/.config/lutris, Lutris keeps its configs in its data folder)
@@ -82,6 +83,13 @@ import os
 assert runner == "linux", runner
 assert "/bin/steam" in open(os.path.expanduser(f"~/.local/share/lutris/games/{config}.yml")).read()
 P
+# The covers bundled in /etc/skel (lutris.net has none for them): copied in when missing, one you have kept
+mkdir -p "$t/skel/.local/share/lutris/coverart"; echo bundled >"$t/skel/.local/share/lutris/coverart/bundled-only.png"
+echo bundled >"$t/skel/.local/share/lutris/coverart/mine.jpg"; echo yours >"$t/.local/share/lutris/coverart/mine.png"
+AGROS_SKEL=$t/skel run
+[[ $(cat "$t/.local/share/lutris/coverart/bundled-only.png" 2>/dev/null) == bundled ]] || { echo "FAIL: a bundled cover not copied in"; exit 1; }
+[[ ! -e $t/.local/share/lutris/coverart/mine.jpg && $(cat "$t/.local/share/lutris/coverart/mine.png") == yours ]] ||
+    { echo "FAIL: a bundled cover taken over one you have"; exit 1; }
 # Only Flathub's Steam (a stand-in flatpak, no steam on the PATH): its entry installed too, opening it with flatpak
 rm -rf "$t/.local/share/lutris" "$t/.cache/lutris" "$t/.config/lutris"
 mkdir -p "$t/flat" && ln -s "$(command -v python3)" "$t/flat/python3"

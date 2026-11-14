@@ -31,6 +31,35 @@ ShellRoot {
     readonly property var page: pages.find(p => p.id === pageId) ?? pages[0] ?? null
     property var values: ({}) // key -> value, changed here before dots-settings has saved them
 
+    // Search (the field above the pages): every page's settings whose label, description or key has the words, each
+    // once (Caelestia's options on their own pages first, not again in the list of all of them)
+    property string search
+    readonly property var shownPage: {
+        const q = search.trim().toLowerCase();
+        if (!q)
+            return page;
+        const groups = [], seen = {};
+        let n = 0;
+        for (const p of pages)
+            for (const g of p.groups) {
+                const hits = g.settings.filter(s => !seen[s.key] && [s.label, s.description ?? "", s.key].some(t => t.toLowerCase().includes(q)));
+                hits.forEach(s => seen[s.key] = true);
+                if (hits.length && n < 150) // (a word in hundreds of them: the first ones, the window stays quick)
+                    groups.push({ title: `${p.title} › ${g.title}`, settings: hits.slice(0, 150 - n) });
+                n += hits.length;
+            }
+        return { id: "search", title: groups.length ? "Search" : "Nothing found", groups };
+    }
+    // Groups opened (the long lists start closed): "<page>/<group>" -> true
+    property var expanded: ({})
+    // A choice with many options (fonts, screen modes) open as a list: its setting
+    property var menu: null
+    property string menuFilter
+    onMenuChanged: menuFilter = ""
+    // (the fields' own text, once typed in, no longer follows these: put back when they're cleared from here)
+    onSearchChanged: if (searchInput.text !== search) searchInput.text = search
+    onMenuFilterChanged: if (menuFilterInput.text !== menuFilter) menuFilterInput.text = menuFilter
+
     // Changes run one at a time, in order; how to apply them (reload Hyprland...) is collected and done once they stop
     property var queue: []
     property var pendingApply: []
@@ -38,6 +67,7 @@ ShellRoot {
     property bool awaitingOutput
     readonly property bool busy: queue.length > 0 || runner.running || awaitingOutput || applyTimer.running || applier.running
     property string error // the last save or apply that failed, shown at the bottom
+    property bool deferred // the last apply waits for a game to close (dots-settings apply said "deferred")
     property bool closing // the window was closed: quit once the changes are saved and applied
     onBusyChanged: if (closing && !busy) Qt.quit()
 
@@ -47,10 +77,20 @@ ShellRoot {
     function set(key: string, value: var): void {
         error = "";
         edits++;
-        schemaProc.lastText = ""; // the screen differs from the last reading now: the next one is shown (a failed save put back)
+        schemaProc.lastText = nowProc.lastText = ""; // the screen differs from the last reading now: the next one is shown (a failed save put back)
         values = Object.assign({}, values, { [key]: value });
         queue = [...queue, [cli, "set", key, JSON.stringify(value), "--later"]];
         next();
+    }
+
+    // A reading of the settings (schemaProc) or of their values (nowProc), its clicks counted as it's asked for: counted
+    // when it started, a click in between was overwritten by what it had read before it. One running isn't started
+    // again (its count, from before that click, stays: its reading is thrown away)
+    function read(proc: var): void {
+        if (proc.running)
+            return;
+        proc.edits = edits;
+        proc.running = true;
     }
 
     function next(): void {
@@ -62,8 +102,9 @@ ShellRoot {
         runner.running = true;
     }
 
-    // The settings as saved: at start, after a change that failed, and every few seconds while idle (one changed
-    // elsewhere, the window mode by its key, shows as it is)
+    // The pages with their option lists (fonts, wallpapers...) and the settings as saved: at start, on each page shown,
+    // after a change that failed or was applied (the shortcuts no setting changes, the clashes), and when the poll below
+    // finds a setting come or gone (a screen plugged in, an app's autostart entry)
     Process {
         id: schemaProc
 
@@ -74,7 +115,6 @@ ShellRoot {
 
         running: true
         command: [root.cli, "schema"]
-        onStarted: edits = root.edits
         stdout: StdioCollector {
             onStreamFinished: {
                 // A switch flipped while it read: its old value would flip it back on screen
@@ -102,11 +142,50 @@ ShellRoot {
         }
     }
 
+    onPageIdChanged: root.read(schemaProc)
+
+    // Every few seconds while idle, only the values (dots-settings now: no option lists, a fraction of the schema's
+    // work): one changed elsewhere, the window mode by its key, shows as it is
+    Process {
+        id: nowProc
+
+        property int edits
+        property string lastText
+
+        command: [root.cli, "now"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                if (nowProc.edits !== root.edits || text === nowProc.lastText)
+                    return;
+                let now;
+                try {
+                    now = JSON.parse(text);
+                } catch (e) {
+                    root.read(schemaProc); // (its reading says what's wrong)
+                    return;
+                }
+                nowProc.lastText = text;
+                // (the shortcuts no setting changes aren't in it: only the schema lists them)
+                const known = Object.keys(root.values).filter(k => !k.startsWith("binds.")).sort().join("\n");
+                if (Object.keys(now).sort().join("\n") !== known)
+                    root.read(schemaProc);
+                else
+                    root.values = Object.assign({}, root.values, now);
+            }
+        }
+    }
+
+    // (a first read that failed tried again too: with none shown yet, the window stayed empty)
     Timer {
-        running: !root.busy && win.visible && root.pages.length > 0
+        running: !root.busy && win.visible
         interval: 4000
         repeat: true
-        onTriggered: schemaProc.running = true
+        onTriggered: {
+            if (root.pages.length)
+                root.read(nowProc);
+            else
+                root.read(schemaProc);
+        }
     }
 
     Process {
@@ -132,6 +211,7 @@ ShellRoot {
                 root.error = runnerErr.text.trim().split("\n").pop() || "A change couldn't be saved";
                 // A fresh reading, after this (one already running started before it, and is thrown away)
                 schemaProc.running = false;
+                schemaProc.edits = root.edits;
                 schemaProc.running = true;
             }
             root.next();
@@ -152,6 +232,7 @@ ShellRoot {
             // Each one runs, and any failing shows (not only the last one's exit status)
             applier.command = ["sh", "-c", "s=0; " + root.pendingApply.map(h => `"${root.cli}" apply ${h} || s=1`).join("; ") + "; exit $s"];
             root.pendingApply = [];
+            root.deferred = false;
             applier.running = true;
         }
     }
@@ -162,9 +243,14 @@ ShellRoot {
         stderr: StdioCollector {
             id: applierErr
         }
+        // (a game open: the change waits until it closes)
+        stdout: StdioCollector {
+            onStreamFinished: root.deferred = text.includes("deferred")
+        }
         onExited: code => {
             if (code !== 0)
                 root.error = applierErr.text.trim().split("\n").pop() || "A change couldn't be applied";
+            root.read(schemaProc);
         }
     }
 
@@ -357,42 +443,19 @@ ShellRoot {
         }
     }
 
-    // A setting's shortcuts as chips (x removes one), + records another, and back to the default when changed
+    // A setting's shortcuts as chips (x removes one), + records another; a fixed one's only shown
     component Shortcuts: Flow {
         id: sc
 
         property var setting
         property var keys: []
-        readonly property bool changed: JSON.stringify(keys) !== JSON.stringify(Array.from(setting?.default ?? []))
 
         Layout.maximumWidth: 330
         layoutDirection: Qt.RightToLeft
         spacing: 6
 
         Rectangle {
-            visible: sc.changed
-            implicitWidth: 32
-            implicitHeight: 32
-            radius: 16
-            color: resetMouse.containsMouse ? root.c("surfaceContainerHighest") : "transparent"
-
-            Icon {
-                anchors.centerIn: parent
-                text: "restart_alt"
-                font.pixelSize: 18
-            }
-            MouseArea {
-                id: resetMouse
-
-                anchors.fill: parent
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: root.set(sc.setting.key, sc.setting.default)
-            }
-        }
-
-        Rectangle {
-            visible: !sc.setting?.modifier || sc.keys.length === 0
+            visible: !sc.setting?.readonly && (!sc.setting?.modifier || sc.keys.length === 0)
             implicitWidth: 32
             implicitHeight: 32
             radius: 16
@@ -445,7 +508,7 @@ ShellRoot {
                         color: chip.clash ? root.c("onErrorContainer") : root.c("onSurface")
                     }
                     Icon {
-                        visible: chipHover.hovered
+                        visible: chipHover.hovered && !sc.setting?.readonly
                         anchors.verticalCenter: parent.verticalCenter
                         text: "close"
                         font.pixelSize: 16
@@ -462,12 +525,300 @@ ShellRoot {
         }
     }
 
+    // A small round icon button (reset, -, +)
+    component IconButton: Rectangle {
+        id: ib
+
+        property string icon
+        property bool filled
+        signal clicked
+
+        implicitWidth: 32
+        implicitHeight: 32
+        radius: 16
+        color: ibMouse.containsMouse ? root.c("surfaceContainerHighest") : ib.filled ? root.c("surfaceContainerHigh") : "transparent"
+
+        Icon {
+            anchors.centerIn: parent
+            text: ib.icon
+            font.pixelSize: 18
+        }
+        MouseArea {
+            id: ibMouse
+
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: ib.clicked()
+        }
+    }
+
+    // Text typed in, saved on Enter or on leaving the field (JSON: Ctrl+Enter, as Enter starts a new line there)
+    component Field: Rectangle {
+        id: field
+
+        property string value
+        property string placeholder
+        property bool mono
+        property bool multiline
+        signal committed(string text)
+
+        function done(): void {
+            if (input.text !== value)
+                committed(input.text);
+        }
+        // (what was typed showing the value again: a commit that changed nothing leaves value as it was, so the text
+        // didn't follow it)
+        function reset(): void {
+            input.text = value;
+        }
+
+        implicitWidth: 260
+        implicitHeight: Math.max(36, input.contentHeight + 18)
+        radius: field.multiline ? 12 : 18
+        color: root.c("surfaceContainerHigh")
+        border.width: input.activeFocus ? 2 : 0
+        border.color: root.c("primary")
+
+        TextEdit {
+            id: input
+
+            anchors.fill: parent
+            anchors.leftMargin: 14
+            anchors.rightMargin: 14
+            anchors.topMargin: 9
+            text: field.value
+            wrapMode: field.multiline ? TextEdit.WrapAnywhere : TextEdit.NoWrap
+            clip: true
+            selectByMouse: true
+            font.family: field.mono ? "CaskaydiaCove NF" : "Rubik"
+            font.pixelSize: field.mono ? 12 : 14
+            color: root.c("onSurface")
+            selectionColor: root.c("primary")
+            selectedTextColor: root.c("onPrimary")
+            Keys.onReturnPressed: event => {
+                if (field.multiline && !(event.modifiers & Qt.ControlModifier)) {
+                    event.accepted = false;
+                    return;
+                }
+                field.done();
+                focus = false;
+            }
+            Keys.onEscapePressed: {
+                text = field.value;
+                focus = false;
+            }
+            onActiveFocusChanged: if (!activeFocus) field.done()
+        }
+        // (typed in, the text no longer follows the value: put back once saved, or read again)
+        onValueChanged: if (!input.activeFocus) input.text = value
+        Label {
+            anchors.left: parent.left
+            anchors.leftMargin: 14
+            anchors.verticalCenter: parent.verticalCenter
+            visible: !input.text && !input.activeFocus
+            text: field.placeholder || "Empty"
+            color: root.c("onSurfaceVariant")
+        }
+    }
+
+    // A number: a slider when it has a range, and - and + around its value (which can be typed in too)
+    component NumberField: RowLayout {
+        id: nf
+
+        property var setting
+        property real value
+        readonly property bool ranged: setting?.min !== undefined && setting?.max !== undefined
+        // Its own step; with none, the slider's and - and +'s: a hundredth of the power of ten of its range (0.1 for 0-40,
+        // 1 for 0-100), or with no range a tenth of that of its first value (0.1 for 1.78, 10 for 150). Fixed for the
+        // field: following the value, - then + didn't come back (1 - 0.1 = 0.9, then + 0.01)
+        property real first: value // (its first value: the binding broken once made, below)
+        Component.onCompleted: first = value
+        readonly property real step: setting?.step ?? (setting?.integer ? 1 : Math.pow(10, Math.floor(Math.log10((ranged ? (setting.max - setting.min) / 10 : Math.abs(first)) || 1)) - 1))
+        property real dragged: NaN // (where the slider is while held: saved when let go)
+
+        // Within its range, on its steps, and no 0.30000000000000004. Typed in (free) where the setting has no step of
+        // its own: as typed, not snapped to a grid (16/9 stays 16/9)
+        function fix(v: real, free: bool): real {
+            if (setting?.min !== undefined)
+                v = Math.max(setting.min, v);
+            if (setting?.max !== undefined)
+                v = Math.min(setting.max, v);
+            if (setting?.integer)
+                return Math.round(v);
+            if (free && setting?.step === undefined)
+                return v;
+            const from = setting?.min ?? 0;
+            v = from + Math.round((v - from) / step) * step;
+            return parseFloat(v.toPrecision(12));
+        }
+        function commit(v: real, free: bool): void {
+            v = fix(v, free);
+            if (!isNaN(v) && v !== value)
+                root.set(setting.key, v);
+            else
+                nfField.reset(); // (not a number, or no change once kept in range: the value shown again)
+        }
+
+        spacing: 4
+
+        Item {
+            id: slider
+
+            readonly property real shown: isNaN(nf.dragged) ? nf.value : nf.dragged
+            readonly property real frac: nf.ranged ? Math.max(0, Math.min(1, (shown - nf.setting.min) / (nf.setting.max - nf.setting.min))) : 0
+
+            visible: nf.ranged
+            implicitWidth: 170
+            implicitHeight: 32
+
+            Rectangle {
+                anchors.verticalCenter: parent.verticalCenter
+                width: parent.width
+                height: 6
+                radius: 3
+                color: root.c("surfaceContainerHighest")
+
+                Rectangle {
+                    width: slider.frac * parent.width
+                    height: parent.height
+                    radius: 3
+                    color: root.c("primary")
+                }
+            }
+            Rectangle {
+                x: slider.frac * (slider.width - width)
+                anchors.verticalCenter: parent.verticalCenter
+                width: 20
+                height: 20
+                radius: 10
+                color: root.c("primary")
+            }
+            MouseArea {
+                function at(x: real): real {
+                    return nf.fix(nf.setting.min + Math.max(0, Math.min(1, x / width)) * (nf.setting.max - nf.setting.min), false);
+                }
+
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onPressed: mouse => nf.dragged = at(mouse.x)
+                onPositionChanged: mouse => nf.dragged = at(mouse.x)
+                onReleased: {
+                    nf.commit(nf.dragged, false);
+                    nf.dragged = NaN;
+                }
+            }
+        }
+
+        IconButton {
+            icon: "remove"
+            onClicked: nf.commit(nf.value - nf.step, false)
+        }
+        Field {
+            id: nfField
+
+            implicitWidth: 72
+            value: String(slider.shown)
+            onCommitted: text => nf.commit(parseFloat(text.replace(",", ".")), true)
+        }
+        IconButton {
+            icon: "add"
+            onClicked: nf.commit(nf.value + nf.step, false)
+        }
+    }
+
+    // One of many options (fonts, a screen's modes...): the one chosen, a click lists them all
+    component Dropdown: Rectangle {
+        id: dd
+
+        property var setting
+        property string value
+        readonly property string shown: (setting?.options ?? []).find(o => o.value === value)?.label ?? value
+
+        implicitWidth: Math.min(300, ddRow.implicitWidth + 32)
+        implicitHeight: 36
+        radius: 18
+        color: ddMouse.containsMouse ? root.c("surfaceContainerHighest") : root.c("surfaceContainerHigh")
+
+        RowLayout {
+            id: ddRow
+
+            anchors.fill: parent
+            anchors.leftMargin: 16
+            anchors.rightMargin: 10
+            spacing: 6
+
+            Label {
+                Layout.fillWidth: true
+                Layout.maximumWidth: 240
+                text: dd.shown || "None"
+                elide: Text.ElideRight
+                font.family: dd.setting?.preview === "font" && dd.value ? dd.value : "Rubik"
+            }
+            Icon {
+                text: "expand_more"
+                font.pixelSize: 20
+            }
+        }
+        MouseArea {
+            id: ddMouse
+
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.menu = dd.setting
+        }
+    }
+
+    // Pictures to pick one from (the wallpaper)
+    component Pictures: Flow {
+        id: pics
+
+        property var setting
+        property string value
+
+        spacing: 8
+
+        Repeater {
+            model: pics.setting?.options ?? []
+
+            Rectangle {
+                id: pic
+
+                required property var modelData
+                readonly property bool selected: modelData.value === pics.value
+
+                implicitWidth: 156
+                implicitHeight: 92
+                radius: 14
+                color: pic.selected ? root.c("primary") : picMouse.containsMouse ? root.c("surfaceContainerHighest") : root.c("surfaceContainerHigh")
+
+                Image {
+                    anchors.fill: parent
+                    anchors.margins: pic.selected ? 4 : 2
+                    source: "file://" + pic.modelData.value.split("/").map(encodeURIComponent).join("/")
+                    sourceSize.width: 312
+                    asynchronous: true
+                    fillMode: Image.PreserveAspectCrop
+                }
+                MouseArea {
+                    id: picMouse
+
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: if (!pic.selected) root.set(pics.setting.key, pic.modelData.value)
+                }
+            }
+        }
+    }
+
     FloatingWindow {
         id: win
 
         title: "Desktop Settings"
-        implicitWidth: 900
-        implicitHeight: 640
+        implicitWidth: 980
+        implicitHeight: 700
         color: root.c("surface")
         // Closed: out of sight at once, but quit only when the changes are saved and applied (quitting stops them)
         onVisibleChanged: {
@@ -489,244 +840,457 @@ ShellRoot {
             anchors.fill: parent
             color: root.c("surface")
 
-        RowLayout {
-            anchors.fill: parent
-            anchors.margins: 16
-            spacing: 16
+            RowLayout {
+                anchors.fill: parent
+                anchors.margins: 16
+                spacing: 16
 
-            // Pages
-            ColumnLayout {
-                Layout.preferredWidth: 220
-                Layout.fillWidth: false // its rows fill it, which would otherwise make it take the whole window
-                Layout.fillHeight: true
-                spacing: 4
+                // Pages
+                ColumnLayout {
+                    Layout.preferredWidth: 220
+                    Layout.fillWidth: false // its rows fill it, which would otherwise make it take the whole window
+                    Layout.fillHeight: true
+                    spacing: 4
 
-                RowLayout {
-                    Layout.margins: 8
-                    Layout.bottomMargin: 16
-                    spacing: 12
+                    RowLayout {
+                        Layout.margins: 8
+                        Layout.bottomMargin: 16
+                        spacing: 12
 
-                    Rectangle {
-                        implicitWidth: 44
-                        implicitHeight: 44
-                        radius: 14
-                        color: root.c("primaryContainer")
+                        Rectangle {
+                            implicitWidth: 44
+                            implicitHeight: 44
+                            radius: 14
+                            color: root.c("primaryContainer")
 
-                        Icon {
-                            anchors.centerIn: parent
-                            text: "tune"
-                            color: root.c("onPrimaryContainer")
+                            Icon {
+                                anchors.centerIn: parent
+                                text: "tune"
+                                color: root.c("onPrimaryContainer")
+                            }
+                        }
+                        Label {
+                            text: "Settings"
+                            font.pixelSize: 20
+                            font.weight: Font.Medium
                         }
                     }
-                    Label {
-                        text: "Settings"
-                        font.pixelSize: 20
-                        font.weight: Font.Medium
-                    }
-                }
 
-                Repeater {
-                    model: root.pages
-
+                    // Search every page
                     Rectangle {
-                        id: tab
-
-                        required property var modelData
-                        readonly property bool selected: root.page?.id === modelData.id
-
                         Layout.fillWidth: true
-                        implicitHeight: 48
-                        radius: 24
-                        color: selected ? root.c("secondaryContainer") : tabMouse.containsMouse ? root.c("surfaceContainerHigh") : "transparent"
+                        Layout.bottomMargin: 8
+                        implicitHeight: 44
+                        radius: 22
+                        color: root.c("surfaceContainerHigh")
+                        border.width: searchInput.activeFocus ? 2 : 0
+                        border.color: root.c("primary")
 
                         RowLayout {
                             anchors.fill: parent
-                            anchors.leftMargin: 16
-                            spacing: 14
+                            anchors.leftMargin: 14
+                            anchors.rightMargin: 6
+                            spacing: 10
 
                             Icon {
-                                text: tab.modelData.icon
-                                color: tab.selected ? root.c("onSecondaryContainer") : root.c("onSurfaceVariant")
+                                text: "search"
+                                font.pixelSize: 20
                             }
-                            Label {
-                                Layout.fillWidth: true
-                                text: tab.modelData.title
-                                font.weight: tab.selected ? Font.Medium : Font.Normal
-                                color: tab.selected ? root.c("onSecondaryContainer") : root.c("onSurface")
-                            }
-                        }
-
-                        MouseArea {
-                            id: tabMouse
-
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.pageId = tab.modelData.id
-                        }
-                    }
-                }
-
-                Item {
-                    Layout.fillHeight: true
-                }
-
-                // Whether changes are being saved and applied
-                RowLayout {
-                    Layout.margins: 12
-                    spacing: 8
-                    opacity: root.busy ? 1 : 0.7
-
-                    Icon {
-                        text: root.busy ? "sync" : "check_circle"
-                        font.pixelSize: 18
-
-                        RotationAnimation on rotation {
-                            running: root.busy
-                            from: 360
-                            to: 0
-                            duration: 1200
-                            loops: Animation.Infinite
-                            onStopped: parent.rotation = 0
-                        }
-                    }
-                    Label {
-                        text: root.error || (root.busy ? "Applying…" : "Changes apply right away")
-                        font.pixelSize: 12
-                        color: root.error ? root.c("error") : root.c("onSurfaceVariant")
-                    }
-                }
-            }
-
-            // The page
-            Rectangle {
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                radius: 24
-                color: root.c("surfaceContainerLow")
-
-                Flickable {
-                    id: flick
-
-                    anchors.fill: parent
-                    anchors.margins: 24
-                    contentHeight: pageCol.implicitHeight
-                    clip: true
-
-                    ColumnLayout {
-                        id: pageCol
-
-                        width: flick.width
-                        spacing: 20
-
-                        Label {
-                            text: root.page?.title ?? ""
-                            font.pixelSize: 26
-                            font.weight: Font.Medium
-                        }
-
-                        Repeater {
-                            model: root.page?.groups ?? []
-
-                            ColumnLayout {
-                                id: group
-
-                                required property var modelData
+                            TextInput {
+                                id: searchInput
 
                                 Layout.fillWidth: true
-                                spacing: 8
+                                text: root.search
+                                clip: true
+                                font.family: "Rubik"
+                                font.pixelSize: 14
+                                color: root.c("onSurface")
+                                selectionColor: root.c("primary")
+                                selectedTextColor: root.c("onPrimary")
+                                selectByMouse: true
+                                onTextEdited: root.search = text
+                                Keys.onEscapePressed: root.search = ""
 
                                 Label {
-                                    Layout.leftMargin: 4
-                                    text: group.modelData.title
-                                    font.pixelSize: 13
-                                    font.weight: Font.Medium
-                                    color: root.c("primary")
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    visible: !parent.text
+                                    text: "Search settings"
+                                    color: root.c("onSurfaceVariant")
                                 }
+                            }
+                            IconButton {
+                                visible: !!root.search
+                                icon: "close"
+                                onClicked: root.search = ""
+                            }
+                        }
+                    }
+
+                    // (more pages than fit: they scroll)
+                    Flickable {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        contentHeight: tabs.implicitHeight
+                        clip: true
+                        boundsBehavior: Flickable.StopAtBounds
+
+                        ColumnLayout {
+                            id: tabs
+
+                            width: parent.width
+                            spacing: 2
+
+                            Repeater {
+                                model: root.pages
 
                                 Rectangle {
+                                    id: tab
+
+                                    required property var modelData
+                                    readonly property bool selected: !root.search && root.page?.id === modelData.id
+
                                     Layout.fillWidth: true
-                                    implicitHeight: rows.implicitHeight + 8
-                                    radius: 20
-                                    color: root.c("surfaceContainer")
+                                    implicitHeight: 44
+                                    radius: 22
+                                    color: selected ? root.c("secondaryContainer") : tabMouse.containsMouse ? root.c("surfaceContainerHigh") : "transparent"
 
-                                    ColumnLayout {
-                                        id: rows
+                                    RowLayout {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: 16
+                                        spacing: 14
 
-                                        anchors.left: parent.left
-                                        anchors.right: parent.right
-                                        anchors.top: parent.top
-                                        anchors.margins: 4
-                                        spacing: 0
+                                        Icon {
+                                            text: tab.modelData.icon
+                                            color: tab.selected ? root.c("onSecondaryContainer") : root.c("onSurfaceVariant")
+                                        }
+                                        Label {
+                                            Layout.fillWidth: true
+                                            text: tab.modelData.title
+                                            font.weight: tab.selected ? Font.Medium : Font.Normal
+                                            color: tab.selected ? root.c("onSecondaryContainer") : root.c("onSurface")
+                                        }
+                                    }
 
-                                        Repeater {
-                                            model: group.modelData.settings
+                                    MouseArea {
+                                        id: tabMouse
 
-                                            RowLayout {
-                                                id: row
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            root.pageId = tab.modelData.id;
+                                            root.search = "";
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
 
-                                                required property var modelData
-                                                required property int index
-                                                readonly property var value: root.values[modelData.key]
+                    // Whether changes are being saved and applied
+                    RowLayout {
+                        Layout.margins: 12
+                        spacing: 8
+                        opacity: root.busy ? 1 : 0.7
 
-                                                Layout.fillWidth: true
+                        Icon {
+                            text: root.busy ? "sync" : "check_circle"
+                            font.pixelSize: 18
+
+                            RotationAnimation on rotation {
+                                running: root.busy
+                                from: 360
+                                to: 0
+                                duration: 1200
+                                loops: Animation.Infinite
+                                onStopped: parent.rotation = 0
+                            }
+                        }
+                        Label {
+                            text: root.error || (root.busy ? "Applying…" : root.deferred ? "Applied once your game closes" : "Changes apply right away")
+                            font.pixelSize: 12
+                            color: root.error ? root.c("error") : root.c("onSurfaceVariant")
+                        }
+                    }
+                }
+
+                // The page (or what the search found)
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    radius: 24
+                    color: root.c("surfaceContainerLow")
+
+                    Flickable {
+                        id: flick
+
+                        anchors.fill: parent
+                        anchors.margins: 24
+                        contentHeight: pageCol.implicitHeight
+                        clip: true
+                        boundsBehavior: Flickable.StopAtBounds
+
+                        ColumnLayout {
+                            id: pageCol
+
+                            width: flick.width
+                            spacing: 20
+
+                            Label {
+                                text: root.shownPage?.title ?? ""
+                                font.pixelSize: 26
+                                font.weight: Font.Medium
+                            }
+
+                            Repeater {
+                                model: root.shownPage?.groups ?? []
+
+                                ColumnLayout {
+                                    id: group
+
+                                    required property var modelData
+                                    readonly property string key: `${root.shownPage?.id}/${modelData.title}`
+                                    // (the long lists start closed: their title opens them; a search shows them open)
+                                    readonly property bool closed: !!modelData.collapsed && !root.expanded[key]
+
+                                    visible: modelData.settings.length > 0 || !!modelData.empty
+                                    Layout.fillWidth: true
+                                    spacing: 8
+
+                                    RowLayout {
+                                        Layout.leftMargin: 4
+                                        spacing: 4
+
+                                        Label {
+                                            text: group.modelData.title
+                                            font.pixelSize: 13
+                                            font.weight: Font.Medium
+                                            color: root.c("primary")
+                                        }
+                                        Icon {
+                                            visible: !!group.modelData.collapsed
+                                            text: group.closed ? "expand_more" : "expand_less"
+                                            font.pixelSize: 18
+                                            color: root.c("primary")
+                                        }
+                                        Label {
+                                            visible: group.closed
+                                            text: `(${group.modelData.settings.length})`
+                                            font.pixelSize: 12
+                                            color: root.c("onSurfaceVariant")
+                                        }
+
+                                        TapHandler {
+                                            enabled: !!group.modelData.collapsed
+                                            onTapped: root.expanded = Object.assign({}, root.expanded, { [group.key]: !root.expanded[group.key] })
+                                        }
+                                        HoverHandler {
+                                            enabled: !!group.modelData.collapsed
+                                            cursorShape: Qt.PointingHandCursor
+                                        }
+                                    }
+
+                                    Rectangle {
+                                        visible: !group.closed
+                                        Layout.fillWidth: true
+                                        implicitHeight: rows.implicitHeight + 8
+                                        radius: 20
+                                        color: root.c("surfaceContainer")
+
+                                        ColumnLayout {
+                                            id: rows
+
+                                            anchors.left: parent.left
+                                            anchors.right: parent.right
+                                            anchors.top: parent.top
+                                            anchors.margins: 4
+                                            spacing: 0
+
+                                            Label {
+                                                visible: group.modelData.settings.length === 0
                                                 Layout.margins: 14
-                                                spacing: 20
+                                                text: group.modelData.empty ?? ""
+                                                color: root.c("onSurfaceVariant")
+                                            }
 
+                                            Repeater {
+                                                model: group.closed ? [] : group.modelData.settings
+
+                                                // One setting: its control by its kind (one Loader each: only that one made)
                                                 ColumnLayout {
-                                                    Layout.fillWidth: true
-                                                    spacing: 3
+                                                    id: row
 
-                                                    Label {
-                                                        Layout.fillWidth: true
-                                                        text: row.modelData.label
-                                                        font.weight: Font.Medium
+                                                    required property var modelData
+                                                    readonly property var value: root.values[modelData.key]
+                                                    readonly property string kind: modelData.type
+                                                    // (JSON and pictures: under the label, the row's whole width)
+                                                    readonly property bool wide: kind === "json" || kind === "image"
+                                                    readonly property bool changed: modelData.default !== undefined && !modelData.get && !modelData.readonly && JSON.stringify(value) !== JSON.stringify(modelData.default)
+                                                    readonly property var control: ({
+                                                            bool: boolControl,
+                                                            choice: (modelData.options?.length ?? 0) > 7 || modelData.open ? dropControl : choiceControl,
+                                                            keys: keysControl,
+                                                            number: numberControl,
+                                                            text: textControl,
+                                                            json: jsonControl,
+                                                            image: imageControl
+                                                        })[kind] ?? null
+
+                                                    Layout.fillWidth: true
+                                                    Layout.margins: 14
+                                                    spacing: 10
+
+                                                    Component {
+                                                        id: boolControl
+
+                                                        Switch {
+                                                            checked: row.value === true
+                                                            onToggled: on => root.set(row.modelData.key, on)
+                                                        }
                                                     }
-                                                    Label {
-                                                        Layout.fillWidth: true
-                                                        visible: !!row.modelData.description
-                                                        text: row.modelData.description ?? ""
-                                                        wrapMode: Text.WordWrap
-                                                        font.pixelSize: 12
-                                                        color: root.c("onSurfaceVariant")
+                                                    Component {
+                                                        id: choiceControl
+
+                                                        Choice {
+                                                            options: row.modelData.options ?? []
+                                                            value: row.value ?? ""
+                                                            onPicked: v => root.set(row.modelData.key, v)
+                                                        }
                                                     }
-                                                    Label {
-                                                        readonly property var others: {
-                                                            const out = [];
-                                                            if (row.modelData.type === "keys" && !row.modelData.modifier)
-                                                                for (const k of Array.from(row.value ?? []))
-                                                                    for (const l of root.usage[root.norm(k)] ?? [])
-                                                                        if (l !== row.modelData.label && !out.includes(l))
-                                                                            out.push(l);
-                                                            return out;
+                                                    Component {
+                                                        id: dropControl
+
+                                                        Dropdown {
+                                                            setting: row.modelData
+                                                            value: row.value ?? ""
+                                                        }
+                                                    }
+                                                    Component {
+                                                        id: keysControl
+
+                                                        Shortcuts {
+                                                            setting: row.modelData
+                                                            keys: Array.from(row.value ?? [])
+                                                        }
+                                                    }
+                                                    Component {
+                                                        id: numberControl
+
+                                                        NumberField {
+                                                            setting: row.modelData
+                                                            value: row.value ?? 0
+                                                        }
+                                                    }
+                                                    Component {
+                                                        id: textControl
+
+                                                        Field {
+                                                            value: row.value ?? ""
+                                                            placeholder: row.modelData.placeholder ?? ""
+                                                            onCommitted: text => root.set(row.modelData.key, text)
+                                                        }
+                                                    }
+                                                    Component {
+                                                        id: jsonControl
+
+                                                        Field {
+                                                            mono: true
+                                                            multiline: true
+                                                            value: JSON.stringify(row.value ?? null, null, JSON.stringify(row.value ?? null).length > 60 ? 2 : 0)
+                                                            onCommitted: text => {
+                                                                try {
+                                                                    root.set(row.modelData.key, JSON.parse(text));
+                                                                } catch (e) {
+                                                                    root.error = `${row.modelData.label}: not valid JSON`;
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                    Component {
+                                                        id: imageControl
+
+                                                        Pictures {
+                                                            setting: row.modelData
+                                                            value: row.value ?? ""
+                                                        }
+                                                    }
+
+                                                    RowLayout {
+                                                        Layout.fillWidth: true
+                                                        spacing: 20
+
+                                                        ColumnLayout {
+                                                            Layout.fillWidth: true
+                                                            spacing: 3
+
+                                                            Label {
+                                                                Layout.fillWidth: true
+                                                                text: row.modelData.label
+                                                                font.weight: Font.Medium
+                                                                wrapMode: Text.WordWrap
+                                                            }
+                                                            Label {
+                                                                Layout.fillWidth: true
+                                                                visible: !!row.modelData.description
+                                                                text: row.modelData.description ?? ""
+                                                                wrapMode: Text.WordWrap
+                                                                font.pixelSize: 12
+                                                                color: root.c("onSurfaceVariant")
+                                                            }
+                                                            // AgrOS's say on it (one of Caelestia's options it relies on)
+                                                            Label {
+                                                                Layout.fillWidth: true
+                                                                visible: !!row.modelData.note
+                                                                text: row.modelData.note ?? ""
+                                                                wrapMode: Text.WordWrap
+                                                                font.pixelSize: 12
+                                                                color: root.c("tertiary")
+                                                            }
+                                                            Label {
+                                                                readonly property var others: {
+                                                                    const out = [];
+                                                                    if (row.kind === "keys" && !row.modelData.modifier)
+                                                                        for (const k of Array.from(row.value ?? []))
+                                                                            for (const l of root.usage[root.norm(k)] ?? [])
+                                                                                if (l !== row.modelData.label && !out.includes(l))
+                                                                                    out.push(l);
+                                                                    return out;
+                                                                }
+
+                                                                Layout.fillWidth: true
+                                                                visible: others.length > 0
+                                                                text: "Also used by: " + others.join(", ")
+                                                                wrapMode: Text.WordWrap
+                                                                font.pixelSize: 12
+                                                                color: root.c("error")
+                                                            }
                                                         }
 
-                                                        Layout.fillWidth: true
-                                                        visible: others.length > 0
-                                                        text: "Also used by: " + others.join(", ")
-                                                        wrapMode: Text.WordWrap
-                                                        font.pixelSize: 12
-                                                        color: root.c("error")
+                                                        Loader {
+                                                            // (shortcuts wrap past this: a Flow is as wide as all of them in a row otherwise)
+                                                            Layout.maximumWidth: row.kind === "keys" ? 330 : Number.POSITIVE_INFINITY
+                                                            active: !row.wide
+                                                            sourceComponent: row.control
+                                                            enabled: !row.modelData.readonly
+                                                            opacity: row.modelData.readonly && row.kind !== "keys" ? 0.5 : 1
+                                                        }
+
+                                                        // Back to the default
+                                                        IconButton {
+                                                            visible: row.changed
+                                                            icon: "restart_alt"
+                                                            onClicked: root.set(row.modelData.key, row.modelData.default)
+                                                        }
                                                     }
-                                                }
 
-                                                Switch {
-                                                    visible: row.modelData.type === "bool"
-                                                    checked: row.value === true
-                                                    onToggled: on => root.set(row.modelData.key, on)
-                                                }
-
-                                                Choice {
-                                                    visible: row.modelData.type === "choice"
-                                                    options: row.modelData.options ?? []
-                                                    value: row.value ?? ""
-                                                    onPicked: v => root.set(row.modelData.key, v)
-                                                }
-
-                                                Shortcuts {
-                                                    visible: row.modelData.type === "keys"
-                                                    setting: row.modelData
-                                                    keys: row.modelData.type === "keys" ? Array.from(row.value ?? []) : []
+                                                    Loader {
+                                                        active: row.wide
+                                                        visible: active
+                                                        Layout.fillWidth: true
+                                                        sourceComponent: row.control
+                                                        enabled: !row.modelData.readonly
+                                                        opacity: row.modelData.readonly ? 0.5 : 1
+                                                    }
                                                 }
                                             }
                                         }
@@ -737,7 +1301,127 @@ ShellRoot {
                     }
                 }
             }
-        }
+
+            // A dropdown's list: every option (a filter for long ones), the chosen one marked
+            Rectangle {
+                id: menuView
+
+                readonly property var options: (root.menu?.options ?? []).filter(o => !root.menuFilter || o.label.toLowerCase().includes(root.menuFilter.toLowerCase()))
+
+                anchors.fill: parent
+                visible: !!root.menu
+                color: Qt.rgba(0, 0, 0, 0.6)
+                onVisibleChanged: if (visible) menuFilterInput.forceActiveFocus()
+
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: root.menu = null
+                }
+
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: 440
+                    height: Math.min(parent.height - 80, menuCol.implicitHeight + 32)
+                    radius: 24
+                    color: root.c("surfaceContainerHigh")
+
+                    MouseArea {
+                        anchors.fill: parent // (a click inside isn't one outside)
+                    }
+
+                    ColumnLayout {
+                        id: menuCol
+
+                        anchors.fill: parent
+                        anchors.margins: 16
+                        spacing: 10
+
+                        Label {
+                            Layout.leftMargin: 8
+                            text: root.menu?.label ?? ""
+                            font.pixelSize: 18
+                            font.weight: Font.Medium
+                        }
+                        Rectangle {
+                            Layout.fillWidth: true
+                            implicitHeight: 40
+                            radius: 20
+                            color: root.c("surfaceContainerHighest")
+
+                            TextInput {
+                                id: menuFilterInput
+
+                                anchors.fill: parent
+                                anchors.leftMargin: 16
+                                anchors.rightMargin: 16
+                                verticalAlignment: TextInput.AlignVCenter
+                                text: root.menuFilter
+                                clip: true
+                                font.family: "Rubik"
+                                font.pixelSize: 14
+                                color: root.c("onSurface")
+                                onTextEdited: root.menuFilter = text
+                                Keys.onEscapePressed: root.menu = null
+                                Keys.onReturnPressed: if (menuView.options.length === 1) {
+                                    root.set(root.menu.key, menuView.options[0].value);
+                                    root.menu = null;
+                                }
+
+                                Label {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    visible: !parent.text
+                                    text: "Filter"
+                                    color: root.c("onSurfaceVariant")
+                                }
+                            }
+                        }
+                        ListView {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            implicitHeight: contentHeight
+                            clip: true
+                            boundsBehavior: Flickable.StopAtBounds
+                            model: menuView.options
+
+                            delegate: Rectangle {
+                                id: item
+
+                                required property var modelData
+                                readonly property bool selected: modelData.value === root.values[root.menu?.key]
+
+                                width: ListView.view.width
+                                implicitHeight: 40
+                                radius: 20
+                                color: selected ? root.c("secondaryContainer") : itemMouse.containsMouse ? root.c("surfaceContainerHighest") : "transparent"
+
+                                Label {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.leftMargin: 16
+                                    anchors.rightMargin: 16
+                                    text: item.modelData.label || "None"
+                                    elide: Text.ElideRight
+                                    font.family: root.menu?.preview === "font" && item.modelData.value ? item.modelData.value : "Rubik"
+                                    color: item.selected ? root.c("onSecondaryContainer") : root.c("onSurface")
+                                }
+                                MouseArea {
+                                    id: itemMouse
+
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        if (!item.selected)
+                                            root.set(root.menu.key, item.modelData.value);
+                                        root.menu = null;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
 
             // Recording a shortcut
             Rectangle {

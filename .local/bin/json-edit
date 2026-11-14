@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# json-edit <file> <jq options and filter>: a JSON settings file changed by a jq filter, the scripts' one way to do it
+# (Caelestia's shell.json: the weather place from the place picker and agros-personal, the Super menu's pins from
+# caelestia-pin; the dock's pins; Equibop's theme). Under <file>.lock, caelestia-pin's too: two changes at once both
+# started from the same file and one was lost. Replaced whole (never half-written; a link's target, its mode kept),
+# started as {} when missing, and tried again twice: Caelestia may be halfway through rewriting its file, which jq then
+# can't read. Empty (Caelestia mid-rewrite: taken for missing, it was replaced by {} and every setting lost) or not JSON
+# (a hand edit): left as it is, exit 1
+# json-edit --lock <file> <command...>: the command run under <file>'s lock (a check before an edit, a note after it:
+# caelestia-pin's dock order); a json-edit of that file inside it doesn't take the lock again (JSON_EDIT_HELD)
+if [[ ${1:-} == --lock ]]; then
+    f=${2:?usage: json-edit --lock <file> <command...>}
+    shift 2
+    mkdir -p "$(dirname "$f")" || exit 1
+    exec 9>"$f.lock"
+    flock 9
+    JSON_EDIT_HELD=$f exec "$@"
+fi
+f=${1:?usage: json-edit <file> <jq options and filter>}
+shift
+mkdir -p "$(dirname "$f")" || exit 1
+if [[ ${JSON_EDIT_HELD:-} != "$f" ]]; then
+    exec 9>"$f.lock"
+    flock 9
+fi
+[[ -e $f ]] || echo '{}' >"$f"
+# A link (a settings file kept elsewhere: your dotfiles' copy) stays one: the file it points to replaced, its mode kept
+real=$(readlink -f -- "$f") || exit 1
+for _ in 1 2 3; do
+    # (an empty file: jq reads no value and writes nothing, exit 0)
+    jq "$@" "$real" >"$real.tmp" && [[ -s $real.tmp ]] && chmod --reference="$real" "$real.tmp" &&
+        mv "$real.tmp" "$real" && exit 0
+    sleep 0.3
+done
+rm -f "$real.tmp"
+exit 1

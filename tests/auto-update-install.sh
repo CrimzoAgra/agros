@@ -9,23 +9,37 @@
 # script is shellchecked, and shutdown's own time limit is longer than the install's; the boot's download's unit holds off
 # neither shutdown nor sleep
 set -euo pipefail
+# shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 mkdir -p "$t/bin" "$t/pac/sync" "$t/au/db/sync"
-# The script as agros-system installs it; its pacman lock holders the same as dotfiles-check's (one definition each,
-# kept alike)
+# The script as agros-system installs it (agros-scripts' helpers, pacman-lock-holder and wait-online, from here)
 au=$here/packages/agros-system
-holders() { sed -n "s/^\( *\)pacman_holders='\([^']*\)'.*/\2/p" "$1" | head -1; }
-holder_fn() { sed -n '/^lock_holder() {$/,/^}$/p' "$1"; }
-[[ -n $(holders "$au/auto-update") && $(holders "$au/auto-update") == "$(holders "$here/.local/bin/dotfiles-check")" &&
-    $(holder_fn "$au/auto-update") == "$(holder_fn "$here/.local/bin/dotfiles-check")" ]] ||
-    fail "auto-update's pacman_holders or lock_holder not dotfiles-check's"
-# (the AgrOS users: just this one, its home here)
-printf '#!/bin/sh\necho %s\n' "$(id -un)" >"$t/bin/agros-each-user"; chmod +x "$t/bin/agros-each-user"
+# (the AgrOS users: just this one. --as: mktemp run, update-kinds and flatpak-bundle-update noted, not run (they'd
+# update this machine's own); update-kinds hands $KINDS_NOTE back on fd 3, flatpak-bundle-update --fetch finds
+# something with $FETCHED. --notify and --notify-wait noted; --notify-wait tells someone, but with $NOBODY)
+# shellcheck disable=SC2016  # (expanded by the stand-in)
+printf '#!/bin/bash\ncalls=%s/calls\n%s\n' "$t" 'case $1 in
+    --list) id -un; [ -z "${TWO_USERS:-}" ] || id -un ;;
+    --as) shift 2; echo "as $*" >>"$calls"
+        [ -z "${TWO_USERS:-}" ] || ! IFS= read -r -t 1 line || echo "stdin $line" >>"$calls"
+        case "$*" in
+            mktemp*) exec "$@" ;;
+            *update-kinds*) [ -z "${KINDS_NOTE:-}" ] || printf "%s\n" "$KINDS_NOTE" >&3 ;;
+            *--fetch*) [ -z "${FETCHED:-}" ] || echo app >"${@: -1}/fetched" ;;
+        esac ;;
+    --notify) shift; echo "notify-later $*" >>"$calls"; [ -z "${TWO_USERS:-}" ] || ! IFS= read -r -t 1 line || echo "stdin $line" >>"$calls" ;;
+    --notify-wait) shift; echo "notify $*" >>"$calls"; [ -z "${NOBODY:-}" ] ;;
+esac' >"$t/bin/agros-each-user"
+chmod +x "$t/bin/agros-each-user"
 sed -e "s|/var/lib/auto-update|$t/au|g" -e "s|/var/lib/pacman|$t/pac|g" -e "s|/var/log/auto-update.log|$t/log|g" \
     -e "s|for m in /boot |for m in $t/boot |" -e "s|/etc/grub.d/41_snapshots-btrfs|$t/grub-btrfs|g" \
     -e "s|command -v limine-snapper-sync|command -v $t/limine-sync|; s|^\( *\)limine-snapper-sync >|\1$t/limine-sync >|" \
     -e "s|\${AGROS_EACH_USER:-/usr/lib/agros/bin/agros-each-user}|$t/bin/agros-each-user|" \
+    -e "s|/usr/lib/agros/auto-update-aur|$t/auto-update-aur|g; s|/usr/lib/agros/auto-update |$t/auto-update |g" \
+    -e "s|/usr/lib/agros/bin/|$here/.local/bin/|g" \
     "$au/auto-update" >"$t/auto-update"
+sed -e "s|/var/lib/auto-update|$t/au|g" -e "s|/usr/lib/agros/auto-update-aur|$t/auto-update-aur|g" \
+    -e "s|/usr/lib/agros/bin/|$here/.local/bin/|g" "$au/auto-update-aur" >"$t/auto-update-aur"
 grep -q -- '--install' "$t/auto-update" || fail "auto-update has no --install"
 # (the script itself checked: nothing else reads it before it runs at boot and shutdown)
 bash -n "$t/auto-update" || fail "the generated auto-update doesn't parse"
@@ -40,9 +54,9 @@ grep -q 'systemd-inhibit' <<<"$unit" && fail "the boot's download blocks shutdow
 # Flatpaks from a file at boot: downloaded with nothing held, then reinstalled with sleep and power off held by root
 # (logind refuses the user that hold outside a session) around that step alone
 # shellcheck disable=SC2016  # (the generated script's own text)
-{ grep -q -- '-H .*/flatpak-bundle-update" --fetch "$fetched"$' "$t/auto-update" &&
-    ! grep -- '--fetch "$fetched"' "$t/auto-update" | grep -q systemd-inhibit &&
-    grep -B2 -- '--install-fetched "$fetched"' "$t/auto-update" | grep -q '^ *timeout 30m systemd-inhibit --what=sleep:shutdown --mode=block '; } ||
+{ grep -q -- '--as "$user" "$home/.local/bin/flatpak-bundle-update" --fetch "$fetched"$' "$t/auto-update" &&
+    ! grep -q systemd-inhibit <<<"$(grep -- '--fetch "$fetched"' "$t/auto-update")" &&
+    grep -q '^ *timeout 30m systemd-inhibit --what=sleep:shutdown --mode=block ' <<<"$(grep -B2 -- '--install-fetched "$fetched"' "$t/auto-update")"; } ||
     fail "the boot's Flatpak reinstall not held by root around that step alone: $(grep -n -A6 'Those from a file' "$t/auto-update")"
 # Shutdown's own limit (the targets' JobTimeoutSec) longer than the install's (TimeoutStopSec), so it can't cut it off
 stop=$(sed -n 's/^TimeoutStopSec=\([0-9]*\)min$/\1/p' "$au/auto-update-install.service")
@@ -54,20 +68,24 @@ unit=$(cat "$au/auto-update-install.service")
 { grep -qxE 'Before=.*\bsystemd-user-sessions\.service\b.*' <<<"$unit" && grep -qxE 'Before=.*\bauto-update\.service\b.*' <<<"$unit" &&
     grep -qxE 'After=.*\bnetwork\.target\b.*' <<<"$unit" &&
     # (nor on /boot's mount: before systemd-user-sessions, the login screen waited on a slow boot partition)
-    ! grep -E '^(RequiresMountsFor|After|Requires)=' <<<"$unit" | grep -qE '/boot|boot\.mount'; } || fail "the install's unit not ordered after user sessions: $unit"
-# pacman: -Qu says what's waiting ($QU, exit $QU_RC); -Su installs (exit $PACMAN_RC; $PACMAN_HANG: hangs, to be cut off);
+    ! grep -qE '/boot|boot\.mount' <<<"$(grep -E '^(RequiresMountsFor|After|Requires)=' <<<"$unit")"; } || fail "the install's unit not ordered after user sessions: $unit"
+# ...and before udisks2 and the system bus stop (fwupd finds the EFI partition through udisks2)
+{ grep -qxE 'After=.*\budisks2\.service\b.*' <<<"$unit" && grep -qxE 'After=.*\bdbus\.service\b.*' <<<"$unit" &&
+    grep -qx 'Wants=udisks2.service' <<<"$unit"; } || fail "the install's unit not ordered before udisks2 stops: $unit"
+# pacman: -Qu says what's waiting ($QU, exit $QU_RC; $QU_ERR on stderr); -Su installs (exit $PACMAN_RC; $PACMAN_HANG: hangs, to be cut off);
 # -Syuw the boot's download ($SYUW_RC)
 cat >"$t/bin/pacman" <<EOF
 #!/bin/sh
 case \$1 in
-    -Qu) [ -z "\$QU" ] || printf '%s\n' "\$QU"; exit \${QU_RC:-0} ;;
+    -Qu) [ -z "\$QU" ] || printf '%s\n' "\$QU"; [ -z "\$QU_ERR" ] || echo "\$QU_ERR" >&2; exit \${QU_RC:-0} ;;
     -Q) [ -n "\$Q_HAVE" ] || exit 1; echo "\$2 \$Q_HAVE" ;;
     -Su) echo "pacman \$* (SNAP_PAC_SKIP=\$SNAP_PAC_SKIP)" >>"$t/calls"; echo "installing foo"
         # (the boot partition kept open by the install all along)
-        ! ls -l /proc/\$PPID/fd 2>/dev/null | grep -q " $t/boot\$" || echo "boot held" >>"$t/calls"
+        fds=\$(ls -l /proc/\$PPID/fd 2>/dev/null); case "\$fds" in *" $t/boot"*) echo "boot held" >>"$t/calls" ;; esac
         [ -z "\$PACMAN_HANG" ] || { echo \$\$ >"$t/hung"; exec sleep 60; }
+        case " \$* " in *" agros-aur/"*) [ -z "\$PACMAN_AUR_RC" ] || { echo "error: failed to commit transaction (conflicting files)"; exit 1; } ;; esac
         [ "\${PACMAN_RC:-0}" = 0 ] || echo "error: boom"; exit \${PACMAN_RC:-0} ;;
-    -Syuw) echo "download \$*" >>"$t/calls"; exit \${SYUW_RC:-0} ;;
+    -Syuw) echo "download \$*" >>"$t/calls"; [ -e "$t/au/downloading" ] && echo "download marked" >>"$t/calls"; exit \${SYUW_RC:-0} ;;
 esac
 EOF
 # snapper at shutdown: over DBus it fails (snapperd can't start while the system goes down), and only what worked is noted
@@ -75,7 +93,18 @@ cat >"$t/bin/snapper" <<EOF
 #!/bin/sh
 case " \$* " in *" --no-dbus "*) echo "snapper \$*" >>"$t/calls" ;; *) exit 1 ;; esac
 EOF
-for s in curl flatpak sudo; do printf '#!/bin/sh\nexit 0\n' >"$t/bin/$s"; done
+for s in curl flatpak; do printf '#!/bin/sh\nexit 0\n' >"$t/bin/$s"; done
+# (through PAM, never: a logind session for the user)
+for s in sudo runuser su; do printf '#!/bin/sh\necho "PAM %s" >>%s/calls\nexit 1\n' "$s" "$t" >"$t/bin/$s"; done
+# shellcheck disable=SC2016
+printf '#!/bin/sh\nwhile [ "${1#--}" != "$1" ]; do shift; done\nexec "$@"\n' >"$t/bin/systemd-inhibit"
+# fwupd: nothing waiting ($FW: get-updates' JSON); fwupdtool, the shutdown's, noted (exit $FWTOOL_RC; $FW_LEFT: what
+# it still offers after, a device it skipped, saying why); systemd-run noted
+# shellcheck disable=SC2016  # (expanded by the stand-ins)
+printf '#!/bin/sh\n[ "$1" = get-updates ] && [ -n "$FW" ] && { echo "$FW"; exit 0; }\nexit 2\n' >"$t/bin/fwupdmgr"
+# shellcheck disable=SC2016
+printf '#!/bin/sh\nif [ "$1" = get-updates ]; then [ -n "$FW_LEFT" ] && echo "$FW_LEFT"; exit 0; fi\necho "fwupdtool $*" >>%s/calls\necho "flashing"\n[ -z "$FW_LEFT" ] || echo "  ‣ Device requires AC power to be connected"\nexit ${FWTOOL_RC:-0}\n' "$t" >"$t/bin/fwupdtool"
+printf '#!/bin/sh\necho "systemd-run $*" >>%s/calls\n' "$t" >"$t/bin/systemd-run"
 # fstab and mounts (this machine's not read): $FSTAB_BOOT puts /boot in fstab, $BOOT_UNMOUNTED has it not mounted
 # shellcheck disable=SC2016  # (expanded by the stand-ins)
 # (and what's mounted there: $BOOT_FSTYPE, autofs an automount's placeholder; the boot folder a throwaway one)
@@ -92,13 +121,16 @@ EOF
 printf '#!/bin/sh\n[ -z "$BOOT_UNMOUNTED" ]\n' >"$t/bin/mountpoint"
 # pgrep -x: something taking pacman's lock running ($HOLDER_RUNS: a process of its own, as lock_holder reads its command
 # line); the rest: nothing. systemctl list-jobs: $JOBS
-sleep 300 & holder=$!
-trap 'kill $holder 2>/dev/null; rm -rf "$t"' EXIT
+# (a pacman on these lists: its --dbpath the test's, as pacman-lock-holder reads it)
+printf '#!/bin/sh\nsleep 300\n' >"$t/holder"; chmod +x "$t/holder"
+"$t/holder" --dbpath "$t/pac" & holder=$!
+disown "$holder"  # (killed at the end without a job notice after "ok")
+trap 'pkill -P $holder; kill $holder 2>/dev/null; rm -rf "$t"' EXIT
 # shellcheck disable=SC2016  # (expanded by the stand-ins)
 printf '#!/bin/sh\n[ "$1" = -x ] && [ -n "$HOLDER_RUNS" ] && { echo %s; exit 0; }\nexit 1\n' "$holder" >"$t/bin/pgrep"
 # shellcheck disable=SC2016
 printf '#!/bin/sh\n[ "$1" != list-jobs ] || printf "%%s\n" "$JOBS"\nexit 0\n' >"$t/bin/systemctl"
-chmod +x "$t/bin/"* "$t/auto-update"
+chmod +x "$t/bin/"* "$t/auto-update" "$t/auto-update-aur"
 export PATH=$t/bin:$PATH QU="foo 1-1 -> 2-1"
 # pacman's list the one an earlier install put there (copied before cp -p: its time the copy's, now), the download's
 # newer but with the mirror's time, earlier: still taken (by content, it's this one's own copy)
@@ -146,13 +178,35 @@ PACMAN_RC=1 "$t/auto-update" --install && fail "a failed install reported succes
 lists
 QU=$'qt6-base 6.9.0-1 -> 6.10.0-1\nfoo 1-1 -> 2-1' "$t/auto-update" --install || fail "a held install failed"
 [[ $(res) == "held "* && -s $t/au/held && $(cat "$t/pac/sync/core.db") == old ]] || fail "a new Qt not held back: $(res)"
+# A new Python (minor version) the same: held, its line alone in "held"; a Python bugfix release holds nothing
+lists
+QU=$'python 3.13.7-1 -> 3.14.0-1\nfoo 1-1 -> 2-1' "$t/auto-update" --install >/dev/null || fail "a held install failed"
+[[ $(res) == "held "*"a new python"* && $(cat "$t/au/held") == "python 3.13.7-1 -> 3.14.0-1" ]] || fail "a new Python not held back: $(res)"
+lists
+QU=$'python 3.14.0-1 -> 3.14.1-1\nfoo 1-1 -> 2-1' "$t/auto-update" --install >/dev/null || fail "an install with a Python bugfix failed"
+[[ $(res) == "ok "* ]] || fail "a Python bugfix release held the update back: $(res)"
 # Nothing to install: ok (and no "held" left from before)
 lists
 QU='' QU_RC=1 "$t/auto-update" --install || fail "nothing to install failed"
 [[ $(res) == "ok "* && ! -e $t/au/held ]] || fail "nothing to install not written down as ok: $(res)"
+# Only what pacman.conf holds back (IgnorePkg's "[ignored]"): nothing to install (no snapshot, no pacman -Su), and an
+# ignored new Qt holds nothing back
+lists
+: >"$t/calls"
+QU='foo 1-1 -> 2-1 [ignored]' "$t/auto-update" --install || fail "only ignored updates failed"
+[[ $(res) == "ok "* && ! -s $t/calls ]] || fail "ignored updates counted as waiting: $(res) $(cat "$t/calls")"
+lists
+: >"$t/calls"
+QU=$'qt6-base 6.9.0-1 -> 6.10.0-1 [ignored]\nfoo 1-1 -> 2-1' "$t/auto-update" --install >/dev/null || fail "an install beside an ignored Qt failed"
+[[ $(res) == "ok "* ]] && grep -q '^pacman -Su' "$t/calls" || fail "an ignored new Qt held the update back: $(res)"
+# Nothing to install, with a warning on stderr: still ok, not a failure
+lists
+QU='' QU_ERR="warning: config file /etc/pacman.conf, line 9: directive 'X' not recognized" QU_RC=1 "$t/auto-update" --install ||
+    fail "nothing to install with a warning failed"
+[[ $(res) == "ok "* ]] || fail "a warning from pacman -Qu written down as a failure: $(res)"
 # pacman can't list the updates: failed, the lists back
 lists
-QU="error: failed to init transaction" QU_RC=1 "$t/auto-update" --install && fail "pacman's error reported success"
+QU_ERR="error: failed to init transaction" QU_RC=1 "$t/auto-update" --install && fail "pacman's error reported success"
 [[ $(res) == "failed "*"failed to init transaction" && $(cat "$t/pac/sync/core.db") == old ]] ||
     fail "pacman's error listing the updates not written down as failed: $(res)"
 
@@ -172,7 +226,7 @@ done
 unset HOLDER_RUNS
 rm "$t/pac/db.lck"
 [[ $(res) == "$before" && -s $t/au/held ]] || fail "a skipped install wiped how the last one went: $(res)"
-grep -q "something using pacman still ran ($holder sleep 300)" "$t/log" || fail "skipped for pacman's other user, not said"
+grep -q "something using pacman still ran ($holder /bin/sh $t/holder --dbpath $t/pac)" "$t/log" || fail "skipped for pacman's other user, not said"
 [[ $(cut -d' ' -f3- "$t/au/skipped") == "something using pacman still ran"* ]] || fail "the skip's reason not written down: $(cat "$t/au/skipped")"
 # dotfiles-check says it, and the failed install still
 mkdir -p "$t/h"
@@ -220,8 +274,36 @@ QU='' QU_RC=1 "$t/auto-update" --install || fail "nothing to install failed"
 # ...and the download marks itself finished only when it is
 SYUW_RC=1 "$t/auto-update" || true
 [[ ! -e $t/au/db/complete ]] || fail "a failed download marked as finished"
+: >"$t/calls"
 "$t/auto-update" || fail "the boot's download failed"
 [[ -e $t/au/db/complete ]] || fail "a finished download not marked"
+# (marked downloading while it runs, for Updates' update-apps to wait on: from the start of the run, gone once it's
+# done, not through the Flatpaks and the rest)
+grep -qx "download marked" "$t/calls" && [[ ! -e $t/au/downloading ]] || fail "the download not marked while it ran, or the mark left: $(cat "$t/calls")"
+grep -q '^touch "\$au/downloading"$' <<<"$(sed -n '/^# The last shutdown.s install cut off before it finished/,$p' "$t/auto-update" | head -1; grep -B4 '^# The last shutdown.s install cut off before it finished' "$t/auto-update")" ||
+    fail "the mark not made first thing at boot"
+grep -q '^PAM' "$t/calls" && fail "a user's part run through PAM: $(grep '^PAM' "$t/calls")"
+grep -q '^as env XDG_RUNTIME_DIR=.*/update-kinds --boot ' "$t/calls" || fail "the users' kinds not run as them (agros-each-user --as): $(cat "$t/calls")"
+# A new Proton (update-kinds' notice, on fd 3): said on that user's desktop once they're logged in, by its own unit
+: >"$t/calls"
+KINDS_NOTE=$'steam\tNew Proton: GE-Proton11-12\tRestart Steam' "$t/auto-update" || fail "the boot with a Proton notice failed"
+grep -qx "notify-later --user $(id -un) -a Updates -i steam New Proton: GE-Proton11-12 Restart Steam" "$t/calls" ||
+    fail "the Proton notice not handed to agros-each-user --notify: $(cat "$t/calls")"
+# Each user's commands not reading the list of users (their stdin elsewhere): two users, both run
+: >"$t/calls"; : >"$t/log"
+TWO_USERS=1 FETCHED=1 KINDS_NOTE=$'steam\tNew Proton: GE-Proton11-12\tRestart Steam' "$t/auto-update" </dev/null || fail "the boot with two users failed"
+[[ $(grep -c "^-- $(id -un)$" "$t/log") == 2 && $(grep -c 'update-kinds --boot' "$t/calls") == 2 ]] && ! grep -q '^stdin' "$t/calls" ||
+    fail "a user's command read the list of users: $(grep '^stdin' "$t/calls") $(grep -c "^-- " "$t/log")"
+# Flatpaks from a file: reinstalled as the user under root's hold; not with too little of the run's 4 h left
+: >"$t/calls"
+FETCHED=1 "$t/auto-update" || fail "the boot with Flatpaks from a file failed"
+grep -q '^as .*flatpak-bundle-update --install-fetched' "$t/calls" || fail "the Flatpaks from a file not reinstalled: $(cat "$t/calls")"
+sed 's/((SECONDS > 4 \* 3600 - 35 \* 60))/((1))/' "$t/auto-update" >"$t/auto-update-late"; chmod +x "$t/auto-update-late"
+grep -q '((1))' "$t/auto-update-late" || fail "test setup: the time left not made short"
+: >"$t/calls"; : >"$t/log"
+FETCHED=1 "$t/auto-update-late" || true
+! grep -q -- '--install-fetched' "$t/calls" && grep -q "too little of the run's time left" "$t/log" ||
+    fail "the Flatpaks from a file reinstalled with too little time left: $(cat "$t/calls")"
 
 # An install cut off at shutdown (pacman killed mid-way): the next boot puts pacman's lists back, and its lock
 lists
@@ -266,9 +348,137 @@ lists
 lists
 : >"$t/pac/db.lck"; : >"$t/calls"
 sleep 300 3<"$t/pac/db.lck" & opener=$!
+disown "$opener"
 : >"$t/log"; "$t/auto-update" --install || fail "the install with pacman's lock open failed"; out=$(cat "$t/log")
-kill $opener; wait $opener 2>/dev/null || true
+kill $opener
 [[ -e $t/pac/db.lck && ! -s $t/calls && $out == *"something has pacman's lock open"* ]] ||
     fail "pacman's lock taken out (or installed) while something had it open: $out / $(cat "$t/calls")"
 rm -f "$t/pac/db.lck"
+
+# The boot's AUR builds (auto-update-aur's, in $t/au/aur): installed in the same pacman transaction as the repo's, from
+# their own repo (agros-aur, its list put in pacman's for the install alone), each rebuilt for the new Qt
+aurdir=$t/au/aur
+built() {
+    rm -rf "$aurdir"; mkdir -p "$aurdir/repo"
+    echo db >"$aurdir/repo/agros-aur.db"
+    echo "quickshell-git 0.3-1" >"$aurdir/built"; echo quickshell-git >"$aurdir/rebuild"
+    echo "qt6-base 6.10.0-1 " >"$aurdir/runtime-target"; touch "$aurdir/planned"
+}
+newqt=$'qt6-base 6.9.0-1 -> 6.10.0-1\nfoo 1-1 -> 2-1'
+lists; built; : >"$t/calls"
+QU=$newqt Q_HAVE=0.3-1 "$t/auto-update" --install >/dev/null || fail "the install with the AUR's rebuilds failed: $(tail -5 "$t/log")"
+grep -q "^pacman -Su --noconfirm --config $t/au/prev/pacman.conf agros-aur/quickshell-git" "$t/calls" ||
+    fail "the AUR's rebuild not in the repo's transaction: $(cat "$t/calls")"
+[[ $(res) == "ok "* && ! -e $t/pac/sync/agros-aur.db ]] || fail "the AUR repo's list left in pacman's, or not ok: $(res)"
+[[ $(cat "$t/au/qt-built") == "qt6-base 0.3 qt6-declarative 0.3 " ]] || fail "the Qt the shells were rebuilt for not written down: $(cat "$t/au/qt-built" 2>/dev/null)"
+# (an AUR build no newer than what's installed, and no new Qt: not reinstalled)
+lists; built; : >"$t/calls"
+Q_HAVE=0.3-1 "$t/auto-update" --install >/dev/null || fail "the install beside an AUR build already installed failed"
+grep -q 'agros-aur/' "$t/calls" && fail "an AUR build reinstalled with nothing new: $(cat "$t/calls")"
+# A new Qt and a failed rebuild for it: the whole update waits (said, the lists back)
+lists; built; rm "$aurdir/built"; echo "quickshell-git: its build failed" >"$aurdir/failed"; : >"$t/calls"
+QU=$newqt Q_HAVE=0.3-1 "$t/auto-update" --install >/dev/null || fail "the held install failed"
+[[ $(res) == "held "*"build failed"* && ! -s $t/calls && $(cat "$t/pac/sync/core.db") == old ]] ||
+    fail "a new Qt installed without the shells rebuilt: $(res) $(cat "$t/calls")"
+# ...or rebuilt older than what's installed (pacman would leave it, and the new Qt go in alone): waits too
+lists; built; : >"$t/calls"
+QU=$newqt Q_HAVE=0.4-1 "$t/auto-update" --install >/dev/null || fail "the held install failed"
+[[ $(res) == "held "*"came out older than what's installed: quickshell-git" && ! -s $t/calls ]] ||
+    fail "a new Qt installed with its rebuild older than what's installed: $(res) $(cat "$t/calls")"
+# ...or rebuilt for another Qt than these lists bring: waits too
+lists; built; echo "qt6-base 6.11.0-1 " >"$aurdir/runtime-target"; : >"$t/calls"
+QU=$newqt Q_HAVE=0.3-1 "$t/auto-update" --install >/dev/null
+[[ $(res) == "held "* && ! -s $t/calls ]] || fail "installed with the shells rebuilt for another Qt: $(res)"
+# A new Qt with nothing built on it to rebuild: installed (and nothing built: no complaint of a missing list)
+lists; built; : >"$aurdir/rebuild"; rm "$aurdir/built"; : >"$t/calls"; : >"$t/log"
+QU=$newqt Q_HAVE=0.3-1 "$t/auto-update" --install >/dev/null
+[[ $(res) == "ok "* ]] && grep -q '^pacman -Su' "$t/calls" || fail "a new Qt held back with nothing to rebuild: $(res)"
+grep -q 'No such file' "$t/log" && fail "the install complains of a list the builds didn't write: $(grep 'No such file' "$t/log")"
+# A new Qt, its rebuild built, an unrelated AUR app's build failed: installed with the rebuild, not held for the other
+lists; built; echo "equibop: its build failed" >"$aurdir/failed"; : >"$t/calls"
+QU=$newqt Q_HAVE=0.3-1 "$t/auto-update" --install >/dev/null
+[[ $(res) == "ok "* ]] && grep -q '^pacman -Su .* agros-aur/quickshell-git' "$t/calls" ||
+    fail "a new Qt held back for an unrelated AUR app's failed build: $(res) $(cat "$t/calls")"
+# AUR apps pacman can't install (a file conflict): the rest installed without them, said; not when a new runtime needs
+# them (failed, the lists back)
+lists; built; : >"$aurdir/rebuild"; : >"$t/calls"
+Q_HAVE=0.2-1 PACMAN_AUR_RC=1 "$t/auto-update" --install >/dev/null || fail "the install without the AUR apps failed: $(tail -5 "$t/log")"
+[[ $(res) == "ok "* && $(grep -c '^pacman -Su' "$t/calls") == 2 ]] && grep -q "^pacman -Su --noconfirm --config $t/au/prev/pacman.conf --ignore quickshell-git (" "$t/calls" ||
+    fail "the repo's part not installed without the AUR apps pacman refused: $(res) $(cat "$t/calls")"
+[[ $(sed -n 2p "$t/au/aur-install-failed") == "quickshell-git 0.3-1" && $(head -1 "$t/au/aur-install-failed") == *"conflicting files"* ]] ||
+    fail "the AUR apps left out not written down: $(cat "$t/au/aur-install-failed" 2>/dev/null)"
+out=$(HOME=$t/h AUTO_UPDATE_DIR=$t/au PACMAN_DB_DIR=$t/pac Q_HAVE=0.2-1 "$here/.local/bin/dotfiles-check" 2>&1) || true
+[[ $out == *"couldn't install AUR apps at shutdown (quickshell-git"*"conflicting files"* ]] || fail "dotfiles-check didn't say the AUR apps left out: $out"
+lists; built; : >"$t/calls"
+QU=$newqt Q_HAVE=0.3-1 PACMAN_AUR_RC=1 "$t/auto-update" --install >/dev/null && fail "a new Qt installed without its rebuild"
+[[ $(res) == "failed "* && $(grep -c '^pacman -Su' "$t/calls") == 1 && $(cat "$t/pac/sync/core.db") == old ]] ||
+    fail "a new Qt's rebuild refused, and the rest tried without it: $(res) $(cat "$t/calls")"
+# (an install of them that goes through: the note gone)
+lists; built; : >"$aurdir/rebuild"
+Q_HAVE=0.2-1 "$t/auto-update" --install >/dev/null
+[[ ! -e $t/au/aur-install-failed ]] || fail "the AUR apps' install failure still noted once they're installed"
+# An AUR update that failed, no new Qt: the rest (the repo's, the AUR apps built) without it
+lists; built; echo "equibop: the build failed" >"$aurdir/failed"; echo "equibop 1.1-1" >"$aurdir/wanted"; : >"$t/calls"
+Q_HAVE=0.2-1 "$t/auto-update" --install >/dev/null
+[[ $(res) == "ok "* ]] && grep -q '^pacman -Su .* agros-aur/quickshell-git' "$t/calls" ||
+    fail "the rest not installed beside a failed AUR build: $(res) $(cat "$t/calls")"
+grep -q "AUR apps wait" "$t/log" || fail "the AUR apps waiting not said"
+out=$(HOME=$t/h AUTO_UPDATE_DIR=$t/au PACMAN_DB_DIR=$t/pac "$here/.local/bin/dotfiles-check" 2>&1) || true
+[[ $out == *"couldn't build AUR apps (equibop: the build failed): still waiting: equibop;"* ]] || fail "dotfiles-check didn't say the failed AUR build: $out"
+rm -rf "$aurdir"
+
+# Firmware: found at boot (fwupd), written down and said (in a unit of its own); installed at shutdown only once said,
+# before the packages
+FW='{"Devices":[{"DeviceId":"abc123","Name":"System Firmware","Version":"1.0","Releases":[{"Version":"1.2"}]}]}'
+: >"$t/calls"
+FW=$FW "$t/auto-update" || fail "the boot with firmware waiting failed"
+[[ $(cat "$t/au/firmware") == $'abc123\tSystem Firmware\t1.0\t1.2' ]] || fail "the firmware waiting not written down: $(cat "$t/au/firmware" 2>/dev/null)"
+grep -q "^systemd-run .*--unit=agros-firmware-note $t/auto-update --firmware-note" "$t/calls" || fail "the firmware not said: $(cat "$t/calls")"
+lists; : >"$t/calls"
+"$t/auto-update" --install >/dev/null
+grep -q fwupdtool "$t/calls" && fail "firmware installed before the users were told"
+# (said on the users' desktops once someone's logged in: agros-each-user --notify-wait; nobody yet: not marked told)
+NOBODY=1 "$t/auto-update" --firmware-note
+[[ ! -e $t/au/firmware-told ]] || fail "the firmware marked told with nobody told"
+"$t/auto-update" --firmware-note
+grep -q "^notify .*Firmware update ready System Firmware: installed when you shut down or restart" "$t/calls" ||
+    fail "the firmware not said on the desktop: $(cat "$t/calls")"
+cmp -s "$t/au/firmware" "$t/au/firmware-told" || fail "the firmware said not marked told"
+: >"$t/calls"
+"$t/auto-update" --install >/dev/null
+[[ $(head -1 "$t/calls") == "fwupdtool update --assume-yes --no-reboot-check abc123" ]] && grep -q '^pacman -Su' "$t/calls" ||
+    fail "the firmware said not installed first at shutdown: $(cat "$t/calls")"
+# (never under a time limit of its own: one cut a flash off midway)
+grep -E 'timeout [^|]*fwupdtool update' "$t/auto-update" && fail "the firmware's flash under a time limit of its own"
+[[ ! -e $t/au/firmware && ! -e $t/au/firmware-told ]] || fail "installed firmware still waiting"
+grep -q "a UEFI or BIOS update applies at the next boot" "$t/log" || fail "a staged UEFI update not said"
+# Skipped (fwupd's own checks: it needs AC power), though fwupdtool exits 0: the device still offers it after. Kept for
+# the next shutdown, said by dotfiles-check with fwupd's reason; one that fails outright the same
+FW=$FW "$t/auto-update"; cp "$t/au/firmware" "$t/au/firmware-told"
+lists; : >"$t/log"; FW_LEFT=$FW "$t/auto-update" --install >/dev/null
+[[ -s $t/au/firmware-told && -s $t/au/firmware-failed ]] || fail "a skipped firmware update (exit 0) not kept and noted"
+grep -q "firmware: installed" "$t/log" && fail "a skipped firmware update logged as installed"
+out=$(HOME=$t/h AUTO_UPDATE_DIR=$t/au PACMAN_DB_DIR=$t/pac "$here/.local/bin/dotfiles-check" 2>&1) || true
+[[ $out == *"firmware update failed to install at shutdown"*"Device requires AC power to be connected"* ]] || fail "dotfiles-check didn't say the skipped firmware: $out"
+lists; rm "$t/au/firmware-failed"; FWTOOL_RC=1 "$t/auto-update" --install >/dev/null
+[[ -s $t/au/firmware-told && $(cut -d' ' -f3- "$t/au/firmware-failed") == flashing ]] || fail "a failed firmware update not kept and noted"
+# Too little of the install's time left: firmware not started; after a firmware update that took long, the packages put
+# off to the next shutdown (counted)
+sed 's/((SECONDS <= stop - packages - 25 \* 60))/((0))/' "$t/auto-update" >"$t/auto-update-late"; chmod +x "$t/auto-update-late"
+grep -q '((0))' "$t/auto-update-late" || fail "test setup: the firmware's time left not made short"
+lists; rm -f "$t/au/firmware-failed" "$t/au/skipped"; : >"$t/calls"; "$t/auto-update-late" --install >/dev/null
+! grep -q fwupdtool "$t/calls" && grep -q '^pacman -Su' "$t/calls" || fail "firmware started with too little time left: $(cat "$t/calls")"
+sed 's/((SECONDS <= stop - packages))/((0))/' "$t/auto-update" >"$t/auto-update-late"
+grep -q '((0))' "$t/auto-update-late" || fail "test setup: the packages' time left not made short"
+lists; : >"$t/calls"; "$t/auto-update-late" --install >/dev/null
+grep -q fwupdtool "$t/calls" && ! grep -q '^pacman -Su' "$t/calls" && grep -q "firmware update took long" "$t/au/skipped" ||
+    fail "the packages installed with too little time left after the firmware: $(cat "$t/calls")"
+# Nothing waiting at the next boot: the notes gone, its failure too
+"$t/auto-update"
+[[ ! -e $t/au/firmware && ! -e $t/au/firmware-told && ! -e $t/au/firmware-failed ]] || fail "firmware no longer waiting still noted"
+
+# The log keeps the last 20 runs
+for _ in {1..25}; do "$t/auto-update" --install >/dev/null; done
+n=$(grep -c '^===== .* --install =====$' "$t/log")
+((n >= 19 && n <= 21)) || fail "the log not trimmed to its last runs: $n"
 echo "ok auto-update-install"

@@ -1,5 +1,5 @@
 // Caelestia-style login screen for greetd, modelled on Caelestia's lock screen.
-// Installed to /etc/greetd/caelestia-greeter by ~/.local/share/caelestia-greeter/install.sh (run with sudo).
+// Installed to /etc/greetd/caelestia-greeter by the agros-greeter package.
 // The wallpaper and Caelestia colours are copied into theme/ by make-theme.sh at every login.
 // Preview on the desktop (no logging in):
 //   ~/.local/share/caelestia-greeter/make-theme.sh ~/.local/share/caelestia-greeter/theme && qs -p ~/.local/share/caelestia-greeter
@@ -19,10 +19,11 @@ ShellRoot {
     // Colours, user and wallpaper: theme/theme.json next to this file (refreshed at every login by make-theme.sh)
     property var theme: ({})
     readonly property var c: theme.colours ?? {}
-    // (theme.json is rewritten at every login; install.sh also puts the user in the environment, in case it's broken)
+    // (theme.json is rewritten at every login; agros-greeter's install also puts the user in its env file, in case it's
+    // broken)
     readonly property string user: chosenUser || theme.user || Quickshell.env("CAELESTIA_GREETER_USER") || ""
     // The people who can log in (uid 1000 and up, a login shell): with more than one, the pill by the session's
-    // opens their list (the last one to log in comes first; the wallpaper and colours stay the last one's)
+    // opens their list (in the system's account order; the wallpaper and colours stay the last one's)
     property var users: []
     property string chosenUser
 
@@ -93,7 +94,7 @@ ShellRoot {
         }
         // No user (theme.json broken and none in the environment): greetd can't start, and would leave it spinning
         if (!user) {
-            message = "No user set: run the login screen's install.sh again";
+            message = "No user set: put CAELESTIA_GREETER_USER=<name> in /etc/greetd/caelestia-greeter/env (Ctrl+Alt+F2)";
             return;
         }
         busy = true;
@@ -774,6 +775,18 @@ ShellRoot {
                 Keys.onReturnPressed: picker.pick(picker.highlighted)
                 Keys.onEnterPressed: picker.pick(picker.highlighted)
                 Keys.onEscapePressed: picker.close()
+                // (a letter typed with the list open is the password's: it goes there, and the list closes)
+                Keys.onPressed: e => {
+                    // (printable text only, emoji included: not control keys, Delete or shortcuts)
+                    if (/^[^\x00-\x1f\x7f]+$/.test(e.text) && !(e.modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier))) {
+                        picker.close();
+                        input.remove(input.selectionStart, input.selectionEnd);
+                        input.insert(input.cursorPosition, e.text);
+                        root.password = input.text;
+                        root.message = "";
+                        e.accepted = true;
+                    }
+                }
 
                 // (a click between the rows doesn't close it)
                 MouseArea {

@@ -3,6 +3,7 @@
 # ("USB DISK", a FAT label's usual kind) is found. lsblk's raw output (-r) writes that space as \x20 (seen on this
 # machine: PARTLABEL "Basic\x20data\x20partition"), so the folder it names doesn't exist as written
 set -euo pipefail
+# shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 mnt="$t/media/USB DISK"; mkdir -p "$mnt" "$t/bin"; : >"$mnt/dotfiles-personal.tar.gpg"
 # (lsblk as real lsblk -nrpo NAME,RM,TYPE,MOUNTPOINT prints that drive)

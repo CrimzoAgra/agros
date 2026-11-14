@@ -52,11 +52,11 @@ Scope {
     property bool ready: false
     readonly property string name: placeNames[location] || location
 
-    // Set (empty: automatic again), in Caelestia's file as it writes it (tried again twice: Caelestia may be halfway
-    // through rewriting the file, which jq then can't read). Under the lock caelestia-pin takes to change the same file
-    // (its Super menu pins): neither loses the other's change
+    // Set (empty: automatic again), in Caelestia's file as it writes it, by json-edit (under the lock caelestia-pin
+    // takes to change the same file, tried again while Caelestia is halfway through rewriting it)
     function setLocation(loc: string): void {
-        Quickshell.execDetached(["sh", "-c", `f="$HOME/.config/caelestia/shell.json"; exec 9>"$f.lock"; flock 9; [ -s "$f" ] || echo "{}" >"$f"; for i in 1 2 3; do jq --indent 4 --arg l "$1" '.services.weatherLocation = $l' "$f" >"$f.tmp" && mv "$f.tmp" "$f" && exit; sleep 0.3; done; rm -f "$f.tmp"`, "sh", loc.trim()]);
+        const f = `${Quickshell.env("HOME")}/.config/caelestia/shell.json`;
+        Quickshell.execDetached([`${Quickshell.env("HOME")}/.local/bin/json-edit`, f, "--indent", "4", "--arg", "l", loc.trim(), ".services.weatherLocation = $l"]);
     }
 
     // Places picked from the suggestions are saved as "lat,lon" (the exact place, for Caelestia too); their names are kept

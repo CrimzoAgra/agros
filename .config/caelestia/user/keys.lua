@@ -1,5 +1,5 @@
 -- Keys: the Super+Tab / Alt+Tab switchers, Scroll Lock, lock badges, and binds of my own. (Window binds: windows.lua.)
--- dots.bind binds take their keys from the Settings app (Keyboard page); the keys named here are the defaults
+-- dots.bind binds take their keys from the Settings app (Shortcuts page); the keys named here are the defaults
 -- Caelestia's own binds for the same keys (Alt+Tab window cycling, Print, Super+Alt+Space, Super+Alt+F) are turned off
 -- in hypr-vars.lua, so nothing here has to undo them
 

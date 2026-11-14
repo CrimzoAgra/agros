@@ -9,26 +9,26 @@ if [[ ${1:-} == dock ]]; then
     cfg="$HOME/.config/quickshell/sidedock/pins.json"
     path='.'
     prompt="Pin to dock: "
-    empty='[]'
+    empty='[]' indent=()
 else
     cfg="$HOME/.config/caelestia/shell.json"
     path='.launcher.favouriteApps'
     prompt="Pin to Super menu: "
-    empty='{}'
+    # (written as Caelestia and the Settings app write it: one shell.json format)
+    empty='{}' indent=(--indent 4)
 fi
+helpers=$(dirname "$(readlink -f "$0")")
 mkdir -p "${cfg%/*}"
-[[ -s $cfg ]] || echo "$empty" >"$cfg"
+# (a missing one; and an empty pins file, which nothing rewrites in place (json-edit refuses an empty file: every pin
+# was refused). Not an empty shell.json: that's Caelestia's mid-rewrite, not one to start again)
+[[ -e $cfg && (-s $cfg || ${1:-} != dock) ]] || echo "$empty" >"$cfg"
 
 toggle() {
-    # One change at a time: two quick pin clicks would both start from the same file and one would be lost
-    # (held for this change only, not while the picker is open)
-    (
-        flock 9
-        # (a value that isn't a list, from a hand edit: started again, not left failing)
-        jq --arg id "$1" "$path = (($path | arrays // [])
-                | if any(.[]; . == \$id) then map(select(. != \$id)) else . + [\$id] end)" \
-            "$cfg" >"$cfg.tmp" && mv "$cfg.tmp" "$cfg"
-    ) 9>"$cfg.lock"
+    # One change at a time (json-edit, beside this: two quick pin clicks would both start from the same file and one
+    # would be lost; held for this change only, not while the picker is open)
+    # (a value that isn't a list, from a hand edit: started again, not left failing)
+    "$helpers/json-edit" "$cfg" "${indent[@]}" --arg id "$1" "$path = (($path | arrays // [])
+        | if any(.[]; . == \$id) then map(select(. != \$id)) else . + [\$id] end)"
 }
 # The dock's own order (its drag), under the same lock as a pin click. One JSON value: the order (by entry id, as the
 # dock shows its pins), as a list, or {"order": [...], "keys": {pin: its entry id}} for the pins the dock started from
@@ -38,31 +38,29 @@ toggle() {
 # brought back; one pinned since (not in the order) kept after them. With <seq> ("<the dock's run>:<count>"): one not
 # newer than the last order written by the same run (two drags finishing out of order) changes nothing
 if [[ ${1:-} == dock && ${2:-} == --order ]]; then
-    (
-        flock 9
-        req=$(jq -sce 'length == 1 and (.[0] | (type == "array" and all(.[]; type == "string"))
-                or (type == "object" and (.order | type == "array" and all(.[]; type == "string"))
-                    and ((.keys // {}) | type == "object" and all(.[]; type == "string"))))' <<<"${3:-}" >/dev/null 2>&1 &&
-              jq -c 'if type == "array" then {order: ., keys: {}} else {order, keys: (.keys // {})} end' <<<"$3") ||
-            { echo "Not a list of app ids, pins left as they are: ${3:-}" >&2; exit 1; }
-        seq=${4:-}
-        IFS=: read -r last_run last_n 2>/dev/null <"$cfg.order-seq" || true
-        run=${seq%%:*} n=${seq#*:}
-        if [[ $seq =~ ^[^:]+:[0-9]+$ && $run == "${last_run:-}" && ${last_n:-} =~ ^[0-9]+$ ]] && ((n <= last_n)); then
-            echo "An older order than the last one written: left out" >&2
-            exit 0
-        fi
-        jq --argjson req "$req" '(arrays // []) as $now | $req.order as $order | $req.keys as $keys
-            | def key: ($keys[.] // .);
-              def same($b): ascii_downcase == ($b | ascii_downcase);
-              ($now | map(key)) as $nowkeys | [$keys[]] as $base
-            | ($order | map(select(. as $k | (any($base[]; same($k)) | not) or any($nowkeys[]; same($k)))))
-              + ($now | map(select(key as $k | all($order[]; same($k) | not))))' "$cfg" >"$cfg.tmp" ||
-            { echo "The dock's order couldn't be written: pins left as they are" >&2; rm -f "$cfg.tmp"; exit 1; }
-        mv "$cfg.tmp" "$cfg"
-        # (noted only once written)
-        [[ ! $seq =~ ^[^:]+:[0-9]+$ ]] || echo "$seq" >"$cfg.order-seq"
-    ) 9>"$cfg.lock"
+    # (this again, under json-edit's lock for the pins file: the check of the run's count, the change and its note as one)
+    [[ ${JSON_EDIT_HELD:-} == "$cfg" ]] || exec "$helpers/json-edit" --lock "$cfg" "$0" "$@"
+    req=$(jq -sce 'length == 1 and (.[0] | (type == "array" and all(.[]; type == "string"))
+            or (type == "object" and (.order | type == "array" and all(.[]; type == "string"))
+                and ((.keys // {}) | type == "object" and all(.[]; type == "string"))))' <<<"${3:-}" >/dev/null 2>&1 &&
+          jq -c 'if type == "array" then {order: ., keys: {}} else {order, keys: (.keys // {})} end' <<<"$3") ||
+        { echo "Not a list of app ids, pins left as they are: ${3:-}" >&2; exit 1; }
+    seq=${4:-}
+    IFS=: read -r last_run last_n 2>/dev/null <"$cfg.order-seq" || true
+    run=${seq%%:*} n=${seq#*:}
+    if [[ $seq =~ ^[^:]+:[0-9]+$ && $run == "${last_run:-}" && ${last_n:-} =~ ^[0-9]+$ ]] && ((n <= last_n)); then
+        echo "An older order than the last one written: left out" >&2
+        exit 0
+    fi
+    "$helpers/json-edit" "$cfg" --argjson req "$req" '(arrays // []) as $now | $req.order as $order | $req.keys as $keys
+        | def key: ($keys[.] // .);
+          def same($b): ascii_downcase == ($b | ascii_downcase);
+          ($now | map(key)) as $nowkeys | [$keys[]] as $base
+        | ($order | map(select(. as $k | (any($base[]; same($k)) | not) or any($nowkeys[]; same($k)))))
+          + ($now | map(select(key as $k | all($order[]; same($k) | not))))' ||
+        { echo "The dock's order couldn't be written: pins left as they are" >&2; exit 1; }
+    # (noted only once written)
+    [[ ! $seq =~ ^[^:]+:[0-9]+$ ]] || echo "$seq" >"$cfg.order-seq"
     exit
 fi
 if [[ -n ${2:-} ]]; then

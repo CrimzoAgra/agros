@@ -2,6 +2,7 @@
 # timezone-auto: nothing while it's off; on, the zone for the weather location ("lat,lon" or a town) or the IP set only
 # when it differs from the system's; no network, no answer or a bad one: nothing set, and no error
 set -euo pipefail
+# shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 mkdir -p "$t/bin" "$t/home/.config/caelestia"
 # (the network faked: each service answers what $ANSWER says; the URL asked for kept in $t/asked)
@@ -15,10 +16,12 @@ cat >"$t/bin/timedatectl" <<EOF
 #!/bin/sh
 case \$1 in show) echo Europe/Lisbon ;; --no-ask-password) echo "\$3" >>"$t/set" ;; *) exit 1 ;; esac
 EOF
-printf '#!/bin/sh\nexit 0\n' >"$t/bin/nm-online"
-chmod +x "$t"/bin/*
+# (its wait for the network, beside it: none here)
+mkdir -p "$t/lib" && cp "$here/.local/bin/timezone-auto" "$t/lib/"
+printf '#!/bin/sh\nexit 0\n' >"$t/lib/wait-online"
+chmod +x "$t"/bin/* "$t/lib/wait-online"
 place() { printf '{"services": {"weatherLocation": "%s"}}\n' "$1" >"$t/home/.config/caelestia/shell.json"; }
-run() { rm -f "$t/set" "$t/asked"; HOME=$t/home PATH=$t/bin:$PATH ANSWER=${ANSWER-} timeout 10 "$here/.local/bin/timezone-auto" "$@"; }
+run() { rm -f "$t/set" "$t/asked"; HOME=$t/home PATH=$t/bin:$PATH ANSWER=${ANSWER-} timeout 10 "$t/lib/timezone-auto" "$@"; }
 set_to() { [[ $(cat "$t/set" 2>/dev/null) == "$1" ]]; }
 
 place ""
@@ -29,7 +32,7 @@ set_to Europe/Madrid || fail "on, automatic location: the IP's zone wasn't set"
 grep -q ip-api.com "$t/asked" || fail "automatic location: not looked up by IP"
 ANSWER='{"timezone": "Europe/Lisbon"}' run
 [[ ! -e $t/set ]] || fail "the zone it already is was set again"
-ANSWER= run || fail "no network: it failed"
+ANSWER='' run || fail "no network: it failed"
 [[ ! -e $t/set ]] || fail "no network: a zone was set"
 ANSWER='not json' run || fail "a bad answer: it failed"
 [[ ! -e $t/set ]] || fail "a bad answer: a zone was set"

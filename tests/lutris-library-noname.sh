@@ -2,6 +2,7 @@
 # lutris-library and a Steam manifest with no "name" yet (Steam rewriting it mid-download): skipped, the run carries
 # on; saved, its NULL name crashed this run and every later one
 set -euo pipefail
+# shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 export HOME=$t XDG_DATA_HOME=$t/.local/share XDG_CACHE_HOME=$t/.cache XDG_CONFIG_HOME=$t/.config
 export DBUS_SESSION_BUS_ADDRESS=unix:path=$t/no-bus

@@ -1,9 +1,15 @@
 [Unit]
-Description=Link AgrOS's programs into your home (~/.local/bin, ~/.local/share)
+Description=Link AgrOS's programs into your home (~/.local/bin, ~/.local/share) and update its settings you never edited
+# Before the desktop starts: it runs those programs through the links and reads those settings, uwsm's env.d first (its
+# loader, then Hyprland, after this target). Wanted by default.target, not the graphical session's, so a text or SSH
+# login gets them too
+Before=graphical-session-pre.target wayland-wm-env@hyprland.desktop.service
 
 [Service]
 Type=oneshot
 ExecStart=/usr/lib/agros/bin/agros-links
+# (its notification of settings you edited waits in the background for Caelestia: kept alive past the start)
+RemainAfterExit=yes
 
 [Install]
 WantedBy=default.target

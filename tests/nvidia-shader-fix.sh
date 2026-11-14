@@ -2,6 +2,7 @@
 # nvidia-shader-fix's edit of Steam's localconfig.vdf: added once, an existing %command% option kept, a game with no
 # entry yet gets one, taken out again leaving the rest as it was. Only on the GPUs it's for (none on AMD/Intel)
 set -euo pipefail
+# shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 python3 -I - "$here/.local/bin/nvidia-shader-fix" "$t" <<'P'
 import importlib.machinery, importlib.util, sys
@@ -51,7 +52,7 @@ assert not fix.affected("100"), "affected for a game it has no fix for"
 # Affected but no spirv-tools to make the fix with: the game just runs, and you're told
 ran, told = [], []
 fix.os.execvp = lambda prog, cmd: ran.append(cmd) or sys.exit(0)
-fix.notify = told.append
+fix.notify = fix.warn = told.append
 os.environ["SteamAppId"] = "1091500"
 fix.HOME = fix.OVERRIDES = bin_  # (not your own: a fix made there already took the spirv-tools check out of it)
 try:

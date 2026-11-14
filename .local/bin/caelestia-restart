@@ -3,7 +3,10 @@
 # environment: your login shell as $SHELL, none of the editor/Claude variables of whatever started this.
 #   caelestia-restart --rebuild   the overlay rebuilt while the shell is stopped (dots-settings): rebuilt under the
 #                                 running shell, its folder swapped beneath it, Hyprland dropped the shell
+# With a game open it waits until the game closes (in the background, said in a notification), whoever asked: the
+# Settings app, a rebuild handed over by caelestia-overlay, the shortcut
 # shellcheck disable=SC2046  # one variable name per word on purpose
+helpers=$(dirname "$(readlink -f "$0")")  # (the shared helpers, beside this)
 # Run from outside the desktop (an SSH login, a text console: dots-settings set there), Hyprland runs it instead (its
 # first one, -i 0), with the desktop's environment: from here the shell was killed and the new one couldn't start.
 # (so from there a failed --rebuild isn't reported back: Hyprland runs it. Changes it skipped are said in a notification
@@ -14,10 +17,37 @@ fi
 unset $(env | grep -oE "^(CLAUDE[A-Z_]*|CLAUDECODE|ANTHROPIC[A-Z_]*|NODE_OPTIONS|VSCODE[A-Z_]*|ELECTRON[A-Z_]*|QS_APP_ID)=" | tr -d =)
 SHELL=$(getent passwd "$USER" | cut -d: -f7)  # your login shell, not the one this was started from
 export SHELL
+# A game open: the restart (the bar gone a moment, the game's focus taken) runs once it closes (after-games), run again
+# then, in the background: in your user manager, so the caller's unit ending doesn't take it along; without one, detached.
+# Requests during one game merged into that one pending restart (a --rebuild one makes it a rebuild), said once: each
+# with its own waiter, Caelestia restarted again and again after the game. Pending: this file, its waiter holding it
+# (flock); the requests one at a time (its .req lock), so two at once don't both start one
+if "$helpers/game-focus" --game-open 2>/dev/null; then
+    p=${XDG_RUNTIME_DIR:-/tmp}/caelestia-restart-pending
+    exec 7>"$p.req"; flock 7
+    echo "${1:-}" >>"$p"
+    free() { { flock -n 6; } 6<"$p"; } 2>/dev/null  # (there, and no waiter on it)
+    if ! free; then
+        echo "caelestia-restart: a game is open: already restarted once it closes${1:+ (now rebuilt too)}"
+        exit 0
+    fi
+    echo "caelestia-restart: a game is open: restarted${1:+ (and rebuilt)} once it closes"
+    # (the file taken away before it's read: a request after that starts a waiter of its own)
+    set -- sh -c 'h=$1 me=$2 p=$3; exec 8<"$p"; flock 8; "$h/after-games"; mv -f "$p" "$p.taken"
+        a=$(grep -m1 -x -e --rebuild "$p.taken"); rm -f "$p.taken"; exec "$me" $a 8<&-' _ "$helpers" "$(readlink -f "$0")" "$p"
+    systemd-run --user --quiet --collect "$@" >/dev/null 2>&1 7>&- || setsid -f "$@" >/dev/null 2>&1 </dev/null 7>&-
+    # (the next request waits until the waiter holds it, at most 5 s: before that it would start a second)
+    for _ in $(seq 50); do free || break; sleep 0.1; done
+    setsid -f "$helpers/notify-when-up" -a Caelestia "Caelestia restarts once your game closes" \
+        "Your change applies then" >/dev/null 2>&1 </dev/null 7>&-
+    exit 0
+fi
 # Spotify shows its window the moment the tray goes away: if it's hidden in the tray, have that window open
 # out of sight (the silent rules in ~/.config/caelestia/user/apps.lua; tray-keeper minimises it and turns them off)
 if pgrep -f com.spotify.Client >/dev/null && ! hyprctl clients -j | jq -e 'any(.[]; .class | ascii_downcase == "spotify")' >/dev/null; then
     hyprctl eval 'dots.spotify_silent_set(true)' >/dev/null
+    # (off again if no new shell comes up: no tray-keeper then to turn them off, its window kept out of sight for good)
+    trap '[[ -n ${up:-} ]] || hyprctl eval "dots.spotify_silent_set(false)" >/dev/null' EXIT
 fi
 # Under the overlay's lock from the stop until the new shell is up: a rebuild waiting on it (an update's pacman hook) then
 # finds the shell running and hands over to this, rather than swapping the folder under the shell just started
@@ -27,43 +57,50 @@ flock 9
 # Every Caelestia running, by its process: the one from before the overlay existed runs from
 # /etc/xdg/quickshell/caelestia, which "qs -c caelestia kill" (now the overlay's) doesn't match, and two shells
 # doubled the room the bar keeps (maximised and tiled windows' gaps)
-for pid in $(qs list --all 2>/dev/null | awk '/Process ID:/ {pid = $3} /Config path: .*\/quickshell\/caelestia\/shell\.qml$/ {print pid}'); do
+pids() { qs list --all 2>/dev/null | awk '/Process ID:/ {pid = $3} /Config path: .*\/quickshell\/caelestia\/shell\.qml$/ {print pid}'; }
+old=$(pids)
+for pid in $old; do
     qs kill --pid "$pid" >/dev/null 2>&1
 done
 # Until it's gone (at most 5 s): one still closing makes the new one (-n) not start at all. Still there: killed outright,
 # and if even that doesn't take, no rebuild (it would swap the folder under it)
-gone() { for _ in $(seq "$1"); do qs list --all 2>/dev/null | grep -q "/quickshell/caelestia/shell.qml" || return 0; sleep 0.1; done; return 1; }
+gone() { for _ in $(seq "$1"); do [[ -z $(pids) ]] && return 0; sleep 0.1; done; return 1; }
 if ! gone 50; then
-    for pid in $(qs list --all 2>/dev/null | awk '/Process ID:/ {pid = $3} /Config path: .*\/quickshell\/caelestia\/shell\.qml$/ {print pid}'); do
+    for pid in $(pids); do
         kill -9 "$pid" 2>/dev/null
     done
     gone 20 || stuck=1
 fi
+# Still there: no second one started beside it (two shells, the bar's room doubled), nor a rebuild under it
+[[ -z ${stuck:-} ]] || { echo "caelestia-restart: Caelestia wouldn't stop: not restarted${1:+, not rebuilt}"; exit 3; }
 rc=0
-if [[ ${1:-} == --rebuild && -n ${stuck:-} ]]; then
-    echo "caelestia-restart: Caelestia wouldn't stop: not rebuilt"; rc=3
-elif [[ ${1:-} == --rebuild ]]; then
+if [[ ${1:-} == --rebuild ]]; then
     # (a failure the exit status too, 3: the Settings app says "Applying it failed"; the shell started again all the
     # same, and what it has then, none of your changes or the ones before, said once it's up, below; caelestia-overlay
     # tells 3 from "not handed over")
-    CAELESTIA_REBUILDING=1 "$HOME/.local/bin/caelestia-overlay" >/dev/null || { echo "caelestia-restart: the overlay didn't build (said once Caelestia is up)"; rc=3; }
+    CAELESTIA_REBUILDING=1 "$helpers/caelestia-overlay" >/dev/null || { echo "caelestia-restart: the overlay didn't build (said once Caelestia is up)"; rc=3; }
 fi
 # From home: apps opened from the launcher and dock start in Caelestia's folder (Thunar opens there)
 cd "$HOME" || exit 1
 # In a systemd scope of its own: started from an app's terminal (VS Code...), it would otherwise be in that app's
 # scope, and closing or force-quitting the app would take the shell down with it
-systemd-run --user --scope --quiet --collect --unit="caelestia-$(date +%s)" setsid qs -c caelestia -n -d >/dev/null 2>&1 9>&-
-# (the lock kept until it's up, at most 10 s)
-for _ in $(seq 100); do qs list --all 2>/dev/null | grep -q "/quickshell/caelestia/shell.qml" && break; sleep 0.1; done
+# (named to the nanosecond: two restarts in one second had the second's scope refused, and no shell)
+systemd-run --user --scope --quiet --collect --unit="caelestia-$(date +%s%N)" setsid qs -c caelestia -n -d >/dev/null 2>&1 9>&-
+# (the lock kept until it's up, at most 30 s; never up: 3, a failure, as a failed rebuild)
+up=''
+# (a new one: not one of those stopped above, should one linger)
+for _ in $(seq 300); do [[ -n $(grep -vxF -f <(printf '%s\n' "$old") <<<"$(pids)") ]] && { up=1; break; }; sleep 0.1; done
+[[ -n $up ]] || { echo "caelestia-restart: Caelestia didn't start"; rc=3; }
 exec 9>&-
 # A rebuild's skipped changes said now, the new shell (the notification server) up: said during the build, with it
-# stopped, it went to nobody (a few tries: its notifications come up just after it shows in qs list)
+# stopped, it went to nobody (dots-warn: its notifications come up just after it shows in qs list)
 skipped=${XDG_STATE_HOME:-$HOME/.local/state}/caelestia-overlay-skipped
+# (in the background: dots-warn tries for a minute when the shell never came up, and the caller waited on it. In a
+# scope of its own: run by the after-game waiter, this is its unit's main process, and its end killed the unit's
+# cgroup, a setsid'd warning in it too; without a user manager, detached)
 if [[ ${1:-} == --rebuild && -s $skipped ]]; then
-    for _ in $(seq 10); do
-        notify-send -u critical -a Dotfiles -i dialog-warning "Caelestia changed: some of your changes are off" "$(cat "$skipped")" 2>/dev/null && break
-        sleep 0.5
-    done
+    set -- setsid -f "$helpers/dots-warn" "Caelestia changed: some of your changes are off" "$(cat "$skipped")"
+    systemd-run --user --scope --quiet --collect "$@" >/dev/null 2>&1 </dev/null || "$@" >/dev/null 2>&1 </dev/null
 fi
 # Tray icons of apps that don't re-add them, and Spotify's window: ~/.local/bin/tray-keeper
 exit $rc

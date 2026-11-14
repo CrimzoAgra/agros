@@ -1,26 +1,45 @@
 #!/usr/bin/env python3
 """Keeps the kernel console in each screen's best mode, so there's no "no video" between the login screen and the
 desktop (the screen doesn't resync when Hyprland takes over). Runs at every boot (boot-video-mode.service, installed
-by system/boot-video-mode.sh): reads the connected screens' modes from their EDID, picks the highest resolution and
-then its highest refresh rate (screenmode.py, shared with the login screen's best-mode), and sets video=<screen>:<W>x<H>@<Hz>
+by agros-boot): reads the connected screens' modes from their EDID, picks the screen's own resolution (its preferred
+mode's) and then its highest refresh rate there (screenmode.py, shared with the login screen's best-mode), and sets video=<screen>:<W>x<H>@<Hz>
 in the kernel options (Limine or GRUB) when they changed. The kernel picks its mode before this can run, so a newly
 connected screen gets its mode from the boot after.
   boot-video-mode           update the kernel options if the screens changed
   boot-video-mode --check   only print the options for the screens connected now (none: said, exit 3)
   boot-video-mode --current the video= options the boot config has now (what a boot with no screen found keeps; no
                             Limine or GRUB settings: exit 4)
+  boot-video-mode --quiet-boot  the options that keep the boot's and shutdown's text behind the splash (QUIET) added,
+                            each only where the line has no option of its name (a loglevel=7 of yours stays); the boot
+                            entries not made again (boot-menu does); none missing: exit 3. (Here, the one place that
+                            edits the kernel options line of Limine or GRUB)
+  boot-video-mode --remove  the video= options it set taken out (agros-boot's removal): the ones in the form it writes,
+                            video=<screen>:<W>x<H>@<Hz> (others, like video=efifb:off, are yours: kept); and the QUIET
+                            ones the line didn't have before AgrOS (its <file>.agros-orig, boot-menu's copy; none: kept);
+                            the boot entries not made again (the caller does, with its other changes); none there: exit 3
+The kernel options line is the set in effect: the file is read as a shell script, so a KEY= line sets the options and each
+KEY+= after it adds to them (Limine's KERNEL_CMDLINE[default] can have several). Options go on its last line; ones of
+the same name on any of its lines count as there
 """
 import glob
 import os
 import re
-import shutil
 import subprocess
 import sys
 
-# screenmode.py: next to this script once installed, in the login screen's folder in the repo
+# screenmode.py: next to this script once installed, in the login screen's folder in the repo. No __pycache__ for it:
+# run as root, it would leave one in /usr/lib/agros that no package owns (and in the repo)
+sys.dont_write_bytecode = True
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../.local/share/caelestia-greeter"))
-from screenmode import rank
+from screenmode import best
 
+# The video= options it writes (whole options only: after a space or the quote, up to one or the end)
+OURS = r'video=[^\s:"\']+:\d+x\d+@\d+(?![^\s"\'])'
+# The boot's and shutdown's text kept behind the splash: no kernel messages but critical ones, Plymouth's splash (not its
+# text mode), udev's start-up line in the boot image (before Plymouth is up) and systemd's status lines (failures too:
+# in the journal, journalctl -b -p err) off; Esc on the splash still shows the text. The emergency shell still comes up.
+# No vt.global_cursor_default=0: a text console and the emergency shell would have no cursor
+QUIET = ["quiet", "splash", "loglevel=3", "rd.udev.log_level=3", "systemd.show_status=false"]
 MODE = re.compile(r"\b(\d+)x(\d+)\s+([\d.]+) Hz")  # edid-decode's mode lines (interlaced ones read "1920x1080i")
 
 
@@ -29,14 +48,12 @@ def best_mode(edid_text):
     # At the screen's own resolution (its first detailed timing), as the login screen picks and Hyprland's "preferred":
     # a TV's EDID also lists modes above it it only takes in (4096x2160 on a 3840x2160 panel)
     native = re.search(r"DTD 1:\s+(\d+)x(\d+)", edid_text)
-    if native:
-        modes = [m for m in modes if (m[0], m[1]) == (int(native[1]), int(native[2]))] or modes
-    return max(modes, key=lambda m: rank(*m)) if modes else None
+    return best(modes, [(int(native[1]), int(native[2]))] if native else [])
 
 
 def screens():
     video = []
-    for status in sorted(glob.glob("/sys/class/drm/card*-*/status")):
+    for status in sorted(glob.glob(f"{ROOT}/sys/class/drm/card*-*/status")):
         conn = os.path.dirname(status)
         with open(status) as f:
             if f.read().strip() != "connected":
@@ -56,58 +73,171 @@ def screens():
     return video
 
 
+def connector(v):
+    return v.split("=", 1)[1].split(":", 1)[0]  # video=HDMI-A-1:... -> HDMI-A-1
+
+
 def with_video(line, video):
     """The options line with the new video= entries in place of the old ones for the same screens, before its closing
     quote (" or '). An old entry for a connector not seen now (a DisplayPort screen asleep reads "disconnected") stays:
     the kernel ignores it while the screen is away, and the boot config isn't rewritten twice (without it, then with it
     again at the next boot)."""
-    connector = lambda v: v.split("=", 1)[1].split(":", 1)[0]  # noqa: E731
     now = {connector(v) for v in video}
     # Whole options only (after a space or the quote): not the end of another one's name, like "foo.video=1"
     kept = [v for v in re.findall(r'(?<![^\s"\'])video=[^ "\']*', line) if connector(v) not in now]
     entries = kept + video
     # A value with no quotes (KERNEL_CMDLINE[default]+=quiet, GRUB_CMDLINE_LINUX_DEFAULT=quiet: one word, as the shell
     # reads it): quoted, so the options can go in
+    quoted = with_quotes(line, "screen modes")
+    if quoted is None:
+        return line
+    return re.sub(r'(["\'])\s*$', lambda m: (" " + " ".join(entries) if entries else "") + m.group(1), without_video(quoted))
+
+
+def with_quotes(line, what):
+    """The options line with its value quoted (a value with no quotes, KERNEL_CMDLINE[default]+=quiet,
+    GRUB_CMDLINE_LINUX_DEFAULT=quiet: one word, as the shell reads it), so options can go in; None, said, where they
+    can't (a quote not closed)"""
     bare = re.match(r'^([A-Za-z_][\w\[\]]*\+?=)([^\s"\']*)\s*$', line)
     if bare:
         line = f'{bare.group(1)}"{bare.group(2)}"'
     if not re.search(r'["\']\s*$', line):
-        print(f"No closing quote on the kernel options line, screen modes not set: {line.strip()}", file=sys.stderr)
+        print(f"No closing quote on the kernel options line, {what} not set: {line.strip()}", file=sys.stderr)
+        return None
+    return line
+
+
+def names(line):
+    """The names of the options in a kernel options line (quiet, loglevel...): the words in its quotes, or after its = """
+    value = re.sub(r'^[^"\'=]*=', "", line)
+    return {o.split("=", 1)[0] for o in re.findall(r'[^\s"\']+', value)}
+
+
+def with_quiet(line, have=frozenset()):
+    """The options line with the QUIET options neither it nor the other lines in effect (have: their names) have one of
+    the name of, before its closing quote"""
+    missing = [o for o in QUIET if o.split("=", 1)[0] not in names(line) | have]
+    quoted = with_quotes(line, "the quiet boot") if missing else None
+    if quoted is None:
         return line
-    line = re.sub(r' ?(?<![^\s"\'])video=[^ "\']*', "", line)
-    return re.sub(r'(["\'])\s*$', lambda m: (" " + " ".join(entries) if entries else "") + m.group(1), line)
+    # (no space after the opening quote: an empty value, ""; but a += one's is added straight onto the text before it)
+    plus = re.match(r'[^"\'=]*\+=', quoted)
+    return re.sub(r'(["\']?)(["\'])\s*$', lambda m: m.group(1) + ("" if m.group(1) and not plus else " ") + " ".join(missing) + m.group(2), quoted)
 
 
-ETC = os.environ.get("BOOT_VIDEO_MODE_ETC", "/etc")  # (another folder in the tests)
+def without_quiet(line, had):
+    """The options line with the QUIET options (as written here) out whose name the lines before AgrOS had none of (had:
+    their names): those AgrOS added"""
+    for o in QUIET:
+        if o.split("=", 1)[0] not in had:
+            line = without_video(line, re.escape(o) + r'(?![^\s"\'])')
+    return line
+
+
+def without_video(line, option=r'video=[^ "\']*'):  # (also the QUIET ones: option)
+    """The options line with no video= entries (whole options only, as with_video); only those matching option, given"""
+    new = re.sub(r' ?(?<![^\s"\'])' + option, "", line)
+    if new == line:
+        return line
+    # (one first in the quotes leaves the space after it: trimmed, but for the spaces the line had there, a += line's
+    # before the text it adds on)
+    lead = re.match(r'^[^"\']*["\']( *)', line)
+    return re.sub(r'^([^"\']*["\']) +(?!["\'\s]*$)', lambda m: m.group(1) + (lead.group(1) if lead else ""),
+                  re.sub(r'^([^"\']*["\']) +(?=["\']\s*$)', r"\1", new, count=1), count=1)
+
+
+def write(conf, lines):
+    """Written beside it and renamed over it, with its owner and mode: a power cut mid-write leaves the old or the new
+    file, never a half one the boot loader's next update would read"""
+    st = os.stat(conf)
+    tmp = conf + ".boot-video-mode-new"
+    with open(tmp, "w") as f:
+        f.write("\n".join(lines))
+        f.flush()
+        os.fsync(f.fileno())
+    os.chown(tmp, st.st_uid, st.st_gid)
+    os.chmod(tmp, st.st_mode & 0o7777)
+    os.replace(tmp, conf)
+
+
+ROOT = os.environ.get("AGROS_ROOT", "")  # (another root in the tests, boot-loader's too)
+HERE = os.path.dirname(os.path.abspath(__file__))
+# agros-boot's boot-loader, which decides the boot loader for boot-menu and its install too: beside this folder once
+# installed, in agros-boot's in the repo
+LOADER = next((p for p in (f"{HERE}/../boot-loader", f"{HERE}/../packages/agros-boot/boot-loader") if os.path.exists(p)),
+              f"{HERE}/../boot-loader")
 
 
 def boot_config():
     """The boot loader's settings this keeps the options in: (file, its kernel options line's start, the command that
-    makes the boot entries from it), or None. Limine's where there, else GRUB's (its settings left by a removed GRUB:
-    not it)"""
-    if os.path.isfile(f"{ETC}/default/limine"):
-        return f"{ETC}/default/limine", r"KERNEL_CMDLINE\[default\]\+?=", ["limine-update"]
-    if os.path.isfile(f"{ETC}/default/grub") and shutil.which("grub-mkconfig"):
-        return f"{ETC}/default/grub", r"GRUB_CMDLINE_LINUX_DEFAULT=", ["grub-mkconfig", "-o", "/boot/grub/grub.cfg"]
+    makes the boot entries from it), or None. Limine's or GRUB's, the one boot-loader says boots (Limine with no
+    /etc/default/limine: no kernel options file, none)"""
+    loader = subprocess.run([LOADER], check=False, capture_output=True, text=True).stdout.strip()
+    if loader == "limine" and os.path.isfile(f"{ROOT}/etc/default/limine"):
+        return f"{ROOT}/etc/default/limine", r"KERNEL_CMDLINE\[default\]\+?=", ["limine-update"]
+    if loader == "grub":
+        return f"{ROOT}/etc/default/grub", r"GRUB_CMDLINE_LINUX_DEFAULT\+?=", ["grub-mkconfig", "-o", "/boot/grub/grub.cfg"]
     return None
 
 
+def effective(lines, key):
+    """The indexes of the kernel options lines in effect: the last KEY= (not a commented one) and the KEY+= after it;
+    with none, every KEY+="""
+    idx = [i for i, x in enumerate(lines) if re.match(key, x)]
+    sets = [i for i in idx if not re.match(r'[^=]*\+=', lines[i])]
+    return [i for i in idx if i >= sets[-1]] if sets else idx
+
+
+def videos(lines):
+    return [v for x in lines for v in re.findall(r'(?<![^\s"\'])video=[^ "\'\n]*', x)]
+
+
 def current_video():
-    """The video= options of that kernel options line now (its first, not a commented one, as main rewrites it)"""
+    """The video= options of that kernel options line in effect now"""
     found = boot_config()
     if not found:
         return []
     with open(found[0]) as f:
-        for line in f:
-            if re.match(found[1], line):
-                return re.findall(r'(?<![^\s"\'])video=[^ "\'\n]*', line)
-    return []
+        lines = f.read().split("\n")
+    return videos(lines[i] for i in effective(lines, found[1]))
 
 
 def main():
     if "--current" in sys.argv:
         print(" ".join(current_video()))
         return 0 if boot_config() else 4  # (4: no Limine or GRUB settings, nothing it sets)
+    if "--remove" in sys.argv or "--quiet-boot" in sys.argv:
+        found = boot_config()
+        if not found:
+            return 3
+        with open(found[0]) as f:
+            lines = f.read().split("\n")
+        old = list(lines)
+        eff = effective(lines, found[1])
+        if not eff:
+            return 3
+        if "--quiet-boot" in sys.argv:
+            # (the missing ones on the last line in effect, after any the others have)
+            lines[eff[-1]] = with_quiet(lines[eff[-1]], set().union(*(names(lines[i]) for i in eff[:-1])))
+        else:
+            # (the lines in effect before AgrOS, boot-menu's copy: the names they had; none: nothing known to be AgrOS's,
+            # the QUIET ones kept). The video= out of every line (an older AgrOS put them on the first), the QUIET ones out
+            # of those in effect (on another, they did nothing)
+            try:
+                with open(found[0] + ".agros-orig") as f:
+                    before = f.read().split("\n")
+                had = set().union(*(names(before[i]) for i in effective(before, found[1])))
+            except FileNotFoundError:
+                had = None
+            for i, x in enumerate(lines):
+                if re.match(found[1], x):
+                    lines[i] = without_video(x, OURS)
+                    if had is not None and i in eff:
+                        lines[i] = without_quiet(lines[i], had)
+        if lines == old:
+            return 3
+        write(found[0], lines)
+        return 0
     video = screens()
     if "--check" in sys.argv:
         print(" ".join(video) or "no screens with EDID found")
@@ -123,29 +253,21 @@ def main():
     conf, key, update = found
     with open(conf) as f:
         lines = f.read().split("\n")
-    for i, line in enumerate(lines):
-        if re.match(key, line):
-            new = with_video(line, video)
-            if new == line:
-                # Same screens as last time; or a line it couldn't put them in (said by with_video): a failure, not
-                # "done" with nothing set
-                return 0 if set(video) <= set(re.findall(r'(?<![^\s"\'])video=[^ "\'\n]*', line)) else 1
-            lines[i] = new
-            break
-    else:
+    eff = effective(lines, key)
+    if not eff:
         print(f"No kernel options line in {conf}")
         return 1
-    # Written beside it and renamed over it, with its owner and mode: a power cut mid-write leaves the old or the new
-    # file, never a half one the boot loader's next update would read
-    st = os.stat(conf)
-    tmp = conf + ".boot-video-mode-new"
-    with open(tmp, "w") as f:
-        f.write("\n".join(lines))
-        f.flush()
-        os.fsync(f.fileno())
-    os.chown(tmp, st.st_uid, st.st_gid)
-    os.chmod(tmp, st.st_mode & 0o7777)
-    os.replace(tmp, conf)
+    old = list(lines)
+    # These screens' on the last line in effect, out of the others
+    same = r'video=(?:' + "|".join(re.escape(connector(v)) for v in video) + r'):[^ "\']*'
+    for i in eff[:-1]:
+        lines[i] = without_video(lines[i], same)
+    lines[eff[-1]] = with_video(lines[eff[-1]], video)
+    if lines == old:
+        # Same screens as last time; or a line it couldn't put them in (said by with_video): a failure, not "done" with
+        # nothing set
+        return 0 if set(video) <= set(videos(lines[i] for i in eff)) else 1
+    write(conf, lines)
     print(f"Kernel console mode: {' '.join(video)}")
     try:
         return subprocess.run(update, check=False).returncode
@@ -165,6 +287,11 @@ if __name__ == "__main__":
         # A screen not seen now (asleep) keeps its entry; one seen gets the new one
         assert with_video('K="quiet video=DP-1:1x1@1 video=HDMI-A-1:2x2@2"', ["video=HDMI-A-1:3x3@3"]) == 'K="quiet video=DP-1:1x1@1 video=HDMI-A-1:3x3@3"'
         assert with_video(line, []) == line
+        assert without_video('K="video=X:1x1@1 quiet foo.video=1 video=Y:2x2@2"') == 'K="quiet foo.video=1"'
+        assert without_video('K=" quiet"') == 'K=" quiet"'
+        # --remove's: only the ones in the form it writes, not the user's own
+        assert without_video('K="video=efifb:off quiet video=X:1x1@60 video=Y:2x2@2M"', OURS) == 'K="video=efifb:off quiet video=Y:2x2@2M"'
+        assert without_video('K="video=DP-1:2560x1440@165 quiet"', OURS) == 'K="quiet"'
         assert with_video('K="quiet foo.video=1"', ["video=X:1x1@1"]) == 'K="quiet foo.video=1 video=X:1x1@1"'
         assert with_video("GRUB_CMDLINE_LINUX_DEFAULT='quiet splash'", ["video=X:1x1@1"]) == "GRUB_CMDLINE_LINUX_DEFAULT='quiet splash video=X:1x1@1'"
         # A value with no quotes: quoted, the options put in (it was left, and "done" said with nothing set)
@@ -172,6 +299,20 @@ if __name__ == "__main__":
         assert with_video("KERNEL_CMDLINE[default]+=quiet", ["video=X:1x1@1"]) == 'KERNEL_CMDLINE[default]+="quiet video=X:1x1@1"'
         # One it can't (a quote not closed): left as it is (said on stderr)
         assert with_video('K="quiet', ["video=X:1x1@1"]) == 'K="quiet'
+        # The quiet boot: the missing ones added (a name there kept as it is: loglevel=7); none missing, unchanged
+        assert with_quiet("GRUB_CMDLINE_LINUX_DEFAULT='nowatchdog loglevel=7 splash'") == \
+            "GRUB_CMDLINE_LINUX_DEFAULT='nowatchdog loglevel=7 splash quiet rd.udev.log_level=3 systemd.show_status=false'"
+        full = 'K="' + " ".join(QUIET) + '"'
+        assert with_quiet(full) == full and with_quiet("GRUB_CMDLINE_LINUX_DEFAULT=") == 'GRUB_CMDLINE_LINUX_DEFAULT="' + " ".join(QUIET) + '"'
+        assert with_quiet('K="quiet') == 'K="quiet'
+        # Taken out: only those the line before AgrOS had no option of the name of (its quiet and a loglevel of its own stay;
+        # a quietx isn't quiet)
+        assert without_quiet('K="quiet nowatchdog splash loglevel=3 rd.udev.log_level=3 systemd.show_status=false quietx"',
+                             names('K="quiet loglevel=4 nowatchdog"')) == 'K="quiet nowatchdog loglevel=3 quietx"'
+        assert without_quiet(full, set()) == 'K=""'
+        # A += line's: a space before them, even in an empty value (added onto the text before it); others' names count
+        assert with_quiet('K+=""', {"quiet", "splash", "loglevel"}) == 'K+=" rd.udev.log_level=3 systemd.show_status=false"'
+        assert effective(["K+=a", "#K=b", "K=c", "K+=d", "X=e"], r"K\+?=") == [2, 3] and effective(["K+=a", "K+=b"], r"K\+?=") == [0, 1]
         print("ok")
         sys.exit(0)
     sys.exit(main())

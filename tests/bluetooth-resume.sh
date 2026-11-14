@@ -4,6 +4,7 @@
 # forever); bluetoothd stuck, given up on within seconds, not the hook's whole time limit; on: noted. After waking:
 # switched back on when it was on, nothing done when it wasn't
 set -euo pipefail
+# shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 mkdir -p "$t/bin"
 sed "s|/run/bluetooth-was-powered|$t/was-powered|g" "$here/system/bluetooth-resume" >"$t/hook"

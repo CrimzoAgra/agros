@@ -2,6 +2,7 @@
 # The systemd user units: a service that restarts itself and notifies on failure (OnFailure=) goes straight back to
 # starting between crashes (RestartMode=direct), or every crash, the first included, sends "keeps crashing"
 set -euo pipefail
+# shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 for u in "$here"/.config/systemd/user/*.service; do
     if grep -q '^OnFailure=' "$u" && grep -qE '^Restart=(on-failure|always|on-abnormal)' "$u"; then

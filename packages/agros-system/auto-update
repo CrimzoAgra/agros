@@ -1,12 +1,19 @@
 #!/usr/bin/env bash
 # Automatic system update: downloaded at boot, installed at shutdown with --install
 # (agros-system: /usr/lib/agros/auto-update, run by auto-update.service and auto-update-install.service)
-exec >>/var/log/auto-update.log 2>&1
+log=/var/log/auto-update.log
+# (the last 20 runs kept: every boot's download and every shutdown's pacman output are added to it. Not by the firmware
+# note, which runs beside the boot's run)
+if [[ ${1:-} != --firmware-note ]] && [[ -s $log ]]; then
+    kept=$(awk 'function run() { return /^===== / && !/^===== done / } NR == FNR { runs += run(); next } run() { n++ } n > runs - 20' "$log" "$log") &&
+        printf '%s\n' "$kept" >"$log"
+fi
+exec >>"$log" 2>&1
 echo "===== $(date) ${1:-} ====="
 
 # The download's own package lists (as checkupdates does): synced into pacman's own, the system would be on newer lists
-# than packages all session, and installing any one package then a partial upgrade. Its lock is its own too, so setup
-# and the Updates app aren't kept waiting on it
+# than packages all session, and installing any one package then a partial upgrade. Its lock is its own too, so pacman
+# by hand and the Updates app aren't kept waiting on it
 db=/var/lib/auto-update/db
 mkdir -p "$db/sync"
 ln -sfn /var/lib/pacman/local "$db/local"
@@ -15,21 +22,10 @@ ln -sfn /var/lib/pacman/local "$db/local"
 # is cut off (shutdown's time limit, a power cut), must leave pacman on the lists its packages came from, not newer
 # ones (a partial upgrade). restore puts them back (at the next boot for one cut off); settled drops them
 au=/var/lib/auto-update
-# What takes pacman's lock, and lock_holder finding one holding it (dotfiles-check's): pacman's lists aren't changed
-# under any of them
+# What takes pacman's lock, and lock_holder finding one holding it (agros-scripts' pacman-lock-holder, dotfiles-check's
+# too): pacman's lists aren't changed under any of them
 pacdb=/var/lib/pacman
-pacman_holders='pacman|paru|yay|pamac|pamac-daemon|packagekitd|octopi-helper'
-lock_holder() {
-    local p args dbpath=' --dbpath[ =]([^ ]+)' query=' (-Q[A-Za-z]*|--query) '
-    for p in $(pgrep -x "$pacman_holders"); do
-        args=" $(tr '\0' ' ' <"/proc/$p/cmdline" 2>/dev/null)"
-        [[ $args =~ $dbpath && ${BASH_REMATCH[1]%/} != "$pacdb" ]] && continue
-        [[ $args =~ $query ]] && continue
-        echo "$p${args% }"
-        return 0
-    done
-    return 1
-}
+lock_holder() { /usr/lib/agros/bin/pacman-lock-holder "$pacdb"; }
 prev=$au/prev
 restore() {
     local f
@@ -42,7 +38,8 @@ restore() {
     done
     settled
 }
-settled() { rm -rf "$prev" "$au/installing"; }
+# (the AUR builds' repo list too, put there for the install alone)
+settled() { rm -rf "$prev" "$au/installing" "$pacdb/sync/agros-aur.db"; }
 # recover: an install cut off (shutdown's limit, a power cut), or its recovery put off: pacman's lists put back (its
 # packages came from the older ones; those it got to install are taken up again by the next install), and the lock it
 # left. Run at boot and before an install, each time until it's done (only with nothing holding pacman's lock)
@@ -57,12 +54,31 @@ recover() {
 }
 # held: pacman's lock there and one of its users running (not one cut off: its lock left with nothing behind it)
 held() { [[ -e $pacdb/db.lck ]] && lock_holder; }
+each_user=${AGROS_EACH_USER:-/usr/lib/agros/bin/agros-each-user}
+# The boot's AUR builds (auto-update-aur: what they are, and how they went)
+aur=$au/aur
+
+# Firmware the boot found (fwupd: "<device id> <name> <old> <new>" per line, tab-separated, in $au/firmware) said to the
+# users before the shutdown installs it: on each one's desktop (the system's one way: agros-each-user --notify-wait),
+# once someone's logged in to one (up to 12 h), then marked told (firmware-told: only that is installed). Its own unit
+# (systemd-run, by the boot's run), so the boot's run doesn't wait on a login
+if [[ ${1:-} == --firmware-note ]]; then
+    names=$(cut -f2 "$au/firmware" | paste -sd, | sed 's/,/, /g')
+    if "$each_user" --notify-wait -a Updates -i system-software-update "Firmware update ready" \
+        "$names: installed when you shut down or restart (Updates installs it now)"; then
+        cp "$au/firmware" "$au/firmware-told"
+        echo "firmware update said: $names"
+    fi
+    exit 0
+fi
 
 if [[ ${1:-} == --install ]]; then
     # How a real install went, for dotfiles-check (this runs at shutdown: its log alone was never seen): ok, held or
     # failed, when, and why. Shutdowns with nothing installed (skip, below) counted beside it, not over it: a held or
-    # failed install is still said until one replaces it
-    result() { printf '%s %s %s\n' "$1" "$(date '+%F %H:%M')" "${2:-}" >"$au/install-result"; rm -f "$au/skipped"; }
+    # failed install is still said until one replaces it. Its why plain text alone (plain): pacman's error can carry what
+    # a package's install script printed, and dotfiles-check puts it in a notification, which renders links and images
+    plain() { tr -cd "A-Za-z0-9 @._+=:,;/()'-"; }
+    result() { printf '%s %s %s\n' "$1" "$(date '+%F %H:%M')" "$(plain <<<"${2:-}")" >"$au/install-result"; rm -f "$au/skipped"; }
     # Said on the splash, where its theme shows messages (the plain one looked stuck for the minutes a kernel takes)
     say() { command -v plymouth >/dev/null && plymouth --ping 2>/dev/null && plymouth display-message --text="$1" 2>/dev/null; true; }
     # skip <why>: nothing installed this shutdown, counted ("<shutdowns> <since> <why>", dotfiles-check says it 3 in a row)
@@ -77,9 +93,6 @@ if [[ ${1:-} == --install ]]; then
     # under it is the mismatch installing at shutdown is for. Left for a real shutdown
     ! systemctl list-jobs --no-legend 2>/dev/null | grep -q '^ *[0-9]* *soft-reboot\.target ' ||
         skip "a soft reboot (the kernel keeps running: installed at a real shutdown)"
-    # Only what a finished download brought (its mark, "complete"): one cut off (its 2 h, a shutdown during it) has
-    # lists newer than the packages it got, and installing from them would download the rest at shutdown
-    [[ -e $db/complete ]] || skip "the boot's download didn't finish"
     # (the boot partition, wherever fstab mounts it, mounted: a kernel or boot image written with it away would go to
     # the folder under it, and the boot use the old ones). An automount's (x-systemd.automount) placeholder counts as
     # mounted too: looked into first (that mounts it), then the real one there, not autofs. Then kept open (busy) for
@@ -91,6 +104,47 @@ if [[ ${1:-} == --install ]]; then
         { mountpoint -q "$m" && [[ $(findmnt -n -l -o FSTYPE --mountpoint "$m" 2>/dev/null | tail -1) != autofs ]] &&
             exec {busy}<"$m"; } 2>/dev/null || skip "the boot partition ($m) isn't mounted"
     done
+    # The time this has: auto-update-install.service's TimeoutStopSec (60 min; shutdown's own limit, the targets'
+    # JobTimeoutSec, 75), counted from this start. The packages need up to 30 min of it (a kernel's boot images)
+    stop=$((60 * 60)) packages=$((30 * 60))
+    # Firmware first (fwupd), only what the users were told of (auto-update --firmware-note): a flash cut off could
+    # leave a device unusable, a package install cut off is put back. fwupdtool, by itself (it stops fwupd's daemon,
+    # which can't be started any more at shutdown; it finds the EFI partition through udisks2, which this unit stops
+    # before); its own checks stand (on battery below its level it refuses: tried again at the next shutdown). A UEFI or
+    # BIOS update is staged, applied at the next boot. --assume-yes: its questions (a device's warning) answered, never
+    # waited on. Never a time limit of its own: one sent it SIGTERM mid-flash. Started only with its time and the
+    # packages' both left (55 min), it has up to 30 min before the packages are put off to the next shutdown (below),
+    # and the unit's own limit alone after that (a flash still writing at 60 min has hung)
+    if [[ -s $au/firmware-told ]] && cmp -s "$au/firmware" "$au/firmware-told" && command -v fwupdtool >/dev/null &&
+        ((SECONDS <= stop - packages - 25 * 60)); then
+        say "Installing firmware updates, don't turn the computer off..."
+        mapfile -t ids < <(cut -f1 "$au/firmware-told")
+        LC_ALL='' LC_MESSAGES=C fwupdtool update --assume-yes --no-reboot-check "${ids[@]}" </dev/null 2>&1 |
+            tee "$au/firmware-out"
+        fw=${PIPESTATUS[0]}
+        # fwupdtool's exit says nothing of a device it skipped (it needs AC power, the battery too low) nor, in 2.1,
+        # of a flash that failed: those still offer the same update after it (a UEFI one staged offers none until the
+        # next boot). Its own words for why, else its last line. (2: nothing to do, installed from Updates since)
+        left=
+        if ((fw == 0 || fw == 2)); then
+            left=$(LC_ALL='' LC_MESSAGES=C timeout 2m fwupdtool get-updates --json </dev/null 2>/dev/null |
+                jq -r '.Devices[]? | select(.Releases[0]) | .DeviceId' 2>/dev/null | grep -xF -f <(printf '%s\n' "${ids[@]}"))
+        fi
+        if ((fw == 0 || fw == 2)) && [[ -z $left ]]; then
+            echo "firmware: installed (a UEFI or BIOS update applies at the next boot)"
+            rm -f "$au/firmware" "$au/firmware-told" "$au/firmware-failed"
+        else
+            echo "!! firmware: not installed"
+            why=$(sed -n 's/^ *‣ *//p' "$au/firmware-out" | head -1)
+            printf '%s %s\n' "$(date '+%F %H:%M')" "${why:-$(grep -v '^ *$' "$au/firmware-out" | tail -1)}" >"$au/firmware-failed"
+        fi
+        rm -f "$au/firmware-out"
+    fi
+    # (the packages only with their time left: a firmware update that took long puts them off to the next shutdown)
+    ((SECONDS <= stop - packages)) || skip "the firmware update took long: the packages at the next shutdown"
+    # Only what a finished download brought (its mark, "complete"): one cut off (its 2 h, a shutdown during it) has
+    # lists newer than the packages it got, and installing from them would download the rest at shutdown
+    [[ -e $db/complete ]] || skip "the boot's download didn't finish"
     # (nor while something else using pacman holds its lock: its lists would change under it)
     ! holder=$(held) || skip "something using pacman still ran ($holder)"
     # A lock left by a pacman cut off outside this (an Updates run's paru, killed by shutdown or a power cut: pacman
@@ -126,23 +180,66 @@ if [[ ${1:-} == --install ]]; then
         if [[ -e $f.sig ]]; then cp -p "$f.sig" "$dst.sig"; else rm -f "$dst.sig"; fi
         sha256sum <"$dst" >"$au/copied/$name.sum"
     done
-    pending=$(pacman -Qu 2>&1) || [[ -z $pending ]] || {  # (pacman's error, not "none")
+    # (exit 1 with nothing listed is "none". Its stderr apart: a warning there isn't an update (read as one, every
+    # shutdown failed); an "error:" there, or a list with a failure, is pacman's error, not "none")
+    qu=0
+    pending=$(LC_ALL='' LC_MESSAGES=C pacman -Qu 2>"$prev/qu-err") || qu=$?
+    cat "$prev/qu-err"
+    if grep -q '^error:' "$prev/qu-err" || { ((qu)) && [[ -n $pending ]]; }; then
         echo "$pending"
-        result failed "pacman couldn't list the updates: $(tail -1 <<<"$pending")"
+        result failed "pacman couldn't list the updates: $(grep -m1 '^error:' "$prev/qu-err" || tail -1 <<<"$pending")"
         restore
         exit 1
-    }
-    [[ -n $pending ]] || { echo "nothing to install"; result ok; settled; exit 0; }
-    # A new Qt (not a rebuild of the same version) would stop the shells, built against its private parts, from starting
-    # at the next boot: Quickshell and Caelestia are AUR packages this can't rebuild. The whole update waits (a part of
-    # it would be a partial upgrade) for the Updates app, which installs it and rebuilds them (dotfiles-check says so)
-    if awk '$1 ~ /^qt6-(base|declarative)$/ { a = $2; b = $4; sub(/-[^-]*$/, "", a); sub(/-[^-]*$/, "", b); if (a != b) q = 1 } END { exit !q }' <<<"$pending"; then
-        grep -E '^qt6-(base|declarative) ' <<<"$pending" | tee "$au/held"
-        echo "held back: a new Qt (run Updates)"
-        result held
+    fi
+    # (those pacman.conf holds back, IgnorePkg's "[ignored]", left out: counted, every shutdown took a snapshot and ran
+    # an install of nothing, and an ignored Qt held everything back for good. agros-scripts' updates-pending, as
+    # update-apps' list)
+    pending=$(/usr/lib/agros/bin/updates-pending <<<"$pending")
+    # The boot's AUR builds (auto-update-aur), installed in this same transaction: each newer than what's installed, or
+    # rebuilt for the new runtime this installs. Each one on its own: one whose build failed keeps its version (as paru
+    # -Syu leaves it), said by dotfiles-check. Only a new runtime (auto-update-aur's list: Qt, whose private parts the
+    # shells use, so they wouldn't start at the next boot; Python's minor version, whose modules folder changes) waits
+    # for what's built on it: without every one of those rebuilt for it (the build failed or didn't finish, or was for
+    # other lists than these) the whole update waits (a part of it would be a partial upgrade) for the next boot's
+    # builds, or Updates
+    target=$(/usr/lib/agros/bin/update-kinds --runtime-target <<<"$pending")
+    # (a rebuild for it missing, or that came out older than what's installed (pacman would leave it, and the runtime go
+    # in without it), isn't one)
+    older='' missing=''
+    if [[ -n $target && -e $aur/planned && -e $aur/rebuild ]]; then
+        while read -r name; do
+            [[ -n $name ]] || continue
+            ver=$(awk -v n="$name" '$1 == n { print $2 }' "$aur/built" 2>/dev/null)
+            have=$(pacman -Q "$name" 2>/dev/null | cut -d' ' -f2)
+            if [[ -z $ver ]]; then missing+=" $name"
+            elif [[ -n $have ]] && (($(vercmp "$ver" "$have") < 0)); then older+=" $name"; fi
+        done <"$aur/rebuild"
+    fi
+    if [[ -n $target ]] && ! [[ -e $aur/planned && $(cat "$aur/runtime-target" 2>/dev/null) == "$target" && -z $older$missing ]]; then
+        awk -v t="$target" 'BEGIN { k = split(t, a, " "); for (i = 1; i <= k; i += 2) n[a[i]] } $1 in n' <<<"$pending" | tee "$au/held"
+        why="a new $(awk '{ for (i = 1; i <= NF; i += 2) printf "%s%s", (i > 1 ? ", " : ""), $i }' <<<"$target"), and the boot's rebuild for it $(
+            if [[ -n $older ]]; then echo "came out older than what's installed:$older"
+            elif [[ -n $missing ]]; then echo "failed:$missing ($(paste -sd';' "$aur/failed" 2>/dev/null | sed 's/;/; /g'))"
+            elif [[ -e $aur/planned ]]; then echo "was for other package lists"
+            else echo "didn't finish"; fi)"
+        echo "held back: $why"
+        result held "$why"
         restore
         exit 0
     fi
+    targets=()
+    if [[ -e $aur/planned && -s $aur/built ]]; then
+        while read -r name ver; do
+            have=$(pacman -Q "$name" 2>/dev/null | cut -d' ' -f2)
+            [[ -n $have ]] || continue
+            c=$(vercmp "$ver" "$have")
+            if ((c > 0)) || { ((c == 0)) && [[ -n $target ]] && grep -qxF "$name" "$aur/rebuild" 2>/dev/null; }; then
+                targets+=("agros-aur/$name")
+            fi
+        done <"$aur/built"
+    fi
+    [[ ! -s $aur/failed ]] || echo "AUR apps wait, the rest installs without them (the boot's builds: $(paste -sd';' "$aur/failed" | sed 's/;/; /g'))"
+    [[ -n $pending || ${#targets[@]} -gt 0 ]] || { echo "nothing to install"; result ok; settled; exit 0; }
     # safety snapshot (pick it in the boot menu if an update breaks something). --no-dbus: this runs at shutdown, when
     # snapperd (started on demand over DBus) can't be started any more, and the snapshot was silently skipped
     # Then into the boot menu's snapshot list here: what does that otherwise (grub-btrfsd, Limine's snapper sync) is
@@ -162,8 +259,39 @@ if [[ ${1:-} == --install ]]; then
     # (SNAP_PAC_SKIP: snap-pac's own snapshots, over DBus, fail at shutdown like snapper's did; the one above covers it)
     # (its messages in English: pacman's "error:" is what the reason below is found by; translated, "erro:" or
     # "Fehler:", it was lost. Messages only: the hooks it runs keep the system's locale)
-    SNAP_PAC_SKIP=y LC_ALL='' LC_MESSAGES=C pacman -Su --noconfirm 2>&1 | tee "$prev/out"
-    if ((PIPESTATUS[0])); then
+    # (the AUR builds' repo for this one install: pacman's config with it last, its list in pacman's own)
+    conf=/etc/pacman.conf
+    if ((${#targets[@]})); then
+        conf=$prev/pacman.conf
+        { cat /etc/pacman.conf; printf '\n[agros-aur]\nSigLevel = Optional TrustAll\nServer = file://%s\n' "$aur/repo"; } >"$conf"
+        cp "$aur/repo/agros-aur.db" "$pacdb/sync/agros-aur.db"
+        echo "with the AUR's: ${targets[*]#agros-aur/}"
+    fi
+    pacman_su() { SNAP_PAC_SKIP=y LC_ALL='' LC_MESSAGES=C pacman -Su --noconfirm --config "$conf" "$@" 2>&1 | tee "$prev/out"; return "${PIPESTATUS[0]}"; }
+    pacman_su "${targets[@]}"
+    rc=$?
+    # AUR apps pacman can't install (a conflict, a file conflict, a dependency missing): it refuses the whole
+    # transaction, at every shutdown, and the system was never updated. Tried again without them (pacman installs
+    # nothing of a transaction it refuses), but for those a new runtime in it needs (installed with it or not at all),
+    # their version kept. Once that goes through, the AUR apps left out are written down for dotfiles-check ("<when>
+    # <pacman's error>", then "<name> <version>" each), until an install of them goes through
+    if ((rc && ${#targets[@]})); then
+        keep=() drop=()
+        for x in "${targets[@]}"; do
+            if [[ -n $target ]] && grep -qxF "${x#agros-aur/}" "$aur/rebuild" 2>/dev/null; then keep+=("$x"); else drop+=("${x#agros-aur/}"); fi
+        done
+        if ((${#drop[@]})); then
+            why=$(grep -m1 '^error:' "$prev/out" | plain)
+            echo "!! the AUR apps couldn't be installed (${drop[*]}): tried again without them"
+            # (--ignore: -Su would take them from agros-aur too, newer than what's installed)
+            pacman_su --ignore "$(IFS=,; echo "${drop[*]}")" "${keep[@]}"
+            rc=$?
+            ((rc)) || { echo "$(date '+%F %H:%M') $why"; for x in "${drop[@]}"; do grep "^$x " "$aur/built"; done; } >"$au/aur-install-failed"
+        fi
+    elif ((!rc && ${#targets[@]})); then
+        rm -f "$au/aur-install-failed"
+    fi
+    if ((rc)); then
         echo "!! the install failed: pacman's package lists put back as they were"
         result failed "$(grep -m1 '^error:' "$prev/out")"
         say "The update failed: it's tried again at the next shutdown"
@@ -171,11 +299,17 @@ if [[ ${1:-} == --install ]]; then
         exit 1
     fi
     result ok
+    # (the Qt the shells were rebuilt for, or needed no rebuild for: Updates' update-apps doesn't rebuild them again)
+    [[ $target != *qt6-* ]] || /usr/lib/agros/bin/update-kinds --qt-now >"$au/qt-built"
     settled
     echo "===== done $(date) ====="
     exit
 fi
 
+# (downloading: from now to the end of the download below, pacman's cache is written; Updates' update-apps waits
+# while it's there, so both never write the same package into it at once. Made first thing: an Updates run started
+# meanwhile doesn't slip in before the download. auto-update-aur marks its own download the same)
+touch "$au/downloading"
 # The last shutdown's install cut off before it finished: recovered now, or (something using pacman holding its lock)
 # at the next install or boot
 if [[ -e $au/installing ]] && holder=$(held); then
@@ -184,46 +318,80 @@ else
     recover
 fi
 
-# wait for the network (max ~60 s)
-for _ in $(seq 30); do curl -fsI --max-time 2 https://archlinux.org >/dev/null 2>&1 && break; sleep 2; done
+# wait for the network (at most ~2 min; what fails without it is said below)
+/usr/lib/agros/bin/wait-online https://archlinux.org
 
 # system and CachyOS gaming packages, the NVIDIA driver too: downloaded now, installed at shutdown (only once this
 # finished: its mark, complete).
-# A lock a download cut off left (shutdown stopped it mid-way) taken out first, only with no pacman on these lists
-# running; else every boot's download failed on it (dotfiles-check says when one is left)
-if [[ -e $db/db.lck ]] && ! pgrep -f -- "--dbpath $db" >/dev/null; then
+# A lock a download cut off left (shutdown stopped it mid-way) taken out first, only with nothing on these lists that
+# may hold it running (pacman-lock-holder); else every boot's download failed on it (dotfiles-check says when one is left)
+if [[ -e $db/db.lck ]] && ! /usr/lib/agros/bin/pacman-lock-holder "$db" >/dev/null; then
     echo "removing a stale lock: $db/db.lck"
     rm -f "$db/db.lck"
 fi
-rm -f "$db/complete"
+# (the AUR builds made for the last download's lists with it: made again for this one's, below)
+rm -rf "$db/complete" "$aur"
 pacman -Syuw --noconfirm --dbpath "$db" --logfile /dev/null && touch "$db/complete"
+rm -f "$au/downloading"
+
+# Firmware (fwupd): its list of updates refreshed (LVFS's metadata, signed and checked by fwupd) and looked at; any
+# waiting said to the users (--firmware-note, in a unit of its own: it waits for a login) and installed at shutdown.
+# Offline or nothing waiting: nothing said
+if command -v fwupdmgr >/dev/null; then
+    timeout 5m fwupdmgr refresh >/dev/null 2>&1
+    fw=$(timeout 2m fwupdmgr get-updates --json --no-unreported-check --no-metadata-check 2>/dev/null |
+        jq -r '.Devices[]? | select(.Releases[0]) | [.DeviceId, .Name, .Version, .Releases[0].Version] | @tsv' 2>/dev/null)
+    if [[ -n $fw ]]; then
+        printf '%s\n' "$fw" >"$au/firmware"
+        echo "firmware ready, installed at shutdown: $(cut -f2 "$au/firmware" | paste -sd,)"
+        cmp -s "$au/firmware" "$au/firmware-told" ||
+            systemd-run --quiet --collect --unit=agros-firmware-note /usr/lib/agros/auto-update --firmware-note
+    else
+        rm -f "$au/firmware" "$au/firmware-told" "$au/firmware-failed"
+    fi
+fi
 
 # flatpak apps: the system-wide ones, then each user's (Spotify: user-installed so spicetify can change it) and those
-# installed from a downloaded file (Nuvio, ArtCraft), as that user; then their AppImages and Capri's check
+# installed from a downloaded file (Nuvio, ArtCraft), as that user; then their AppImages, Capri's check, Proton builds
+# and developer tools (update-kinds, as Updates runs them)
 # (each given up on after half an hour: a stalled one held shutdown off for as long as it hung)
 command -v flatpak >/dev/null && timeout 30m flatpak update -y --noninteractive
-# The AgrOS users (agros-each-user's list): accounts with a home, each one's own apps
-while IFS= read -r user; do
+# The AgrOS users (agros-each-user's list): accounts with a home, each one's own apps, as that user (agros-each-user
+# --as: setpriv, no PAM, so no logind session: they'd count as logged in, and leave this unit's time limit)
+# (the list read on a descriptor of its own: a command in the loop reading its stdin took the next users with it)
+while IFS= read -r -u 4 user; do
     home=$(getent passwd "$user" | cut -d: -f6)
+    uid=$(id -u "$user")
     echo "-- $user"
-    if command -v flatpak >/dev/null; then
-        timeout 30m sudo -u "$user" -H flatpak update --user -y --noninteractive
-        # Those from a file: downloaded first (as the user, nothing held), then reinstalled (old one out first) with sleep
-        # and power off held for that step alone: by root, here (logind refuses the user that hold outside a session).
-        # Usually seconds; a runtime the new version needs is downloaded in it too, so given up on after half an hour too
-        if [[ -x "$home/.local/bin/flatpak-bundle-update" ]] && fetched=$(sudo -u "$user" mktemp -d); then
-            sudo -u "$user" -H "$home/.local/bin/flatpak-bundle-update" --fetch "$fetched"
-            [[ ! -s $fetched/fetched ]] ||
-                timeout 30m systemd-inhibit --what=sleep:shutdown --mode=block --who="Flatpak update" \
-                    --why="Reinstalling apps from their files" sudo -u "$user" -H "$home/.local/bin/flatpak-bundle-update" --install-fetched "$fetched"
-            rm -rf "$fetched"
+    # (what it has to say (a new Proton: restart Steam, pick it in Lutris) handed back on fd 3, a file of root's, and
+    # said on that user's desktop once they're logged in: agros-each-user --notify. A few lines at most)
+    notes=$(mktemp)
+    "$each_user" --as "$user" env XDG_RUNTIME_DIR="/run/user/$uid" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" \
+        /usr/lib/agros/bin/update-kinds --boot flatpak appimage capri proton dev 3>"$notes"
+    head -n 5 "$notes" | while IFS=$'\t' read -r icon title text; do
+        [[ -n $title ]] && "$each_user" --notify --user "$user" -a Updates -i "$icon" "$title" "$text"
+    done
+    rm -f "$notes"
+    # Those from a file: downloaded first (as the user, nothing held), then reinstalled (old one out first) with sleep
+    # and power off held for that step alone: by root, here (logind refuses the user that hold outside a session).
+    # Usually seconds; a runtime the new version needs is downloaded in it too, so given up on after half an hour too.
+    # Not with less than 35 min of the run's 4 h left (auto-update.service's RuntimeMaxSec): cut off between the old
+    # one's removal and the new one's install, the app would be gone (the next boot does it)
+    if command -v flatpak >/dev/null && [[ -x "$home/.local/bin/flatpak-bundle-update" ]] && fetched=$("$each_user" --as "$user" mktemp -d); then
+        "$each_user" --as "$user" "$home/.local/bin/flatpak-bundle-update" --fetch "$fetched"
+        if [[ -s $fetched/fetched ]] && ((SECONDS > 4 * 3600 - 35 * 60)); then
+            echo "Flatpaks from a file: too little of the run's time left to reinstall them, at the next boot"
+        elif [[ -s $fetched/fetched ]]; then
+            timeout 30m systemd-inhibit --what=sleep:shutdown --mode=block --who="Flatpak update" \
+                --why="Reinstalling apps from their files" "$each_user" --as "$user" "$home/.local/bin/flatpak-bundle-update" --install-fetched "$fetched"
         fi
+        rm -rf "$fetched"
     fi
-    # AppImages they've installed, from their GitHub releases (they live in ~/Applications)
-    [[ -x "$home/.local/bin/appimage-update" ]] && sudo -u "$user" -H "$home/.local/bin/appimage-update"
-    # Capri (capri-update's), when installed: only whether her fork or the original's release moved on (in this log;
-    # the Updates app lists it). Merged, built and tested when started from Updates, as AUR apps
-    [[ -x "$home/.local/bin/capri-update" ]] && sudo -u "$user" -H "$home/.local/bin/capri-update" --check
-done < <("${AGROS_EACH_USER:-/usr/lib/agros/bin/agros-each-user}" --list)
+done 4< <("$each_user" --list)
+
+# The AUR's apps last (the longest: builds), for this download's lists, as their own account, agros-aur, no user's
+# (auto-update-aur); installed at shutdown with the rest
+[[ -e $db/complete ]] && /usr/lib/agros/auto-update-aur "$db"
+rm -f "$au/downloading"
 
 echo "===== done $(date) ====="

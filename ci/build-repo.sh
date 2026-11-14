@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
-# Builds the [agros] pacman repo: the AUR packages AgrOS uses (aur/packages.txt, with the AUR packages they need, by
-# paru into a local repo) and AgrOS's own packages (packages/*, by makepkg), all signed when a key is given.
+# Builds the [agros] pacman repo: AgrOS's own packages (packages/*, by makepkg), the AUR packages AgrOS uses
+# (aur/packages.txt, with the AUR packages they need, by paru into a local repo) and CachyOS's installer, rebuilt, all
+# signed when a key is given.
 # Run in an Arch container, as root (it makes a "builder" user for makepkg):
 #   ci/build-repo.sh <out dir>           the repo in <out dir> (agros.db, agros.files, the packages)
 # Environment: GPGKEY (a key id in root's keyring: packages and the database signed with it, its public key in
-# agros-keyring), AGROS_SKIP_AUR=1 (only AgrOS's own packages), AGROS_PUBLISHED (the published repo's URL: a package
-# already there under the same version is kept as published)
+# agros-keyring), AGROS_SKIP_AUR=1 (only AgrOS's own packages: no AUR ones, no Calamares), AGROS_PUBLISHED (the
+# published repo's URL: a package already there under the same version is kept as published, but for a compiled one
+# built against other libraries (rebuilt and published); the build fails when the published copy can't be read or
+# verified, or when one of AgrOS's own packages changed with its version not raised)
 set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
 out=$(mkdir -p "${1:?usage: build-repo.sh <out dir>}" && cd "$1" && pwd)
@@ -53,12 +56,107 @@ pacman -Sy --noconfirm >/dev/null
 
 # No separate debug packages (Arch's makepkg makes them by default)
 sed -i 's/^\(OPTIONS=(.*\) debug/\1 !debug/' /etc/makepkg.conf
+# 1. AgrOS's own packages, first: one changed with its version not raised fails the build (below) before the long
+# builds of the AUR's and Calamares. No dependencies installed to build them: they're files and settings, but for
+# agros-vmware's shim, built against libdrm, and agros-thunar-usage, a Thunar plugin. Keyring first
+pacman -T libdrm thunar >/dev/null || pacman -S --needed --noconfirm libdrm thunar >/dev/null
+for d in "$work/agros/packages/agros-keyring" "$work"/agros/packages/*/; do
+    d=${d%/}; p=${d##*/}
+    [[ $p == agros-keyring && -n ${keyring_done:-} ]] && continue
+    [[ $p == agros-keyring ]] && keyring_done=1
+    [[ -f $d/PKGBUILD ]] || continue
+    if [[ $p == agros-keyring && ! -s $d/agros.gpg ]]; then
+        echo "-- $p: skipped (no GPGKEY)"
+        continue
+    fi
+    echo "-- $p"
+    # (--nodeps on purpose: makepkg's warning that it skips them left out)
+    (cd "$d" && asb env PKGDEST="$out" makepkg -f --nodeps --noconfirm "${sign[@]}" 2>&1 |
+        sed -u '/WARNING: Skipping dependency checks/d')
+done
+cd "$out"
+# A package whose version hasn't changed keeps the file already published, when its signature checks out: a rebuild
+# is a different file under the same name, and a copy of the old one in pacman's cache then reads as corrupted. But not
+# a compiled one whose rebuild needs other libraries (a new Boost: the installer didn't start) or another Qt (its
+# private API: Quickshell): the rebuild goes out instead, so new installs and the ISO get one that runs
+# What a package was built against: the libraries its programs need, and Qt's version (its exit status means nothing:
+# only for comparing, in [[ ]])
+built_against() {
+    local d=$work/unpacked
+    rm -rf "$d" && mkdir "$d" && bsdtar -xf "$1" -C "$d" 2>/dev/null || return 0
+    local libs
+    libs=$(find "$d" -type f \( -name '*.so*' -o -perm -u+x \) -print0 2>/dev/null | xargs -0r readelf -d 2>/dev/null |
+        sed -n 's/.*(NEEDED).*\[\(.*\)\]/\1/p' | sort -u)
+    echo "$libs"
+    # Python's version, for Python modules (no library of its own to need: they'd sit in an old python3.N)
+    bsdtar -tf "$1" 2>/dev/null | grep -o '^usr/lib/python3\.[0-9]*' | sort -u
+    # Qt's version (not Arch's rebuild number), for what uses Qt: the others had it in the container too
+    grep -q '^libQt6' <<<"$libs" &&
+        sed -n 's/^installed = qt6-base-\(.*\)-[^-]*-[^-]*$/qt \1/p' "$d/.BUILDINFO"
+}
+# What it holds, not when or how it was built: its name, version and relations, and its files' paths, types, modes,
+# link targets and checksums (only these: a change in makepkg's or bsdtar's other fields doesn't read as a change). A
+# package of AgrOS's own changed with its version not raised
+contents() {
+    bsdtar -xOf "$1" .PKGINFO 2>/dev/null |
+        grep -E '^(pkgname|pkgver|depend|optdepend|provides|conflict|replaces|backup) = ' | sort
+    # (mtree's /set lines give the fields a file's line leaves out)
+    bsdtar -xOf "$1" .MTREE 2>/dev/null | zcat | awk '
+        function kv(i) { k = $i; v = $i; sub(/=.*/, "", k); sub(/^[^=]*=/, "", v) }
+        $1 == "/set" { for (i = 2; i <= NF; i++) { kv(i); set[k] = v }; next }
+        $1 == "/unset" { for (i = 2; i <= NF; i++) delete set[$i]; next }
+        $1 ~ /^\.\// && $1 !~ /^\.\/\.(PKGINFO|BUILDINFO)$/ {
+            split("", a); for (k in set) a[k] = set[k]
+            for (i = 2; i <= NF; i++) { kv(i); a[k] = v }
+            print $1, "type=" a["type"], "mode=" a["mode"], "link=" a["link"], "sha256=" a["sha256digest"]
+        }' | sort
+}
+# The published file kept for <file>, when its version is already published (a 404: not yet, a new version)
+keep_published() {
+    local f=$1 code
+    # Not published yet (404): a new version. Anything else (Pages down, a timeout): stopped here, not a rebuild
+    # published under a name users already have
+    # (--retry: a timeout or a 5xx from Pages tried again; a 404 isn't)
+    code=$(curl -sSL --retry 3 --max-time 300 -o "$work/pub" -w '%{http_code}' "$AGROS_PUBLISHED/$f" 2>/dev/null) ||
+        code=000
+    [[ $code == 404 ]] && return 0
+    [[ $code == 200 ]] || { echo "!! $f: the published copy couldn't be read (HTTP $code)"; exit 1; }
+    curl -fsSL --retry 3 --max-time 60 -o "$work/pub.sig" "$AGROS_PUBLISHED/$f.sig" ||
+        { echo "!! $f: the published copy's signature couldn't be read"; exit 1; }
+    asb gpg --batch --verify "$work/pub.sig" "$work/pub" 2>/dev/null ||
+        { echo "!! $f: the published copy's signature doesn't check out"; exit 1; }
+    if [[ $f != agros-*-any.pkg.tar.zst && $(built_against "$work/pub") != "$(built_against "$f")" ]]; then
+        echo "-- $f: the rebuild published (built against other libraries, Qt or Python than the published one)"
+        return 0
+    fi
+    # (the fixed versions: agros-desktop, agros-welcome, agros-keyring, agros-nvidia; not compiled ones, whose build
+    # differs with each compiler: agros-vmware's and agros-thunar-usage's versions count the commits that touch them)
+    # One versioned by the commits (a pkgver()) differs only if built differently from the same commit: a build that
+    # isn't reproducible (it read something besides the repo), stopped here too rather than published over or hidden
+    if [[ $f == agros-*-any.pkg.tar.zst && $(contents "$work/pub") != "$(contents "$f")" ]]; then
+        local name
+        name=$(bsdtar -xOf "$f" .PKGINFO 2>/dev/null | sed -n 's/^pkgname = //p')
+        if grep -q '^pkgver()' "$root/packages/$name/PKGBUILD" 2>/dev/null; then
+            echo "!! $f: built from the same commit as the published one, but its contents differ: packages/$name doesn't build reproducibly"
+        else
+            echo "!! $f changed but its version didn't: raise pkgver in packages/$name/PKGBUILD"
+        fi
+        diff <(contents "$work/pub") <(contents "$f") | head -20 || true  # (diff cut off by head: not the failure)
+        exit 1
+    fi
+    mv -f "$work/pub" "$f" && mv -f "$work/pub.sig" "$f.sig" && chown builder: "$f" "$f.sig"
+    echo "-- $f: the published file kept"
+}
+if [[ -n ${AGROS_PUBLISHED:-} && -n $key ]]; then
+    for f in agros-*-any.pkg.tar.zst; do keep_published "$f"; done
+fi
+
 # The AUR packages and CachyOS's installer built without compiler warnings: theirs (quickshell's hundreds), not
-# AgrOS's to fix, and they buried the log. Back on for AgrOS's own packages (3.)
+# AgrOS's to fix, and they buried the log. AgrOS's own packages (1.) built before, with them
 cp /etc/makepkg.conf "$work/makepkg.conf"
 printf '\nCFLAGS+=" -w"\nCXXFLAGS+=" -w"\n' >>/etc/makepkg.conf
 
-# 1. The AUR packages, with paru (it builds the AUR dependencies too, in order, and adds them all to the repo)
+# 2. The AUR packages, with paru (it builds the AUR dependencies too, in order, and adds them all to the repo)
 if [[ -z ${AGROS_SKIP_AUR:-} ]]; then
     command -v paru >/dev/null || pacman -S --needed --noconfirm paru 2>/dev/null || {
         asb git clone -q https://aur.archlinux.org/paru-bin.git "$work/paru-bin"
@@ -87,17 +185,25 @@ if [[ -z ${AGROS_SKIP_AUR:-} ]]; then
     aur_build || aur_build
 fi
 
-# 2. CachyOS's installer, rebuilt against the libraries of today (CachyOS's own copy can lag behind an Arch update:
-# built for Boost 1.91, it didn't start once Arch moved to 1.92). Its version a ".5" above CachyOS's (raised with each
-# change of AgrOS's: an unchanged version keeps the published file); the live ISO installs it from [agros]
-# (calamares-online.sh). The partition names drawn in the theme's text colours, not black and grey (unreadable on
-# AgrOS's dark installer); the package list's highlight gone on a click on no row (Qt's single selection keeps it,
-# its extended one clears it); the language list's English names in the highlight's text colour on the highlighted
-# row (drawn in the list's own, they were lost in the highlight); GRUB only, the bootloader page's choice gone
+# 3. CachyOS's installer, rebuilt against the libraries of today (CachyOS's own copy can lag behind an Arch update:
+# built for Boost 1.91, it didn't start once Arch moved to 1.92). Its version a ".5" above CachyOS's (calamares_rel
+# below); the live ISO has it from [agros] (packages_desktop.x86_64). The partition names drawn in the theme's text
+# colours, not black and grey (unreadable on AgrOS's dark installer); the package list's highlight gone on a click on
+# no row (Qt's single selection keeps it, its extended one clears it); the language list's English names in the
+# highlight's text colour on the highlighted row (drawn in the list's own, they were lost in the highlight); GRUB only,
+# the bootloader page's choice gone
 # Plain text swaps, each checked after (the build fails when one no longer fits)
-asb git clone -q --depth 1 --filter=blob:none --sparse https://github.com/CachyOS/CachyOS-PKGBUILDS.git "$work/cachyos-pkgbuilds"
-(cd "$work/cachyos-pkgbuilds" && asb git sparse-checkout set cachyos-calamares)
-cat >"$work/calamares-labels" <<'SH'
+# Any change to the swaps raises calamares_rel, with a line for it below holding their new checksum: an unchanged
+# version would keep the old installer published, so the build fails when the swaps' checksum isn't the one recorded
+# for this calamares_rel (each rel's line kept as it is: a new checksum under an old rel fails just the same)
+if [[ -z ${AGROS_SKIP_AUR:-} ]]; then
+    calamares_rel=5
+    case $calamares_rel in
+        5) calamares_sum=2db12fafcbd8 ;;
+    esac
+    asb git clone -q --depth 1 --filter=blob:none --sparse https://github.com/CachyOS/CachyOS-PKGBUILDS.git "$work/cachyos-pkgbuilds"
+    (cd "$work/cachyos-pkgbuilds" && asb git sparse-checkout set cachyos-calamares)
+    cat >"$work/calamares-labels" <<'SH'
     sed -i -e 's/painter->setPen( Qt::black );/painter->setPen( palette().windowText().color() );/' -e 's/painter->setPen( Qt::gray );/painter->setPen( palette().placeholderText().color() );/' src/modules/partition/gui/PartitionLabelsView.cpp
     sed -i 's/^\( *\)ui->groupswidget->setModel( c->model() );$/&\n\1ui->groupswidget->setSelectionMode( QAbstractItemView::ExtendedSelection );/' src/modules/netinstall/NetInstallPage.cpp
     sed -i 's/^\( *index.data( Calamares::Locale::TranslationsModel::EnglishLabelRole ).toString()\) );$/\1, option.state \& QStyle::State_Selected ? QPalette::HighlightedText : QPalette::NoRole );/' src/modules/welcome/WelcomePage.cpp
@@ -116,41 +222,24 @@ cat >"$work/calamares-labels" <<'SH'
         ! grep -rq 'packagechooser_bootloader' src/modules --include=*.cpp ||
         { echo "AgrOS's changes to Calamares no longer fit (ci/build-repo.sh)"; return 1; }
 SH
-(cd "$work/cachyos-pkgbuilds/cachyos-calamares" && asb sed -i 's/^pkgrel=\([0-9]*\)$/pkgrel=\1.5/' PKGBUILD &&
-    asb sed -i -e "/^prepare() {/{n;r $work/calamares-labels" -e '}' PKGBUILD &&
-    asb env PKGDEST="$out" makepkg -s --noconfirm "${sign[@]}")
-
+    sum=$(sha256sum <"$work/calamares-labels" | cut -c1-12)
+    [[ $sum == "${calamares_sum:-}" ]] || {
+        echo "!! The Calamares swaps changed: raise calamares_rel to $((calamares_rel + 1)) and add its line," \
+            "$((calamares_rel + 1))) calamares_sum=$sum ;; (ci/build-repo.sh)"
+        exit 1
+    }
+    # (CachyOS's own pkgrel with a dot already: not raised, and AgrOS's build would have CachyOS's version)
+    (cd "$work/cachyos-pkgbuilds/cachyos-calamares" &&
+        { grep -q '^pkgrel=[0-9]*$' PKGBUILD || { echo "!! cachyos-calamares: its pkgrel isn't a plain number"; false; }; } &&
+        asb sed -i "s/^pkgrel=\([0-9]*\)$/pkgrel=\1.$calamares_rel/" PKGBUILD &&
+        asb sed -i -e "/^prepare() {/{n;r $work/calamares-labels" -e '}' PKGBUILD &&
+        asb env PKGDEST="$out" makepkg -s --noconfirm "${sign[@]}")
+fi
 cp "$work/makepkg.conf" /etc/makepkg.conf
 
-# 3. AgrOS's own packages (no dependencies installed to build them: they're files and settings, but for agros-vmware's
-# shim, built against libdrm), keyring first
-pacman -T libdrm >/dev/null || pacman -S --noconfirm libdrm >/dev/null
-for d in "$work/agros/packages/agros-keyring" "$work"/agros/packages/*/; do
-    d=${d%/}; p=${d##*/}
-    [[ $p == agros-keyring && -n ${keyring_done:-} ]] && continue
-    [[ $p == agros-keyring ]] && keyring_done=1
-    [[ -f $d/PKGBUILD ]] || continue
-    if [[ $p == agros-keyring && ! -s $d/agros.gpg ]]; then
-        echo "-- $p: skipped (no GPGKEY)"
-        continue
-    fi
-    echo "-- $p"
-    # (--nodeps on purpose: makepkg's warning that it skips them left out)
-    (cd "$d" && asb env PKGDEST="$out" makepkg -f --nodeps --noconfirm "${sign[@]}" 2>&1 |
-        sed -u '/WARNING: Skipping dependency checks/d')
-done
-cd "$out"
-# A package whose version hasn't changed keeps the file already published, when its signature checks out: a rebuild
-# is a different file under the same name, and a copy of the old one in pacman's cache then reads as corrupted
 if [[ -n ${AGROS_PUBLISHED:-} && -n $key ]]; then
-    for f in ./*.pkg.tar.zst; do
-        f=${f#./}
-        # (silent: a new version isn't published yet, its 404 expected)
-        curl -fsSL --max-time 300 -o "$work/pub" "$AGROS_PUBLISHED/$f" 2>/dev/null &&
-            curl -fsSL --max-time 60 -o "$work/pub.sig" "$AGROS_PUBLISHED/$f.sig" 2>/dev/null &&
-            asb gpg --batch --verify "$work/pub.sig" "$work/pub" 2>/dev/null || continue
-        mv -f "$work/pub" "$f" && mv -f "$work/pub.sig" "$f.sig" && chown builder: "$f" "$f.sig"
-        echo "-- $f: the published file kept"
+    for f in *.pkg.tar.zst; do
+        [[ $f == agros-*-any.pkg.tar.zst ]] || keep_published "$f"  # (those checked after their build, above)
     done
 fi
 # The database made again from the packages here (paru's local repo already holds the AUR ones: added over it, each

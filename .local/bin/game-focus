@@ -22,6 +22,7 @@ systemd user service (game-focus.service), started from ~/.config/caelestia/user
   writes the disk; CPU alone for 10 minutes: hung, closed).
 Each of these can be turned off in the Settings app (games.* settings: read at start and again on every Hyprland
 config reload, which a change makes).
+game-focus --game-open: exit 0 while a game is open, by the same is_game (after-games: the one definition of a game).
 """
 import json
 import re
@@ -35,7 +36,12 @@ import threading
 import time
 import traceback
 
-steam_ids: dict[int, tuple[str, bool]] = {}  # pid -> (SteamGameId or "", whether it runs from Steam's games folder)
+# The shared helpers, beside this (not ~/.local/bin: one a package update just brought isn't linked there yet)
+HELPERS = os.path.dirname(os.path.realpath(__file__))
+
+# (pid, its start time) -> (SteamGameId or "", whether it runs from Steam's games folder): by its start time too, as
+# user/apps.lua's, a pid used again later is another process
+steam_ids: dict[tuple[int, str], tuple[str, bool]] = {}
 muted: set[int] = set()  # sink inputs this muted
 seen: set[int] = set()  # sink inputs already looked at (a new one may start muted: see the top)
 hosts: dict[int, int] = {}  # sink input -> its Flatpak game process (host pid; -1: none), looked up once
@@ -63,7 +69,7 @@ def setting(key: str) -> bool:
 def load_settings() -> None:
     global SETTINGS
     try:
-        SETTINGS = json.loads(subprocess.run([os.path.expanduser("~/.local/bin/dots-settings"), "values"],
+        SETTINGS = json.loads(subprocess.run([f"{HELPERS}/dots-settings", "values"],
                                              capture_output=True, text=True).stdout)
     except (OSError, ValueError):
         SETTINGS = {}
@@ -96,11 +102,21 @@ def pactl(kind: str) -> str:
         return "[]"
 
 
+def started(pid: int) -> str:
+    """The process's start time, "" when it's gone: with its pid, which process it is (a pid is used again)"""
+    try:
+        # (after the last ")": the name before it may hold ") "; the 22nd field, its start time)
+        return open(f"/proc/{pid}/stat").read().rsplit(")", 1)[1].split()[19]
+    except (OSError, IndexError):
+        return ""
+
+
 def steam_id(pid: int, window: bool = False) -> str:
     """The process's Steam game id, "" if none. Any process of the game counts for its audio (Proton's helpers too); a
     window only if its program is from Steam's games folder: one a game started (a browser opening a link) inherits the
     id too"""
-    if pid not in steam_ids:
+    key = (pid, started(pid))
+    if key not in steam_ids:
         try:
             env = open(f"/proc/{pid}/environ", "rb").read().split(b"\0")
         except OSError:
@@ -113,8 +129,8 @@ def steam_id(pid: int, window: bool = False) -> str:
                                   or "/steamapps/common/" in os.readlink(f"/proc/{pid}/exe"))
         except OSError:
             game = False
-        steam_ids[pid] = (gid, game)
-    gid, game = steam_ids[pid]
+        steam_ids[key] = (gid, game)
+    gid, game = steam_ids[key]
     return gid if game or not window else ""
 
 
@@ -217,9 +233,21 @@ def place_games(clients: list, active: str = "") -> None:
 
 # Closing a game closes the clients started for it --------------------------------------------------------------------
 
-# Store launchers that run under Wine next to their games (in the game's prefix)
-LAUNCHERS = re.compile(rb"(eadesktop|ealauncher|eabackgroundservice|upc|ubisoftconnect|epicgameslauncher|battle\.net|"
-                       rb"galaxyclient|rockstarlauncher|launcher_patcher)\.exe", re.I)
+# Store launchers that run under Wine next to their games (in the game's prefix): store-launchers' list, user/apps.lua's
+# too, matched its way
+try:
+    LAUNCHERS = [b"\\" + n for n in
+                 subprocess.run([f"{HELPERS}/store-launchers"], capture_output=True).stdout.splitlines() if n]
+except OSError:
+    LAUNCHERS = []
+
+
+def launcher(cmd: bytes) -> bool:
+    """A store launcher's command line (a process's, cmdline())"""
+    cmd = b"\\" + cmd.lower().replace(b"/", b"\\").replace(b"\0", b"\\")
+    return any(n in cmd for n in LAUNCHERS)
+
+
 games_open: dict[str, dict] = {}  # game window address -> {"prefix": its Wine prefix or "", "steam": a Steam game}
 
 
@@ -246,7 +274,7 @@ def is_game(c: dict) -> bool:
     """A game window: a Steam game, or one Caelestia (or user/apps.lua) tags "game" (Lutris's Wine games, gamescope).
     Not a store launcher's: under Proton its windows get the games' class (steam_app_default, steam_app_<id>) too"""
     return (bool(game_id(c)) or any(t in ("game", "game*") for t in c.get("tags", []))) \
-        and not LAUNCHERS.search(cmdline(c.get("pid", -1)))
+        and not launcher(cmdline(c.get("pid", -1)))
 
 
 def game_icon(gid: str) -> None:
@@ -300,8 +328,8 @@ def close_launcher(game: dict) -> None:
                  if d.isdigit() and int(d) != os.getpid() and prefix_of(environ(int(d))) == game["prefix"]]
         # (minimised counts too for anything but the launcher: a mod manager waiting in the dock)
         shown = {c.get("pid") for c in clients
-                 if c["workspace"].get("id", 0) > 0 or not LAUNCHERS.search(cmdline(c.get("pid", -1)))}
-        if any(LAUNCHERS.search(cmd) for _, cmd in procs) and not any(pid in shown for pid, _ in procs):
+                 if c["workspace"].get("id", 0) > 0 or not launcher(cmdline(c.get("pid", -1)))}
+        if any(launcher(cmd) for _, cmd in procs) and not any(pid in shown for pid, _ in procs):
             for pid, _ in procs:  # the launcher and what's left of the prefix (its helpers, Wine's services)
                 try:
                     os.kill(pid, signal.SIGTERM)
@@ -455,7 +483,7 @@ def _end_leftovers(game: dict) -> float | None:
         pids = [p for r in reapers for p in descendants(r)]
         shown = {c.get("pid") for c in clients}
         # (nothing left to close: still Steam's turn, its 15 s look may have come while the run was ending)
-        if any(p in shown for p in pids) or any(LAUNCHERS.search(cmdline(p)) for p in pids):
+        if any(p in shown for p in pids) or any(launcher(cmdline(p)) for p in pids):
             return None
     # (outside the lock: a process slow to die, or the look at what it's doing, doesn't hold up the rest)
     what = doing(pids) if pids else ""
@@ -527,8 +555,9 @@ def _update() -> bool:
         place_games(clients, active.get("address", ""))
     placed.intersection_update(c["address"] for c in clients)
     alive = {c["pid"] for c in clients}
-    for pid in [p for p in steam_ids if p not in alive and not os.path.exists(f"/proc/{p}")]:
-        del steam_ids[pid]
+    # (gone, or its pid now another process's: a key that can't come back)
+    for key in [k for k in steam_ids if started(k[0]) != k[1] or not k[1] and k[0] not in alive]:
+        del steam_ids[key]
     if not games and not muted:
         return False
     focused = game_id(active) if active.get("address") else ""
@@ -640,7 +669,7 @@ def alert(address: str, just_left: bool = False) -> None:
         # Normal urgency: Caelestia draws critical ones on its red error colour.
         # A day's timeout keeps it up until you clear it or go to the game (clear_alert closes it then). "--": a title
         # starting with "-" isn't taken for an option (notify-send refused it)
-        p = subprocess.Popen([os.path.expanduser("~/.local/bin/notify-wait"), "-a", name, "-i", icon, "-t", "86400000", "-p",
+        p = subprocess.Popen([f"{HELPERS}/notify-wait", "-a", name, "-i", icon, "-t", "86400000", "-p",
                               "-A", "default=Go to game", "--", name, "This game requires your attention"],
                              stdout=subprocess.PIPE, text=True)
         try:
@@ -796,4 +825,12 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    # game-focus --game-open: exit 0 while a game is open, by is_game (after-games' look: the one definition of a game,
+    # a store launcher's window not one). Hyprland named, as from an SSH login or a text console; not running: none
+    if sys.argv[1:] == ["--game-open"]:
+        try:
+            cs = json.loads(hypr("-i", os.environ.get("HYPRLAND_INSTANCE_SIGNATURE") or "0", "clients", "-j"))
+        except (OSError, ValueError):
+            cs = []
+        sys.exit(0 if isinstance(cs, list) and any(is_game(c) for c in cs) else 1)
     main()

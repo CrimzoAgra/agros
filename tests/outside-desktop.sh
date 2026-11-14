@@ -4,6 +4,7 @@
 # one couldn't start), dots-settings' reload reaches it, dotfiles-check sees its config errors and title bar plugin
 # (it said the plugin wasn't loaded), and the desktop step's Caelestia CLI writes the borders' colours for its Lua config
 set -euo pipefail
+# shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 export log=$t/calls HOME=$t/home XDG_STATE_HOME=''
 mkdir -p "$t/bin" "$HOME/.local/bin" "$HOME/.local/state"
@@ -38,7 +39,9 @@ loader = importlib.machinery.SourceFileLoader("ds", f"{sys.argv[1]}/.local/bin/d
 ds = importlib.util.module_from_spec(importlib.util.spec_from_loader("ds", loader))
 loader.exec_module(ds)
 ds.apply("hypr")
+ds.hyprctl("monitors", "all")
 P
+grep -q '^hyprctl -j monitors all' "$log" || fail "dots-settings' questions (Screens, bind clashes) didn't reach Hyprland: $(cat "$log")"
 for _ in $(seq 50); do grep -q '^hyprctl reload' "$log" && break; sleep 0.1; done
 grep -q '^hyprctl reload' "$log" || fail "dots-settings' reload didn't reach Hyprland: $(cat "$log")"
 
@@ -47,8 +50,9 @@ out=$("${outside[@]}" "$here/.local/bin/dotfiles-check" 2>&1) || true
 [[ $out == *"Title bar plugin not loaded"* ]] && fail "the loaded title bar plugin said not loaded: $out"
 
 : >"$log"
-printf '#!/bin/sh\n' >"$HOME/.local/bin/caelestia-overlay" && chmod +x "$HOME/.local/bin/caelestia-overlay"
-"${outside[@]}" bash -c \
-    'source "$1/.local/bin/agros-welcome"; caelestia_setup' _ "$here" >/dev/null 2>&1 </dev/null
+# (beside it: the programs it runs are the ones beside itself; the overlay's build stubbed)
+cp -r "$here/.local/bin/." "$HOME/.local/bin/"
+printf '#!/bin/sh\n[ "$1" = --running ] && exit 1\nexit 0\n' >"$HOME/.local/bin/caelestia-overlay"
+"${outside[@]}" bash -c 'source "$HOME/.local/bin/agros-welcome"; caelestia_setup' >/dev/null 2>&1 </dev/null
 grep -q '^caelestia scheme set -n dynamic for first$' "$log" || fail "the colours not set for Hyprland: $(cat "$log")"
 echo "ok outside-desktop"

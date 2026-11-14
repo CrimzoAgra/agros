@@ -1,0 +1,15 @@
+#!/bin/sh
+# nvidia-screen [--id]: exit 0 when an NVIDIA card drives a connected screen (--id: its PCI address printed, for
+# nvidia-smi --id). The one check, for VA-API on that card (~/.config/uwsm/env.d/nvidia-vaapi.sh) and the GPU meter
+# of the desktop widgets' stats panel (widgets/shell.qml): on a laptop that shows the desktop on its other GPU, either
+# would keep the NVIDIA card awake and drain the battery
+for s in /sys/class/drm/card*-*/status; do
+    # (read: a builtin, no process per connector; this runs at every login)
+    read -r st 2>/dev/null <"$s" || continue
+    [ "$st" = connected ] || continue
+    c=${s%/*}; c=${c##*/}; d=/sys/class/drm/${c%%-*}/device
+    case $(readlink "$d/driver") in
+        */nvidia) [ "${1:-}" != --id ] || basename "$(readlink -f "$d")"; exit 0 ;;
+    esac
+done
+exit 1

@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # dots.is_game (user/apps.lua), what windows.lua and titlebars.lua leave alone: Caelestia's "game" tag (Proton, Lutris,
-# gamescope) and a native Steam game not tagged yet (SteamGameId + Steam's games folder); not other windows
+# gamescope) and a native Steam game not tagged yet (SteamGameId + Steam's games folder); not other windows, nor a store
+# launcher's (tagged like a game under Proton)
 set -euo pipefail
+# shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 command -v lua >/dev/null || { echo "skip is-game (no lua)"; exit 0; }
 sleep 30 & game=$!
@@ -17,12 +19,16 @@ SteamGameId=1238840 sleep 30 & forsteam=$!
 GAME_NAME="EA App" sleep 30 & byentry=$!
 GAME_NAME="Assassin's Creed Origins" sleep 30 & origins=$!
 env -u GAME_NAME -u SteamGameId sleep 30 & byhand=$!
+# Store launchers' windows tagged like games under Proton (store-launchers' list): Rockstar's, by its folder, and EA's
+(exec -a 'C:\Program Files\Rockstar Games\Launcher\Launcher.exe' sleep 30) & rockstar=$!
+(exec -a 'C:\EA Desktop\EADesktop.exe' sleep 30) & ea=$!
+mkdir -p "$t/home/.local/bin"; ln -s "$here/.local/bin/store-launchers" "$t/home/.local/bin/"
 # A program whose name has ") " in it (the start time in /proc/<pid>/stat is after the last ")")
 cp /usr/bin/sleep "$t/a) b"; "$t/a) b" 30 & odd=$!
-trap 'kill $game $native $relative $forlutris $forsteam $byentry $byhand $origins $odd 2>/dev/null; rm -rf "$t"' EXIT
+trap 'kill $game $native $relative $forlutris $forsteam $byentry $byhand $origins $odd $rockstar $ea 2>/dev/null; rm -rf "$t"' EXIT
 for _ in $(seq 50); do [[ $(cat "/proc/$odd/comm") == "a) b" && $(cat "/proc/$relative/comm") == game ]] && break; sleep 0.05; done
 start=$(sed 's/.*) //' "/proc/$odd/stat" | cut -d' ' -f20)
-out=$(cd "$here" && lua -e '
+out=$(cd "$here" && HOME=$t/home lua -e '
 local any = setmetatable({}, { __index = function(s) return s end, __call = function() end })
 local handlers = {}
 hl = setmetatable({ on = function(_, f) handlers[#handlers + 1] = f end, window_rule = function() return any end }, { __index = function() return any end })
@@ -35,6 +41,8 @@ say("plain", { tags = { "maximised" }, pid = '"$game"' })
 say("native", { tags = {}, pid = '"$native"' })
 say("relative", { tags = {}, pid = '"$relative"' })
 say("notsteam", { tags = {}, pid = '"$forsteam"' })  -- SteamGameId, not from Steam'"'"'s games folder
+say("rockstar", { tags = { "game*" }, pid = '"$rockstar"' })
+say("ea", { tags = { "game" }, pid = '"$ea"' })
 local function up(f, name)
     for i = 1, 99 do local n, v = debug.getupvalue(f, i); if n == name then return v, i end end
 end
@@ -55,7 +63,7 @@ for _, c in ipairs({ { "forlutris", '"$forlutris"' }, { "forsteam", '"$forsteam"
                      { "byhand", '"$byhand"' }, { "origins", '"$origins"' } }) do
     io.write(c[1], "=", tostring(dots.started_for_game(c[2])), "\n")
 end')
-for want in tagged=true tagged_star=true plain=false native=true relative=true forlutris=true forsteam=true byentry=false byhand=false origins=true notsteam=false reads=1 cached=true \
+for want in tagged=true tagged_star=true plain=false native=true relative=true forlutris=true forsteam=true byentry=false byhand=false origins=true notsteam=false rockstar=false ea=false reads=1 cached=true \
     age=true; do
     grep -qx "$want" <<<"$out" || { echo "FAIL: is_game: wanted $want, got: $(tr '\n' ' ' <<<"$out")"; exit 1; }
 done

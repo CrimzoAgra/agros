@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Real covers from SteamGridDB for Lutris games that have none, a wide one, or Steam's padded one (its header art
-pasted on a stretched background, when the publisher uploaded no cover), saved where Lutris looks first
-(~/.local/share/lutris/coverart/<slug>.jpg|png). Needs a SteamGridDB API key in ~/.config/dots/steamgriddb.key
+pasted on a stretched background, when the publisher uploaded no cover), saved where Lutris looks first (its
+coverart folder, lutris.settings.COVERART_PATH: ~/.local/share/lutris/coverart/<slug>.jpg|png unless XDG_DATA_HOME
+moves it). Needs a SteamGridDB API key in ~/.config/dots/steamgriddb.key
 (steamgriddb.com → Preferences → API); without it, does nothing. Started in the background by ~/.local/bin/lutris
-when its library changed. A game SteamGridDB has nothing for is asked once (~/.cache/lutris/steamgriddb-tried)."""
+when its library changed. A game SteamGridDB has nothing for is asked once (~/.cache/lutris/steamgriddb-tried).
+Exits 1 when a game couldn't be asked (offline, the key turned down): the wrapper looks again at its next start."""
 import json
 import os
 import sys
@@ -26,8 +28,8 @@ except OSError:
     KEY = ""
 if not KEY:  # (an empty file too)
     sys.exit(0)
-COVERS = f"{HOME}/.local/share/lutris/coverart"
-TRIED = f"{HOME}/.cache/lutris/steamgriddb-tried"
+# (XDG_CACHE_HOME when set, as Lutris and ~/.local/bin/lutris use it)
+TRIED = f"{os.environ.get('XDG_CACHE_HOME') or HOME + '/.cache'}/lutris/steamgriddb-tried"
 # Its firewall turns away Python's default user agent
 AGENT = {"User-Agent": "lutris-covers/1.0"}
 
@@ -89,8 +91,10 @@ def main():
     from lutris.database.games import get_games
     from lutris.gui.views.store_item import StoreItem
     from lutris.services.base import LutrisCoverartMedium
+    from lutris.settings import COVERART_PATH as covers  # (Lutris's own: where it looks)
 
     medium = LutrisCoverartMedium()
+    failed = False
     try:
         with open(TRIED, encoding="utf-8") as f:
             tried = set(f.read().split())
@@ -98,7 +102,7 @@ def main():
         tried = set()
     for game in get_games():
         slug = game["slug"]
-        if slug in tried or any(os.path.exists(f"{COVERS}/{slug}.{ext}") for ext in ("jpg", "png")):
+        if slug in tried or any(os.path.exists(f"{covers}/{slug}.{ext}") for ext in ("jpg", "png")):
             continue
         if not needs_cover(StoreItem(game, None, medium)):
             continue
@@ -111,24 +115,29 @@ def main():
                 ext = "png" if data[:4] == b"\x89PNG" else "jpg" if data[:2] == b"\xff\xd8" else None
                 if not ext:
                     raise ValueError(f"not a PNG or JPEG: {url}")
-                os.makedirs(COVERS, exist_ok=True)
-                with open(f"{COVERS}/{slug}.{ext}.part", "wb") as f:
+                os.makedirs(covers, exist_ok=True)
+                with open(f"{covers}/{slug}.{ext}.part", "wb") as f:
                     f.write(data)
-                os.replace(f"{COVERS}/{slug}.{ext}.part", f"{COVERS}/{slug}.{ext}")
+                os.replace(f"{covers}/{slug}.{ext}.part", f"{covers}/{slug}.{ext}")
                 print(f"{slug}: {url}")
             else:
                 print(f"{slug}: none on SteamGridDB")
-        # Offline, a bad key, a timeout, an odd answer: this game is asked again next time, the others carry on
+        # Offline, a timeout, too many requests or a server error (or a full disk): this game is asked again next time,
+        # the others carry on. An answer that will stay wrong (another HTTP error, a bad picture, odd data) counts as
+        # tried: else it reran at every Lutris start
         except (OSError, ValueError, KeyError, IndexError, TypeError) as err:
             print(f"{slug}: {err}", file=sys.stderr)
             if getattr(err, "code", None) == 401:
-                return  # the key turned down: the same for every game, not a request each
-            continue
+                return 1  # the key turned down: the same for every game, not a request each
+            if isinstance(err, OSError) and (not isinstance(err, urllib.error.HTTPError) or err.code == 429 or err.code >= 500):
+                failed = True
+                continue
         tried.add(slug)
         os.makedirs(os.path.dirname(TRIED), exist_ok=True)
         with open(TRIED, "a", encoding="utf-8") as f:
             f.write(slug + "\n")
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

@@ -18,7 +18,7 @@ elif systemd-detect-virt -q --vm; then
     export LIBGL_ALWAYS_SOFTWARE=1
 fi
 # Keyboard layout for typing the password: the system's (localectl), as Hyprland uses, variant and options too. Read at
-# each start, so a layout changed later (setup's keyboard step) applies here too
+# each start, so a layout changed later (localectl set-x11-keymap) applies here too
 xkb() { sed -n "s/.*\"Xkb$1\"[[:space:]]*\"\([^\"]*\)\".*/\1/p" /etc/X11/xorg.conf.d/00-keyboard.conf 2>/dev/null | head -1; }
 XKB_DEFAULT_LAYOUT=$(xkb Layout) XKB_DEFAULT_VARIANT=$(xkb Variant) XKB_DEFAULT_OPTIONS=$(xkb Options)
 export XKB_DEFAULT_LAYOUT="${XKB_DEFAULT_LAYOUT:-us}" XKB_DEFAULT_VARIANT XKB_DEFAULT_OPTIONS

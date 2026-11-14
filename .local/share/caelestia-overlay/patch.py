@@ -311,7 +311,7 @@ def tray_menu_fallback():
     s = insert(s, "import Quickshell.Services.SystemTray\n", "import Quickshell\n")
     s = swap(s, """        else
             modelData.secondaryActivate();""", """        else if (!modelData.hasMenu)
-            Quickshell.execDetached(["tray-menu", modelData.id]);
+            Quickshell.execDetached([Quickshell.env("HOME") + "/.local/bin/tray-menu", modelData.id]);
         else
             modelData.secondaryActivate();""", "right-click branch")
     return {rel: s}
@@ -1647,7 +1647,7 @@ FEATURES = (
 
 def turned_off():
     """The features turned off in the Settings app (dots-settings, setting caelestia.<function name>). By the account's
-    home, not $HOME: the pacman hook runs this through runuser, which may keep root's"""
+    home, not $HOME: run as you from root (sudo, su), it may be root's"""
     # (DOTS_SETTINGS: another settings command, for tests/caelestia-overlay.sh)
     cli = os.environ.get("DOTS_SETTINGS") or f"{pwd.getpwuid(os.getuid()).pw_dir}/.local/bin/dots-settings"
     try:
@@ -1670,6 +1670,8 @@ if sys.argv[1:] == ["--list"]:
     sys.exit(0)
 src, dst = sys.argv[1], sys.argv[2]
 off = turned_off()
+skipped = set()  # (what didn't fit: what needs it is skipped too, said as one, not "Off" as if turned off)
+failed = {}  # (of those, the ones whose patch failed, not didn't fit: their error)
 ok = True
 labels = {f.__name__: name for name, f in FEATURES}
 for name, feature in FEATURES:
@@ -1679,7 +1681,17 @@ for name, feature in FEATURES:
     needs = NEEDS.get(feature.__name__, ())
     if needs and all(n in off for n in needs):
         off.add(feature.__name__)
-        print(f"Off: {name} (needs {' or '.join(labels[n] for n in needs)})")
+        if any(n in skipped for n in needs):
+            skipped.add(feature.__name__)
+            # (only the ones that didn't fit named so: another of them may be off by your choice)
+            unfit = [labels[n] for n in needs if n in skipped and n not in failed]
+            broke = [f"{labels[n]} failed ({failed[n]})" for n in needs if n in failed]
+            chosen = [labels[n] for n in needs if n not in skipped]
+            why = ([f"{' and '.join(unfit)} didn't fit"] if unfit else []) + broke + \
+                ([f"{' and '.join(chosen)} turned off"] if chosen else [])
+            print(f"WARNING: {name} skipped, it needs {' or '.join(labels[n] for n in needs)}: {', '.join(why)}")
+        else:
+            print(f"Off: {name} (needs {' or '.join(labels[n] for n in needs)})")
         continue
     try:
         write(feature())
@@ -1687,9 +1699,12 @@ for name, feature in FEATURES:
     except LookupError as e:
         ok = False
         off.add(feature.__name__)  # (and what builds on it: NEEDS)
+        skipped.add(feature.__name__)
         print(f"WARNING: {name} skipped, this Caelestia version doesn't fit the patch ({e})")
     except Exception as e:  # any other failure skips this one, not the rest
         ok = False
         off.add(feature.__name__)
-        print(f"WARNING: {name} skipped, it failed ({type(e).__name__}: {e})")
+        skipped.add(feature.__name__)
+        failed[feature.__name__] = f"{type(e).__name__}: {e}"
+        print(f"WARNING: {name} skipped, it failed ({failed[feature.__name__]})")
 sys.exit(0 if ok else 1)

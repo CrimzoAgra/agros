@@ -6,18 +6,19 @@ desktop-color: "#121318"
 
 # Nothing scaled, all centred and placed from the menu down: the same at any screen size and shape (a full-screen
 # background picture was stretched, which squeezed it on a 4:3 screen, or cropped, which blew it up on a wide one)
+# (sized to fit GRUB's smallest mode, 640x480: banner from y 16, label 166, menu 216-432, 20 px from each side)
 + image {
   left = 50%-230
-  top = 45%-230
+  top = 45%-200
   width = 460
   height = 125
   file = "banner.png"
 }
 
 + boot_menu {
-  left = 50%-380
+  left = 50%-300
   top = 45%
-  width = 760
+  width = 600
   height = 45%
   item_font = "Rubik Regular 22"
   item_color = "#8f8d99"
@@ -34,7 +35,7 @@ desktop-color: "#121318"
 
 + label {
   left = 0
-  top = 45%-60
+  top = 45%-50
   width = 100%
   align = "center"
   id = "__timeout__"

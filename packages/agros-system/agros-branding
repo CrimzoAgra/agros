@@ -4,6 +4,10 @@
 # ID_LIKE keeps cachyos and arch, for the tools that look for them
 f=${1:-/etc/os-release} lsb=${2:-/etc/lsb-release}
 [[ -e $f ]] || cp /usr/lib/os-release "$f"
+# (each as it was before AgrOS's name, kept once: agros-system's removal puts it back where CachyOS's script isn't there)
+for x in "$f" "$lsb"; do
+    [[ -e $x && ! -e $x.agros-orig ]] && ! grep -qE '^(DISTRIB_)?ID=agros$' "$x" && cp "$x" "$x.agros-orig"
+done
 sed -i "$f" \
     -e 's|^NAME=.*$|NAME="AgrOS"|' \
     -e 's|^PRETTY_NAME=.*$|PRETTY_NAME="AgrOS"|' \

@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# dots-warn [notify-send options] <title> <text>: a warning that something in your setup needs a look, the scripts'
+# one way to say so (critical, from "Dotfiles"; options given override those). Sent by notify-when-up (beside this):
+# tried again until the notification server is up, for up to a minute. A caller that can't wait that long runs it in
+# the background
+exec "$(dirname "$(readlink -f "$0")")/notify-when-up" -u critical -a Dotfiles -i dialog-warning "$@"

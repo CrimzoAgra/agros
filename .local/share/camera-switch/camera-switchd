@@ -5,6 +5,7 @@
 # The last position is saved, so it's applied again at boot.
 import glob
 import os
+import pwd
 import select
 import struct
 import subprocess
@@ -14,6 +15,7 @@ import time
 SCAN_OFF, SCAN_ON = 269, 268
 CAMERA = ("04f2", "b83e")  # Integrated Camera (vendor, product)
 STATE = "/var/lib/camera-switch/state"
+EACH_USER = "/usr/lib/agros/bin/agros-each-user"
 
 
 def find_input() -> str | None:
@@ -41,13 +43,20 @@ def camera_dir() -> str | None:
 
 
 def notify(on: bool) -> None:
-    # Show a notification in every logged-in desktop session
-    for bus in glob.glob("/run/user/*/bus"):
-        uid = bus.split("/")[3]
-        if uid == "0":
+    # Show a notification in every logged-in desktop session (agros-each-user's: not root's, nor the login screen's)
+    buses = subprocess.run([EACH_USER, "--sessions"], capture_output=True, text=True).stdout.split()
+    for bus in buses:
+        # The user's group from the account, not from the bus file: theirs to replace, e.g. by a link to a root-group
+        # file (os.stat followed it: notify-send run with group root). A bus not the user's own (lstat) skipped
+        try:
+            uid = int(bus.split("/")[-2])
+            if os.lstat(bus).st_uid != uid:
+                continue
+            gid = pwd.getpwuid(uid).pw_gid
+        except (ValueError, IndexError, OSError, KeyError):
             continue
         subprocess.run(
-            ["setpriv", f"--reuid={uid}", "--regid={}".format(os.stat(bus).st_gid), "--init-groups",
+            ["setpriv", f"--reuid={uid}", f"--regid={gid}", "--init-groups",
              "env", f"DBUS_SESSION_BUS_ADDRESS=unix:path={bus}",
              "notify-send", "-a", "Camera", "-i", "camera-web" if on else "camera-disabled",
              "-t", "2000", "Camera on" if on else "Camera off"],

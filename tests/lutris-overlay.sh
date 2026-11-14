@@ -2,6 +2,7 @@
 # The Lutris launcher in a throwaway home: the overlay applies to the installed Lutris, launches at once share one
 # build, and the patched copy is what runs (lutris --version: no window)
 set -euo pipefail
+# shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 [[ -x /usr/bin/lutris ]] || { echo "skip lutris-overlay (Lutris not installed)"; exit 0; }
 mkdir -p "$t/.local/share" "$t/bin"
@@ -12,7 +13,11 @@ settings
 printf '#!/bin/sh\ncat %s/.config/dots/settings.json\n' "$t" >"$t/bin/dots-settings"; chmod +x "$t/bin/dots-settings"
 cp -r "$here/.local/share/lutris-overlay" "$t/.local/share/"
 printf '#!/bin/sh\necho "$*" >>%s/notified\n' "$t" >"$t/bin/notify-send"; chmod +x "$t/bin/notify-send"
-run() { HOME=$t XDG_CACHE_HOME=$t/cache PATH=$t/bin:$PATH DOTS_SETTINGS=$t/bin/dots-settings "$here/.local/bin/lutris" --version 2>&1; }
+# (its warnings, dots-warn's, in the foreground: said before the checks below look)
+printf '#!/bin/sh\n[ "$1" = -f ] && shift\nexec "$@"\n' >"$t/bin/setsid"; chmod +x "$t/bin/setsid"
+# (in the home's bin: the programs it runs, lutris-covers and dots-warn, are the ones beside itself)
+mkdir -p "$t/.local/bin" && cp "$here/.local/bin/"{lutris,dots-warn,notify-when-up} "$t/.local/bin/"
+run() { HOME=$t XDG_CACHE_HOME=$t/cache PATH=$t/bin:$PATH DOTS_SETTINGS=$t/bin/dots-settings "$t/.local/bin/lutris" --version 2>&1; }
 
 for _ in 1 2 3; do run >/dev/null & done; wait
 [[ ! -e $t/notified ]] || fail "a launch reported the overlay off: $(cat "$t/notified")"
@@ -69,7 +74,7 @@ for f in "$t"/cache/lutris-overlay/lutris/gui/widgets/cellrenderers.py "$t"/cach
     [[ ! -L $f ]] || fail "${f##*/} not patched"
     python3 -m py_compile "$f" || fail "${f##*/} doesn't compile"
 done
-run | grep -qi lutris || fail "the patched copy doesn't start"
+out=$(run); grep -qi lutris <<<"$out" || fail "the patched copy doesn't start: $out"
 # Not rebuilt while the patched Lutris runs (its folder swapped under it): only once it has closed
 before=$(cat "$t/cache/lutris-overlay/stamp")
 (exec -a "python3 $t/cache/lutris-overlay/bin/lutris" sleep 30) & fake=$!
@@ -133,10 +138,13 @@ class View:
     def connect(self, signal, handler): self.handlers[signal] = handler
 class Request:
     def get_uri(self): return s.hand_over + "d=%7Bnot-json"
-ended = []
+ended, logged = [], []
+# (its traceback caught here, not printed: what's logged is checked instead)
+signin.logger.exception = lambda msg, *a: logged.append(msg % a)
 s._watch(View(), ended.append)
 View.handlers["resource-load-started"](None, None, Request())
 assert ended == [None], ended
+assert logged == ["Rockstar: the handed-over games couldn't be read"], logged
 P
 }
 rockstar_check
@@ -162,13 +170,13 @@ build=$t/cache/lutris-overlay/lutris
 settings rockstar_source
 run >/dev/null
 [[ ! -e $build/services/rockstar.py && -f $build/services/signin.py ]] || fail "rockstar_source off: rockstar.py in the build, or signin.py not"
-run | grep -qi lutris || fail "the build without rockstar_source doesn't start"
+out=$(run); grep -qi lutris <<<"$out" || fail "the build without rockstar_source doesn't start: $out"
 bnet_check
 settings bnet_login
 run >/dev/null
 grep -q lutris-owned "$build/services/battlenet.py" && fail "bnet_login switched off is still in the build"
 [[ -f $build/services/signin.py ]] || fail "bnet_login off: signin.py not in the build (Rockstar needs it)"
-run | grep -qi lutris || fail "the build without bnet_login doesn't start"
+out=$(run); grep -qi lutris <<<"$out" || fail "the build without bnet_login doesn't start: $out"
 rockstar_check
 settings
 run >/dev/null
@@ -180,7 +188,7 @@ run >/dev/null
 [[ $(cat "$t/cache/lutris-overlay/stamp" 2>/dev/null) && ! -e $t/cache/lutris-overlay.failed ]] || fail "an optional miss failed the build"
 grep -q "some of your changes are off Covers with rounded corners" "$t/notified" || fail "an optional miss wasn't reported: $(cat "$t/notified")"
 [[ -L $t/cache/lutris-overlay/lutris/gui/lutriswindow.py ]] && fail "an optional miss turned the other changes off"
-run | grep -qi lutris || fail "the build without one change doesn't start"
+out=$(run); grep -qi lutris <<<"$out" || fail "the build without one change doesn't start: $out"
 rm -f "$t/notified"; cp "$t/patch.orig" "$t/.local/share/lutris-overlay/patch.py"
 
 # Patched but no longer loading (it uses something an update renamed): plain Lutris, said so
@@ -217,13 +225,31 @@ run >/dev/null
 mkdir -p "$icons"; touch "$icons/steam.svg" "$t/cache/lutris/versions.json"
 run >/dev/null
 [[ -e $icons/steam.svg && -e $t/cache/lutris/versions.json ]] || fail "whole icons taken away"
+# The library changed: lutris-covers runs, and the library is marked checked only when it got through (offline: the
+# next start looks again); Lutris's data under XDG_DATA_HOME when that's set
+checked=$t/cache/lutris/covers-checked; mkdir -p "$t/.local/bin" "$t/xdg/lutris" "$t/.local/share/lutris"; rm -f "$checked"
+# (it notes the background job it runs in, its parent: what's checked once that has finished)
+covers() { rm -f "$t/covers-ran"; printf '#!/bin/sh\necho $PPID >%s/ran.tmp && mv %s/ran.tmp %s/covers-ran\nexit %s\n' "$t" "$t" "$t" "$1" >"$t/.local/bin/lutris-covers"
+    chmod +x "$t/.local/bin/lutris-covers"; }
+waitfor() { for _ in {1..50}; do [[ -e $1 ]] && return; sleep 0.1; done; return 1; }
+touch "$t/.local/share/lutris/pga.db"; covers 1; run >/dev/null
+waitfor "$t/covers-ran" || fail "lutris-covers didn't run for a changed library"
+job=$(cat "$t/covers-ran"); for _ in {1..50}; do kill -0 "$job" 2>/dev/null || break; sleep 0.1; done
+[[ ! -e $checked ]] || fail "the library marked checked after lutris-covers failed"
+covers 0; run >/dev/null
+waitfor "$checked" || fail "the library not marked checked after lutris-covers got through"
+touch -d '+1 min' "$t/xdg/lutris/pga.db"; covers 0; XDG_DATA_HOME=$t/xdg run >/dev/null
+waitfor "$t/covers-ran" || fail "a library under XDG_DATA_HOME wasn't looked at"
 
 # ...and on Lutris's main (the next release: a change there that breaks one shows here first, as Caelestia's main does in
-# caelestia-overlay); an optional one left out only warns, any other one failing fails here
+# caelestia-overlay); an optional one left out only warns, any other one failing fails here, the store pages' fix too
 if timeout 120 git clone -q --depth 1 https://github.com/lutris/lutris "$t/lutris-main" 2>/dev/null; then
     mkdir -p "$t/main-root" && cp -as "$t/lutris-main/lutris" "$t/main-root/lutris"
     out=$(DOTS_SETTINGS=/bin/false python3 -I "$here/.local/share/lutris-overlay/patch.py" "$t/lutris-main/lutris" "$t/main-root" 2>&1) ||
         fail "the overlay doesn't build on Lutris's main: $out"
+    # (source_page_ids is plumbing: left out, a store's page loses games at random; it must keep fitting, not warn)
+    ! grep -q "^WARNING: A store's own page shows all its games" <<<"$out" ||
+        fail "the store pages' fix (source_page_ids) no longer fits Lutris's main: $(grep "^WARNING: A store's own page" <<<"$out")"
     n=$(grep -c WARNING <<<"$out" || true)
     echo "ok lutris-overlay (on Lutris main: $n optional changes left out)"
 else

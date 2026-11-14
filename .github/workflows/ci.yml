@@ -27,11 +27,13 @@ jobs:
     steps:
       - name: Tools the tests use
         run: |
-          # (only what isn't there: pacman warns about each one asked for that is). Node, qmllint, Hyprland's headers
-          # with a compiler (hyprbars built), mkinitcpio: the tests that check against them
+          # (only what isn't there: pacman warns about each one asked for that is). Node, qmllint, Hyprland's and
+          # Thunar's headers with a compiler (hyprbars and the Thunar plugin built), mkinitcpio, bubblewrap and passt
+          # (the boot's AUR sandbox and its network, checked for real: the host's loopback out of its reach): the tests
+          # that check against them
           pkgs=(git jq python python-gobject python-numpy python-xlib python-secretstorage gnupg shellcheck sudo libnotify
-            procps-ng util-linux which diffutils pacman-contrib file gtk3 lua lutris nodejs qt6-declarative hyprland
-            base-devel mkinitcpio)
+            procps-ng util-linux which diffutils pacman-contrib file gtk3 thunar lua lutris nodejs qt6-declarative hyprland
+            base-devel mkinitcpio bubblewrap passt)
           # (a machine id: without one systemd's install hooks warn that /etc isn't set up; and its hook that loads a
           # package's kernel modules off: no systemd running here, it fails)
           systemd-machine-id-setup >/dev/null
@@ -58,10 +60,25 @@ jobs:
           dots=$(sed -n 's/^_dots=//p' packages/agros-hyprland-settings/PKGBUILD)
           git init -q /tmp/dots && git -C /tmp/dots fetch -q --depth 1 https://github.com/caelestia-dots/caelestia "$dots"
           git -C /tmp/dots checkout -q FETCH_HEAD
-      - name: Shellcheck (AgrOS's own scripts and package scripts)
+      - name: Shellcheck (AgrOS's own scripts and package scripts, the tests)
         run: |
-          shellcheck -S warning .local/bin/agros-* ci/build-repo.sh packages/agros-boot/boot-menu \
-            packages/agros-boot/splash-theme packages/agros-system/auto-update
+          # Every shell script in .local/bin and the data folders (by its shebang; a sourced .sh has none), and the
+          # session's environment files (sh, sourced by uwsm)
+          scripts=()
+          for f in .local/bin/* .local/share/*/*; do
+            [[ -f $f ]] && { [[ $f == *.sh ]] || head -n1 "$f" | grep -qE '^#!.*(/|env )(ba|da)?sh( |$)'; } && scripts+=("$f")
+          done
+          shellcheck -S warning "${scripts[@]}" .config/uwsm/env.d/*.sh ci/build-repo.sh \
+            packages/agros-boot/{boot-menu,boot-loader} \
+            packages/agros-boot/splash-theme packages/agros-boot/grub-theme/make.sh packages/agros-system/auto-update \
+            packages/agros-system/auto-update-aur packages/agros-system/agros-branding \
+            system/bluetooth-resume system/screens-resume system/wired-link-watch packages/agros-greeter/{run,login-reset,hyprland-session}
+          # The tests (their own .shellcheckrc: what they source followed)
+          shellcheck -S warning tests/*.sh
+          # (pacman's install scriptlets, mkinitcpio's install hook and drop-in: bash, with no shebang to go by)
+          shellcheck -S warning -s bash packages/*/*.install packages/agros-boot/{plymouth-title-font,mkinitcpio-plymouth.conf}
+          # The PKGBUILDs (bash, sourced by makepkg: its variables set or read by it, its functions run in $srcdir)
+          shellcheck -S warning -s bash -e SC2034,SC2154,SC2164 packages/*/PKGBUILD
       - name: Tests, as a normal user
         run: |
           useradd -m ci
@@ -96,7 +113,7 @@ jobs:
           curl -fsSL -o /tmp/mirrorlist.pkg "$m/$(curl -fsSL "$m/" | grep -o 'cachyos-mirrorlist-[^"]*\.pkg\.tar\.zst' | sort -V | tail -1)"
           mkdir /tmp/k && bsdtar -xf /tmp/keyring.pkg -C /tmp/k
           pacman-key --add /tmp/k/usr/share/pacman/keyrings/cachyos.gpg
-          pacman-key --lsign-key F3B607488DB35A47
+          pacman-key --lsign-key 882DCFE48E2051D48E2562ABF3B607488DB35A47
           pacman -U --noconfirm /tmp/keyring.pkg /tmp/mirrorlist.pkg
           sed -i '/^\[core\]/i [cachyos]\nInclude = /etc/pacman.d/cachyos-mirrorlist\n' /etc/pacman.conf
           pacman -Sy --noconfirm
@@ -138,3 +155,25 @@ jobs:
       name: github-pages
     steps:
       - uses: actions/deploy-pages@v5
+
+  iso:
+    # A new ISO with the packages just published (agros-iso's ISO workflow; it skips when nothing changed)
+    needs: publish
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Start agros-iso's ISO build
+        env:
+          GH_TOKEN: ${{ secrets.AGROS_ISO_TOKEN }}
+        run: |
+          [ -n "$GH_TOKEN" ] || { echo "::error::Add the AGROS_ISO_TOKEN secret (a token with Actions: read and write on agros-iso)"; exit 1; }
+          # Pages' CDN serves the old agros.db for up to ~10 minutes after a deploy: the ISO waits until it lists this
+          # commit's packages (agros-system's version, r<commits>.<short hash>, changes with every commit). (The steps'
+          # bash runs without pipefail: grep's status alone decides. No grep -q all the same: it would stop tar early,
+          # read as a miss were pipefail ever set)
+          db=https://crimzoagra.github.io/agros/x86_64/agros.db
+          for i in $(seq 40); do
+            curl -fsSL --retry 3 "$db" | tar -tzf - 2>/dev/null | grep -E "^agros-system-r[0-9]+\.${GITHUB_SHA::7}[0-9a-f]*-" >/dev/null && break
+            [ "$i" = 40 ] && { echo "::error::$db still doesn't list this commit's packages after 20 minutes"; exit 1; }
+            sleep 30
+          done
+          gh workflow run iso.yml -R CrimzoAgra/agros-iso --ref main

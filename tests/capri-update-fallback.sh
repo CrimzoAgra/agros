@@ -7,6 +7,7 @@
 # again. One run at a time: a --check during an update says nothing, an update
 # waits
 set -uo pipefail
+# shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 g() { git -C "$1" -c user.name=t -c user.email=t@t "${@:2}"; }
 git init -q -b main "$t/up"
@@ -79,11 +80,17 @@ g "$t/up" rm -q FAILTESTS; g "$t/up" commit -qm fixed; g "$t/up" tag v0.3.2
 
 # One at a time: a --check while an update runs says nothing and leaves her folder alone; an update waits its turn
 lock="$h/.local/state/capri-update.lock"
+# A run fail() started again (CAPRI_UPDATE_LOCKED, the lock held on its fd 9) goes on under it, not shut out by itself
+out=$(exec 9>"$lock"; flock -n 9 && CAPRI_UPDATE_LOCKED=1 run --check)
+grep -q "v0.3.2" <<<"$out" || fail "a run started again under its own lock shut out: $out"
 flock "$lock" sleep 2 & holder=$!
 sleep 0.3
 start=$SECONDS
 out=$(run --check) || fail "--check during an update failed: $out"
 [[ -z $out && $((SECONDS - start)) -lt 2 ]] || fail "--check during an update waited or said something: $out"
+# A stray CAPRI_UPDATE_LOCKED in the environment (no lock on fd 9) doesn't skip the lock
+out=$(CAPRI_UPDATE_LOCKED=1 run --check)
+[[ -z $out ]] || fail "a stray CAPRI_UPDATE_LOCKED skipped the lock: $out"
 out=$(run) || fail "an update after another one: $out"
 grep -q "waiting for the other" <<<"$out" && grep -q "v0.3.2 installed" <<<"$out" || fail "the update didn't wait its turn: $out"
 wait $holder
@@ -143,6 +150,7 @@ g "$t/fork" tag v0.4.0
 out=$(run) && fail "a newest release that doesn't merge reported success: $out"
 [[ $(cat "$app/current/app.js" 2>/dev/null) == mine && $(cat "$app/current/other.js") == x ]] ||
     fail "my fork not installed with the release it has: $out"
+for _ in {1..50}; do grep -q "Capri not on v0.4.0" "$t/notified" 2>/dev/null && break; sleep 0.1; done  # (in the background)
 grep -q "conflicts in: app.js" "$failed" && grep -q "Capri not on v0.4.0" "$t/notified" ||
     fail "the newest release's conflict not said: $out"
 echo f2 >"$t/fork/fork2.js"; g "$t/fork" add -A; g "$t/fork" commit -qm "another change"

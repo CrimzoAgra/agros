@@ -3,6 +3,7 @@
 # told to refresh when the run changed the library, not when it changed nothing (lutris-library.path starts it on every
 # read Lutris makes: a refresh each time reset the view, and its reads started the next run)
 set -euo pipefail
+# shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 command -v dbus-run-session >/dev/null || { echo "skip lutris-library-refresh (no dbus-run-session)"; exit 0; }
 export HOME=$t XDG_DATA_HOME=$t/.local/share XDG_CACHE_HOME=$t/.cache XDG_CONFIG_HOME=$t/.config T=$t HERE=$here

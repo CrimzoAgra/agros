@@ -1,7 +1,7 @@
 -- Personal Hyprland settings, loaded after Caelestia's (~/.config/hypr is Caelestia's: never edit it; its variables,
 -- keys included, are changed in hypr-vars.lua). The rest is split by topic in ~/.config/caelestia/user/.
 
--- Keyboard layout: the system's (localectl set-x11-keymap, the setup's keyboard step), as the login screen and
+-- Keyboard layout: the system's (the one picked in the installer; localectl set-x11-keymap), as the login screen and
 -- scroll-lock read it too
 local kb = io.open("/etc/X11/xorg.conf.d/00-keyboard.conf")
 if kb then
@@ -20,7 +20,7 @@ hl.config({ cursor = { no_hardware_cursors = 1 } })
 hl.config({ ecosystem = { no_update_news = true } })
 
 -- The functions other programs call through hyprctl eval 'dots.<name>(...)' (the dock, the switcher, game-focus...),
--- kept in one table instead of loose globals; the README lists them ("Lua API")
+-- kept in one table instead of loose globals; docs/how-it-works.md lists them ("Lua API")
 dots = {}
 
 -- Only a check (hypr-config-check: Hyprland --verify-config): loaded, nothing done on the side. No "failed to load"
@@ -39,14 +39,22 @@ end
 local ok, settings = pcall(dofile, settings_file)
 local values = ok and type(settings) == "table" and settings or {}
 -- Without it every setting is off and the shortcuts below have no keys (Alt+Tab included): say so, once the desktop
--- is up to show it (at login this runs before Caelestia, with no notification daemon yet)
+-- is up to show it (at login this runs before Caelestia, with no notification daemon yet: dots-warn waits for it)
 if not (ok and type(settings) == "table") and not verify then
-    hl.exec_cmd("sh -c 'sleep 15; exec notify-send -u critical -a Dotfiles -i dialog-warning"
+    hl.exec_cmd("sh -c 'exec ~/.local/bin/dots-warn"
                 .. " \"Desktop settings failed to load\" \"Shortcuts like Alt+Tab and the apps started at login are off."
                 .. " Run dots-settings lua in a terminal to see why.\"'")
 end
 function dots.setting(key) return values[key] end
--- My binds, by name: their keys are settings too (Settings app, Keyboard page; keys.<name>, defaults in its schema), a
+-- Every setting whose key starts with prefix, by key (the Screens page's: screens.<screen>.<field>)
+function dots.settings(prefix)
+    local out = {}
+    for key, value in pairs(values) do
+        if type(key) == "string" and key:sub(1, #prefix) == prefix then out[key] = value end
+    end
+    return out
+end
+-- My binds, by name: their keys are settings too (Settings app, Shortcuts page; keys.<name>, defaults in its schema), a
 -- list of none, one or more. Returns the binds made (to turn them off and on: set_enabled)
 function dots.bind(name, action, opts)
     local made = {}
@@ -57,6 +65,17 @@ end
 -- No mouse acceleration by default: the pointer moves exactly as far as the hand ("flat"; games under XWayland get the
 -- accelerated movement otherwise). On in the Settings app: libinput's default for mice ("adaptive")
 if dots.setting("input.mouse_accel") ~= true then hl.config({ input = { accel_profile = "flat" } }) end
+-- The rest of the Settings app's Mouse and keyboard page (its defaults Caelestia's; one missing leaves Caelestia's)
+hl.config({ input = {
+    sensitivity = dots.setting("input.sensitivity"),
+    natural_scroll = dots.setting("input.natural_scroll"),
+    repeat_rate = dots.setting("input.repeat_rate"),
+    repeat_delay = dots.setting("input.repeat_delay"),
+    touchpad = {
+        natural_scroll = dots.setting("input.touchpad_natural_scroll"),
+        tap_to_click = dots.setting("input.tap_to_click"),
+    },
+} })
 
 -- Each on its own: one that errors (a Hyprland update renamed something it uses) loses only itself, not the ones after
 -- it, and says so (a notification once the desktop is up; hyprctl configerrors has the rest)
@@ -64,7 +83,7 @@ local function load(name)
     local ok, err = pcall(require, name)
     if ok then return end
     if not verify then
-        hl.exec_cmd("sh -c 'sleep 15; exec notify-send -u critical -a Dotfiles -i dialog-warning"
+        hl.exec_cmd("sh -c 'exec ~/.local/bin/dots-warn"
                     .. " \"Part of the desktop config failed to load\" \"" .. name .. ": see hyprctl configerrors\"'")
     end
     error(name .. ": " .. tostring(err), 0)  -- (after the rest has loaded: below)

@@ -1,4 +1,4 @@
-// Firefox settings (Firefox Sync doesn't carry these). Applied once to a new profile by setup.sh;
+// Firefox settings (Firefox Sync doesn't carry these). Applied once to a new profile by agros-welcome;
 // kept up to date by dotfiles-sync. To keep another setting, add its user_pref line here.
 user_pref("browser.contentblocking.category", "custom");
 user_pref("privacy.trackingprotection.cryptomining.enabled", false);

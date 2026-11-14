@@ -3,6 +3,7 @@
 # too (it failed there, settings.lua left as it was), and through a temporary file of its own run (two at once, Hyprland's
 # "lua" and a "set", wrote the same one), none left behind
 set -euo pipefail
+# shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 LC_ALL=C PYTHONUTF8=0 PYTHONCOERCECLOCALE=0 python3 - "$here" "$t" <<'P' || fail "settings.lua not written outside a UTF-8 locale"
 import importlib.machinery, importlib.util, sys

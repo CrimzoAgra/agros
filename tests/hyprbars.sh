@@ -5,6 +5,7 @@
 # ask) said on its last line, "ok hyprbars (SKIPPED: ...)", not a plain ok.
 # DOTS_BUILD_TESTS=1: also builds the patched hyprbars against the installed Hyprland's headers (a minute or two)
 set -euo pipefail
+# shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 [[ -f /usr/include/hyprland/src/version.h ]] || { echo "skip hyprbars (no Hyprland headers)"; exit 0; }
 

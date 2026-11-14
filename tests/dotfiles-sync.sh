@@ -2,6 +2,7 @@
 # dotfiles-sync -n (shows, changes nothing): a file you changed is synced, one the repo got newer (pulled, not yet
 # copied home) is skipped instead of copied back over
 set -euo pipefail
+# shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 repo=$t/repo home=$t/home
 mkdir -p "$repo/.config/app" "$home/.config/app" "$t/bin"

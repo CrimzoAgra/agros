@@ -3,6 +3,7 @@
 # fits, runs at once don't lose the folder, one failing patch skips only itself, a broken patch.py leaves the shell as
 # it was
 set -euo pipefail
+# shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 [[ -d /etc/xdg/quickshell/caelestia ]] || { echo "skip caelestia-overlay (Caelestia not installed)"; exit 0; }
 run() { HOME=$t XDG_STATE_HOME=$t/state PATH=$t/bin:$PATH DOTS_SETTINGS=$t/bin/dots-settings "$here/.local/bin/caelestia-overlay" 2>&1; }
@@ -27,7 +28,7 @@ w=$dst/modules/sidebar/Wrapper.qml i=$dst/modules/drawers/Interactions.qml
 grep -q 'type: offsetBehavior.targetValue > 0.5 ? Anim.Emphasized : Anim.DefaultSpatial' "$w" ||
     fail "the sidebar's close curve not changed: $(grep -A6 'Behavior on offsetScale' "$w")"
 { [[ $(grep -c 'root.sidebarHoverOpens(showSidebarHover) && !screenState.sidebar' "$i") == 2 ]] &&
-    grep -A2 'if (!containsMouse) {' "$i" | grep -q 'sidebarHoverHeld = false'; } || fail "the sidebar's hover edge not gated on pop-ups"
+    grep -q 'sidebarHoverHeld = false' <<<"$(grep -A2 'if (!containsMouse) {' "$i")"; } || fail "the sidebar's hover edge not gated on pop-ups"
 if command -v node >/dev/null; then
     fn=$(sed -n '/^    function sidebarHoverOpens(atEdge: bool): bool {$/,/^    }$/p' "$i" | sed 's/(atEdge: bool): bool {/(atEdge) {/')
     seq=$(node -e "let sidebarHoverHeld = false; const panels = { notifications: { height: 0 } };
@@ -45,7 +46,7 @@ fi
 # by a pop-up coming up under a pointer resting there
 sidebar_edge_released() { # <Interactions.qml>
     local edge fn
-    grep -A1 '^    onPositionChanged: event => {$' "$1" | tail -1 | grep -q '^        root.sidebarHoverOpens(root.atSidebarEdge(event.x, event.y));' ||
+    grep -q '^        root.sidebarHoverOpens(root.atSidebarEdge(event.x, event.y));' <<<"$(grep -A1 '^    onPositionChanged: event => {$' "$1" | tail -1)" ||
         { echo "not the first thing each move does: $(grep -A2 'onPositionChanged: event => {' "$1")"; return; }
     edge=$(sed -n 's/^ *const showSidebarHover = \(.*\);$/\1/p' "$1" | sort -u)
     fn=$(sed -n '/^    function atSidebarEdge(x: real, y: real): bool {$/,/^    }$/p' "$1")
@@ -53,7 +54,7 @@ sidebar_edge_released() { # <Interactions.qml>
     if grep -q sidebarTriggerY <<<"$edge"; then
         grep -qF "$(grep -m1 'const sidebarTriggerY = ' "$1" | sed 's/^ *//')" <<<"$fn" || { echo "its trigger height isn't the hover's: $fn"; return; }
     fi
-    grep -A3 'function onHeightChanged() {' "$1" | grep -q 'root.sidebarHoverOpens(root.atSidebarEdge(root.mouseX, root.mouseY))' &&
+    grep -q 'root.sidebarHoverOpens(root.atSidebarEdge(root.mouseX, root.mouseY))' <<<"$(grep -A3 'function onHeightChanged() {' "$1")" &&
         grep -q '^        target: root.panels.notifications$' "$1" || echo "not held by a pop-up under a resting pointer"
 }
 r=$(sidebar_edge_released "$i"); [[ -z $r ]] || fail "the sidebar's hover edge not let go on every path: $r"
@@ -79,12 +80,12 @@ grep -q 'anchors.topMargin: -notifications.anchors.topMargin - Math.max(0, slide
 # the wallpaper over it
 ! grep -q 'Image {' "$dst/modules/drawers/PeekLayer.qml" || fail "window peek's pictures hide the desktop's widgets"
 # ...and a hyprctl that failed (Hyprland not ready at the shell's start) tried again, not taken as done
-{ grep -q 'if (code === 0) {' "$dst/services/WindowPeek.qml" && grep -A3 'id: retry' "$dst/services/WindowPeek.qml" | grep -q 'interval: 2000'; } ||
+{ grep -q 'if (code === 0) {' "$dst/services/WindowPeek.qml" && grep -q 'interval: 2000' <<<"$(grep -A3 'id: retry' "$dst/services/WindowPeek.qml")"; } ||
     fail "window peek takes a failed hyprctl as done"
 # ...each time later, up to a minute (a config without it for good: not a hyprctl every 2 s all session)
 grep -q 'retry.interval = Math.min(retry.interval \* 2, 60000);' "$dst/services/WindowPeek.qml" ||
     fail "window peek retries a failing hyprctl every 2 s for good"
-sed -n '/^        ScreencopyView {$/,/^        }$/p' "$dst/modules/drawers/PeekLayer.qml" | grep -q '^            layer.enabled: true$' ||
+grep -q '^            layer.enabled: true$' <<<"$(sed -n '/^        ScreencopyView {$/,/^        }$/p' "$dst/modules/drawers/PeekLayer.qml")" ||
     fail "window peek's picture of a see-through window shows the windows under the shell"
 
 # What the patched files add to qmllint's findings on Caelestia's own (each file against the same one unpatched, both
@@ -186,7 +187,7 @@ for f in $(python3 "$here/.local/share/caelestia-overlay/patch.py" --list | pyth
     # The dock off: the rest of the bar as it was (its place kept as space, Caelestia's own entries all there)
     if [[ $f == dock ]]; then
         bar=$t/one/modules/bar/Bar.qml
-        grep -A3 'roleValue: "dock"' "$bar" | grep -q 'Layout.fillHeight: true' || fail "dock off: its place isn't kept as space"
+        grep -q 'Layout.fillHeight: true' <<<"$(grep -A3 'roleValue: "dock"' "$bar")" || fail "dock off: its place isn't kept as space"
         for e in logo workspaces tray clock statusIcons power; do
             grep -q "roleValue: \"$e\"" "$bar" || fail "dock off: the bar lost its $e"
         done
@@ -212,6 +213,20 @@ out=$(DOTS_SETTINGS=$t/bin/two-off python3 "$here/.local/share/caelestia-overlay
 grep -q '^Off: window peek.*(needs bar dock or workspace previews on hover)$' <<<"$out" ||
     fail "window peek not off with both its previews off: $(grep 'window peek' <<<"$out")"
 rm -rf "$t/one"
+# The dock off by you and the workspace preview not fitting: window peek's warning names only the one that didn't fit
+printf '#!/bin/sh\necho %s\n' "'{\"caelestia.dock\": false}'" >"$t/bin/dock-off"; chmod +x "$t/bin/dock-off"
+sed 's/^def workspace_preview(/def workspace_preview(*a):\n    raise LookupError("gone")\n\n\ndef _unused_workspace_preview(/' \
+    "$here/.local/share/caelestia-overlay/patch.py" >"$t/patch-wp.py"; cp -as "$src" "$t/one"
+out=$(DOTS_SETTINGS=$t/bin/dock-off python3 "$t/patch-wp.py" "$src" "$t/one" 2>&1) || true
+grep -q "^WARNING: window peek.* skipped, it needs .*: workspace previews on hover didn't fit, bar dock turned off$" <<<"$out" ||
+    fail "window peek's warning doesn't tell the skipped from the turned off: $(grep 'window peek' <<<"$out")"
+rm -rf "$t/one"
+# ...and one whose patch crashed is said as failed, with its error, not as not fitting
+sed -i 's/raise LookupError("gone")/raise ValueError("broke")/' "$t/patch-wp.py"; cp -as "$src" "$t/one"
+out=$(DOTS_SETTINGS=$t/bin/dock-off python3 "$t/patch-wp.py" "$src" "$t/one" 2>&1) || true
+grep -q "^WARNING: window peek.* skipped, it needs .*: workspace previews on hover failed (ValueError: broke), bar dock turned off$" <<<"$out" ||
+    fail "window peek's warning says a crashed patch didn't fit: $(grep 'window peek' <<<"$out")"
+rm -rf "$t/one" "$t/patch-wp.py"
 
 for _ in 1 2 3; do run >/dev/null & done; wait
 [[ -f $dst/shell.qml ]] || fail "runs at once lost the folder"
@@ -230,6 +245,13 @@ P
 out=$(run) || true
 [[ $(grep -c '^WARNING' <<<"$out") == 1 ]] || fail "a crashing patch didn't skip only itself: $out"
 (($(grep -c '^Patched' <<<"$out") > 20)) || fail "a crashing patch dropped the others"
+# A patch that doesn't fit: what needs it is skipped with it and said so (in the skipped changes' notification), not
+# "Off" as if turned off
+cp "$t/patch.orig" "$p"
+sed -i 's/^def sidebar_shape(/def sidebar_shape(*a):\n    raise LookupError("gone")\n\n\ndef _unused_sidebar_shape(/' "$p"
+out=$(run) || true
+grep -q '^notification sidebar slides down from the top skipped' "$skipped" || fail "what needs a skipped patch not said as skipped: $out"
+grep -q '^Off:' <<<"$out" && fail "what needs a skipped patch said as turned off: $(grep '^Off:' <<<"$out")"
 
 # patch.py itself broken (failing once it has patched: its copies left in the new folder): Caelestia as it comes (links
 # only, no patched copies, old or new), and said so

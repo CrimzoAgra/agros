@@ -1,6 +1,6 @@
 # Keyboard shortcuts
 
-**Super** is the Windows key. Every shortcut can be changed in **Desktop Settings → Keyboard**.
+**Super** is the Windows key. Every shortcut can be changed in **Desktop Settings → Shortcuts**.
 
 ## The basics
 

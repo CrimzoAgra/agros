@@ -54,8 +54,16 @@ def affected(appid: str) -> bool:
     return bool(fix) and any(cap in fix["compute_cap"] and driver.startswith(fix["drivers"]) for cap, driver in gpus())
 
 
-def notify(text: str) -> None:
-    subprocess.run(["notify-send", "-a", "Steam", "NVIDIA shader fix", text], capture_output=True)
+def notify(text: str, helper: str = "notify-when-up") -> None:
+    """A notification through the shared helper beside this (dots-warn: a warning), in the background: the game isn't
+    held up while it waits for the notification server"""
+    subprocess.Popen([os.path.join(os.path.dirname(os.path.realpath(__file__)), helper), "-a", "Steam",
+                      "NVIDIA shader fix", text], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                     start_new_session=True)
+
+
+def warn(text: str) -> None:
+    notify(text, "dots-warn")
 
 
 def run(cmd: list[str]) -> int:
@@ -67,8 +75,8 @@ def run(cmd: list[str]) -> int:
     dump = f"{HOME}/.cache/nvidia-shader-fix-dump/{appid}"
     missing = [h for h in fix["shaders"] if not os.path.exists(f"{out}/{h}.spv")]
     if missing and not (shutil.which("spirv-opt") and shutil.which("spirv-val")):
-        # (setup's Steam extras) Without them every launch dumped the shaders, crashed, and failed after it
-        notify(f"{fix['name']} crashes on this GPU without a fix made with spirv-tools: install it (pacman -S spirv-tools)")
+        # (spirv-tools) Without them every launch dumped the shaders, crashed, and failed after it
+        warn(f"{fix['name']} crashes on this GPU without a fix made with spirv-tools: install it (pacman -S spirv-tools)")
         os.execvp(cmd[0], cmd)
     env = dict(os.environ, VKD3D_SHADER_OVERRIDE=out)
     if missing:

@@ -2,11 +2,10 @@
 # ~/.local/bin/claude: the editor extension's CLI (its newest version); with no extension the next claude on PATH (not
 # itself again, under its own name or a link), and with neither said, not run in a loop
 set -euo pipefail
-here=$(cd "$(dirname "$0")/.." && pwd)
-t=$(mktemp -d); trap 'rm -rf "$t"' EXIT
-fail() { echo "FAIL: $*"; exit 1; }
+# shellcheck source=lib.sh source-path=SCRIPTDIR
+. "$(dirname "$0")/lib.sh"
 mkdir -p "$t/home/.local/bin" "$t/other"
-ln -s "$here/.local/bin/claude" "$t/home/.local/bin/claude"  # (as setup installs it: a copy or a link, on PATH first)
+ln -s "$here/.local/bin/claude" "$t/home/.local/bin/claude"  # (as the packages install it: a link, on PATH first)
 printf '#!/bin/sh\necho "other $*"\n' >"$t/other/claude"; chmod +x "$t/other/claude"
 run() { HOME=$t/home PATH=$t/home/.local/bin:$here/.local/bin:$1:/usr/bin:/bin "$t/home/.local/bin/claude" --version 2>&1; }
 for v in 2.1.9 2.1.10; do

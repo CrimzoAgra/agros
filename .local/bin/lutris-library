@@ -8,7 +8,7 @@
 # - The store launchers (EA App, Ubisoft Connect, Battle.net, Epic, GOG Galaxy, Rockstar) are listed under Launchers in
 #   the sidebar, installed or not: opening one there installs it through Lutris (lutris-overlay keeps them out of the
 #   Games view)
-# Run by lutris-library.path whenever Lutris's database changes (a store sync), and by setup's apps step. An open Lutris
+# Run by lutris-library.path whenever Lutris's database changes (a store sync), and by agros-welcome. An open Lutris
 # shows the changes at once (lutris-overlay's library_refresh action, asked over D-Bus); a plain one once restarted
 import glob
 import json
@@ -37,8 +37,8 @@ from lutris.util.steam import config as steam_config  # noqa: E402
 # Lutris's own warnings ("Steam game N has no config", ~50 a run) only: they also went into an open Lutris's log
 logger.setLevel(logging.ERROR)
 
-# Before Lutris's first start (setup on a fresh install) its folders and database don't exist: made as Lutris makes them
-# at start-up, so the launchers are listed from its very first window
+# Before Lutris's first start (agros-welcome on a fresh install) its folders and database don't exist: made as Lutris
+# makes them at start-up, so the launchers are listed from its very first window
 if not os.path.exists(settings.DB_PATH):
     from lutris.database.schema import syncdb  # noqa: E402
     from lutris.startup import init_dirs  # noqa: E402
@@ -201,7 +201,7 @@ hide = [game_id for group in copies.values() if len(group) > 1
 show = {game_id for group in copies.values() if len(group) > 1 for game_id, _ in group} - set(hide)
 # Each copy hidden once: one you unhid in Lutris (the other hidden instead) stays as you left it, so the ids this script
 # hid are remembered. A copy it hid that should show again (the Steam copy refunded): unhide it from Lutris's Hidden view
-mine_file = os.path.expanduser("~/.local/state/lutris-library-hidden")
+mine_file = os.path.join(os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"), "lutris-library-hidden")
 try:
     with open(mine_file, encoding="utf-8") as f:
         mine = set(json.load(f))
@@ -235,7 +235,7 @@ print(f"{len(hide)} hidden, {len(unhide)} shown again")
 LAUNCHERS = {"ea-app": "EA App", "ubisoft-connect": "Ubisoft Connect", "battlenet": "Battle.net",
              "epic-games-store": "Epic Games Store", "gog-galaxy": "GOG Galaxy",
              "rockstar-games-launcher": "Rockstar Games Launcher", "steam": "Steam"}
-# Steam installed on the system (setup's apps step), else Flathub's: its entry opens it, not lutris.net's installs
+# Steam installed on the system (a package), else Flathub's: its entry opens it, not lutris.net's installs
 # (Flatpak, Windows)
 steam_game = {"exe": shutil.which("steam")}
 flatpak = shutil.which("flatpak")
@@ -265,8 +265,10 @@ try:
     sync_media(LAUNCHERS)
 except Exception as e:  # noqa: BLE001
     logger.error("launcher covers: %s", e)
-# Ones lutris.net has none for (Rockstar's: Lutris stretched its small banner instead), from the dotfiles
-bundled = os.path.join(os.path.dirname(os.path.realpath(__file__)), "../share/lutris-library/covers")
+# Ones lutris.net has none for (Rockstar's: Lutris stretched its small banner instead), from agros-hyprland-settings'
+# /etc/skel (a new account has them already; one made before them, or with them deleted, gets them here)
+# (AGROS_SKEL: another /etc/skel, for tests/lutris-library.sh, as agros-links)
+bundled = f"{os.environ.get('AGROS_SKEL') or '/etc/skel'}/.local/share/lutris/coverart"
 for name in os.listdir(bundled) if os.path.isdir(bundled) else []:
     slug = os.path.splitext(name)[0]
     if not glob.glob(os.path.join(settings.COVERART_PATH, slug + ".*")):

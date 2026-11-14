@@ -155,8 +155,6 @@ def library_refresh():
     def do_activate(self)""")
 
 
-# Grid: in the Games view every cover fills the same box, cropped at the edges like Steam's library (Steam's covers are
-# 2:3, Lutris's 3:4: they showed at different widths)
 # Header bar, top right: one button that syncs every store Lutris shows in the sidebar (what each one's Reload does),
 # the signed-in ones only. lutris-library then adds the new games as it does after any sync
 def sync_all():
@@ -211,6 +209,8 @@ def sync_all():
     def on_busy_started(self):""")
 
 
+# Grid: in the Games view every cover fills the same box, cropped at the edges like Steam's library (Steam's covers are
+# 2:3, Lutris's 3:4: they showed at different widths)
 def same_size_covers():
     edit("gui/widgets/cellrenderers.py", """        media_height = media_path.height
 """, """        media_height = media_path.height
@@ -309,7 +309,7 @@ def start_hidden():
 def window_after_game():
     edit("gui/application.py", """        if self.window and settings.read_bool_setting("hide_client_on_game_start") and not self.quit_on_game_exit:
             self.window.show()  # Show launcher window""", """        if self.window and settings.read_bool_setting("hide_client_on_game_start") and not self.quit_on_game_exit:
-            if not self.has_tray_icon():  # caelestia-overlay: not shown again, unless there's no tray icon to open it
+            if not self.has_tray_icon():  # lutris-overlay: not shown again, unless there's no tray icon to open it
                 self.window.show()""")
     # A game from the launcher, the dock or the bar (lutris:rungameid/N) made the Lutris already in its tray quit when the
     # game ended: only a Lutris started just for the game does (no window yet). Newer Lutris checks its tray icon itself
@@ -379,7 +379,7 @@ def reap_children():
     if old not in read(rel):
         return
     edit(rel, old, "        child = " + old.lstrip() +
-         '        __import__("threading").Thread(target=child.wait, daemon=True).start()  # caelestia-overlay: no zombie\n')
+         '        __import__("threading").Thread(target=child.wait, daemon=True).start()  # lutris-overlay: no zombie\n')
 
 
 # Flathub's Steam: Lutris looks for it only in data/Steam, where older versions of it kept their folder; newer ones keep
@@ -390,7 +390,7 @@ def flathub_steam():
 """
     if old not in read(rel):
         return
-    edit(rel, old, old + '    "~/.var/app/com.valvesoftware.Steam/.local/share/Steam",  # caelestia-overlay: flathub_steam\n')
+    edit(rel, old, old + '    "~/.var/app/com.valvesoftware.Steam/.local/share/Steam",  # lutris-overlay: flathub_steam\n')
 
 
 # Battle.net's source with the Battle.net app not installed in Lutris: its scan for installed games stopped with an error
@@ -400,7 +400,7 @@ def bnet_not_installed():
 """
     if old not in read(rel):
         return
-    edit(rel, old, """            logger.warning("Battle.net is not installed in Lutris")  # caelestia-overlay: not an error dialog
+    edit(rel, old, """            logger.warning("Battle.net is not installed in Lutris")  # lutris-overlay: not an error dialog
             return
 """)
     # lutris-library's Launchers entry for it, not installed: there, with no folder (a crash on None)
@@ -414,7 +414,7 @@ def bnet_not_installed():
 # preferences, it stays off (no longer unset)
 def bnet_source():
     edit("services/__init__.py", 'DEFAULT_SERVICES = ["gog", "egs", "ea_app", "ubisoft", "steam"]',
-         'DEFAULT_SERVICES = ["gog", "egs", "ea_app", "ubisoft", "steam", "battlenet"]  # caelestia-overlay: bnet_source')
+         'DEFAULT_SERVICES = ["gog", "egs", "ea_app", "ubisoft", "steam", "battlenet"]  # lutris-overlay: bnet_source')
 
 
 # Rockstar Games among Lutris's sources, which has none (rockstar.py: its games, installed through the Rockstar Games
@@ -425,12 +425,12 @@ def rockstar_source():
     # (only the start of the line: Lutris's master has "def get_services() -> dict[...]:", and imports Battle.net's
     # service without BNET_ENABLED)
     edit("services/__init__.py", "\n\ndef get_services(", """
-DEFAULT_SERVICES = DEFAULT_SERVICES + ["rockstar"]  # caelestia-overlay: rockstar_source
+DEFAULT_SERVICES = DEFAULT_SERVICES + ["rockstar"]  # lutris-overlay: rockstar_source
 
 
 def get_services(""")
     edit("services/__init__.py", "from lutris.services.battlenet import ",
-         "from lutris.services.rockstar import RockstarService  # caelestia-overlay: rockstar_source\n"
+         "from lutris.services.rockstar import RockstarService  # lutris-overlay: rockstar_source\n"
          "from lutris.services.battlenet import ")
     edit("services/__init__.py", """        "flathub": FlathubService,
 """, """        "flathub": FlathubService,
@@ -457,7 +457,7 @@ def bnet_login():
 """)
     shutil.copy(os.path.join(here, "signin.py"), os.path.join(pkg, "services/signin.py"))  # (rockstar_source's too)
     edit(rel, "from lutris.services.base import BaseService\n",
-         "from lutris.services.signin import SignInService, name_key  # caelestia-overlay: bnet_login\n")
+         "from lutris.services.signin import SignInService, name_key  # lutris-overlay: bnet_login\n")
     edit(rel, "class BattleNetService(BaseService):", "class BattleNetService(SignInService):")
     edit(rel, '    redirect_uris = ["https://lutris.net"]\n', "")  # (SignInService's: none)
     edit(rel, """    def load(self):
@@ -465,7 +465,7 @@ def bnet_login():
         for game in games:
             game.save()
         return games
-""", """    # caelestia-overlay: sign-in (bnet_login in ~/.local/share/lutris-overlay/patch.py, signin.py)
+""", """    # lutris-overlay: sign-in (bnet_login in ~/.local/share/lutris-overlay/patch.py, signin.py)
     label = "Battle.net"
     login_url = "https://account.battle.net/oauth2/authorization/account-settings"
     login_window_width = 480
@@ -524,28 +524,24 @@ def bnet_login():
 # A source's own page left games out at random: it drops hidden games by checking each entry's own id against the
 # library's hidden games, but a source entry's id counts in another table, so an entry whose number a hidden library game
 # has (a hidden Ubisoft copy) went missing (all of Battle.net's). Checked by its library entry instead, none: not hidden.
-# Each part left out without a word where a newer Lutris changed that code
+# The category matchers only where Lutris still has them (its next version matches source pages by store id itself)
 def source_page_ids():
-    for rel, old, new in (
-        ("gui/lutriswindow.py", """        \"\"\"Inject lutris game information into a service game\"\"\"
+    edit("gui/lutriswindow.py", """        \"\"\"Inject lutris game information into a service game\"\"\"
         if lutris_game and service_game["appid"] == lutris_game["service_id"]:
 """, """        \"\"\"Inject lutris game information into a service game\"\"\"
         matched = lutris_game and service_game["appid"] == lutris_game["service_id"]
-        service_game["lutris_game_id"] = lutris_game["id"] if matched else None  # caelestia-overlay: source_page_ids
+        service_game["lutris_game_id"] = lutris_game["id"] if matched else None  # lutris-overlay: source_page_ids
         if matched:
-"""),
-        ("search.py", """        def is_categorized(db_game):
+""")
+    edit("search.py", """        def is_categorized(db_game):
             return db_game["id"] not in uncategorized_ids""", """        def is_categorized(db_game):
-            return db_game.get("lutris_game_id", db_game["id"]) not in uncategorized_ids  # caelestia-overlay"""),
-        ("search.py", """        def match_category(db_game):
-            game_id = db_game["id"]""", """        def match_category(db_game):
-            game_id = db_game.get("lutris_game_id", db_game["id"])  # caelestia-overlay: a source page's game"""),
-        ("search.py", """        def is_in_category(db_game):
-            game_id = db_game["id"]""", """        def is_in_category(db_game):
-            game_id = db_game.get("lutris_game_id", db_game["id"])  # caelestia-overlay: a source page's game"""),
-    ):
-        if old in read(rel):
-            edit(rel, old, new)
+            return db_game.get("lutris_game_id", db_game["id"]) not in uncategorized_ids  # lutris-overlay""")
+    if "def _get_category_matcher(" in read("search.py"):
+        return
+    for name in ("match_category", "is_in_category"):
+        edit("search.py", f"""        def {name}(db_game):
+            game_id = db_game["id"]""", f"""        def {name}(db_game):
+            game_id = db_game.get("lutris_game_id", db_game["id"])  # lutris-overlay: a source page's game""")
 
 
 # Store icons Lutris lacks (Battle.net's: ~/.local/share/lutris-overlay/icons) found like its own, and a source icon
@@ -562,7 +558,7 @@ def source_icons():
             icon_path = os.path.join(settings.RUNTIME_DIR, search_dir, filename + ext)
             if os.path.exists(icon_path):
                 return icon_path
-    for ext in extensions:  # caelestia-overlay: source_icons
+    for ext in extensions:  # lutris-overlay: source_icons
         icon_path = os.path.join({os.path.join(here, "icons")!r}, filename + ext)
         if os.path.exists(icon_path):
             return icon_path
@@ -570,7 +566,7 @@ def source_icons():
 """), ("gui/widgets/scaled_image.py", """        else:
             if not has_stock_icon(fallback_stock_icon_name):""", """        elif fallback_stock_icon_name and (theme_icon := Gtk.IconTheme.get_default().lookup_icon(
                 fallback_stock_icon_name, ICON_SIZE[1], 0)) and theme_icon.get_filename():
-            # caelestia-overlay: source_icons (EA's 256 px one at the others' size)
+            # lutris-overlay: source_icons (EA's 256 px one at the others' size)
             icon = ScaledImage.new_scaled_from_path(theme_icon.get_filename(), size=ICON_SIZE, scale_factor=scale_factor)
         else:
             if not has_stock_icon(fallback_stock_icon_name):""")):
@@ -731,6 +727,7 @@ OPTIONAL = {
 # change (the script then makes do), not the whole build
 PLUMBING = {
     "library_refresh": "An open Lutris shows lutris-library's changes at once (else once it restarts)",
+    "source_page_ids": "A store's own page shows all its games (else some go missing at random)",
 }
 if sys.argv[1:] == ["--list"]:
     print(json.dumps([{"id": k, "label": v} for k, v in OPTIONAL.items()]))

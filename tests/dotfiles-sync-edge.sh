@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # dotfiles-sync's edges: a stray new file in the repo doesn't stop the sync (or its push), nor does VSCodium failing; an
 # unknown argument shows the usage instead of syncing, and no repo says so; "add" refuses a link (not the program it
-# points to); LibreWolf's settings aren't refreshed from a profile setup never applied them to (each would be dropped
-# as "back to the default")
+# points to); LibreWolf's settings aren't refreshed from a profile agros-welcome never applied them to (each would be
+# dropped as "back to the default")
 set -euo pipefail
+# shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t GIT_CONFIG_GLOBAL=/dev/null
 repo=$t/repo home=$t/home
@@ -40,10 +41,10 @@ if out=$(run --help); then fail "an unknown argument reported success: $out"; fi
 # No repo there (not cloned yet, DOTFILES_DIR wrong): says so, not git's error halfway through
 if out=$(DOTFILES_DIR=$t/none HOME=$home PATH=$t/bin:$PATH "$here/.local/bin/dotfiles-sync" 2>&1); then fail "no repo reported success"; fi
 [[ $out == "No dotfiles repo at $t/none"* ]] || fail "no repo: $out"
-# Where setup ran from, recorded, but that clone gone since: ~/Projects/agros, not "No dotfiles repo"
-mkdir -p "$home/.local/state" "$home/Projects"; echo "$t/gone" >"$home/.local/state/dotfiles-repo"; ln -s "$repo" "$home/Projects/agros"
-out=$(HOME=$home LEGION_CONTROL_DIR=$t/none PATH=$t/bin:$PATH "$here/.local/bin/dotfiles-sync" -n 2>&1) || fail "a stale recorded repo: $out"
-rm -r "$home/.local/state/dotfiles-repo" "$home/Projects"
+# No DOTFILES_DIR: ~/Projects/agros
+mkdir -p "$home/Projects"; ln -s "$repo" "$home/Projects/agros"
+out=$(HOME=$home LEGION_CONTROL_DIR=$t/none PATH=$t/bin:$PATH "$here/.local/bin/dotfiles-sync" -n 2>&1) || fail "no DOTFILES_DIR: $out"
+rm -r "$home/Projects"
 
 # "add" of a link: refused, not the program it points to kept under its own path
 mkdir -p "$home/.local/bin" "$home/.local/share/prog"; echo program >"$home/.local/share/prog/big"
@@ -52,13 +53,13 @@ run add "$home/.local/bin/tool" >/dev/null || true
 [[ ! -e $repo/.local/share/prog/big ]] || fail "add kept the program a link points to"
 [[ -z $(git -C "$repo" ls-files .local/share/prog) ]] || fail "add committed the program a link points to"
 
-# LibreWolf: a profile setup never applied settings.js to (only one of its settings there): settings.js left alone
+# LibreWolf: a profile agros-welcome never applied settings.js to (only one of its settings there): settings.js left alone
 lw=$home/.config/librewolf/librewolf; mkdir -p "$lw/p.default"
 printf '[Install1]\nDefault=p.default\n' >"$lw/profiles.ini"
 printf 'user_pref("a.b", true);\n' >"$lw/p.default/prefs.js"
 out=$(run -n)
 [[ $out != *"changed: LibreWolf settings"* ]] || fail "settings.js refreshed from a profile it was never applied to: $out"
-# ...and refreshed from one it was (setup's mark): a setting gone from prefs.js is back to its default, dropped
+# ...and refreshed from one it was (agros-welcome's mark): a setting gone from prefs.js is back to its default, dropped
 touch "$lw/p.default/.dotfiles-imported"
 out=$(run -n)
 [[ $out == *"changed: LibreWolf settings"* ]] || fail "settings.js not refreshed from a profile it was applied to: $out"
@@ -115,4 +116,14 @@ git -C "$repo" stash push -q -m "dotfiles-sync 2026-01-01 10:00:00: your edits i
 out=$(run -n) || fail "a dry run with a sync's stash left failed: $out"
 [[ $out == *"still in git's stash: git -C $repo stash pop stash@{0}"* ]] || fail "a sync's stash left not said: $out"
 git -C "$repo" stash pop -q
+
+# linked: a file in a linked folder (a package's link into /usr/lib/agros) counts as linked, as a link itself does; a
+# plain file doesn't
+# shellcheck source=/dev/null  # (the function cut out of dotfiles-sync)
+source <(sed -n '/^linked() {/p' "$here/.local/bin/dotfiles-sync")
+mkdir -p "$t/live/plain" "$t/elsewhere"; echo x >"$t/elsewhere/f"; echo x >"$t/live/plain/f"
+ln -s "$t/elsewhere" "$t/live/dir"; ln -s "$t/elsewhere/f" "$t/live/plain/link"
+linked "$t/live" dir/f || fail "a file in a linked folder not taken as linked"
+linked "$t/live" plain/link || fail "a link not taken as linked"
+linked "$t/live" plain/f && fail "a plain file taken as linked"
 echo "ok dotfiles-sync-edge"

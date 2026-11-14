@@ -29,7 +29,7 @@ checksum() {
 }
 
 # download <url> <dir> [SHA-256]: the file into <dir> under its own name, checked against the SHA-256 when given.
-# A progress bar when someone's watching (setup.sh), quiet in the boot log
+# A progress bar when someone's watching (a terminal), quiet in the boot log
 download() {
     local name=${1##*/}
     curl -fL --connect-timeout 10 --speed-limit 1000 --speed-time 60 "$([[ -t 2 ]] && echo --progress-bar || echo -sS)" -o "$2/$name" "$1" || return 1

@@ -3,6 +3,7 @@
 # changes): Hyprland runs every bind on the keys, so pressing one does both (Capri's Ctrl+Alt+C also cleared every
 # notification). Against the Caelestia installed here, as the Settings app shows a clash
 set -euo pipefail
+# shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 vars=$HOME/.config/hypr/variables.lua
 [[ -f $vars ]] || { echo "skip dots-settings-keys (no Caelestia)"; exit 0; }
@@ -15,6 +16,8 @@ here, t = sys.argv[1:]
 loader = importlib.machinery.SourceFileLoader("ds", f"{here}/.local/bin/dots-settings")
 ds = importlib.util.module_from_spec(importlib.util.spec_from_loader("ds", loader))
 loader.exec_module(ds)
+ds.CACHE, ds.CAELESTIA_DIR = f"{t}/caelestia-options.json", f"{t}/caelestia"  # (not your home's)
+ds.OPTIONS_QML = f"{here}/.local/share/dots-settings/caelestia-options.qml"  # (the repo's, not your home's)
 ds.HOME, ds.SCHEMA, ds.AUTOSTART = t, f"{here}/.local/share/dots-settings/schema.json", []
 ds.PATCHES = {"caelestia": f"{here}/.local/share/caelestia-overlay/patch.py", "lutris": f"{here}/.local/share/lutris-overlay/patch.py"}
 settings = ds.all_settings(ds.schema())

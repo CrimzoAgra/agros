@@ -1,6 +1,7 @@
 # Maintainer: Filipe Agra
 # A faster, cleaner boot: the boot menu hidden (Esc shows it; Windows and snapshots listed), the CachyOS splash without
-# its closing animation (and with shutdown/restart titles), the console in each screen's best mode from boot
+# its closing animation (and with shutdown/restart titles), no text at boot or shutdown behind it, the console in each
+# screen's best mode from boot
 pkgname=agros-boot
 pkgver=0
 pkgrel=1
@@ -13,21 +14,28 @@ optdepends=('snapper: snapshots before updates, listed in the boot menu'
             'snap-pac: snapshots around pacman transactions'
             'grub-btrfs: snapshots in the GRUB menu')
 install=agros-boot.install
+backup=('etc/mkinitcpio.conf.d/90-agros-plymouth.conf')
 _root=$(realpath "${startdir}/../..")
+# What it's made from (package() below): its version counts only the commits that touch these, not every AgrOS commit, as
+# each new version makes every boot image again (it ships a file mkinitcpio's pacman hook watches, usr/lib/initcpio/*).
+# "1." keeps it above the r<count of every commit> published before
+_inputs=(packages/agros-boot system/boot-video-mode .local/share/caelestia-greeter/screenmode.py)
 
 pkgver() {
-    cd "$_root" && printf 'r%s.%s' "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+    cd "$_root" && printf '1.r%s.%s' "$(git rev-list --count HEAD -- "${_inputs[@]}")" "$(git log -1 --format=%h -- "${_inputs[@]}")"
 }
 
 package() {
     cd "$startdir"
     install -Dm755 boot-menu "$pkgdir/usr/lib/agros/boot-menu"
     install -Dm755 splash-theme "$pkgdir/usr/lib/agros/splash-theme"
+    install -Dm755 boot-loader "$pkgdir/usr/lib/agros/boot-loader"
     install -Dm755 "$_root/system/boot-video-mode" "$pkgdir/usr/lib/agros/boot-video-mode/boot-video-mode"
     install -Dm644 "$_root/.local/share/caelestia-greeter/screenmode.py" "$pkgdir/usr/lib/agros/boot-video-mode/screenmode.py"
     install -Dm644 boot-video-mode.service "$pkgdir/usr/lib/systemd/system/boot-video-mode.service"
     install -Dm644 -t "$pkgdir/usr/share/libalpm/hooks" agros-grub-quiet.hook agros-splash.hook
     install -Dm644 plymouth-title-font "$pkgdir/usr/lib/initcpio/install/plymouth-title-font"
+    install -Dm644 mkinitcpio-plymouth.conf "$pkgdir/etc/mkinitcpio.conf.d/90-agros-plymouth.conf"
     install -Dm644 agros-boot.tmpfiles "$pkgdir/usr/lib/tmpfiles.d/agros-boot.conf"
     # AgrOS's GRUB theme (boot-menu sets it); make.sh, which made its pictures and fonts, isn't installed
     install -Dm644 -t "$pkgdir/usr/share/grub/themes/agros" grub-theme/theme.txt grub-theme/*.png grub-theme/*.pf2

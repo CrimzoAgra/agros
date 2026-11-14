@@ -5,9 +5,8 @@
 # follow (a substack, a module not there, no pam_unix) leaves the file as it was, said. Its pacman hook: on pambase and
 # pam updates
 set -euo pipefail
-here=$(cd "$(dirname "$0")/.." && pwd)
-t=$(mktemp -d); trap 'rm -rf "$t"' EXIT
-fail() { echo "FAIL: $*"; exit 1; }
+# shellcheck source=lib.sh source-path=SCRIPTDIR
+. "$(dirname "$0")/lib.sh"
 # shellcheck source=/dev/null  # (tests/fixtures/arch-pam.sh)
 . "$here/tests/fixtures/arch-pam.sh"
 i=$here/.local/share/caelestia-greeter
@@ -36,7 +35,7 @@ sed -i 's/^\(auth .*pam_faillock.so *authfail\)$/\1 audit/' "$t/pam.d/system-aut
 sed -i '/pam_permit.so/i auth       required                    pam_new2fa.so' "$t/pam.d/system-auth"
 : >"$t/mod/pam_new2fa.so"
 gen >/dev/null || fail "greetd-pam failed on a changed system-auth"
-{ auth | grep -qx 'auth required pam_new2fa.so' && auth | grep -qx 'auth \[default=die\] pam_faillock.so authfail audit nodelay'; } ||
+{ grep -qx 'auth required pam_new2fa.so' <<<"$(auth)" && grep -qx 'auth \[default=die\] pam_faillock.so authfail audit nodelay' <<<"$(auth)"; } ||
     fail "system-auth's change not followed: $(auth)"
 
 # As Linux-PAM reads it: a type in capitals (AUTH) taken, and a last line with no newline

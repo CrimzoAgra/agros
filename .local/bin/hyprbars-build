@@ -9,9 +9,10 @@
 #                           highlight) at once and rebuild mine in the background, swapping it in when done (a
 #                           notification if that fails)
 #   hyprbars-build --prebuild  build it for the Hyprland just installed, without loading it, so the next login has it
-#                           at once (the pacman hook system/pacman-hooks/hyprbars-prebuild.hook runs it on a Hyprland
-#                           update; Hyprland needn't be running)
+#                           at once (the pacman hook packages/agros-system/agros-hyprbars-prebuild.hook runs it on a
+#                           Hyprland update; Hyprland needn't be running)
 set -euo pipefail
+helpers=$(dirname "$(readlink -f "$0")")  # (the shared helpers, beside this)
 # (not on the live USB: no compiler, and nothing to keep it for)
 [[ -d /run/archiso ]] && exit 0
 patch="$HOME/.local/share/hyprbars/hyprbars.patch"
@@ -59,11 +60,13 @@ if [[ ${1:-} == --login ]]; then
     [[ -f $aur ]] && { hyprctl plugin load "$aur" >/dev/null 2>&1 || true; }
     log="$HOME/.cache/hyprbars-build.log"
     if ! "$0" >"$log" 2>&1; then
+        # (notify-when-up: at login Caelestia, the notification server, may not be up yet)
+        warn() { "$helpers/notify-when-up" -u normal -a Hyprbars -i dialog-warning "$@"; }
         # (the AUR one is built for one Hyprland version: after an update it may not start either)
         if loaded; then
-            notify-send -a Hyprbars "Title bar highlight not rebuilt" "Building it for Hyprland $ver failed, so the title bars have no hover highlight for now. Details: $log"
+            warn "Title bar highlight not rebuilt" "Building it for Hyprland $ver failed, so the title bars have no hover highlight for now. Details: $log"
         else
-            notify-send -a Hyprbars "No title bars" "Building hyprbars for Hyprland $ver failed, and the AUR one doesn't start on it: no title bars for now. Details: $log"
+            warn "No title bars" "Building hyprbars for Hyprland $ver failed, and the AUR one doesn't start on it: no title bars for now. Details: $log"
         fi
     fi
     exit 0
@@ -79,7 +82,8 @@ tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 # At login the network may not be up yet (the clone failed at once): wait for it, at most ~2 min. Not from the pacman
 # hook: there it held the update up (at shutdown, the network maybe gone) for a build the next login makes anyway
-$prebuild || for _ in $(seq 30); do curl -fsI --max-time 2 https://github.com >/dev/null 2>&1 && break; sleep 2; done
+# (still offline: on to the clone anyway, whose tries and message say so; set -e left with no message)
+$prebuild || "$helpers/wait-online" https://github.com || true
 # A stalled clone is given up on and tried again, 3 times (at a login on 2026-11-04 one hung for minutes, the AUR plugin
 # staying loaded meanwhile); still failing: the notification of --login says so
 for try in 1 2 3; do
@@ -118,7 +122,7 @@ fi
 
 # Into the running Hyprland, in place of whichever hyprbars is loaded (from outside the config: loading it reloads
 # the config, which is safe only from here). After any game: the reload would take it out of fullscreen
-"$HOME/.local/bin/after-games"
+"$helpers/after-games"
 for so in "$out" "$aur"; do hyprctl plugin unload "$so" >/dev/null 2>&1 || true; done
 hyprctl plugin load "$out" >/dev/null 2>&1 || true
 if ! loaded mine; then

@@ -12,8 +12,8 @@ case $1 in
 esac
 [[ -e $flag ]] || exit 0
 
-# (at login the network can still be coming up)
-nm-online -q -t 60 >/dev/null 2>&1
+# (at login the network can still be coming up: wait-online, beside this, the scripts' one wait for it)
+"$(dirname "$(readlink -f "$0")")/wait-online" https://api.open-meteo.com
 get() { curl -fsS --max-time 10 "$@" 2>/dev/null; }
 place=$(jq -r '.services.weatherLocation // ""' "${XDG_CONFIG_HOME:-$HOME/.config}/caelestia/shell.json" 2>/dev/null)
 if [[ $place =~ ^\ *(-?[0-9.]+)\ *,\ *(-?[0-9.]+)\ *$ ]]; then

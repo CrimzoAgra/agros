@@ -1,23 +1,123 @@
+# boot-menu run: an upgrade runs it again only when it changed (each run puts its settings back over yours, so not at
+# every upgrade), by the note it leaves of the version run (boot-menu.sum: boot-menu writes it, empty when it failed or
+# the boot loader wasn't set up yet, as in the installer's package step: run by the installer's own step then, or at the
+# next upgrade)
+# The boot images aren't made here: mkinitcpio's own pacman hook (or Limine's in its place) makes them once, after the
+# transaction, as agros-boot ships a file it watches (usr/lib/initcpio/install/plymouth-title-font), at its install,
+# each upgrade and its removal. Here, mid-transaction, a kernel updated alongside had its old modules gone: they failed
+# (said so for nothing) and were made twice
+# (AGROS_ROOT: another root, the tests' throwaway one; / when pacman runs this)
+_r=${AGROS_ROOT:-}
+_lib=$_r/usr/lib/agros
+_stamp=$_r/var/lib/agros/boot-menu.sum
+_boot_menu() { "$_lib/boot-menu" || echo "agros-boot: the boot menu left as it was"; }
+# A setting boot-menu changed in <file> put back as <file>.agros-orig had it ($2: the key with its separator,
+# GRUB_TIMEOUT= or timeout:); none there before: commented out. GRUB's and Limine's alike
+_restore() {
+    local f=$1 k=$2 line
+    line=$(grep -m1 -E "^\s*$k" "$f.agros-orig" || grep -m1 -E "^#\s*$k" "$f.agros-orig") || line=
+    # (escaped for sed's replacement: \, & and the | it's delimited by)
+    line=$(printf '%s\n' "$line" | sed 's/[\\&|]/\\&/g')
+    if [[ -n $line ]]; then
+        sed -i -E "s|^\s*$k.*|$line|" "$f"
+    else
+        sed -i -E "s|^\s*$k|#$k|" "$f"
+    fi
+}
+
 post_install() {
-    /usr/lib/agros/boot-menu || echo "agros-boot: the boot menu left as it was"
+    _boot_menu
     systemctl enable boot-video-mode.service >/dev/null 2>&1 || true
-    /usr/lib/agros/splash-theme || echo "agros-boot: the splash left as it was"
+    "$_lib/splash-theme" --no-initramfs || echo "agros-boot: the splash left as it was"
 }
 
 post_upgrade() {
-    systemctl daemon-reload >/dev/null 2>&1 || true
-    # GRUB on CachyOS's theme (installs from before AgrOS had its own): AgrOS's, once; a theme you set yourself is kept.
-    # Only GRUB that boots (boot-menu's own test: a machine moved to Limine keeps an old /etc/default/grub)
-    if [[ ! -f /etc/default/limine ]] && grep -q '^GRUB_THEME=.*/themes/cachyos/' /etc/default/grub 2>/dev/null && [[ -f /usr/share/grub/themes/agros/theme.txt ]]; then
-        sed -i 's|^GRUB_THEME=.*|GRUB_THEME=/usr/share/grub/themes/agros/theme.txt|' /etc/default/grub
-        grub-mkconfig -o /boot/grub/grub.cfg >/dev/null 2>&1 || echo "agros-boot: GRUB's menu not remade (run: sudo grub-mkconfig -o /boot/grub/grub.cfg)"
+    # A changed boot-menu applied (it sets the same settings each run). GRUB's settings from before AgrOS: an earlier
+    # boot-menu kept them as grub.bak (copied, not moved: it may be a .bak of yours, from before AgrOS all the same)
+    # Not noted yet (an install from before the note): noted as it is, not run (that would put the settings back over
+    # yours once, on everyone's next update); the backup still kept under AgrOS's own name
+    # (Limine's limine.conf.bak the same, wherever boot-loader says Limine keeps it)
+    local c g=$_r/etc/default/grub
+    for c in "$g" $("$_lib/boot-loader" --limine-all); do
+        [[ -f $c.bak && ! -e $c.agros-orig ]] && cp -p "$c.bak" "$c.agros-orig"
+    done
+    if [[ ! -f $_stamp ]]; then
+        "$_lib/boot-menu" --note
+    elif [[ $(sha256sum <"$_lib/boot-menu") != "$(cat "$_stamp")" ]]; then
+        _boot_menu
     fi
+    # GRUB on CachyOS's theme (installs from before AgrOS had its own): AgrOS's, once; a theme you set yourself is kept.
+    # Only GRUB that boots (boot-loader's: a machine moved to Limine keeps an old /etc/default/grub). After boot-menu: run
+    # just now, it set AgrOS's itself and made the menu (made once, not twice)
+    if [[ $("$_lib/boot-loader") == grub ]] && grep -q '^GRUB_THEME=.*/themes/cachyos/' "$g" &&
+        [[ -f $_r/usr/share/grub/themes/agros/theme.txt ]]; then
+        sed -i 's|^GRUB_THEME=.*|GRUB_THEME=/usr/share/grub/themes/agros/theme.txt|' "$g"
+        grub-mkconfig -o "$_r/boot/grub/grub.cfg" >/dev/null 2>&1 || echo "agros-boot: GRUB's menu not remade (run: sudo grub-mkconfig -o /boot/grub/grub.cfg)"
+    fi
+    # The faster splash made again (a changed splash-theme; the boot images: mkinitcpio's hook, after the transaction)
+    "$_lib/splash-theme" --update --no-initramfs >/dev/null 2>&1 ||
+        echo "agros-boot: the splash not made again (run: sudo /usr/lib/agros/splash-theme)"
+    true
 }
 
 pre_remove() {
     systemctl disable boot-video-mode.service >/dev/null 2>&1 || true
-    [[ $(plymouth-set-default-theme 2>/dev/null) == cachyos-bootanimation-fast ]] &&
-        plymouth-set-default-theme cachyos-bootanimation 2>/dev/null
-    rm -rf /usr/share/plymouth/themes/cachyos-bootanimation-fast
+    # The splash back to CachyOS's (out of the boot images: mkinitcpio's hook, after the transaction, as plymouth-title-font
+    # goes)
+    "$_lib/splash-theme" --remove --no-initramfs >/dev/null 2>&1 || echo "agros-boot: the splash left as it was"
+    # (the shutdown image's hook goes with this package: out of the list made at boot, or that image fails to build)
+    sed -i '/^HOOKS+=(plymouth-title-font)$/d' "$_r/run/initramfs/mkinitcpio-shutdown.conf" 2>/dev/null
+    local g=$_r/etc/default/grub key line c loader remake=
+    loader=$("$_lib/boot-loader")
+    # The screens' modes boot-video-mode put in the kernel options (video=...) taken out by itself, and the quiet boot's
+    # options boot-menu had it add (quiet, splash, loglevel=3...) that the line didn't have before AgrOS (its
+    # .agros-orig: GRUB's grub.agros-orig, Limine's limine.agros-orig), and the boot entries made again (GRUB's below,
+    # with its other changes)
+    if "$_lib/boot-video-mode/boot-video-mode" --remove >/dev/null 2>&1; then
+        if [[ $loader == limine ]]; then
+            limine-update >/dev/null 2>&1 || echo "agros-boot: Limine's entries not remade (run: sudo limine-update)"
+        else
+            remake=1
+        fi
+    fi
+    rm -f "$_r/etc/default/limine.agros-orig"
+    # The menu's settings boot-menu set back to the ones before it (its grub.agros-orig): only those, the rest of the
+    # file may have changed since (its kernel options: by boot-video-mode, above)
+    if [[ -f $g.agros-orig && -f $g ]]; then
+        for key in GRUB_TIMEOUT_STYLE GRUB_TIMEOUT GRUB_DEFAULT GRUB_SAVEDEFAULT GRUB_DISABLE_OS_PROBER GRUB_THEME; do
+            _restore "$g" $key=
+        done
+        rm -f "$g.agros-orig"
+        remake=1
+    fi
+    # (GRUB still pointed at AgrOS's theme, about to go, with no grub.agros-orig to restore: back to CachyOS's, if it's there)
+    if grep -q '^GRUB_THEME=/usr/share/grub/themes/agros/' "$g" 2>/dev/null; then
+        if [[ -f $_r/usr/share/grub/themes/cachyos/theme.txt ]]; then
+            sed -i 's|^GRUB_THEME=.*|GRUB_THEME=/usr/share/grub/themes/cachyos/theme.txt|' "$g"
+        else
+            sed -i 's|^GRUB_THEME=|#GRUB_THEME=|' "$g"
+        fi
+        remake=1
+    fi
+    # Limine's settings boot-menu set (timeout, quiet, remember_last_entry) back from its limine.conf.agros-orig: the
+    # line it had, or none (boot-menu added it: commented out)
+    for c in $("$_lib/boot-loader" --limine-all); do
+        [[ -f $c.agros-orig && -f $c ]] || continue
+        for key in timeout quiet remember_last_entry; do _restore "$c" $key:; done
+        rm -f "$c.agros-orig"
+    done
+    # The motherboard's wait before the boot loader (boot-menu's efibootmgr -t 0) back, where boot-menu noted it. Not
+    # noted (boot-menu from before the note, or no timeout set then): left at 0, its firmware setup changes it
+    if [[ -f $_r/var/lib/agros/efi-timeout ]]; then
+        line=$(cat "$_r/var/lib/agros/efi-timeout")
+        [[ $line =~ ^[1-9][0-9]?$ ]] && efibootmgr -q -t "$line" 2>/dev/null
+        rm -f "$_r/var/lib/agros/efi-timeout"
+    fi
+    [[ -z $remake || $loader != grub ]] || grub-mkconfig -o "$_r/boot/grub/grub.cfg" >/dev/null 2>&1 ||
+        echo "agros-boot: GRUB's menu not remade (run: sudo grub-mkconfig -o /boot/grub/grub.cfg)"
+    # (GRUB's "Loading Linux..." lines, taken out of its 10_linux: back with grub's next update, or now)
+    [[ $loader != grub || ! -f $_r/etc/grub.d/10_linux ]] ||
+        echo "agros-boot: GRUB's loading messages come back with its next update (now: sudo pacman -S grub)"
+    rm -f "$_stamp"
     true
 }

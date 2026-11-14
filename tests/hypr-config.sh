@@ -5,6 +5,7 @@
 # scripts call don't error; every dots.bind / dots.setting name is in the Settings app's schema and every function in
 # the Lua API table (docs/how-it-works.md) exists
 set -euo pipefail
+# shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 command -v lua >/dev/null || { echo "skip hypr-config (no lua)"; exit 0; }
 
@@ -37,13 +38,13 @@ cat >"$t/stub.lua" <<'L'
 -- Hyprland's hl, enough for the config: rules, binds and handlers recorded, queries answered from WINDOWS and SCREENS.
 -- A bad argument is a config error (listed), not a Lua error, as in Hyprland. Focus and window moves are played on
 -- SCREENS (FOCUS: the focused one's index) and WINDOWS (ACTIVE: the active window), what the binds do in BIND_ACTIONS;
--- LID: what /proc says of the laptop lid; RELOADED: a dispatched "hyprctl reload"
+-- LID: what /proc says of the laptop lid; RELOADED: a dispatched hypr-reload
 local plugin = os.getenv("PLUGIN") == "1"
 handlers, binds, config_errors, hidden_rules, unset_gestures, WINDOW_RULES = {}, {}, {}, {}, {}, {}
 -- CONFIG: what hl.get_config answers (the blur setting window peek turns off and back); HELD_TIMERS: timers queued
 -- there while HOLD_TIMERS is on (else run at once); PEEK_TAGS: window peek's tag dispatches, in order
 CONFIG, HELD_TIMERS, PEEK_TAGS = { ["decoration.blur.ignore_opacity"] = true }, {}, {}
-BIND_ACTIONS, MONITOR_RULES, FOCUS = {}, {}, 1
+BIND_ACTIONS, MONITOR_RULES, FOCUS, ENV = {}, {}, 1, {}
 local popen = io.popen
 io.popen = function(cmd, ...)
     if cmd:find("/proc/acpi/button/lid", 1, true) then return { read = function() return LID or "" end, close = function() end } end
@@ -107,7 +108,7 @@ hl = {
     on = function(name, fn) handlers[name] = handlers[name] or {}; table.insert(handlers[name], fn) end,
     exec_cmd = function(cmd)
         check(type(cmd) == "string", "hl.exec_cmd: not a string")
-        if tostring(cmd):find("notify-send", 1, true) then io.write("exec notify-send\n") end
+        if tostring(cmd):find("dots-warn", 1, true) then io.write("exec dots-warn\n") end
         check(not cmd:find("open_retry([[0x5]]", 1, true), "a window on a special workspace waited for a workspace id")
     end,
     dispatch = function(d)
@@ -142,7 +143,7 @@ hl = {
                 for k = #w.tags, 1, -1 do if w.tags[k] == tag then table.remove(w.tags, k) end end
                 if sign == "+" then w.tags[#w.tags + 1] = tag end
             end
-        elseif name == "exec_cmd" and tostring(a):find("hyprctl reload", 1, true) then
+        elseif name == "exec_cmd" and tostring(a):find("hypr-reload", 1, true) then
             RELOADED = true
         end
     end,
@@ -160,7 +161,12 @@ hl = {
     workspace_rule = function(r) check(type(r.workspace) == "string", "hl.workspace_rule: workspace not a string"); return rule() end,
     monitor = function(r) check(type(r.output) == "string", "hl.monitor: no output"); MONITOR_RULES[#MONITOR_RULES + 1] = r end,
     define_submap = function(_, fn) if type(fn) == "function" then fn() end end,
-    get_monitors = function() return SCREENS end,
+    -- (as Hyprland 0.57's: a screen that's off (enabled = false) listed only with { all = true })
+    get_monitors = function(o)
+        local list = {}
+        for _, m in ipairs(SCREENS) do if o and o.all or m.enabled ~= false then list[#list + 1] = m end end
+        return list
+    end,
     get_active_monitor = function() return SCREENS[FOCUS] or SCREENS[1] end,
     get_active_workspace = function() return (SCREENS[FOCUS] or SCREENS[1]).active_workspace end,
     get_active_window = function() return ACTIVE or WINDOWS[1] end,
@@ -182,6 +188,7 @@ hl = {
     end,
     get_devices = function() return { { type = "keyboard", main = true, name = "kb", caps_lock = false, num_lock = true } } end,
     get_cursor_pos = function() return { x = 100, y = 100 } end,
+    env = function(k, v) check(type(k) == "string" and type(v) == "string", "hl.env: not strings"); ENV[k] = v end,
     dsp = dsp,
     plugin = plugin and { hyprbars = { add_button = function(b) check(b.icon and b.action, "add_button") end } } or {},
 }
@@ -209,7 +216,7 @@ fire("monitor.added", SCREENS[2]); fire("monitor.layout_changed")
 dots.focus_window("0x3", true); dots.focus_window("0xdead")
 dots.focus_app("org.gnome.Nautilus", "Files", true); dots.focus_app(nil, nil, false)
 dots.maximise_window(); dots.minimise_window(); dots.refit_maximised(); dots.toggle_window_mode(); dots.toggle_window_mode()
-dots.titlebar_drag_start("0x3", "before"); dots.goto_workspace(13); dots.goto_workspace(1)
+dots.titlebar_drag_start("0x3", "before"); dots.goto_workspace(13); dots.goto_workspace(1); dots.clean_workspace(2)
 dots.spotify_silent_set(true); dots.spotify_silent_set(false); dots.spotify_hide("dead"); dots.spotify_show()
 dots.minimise_launcher("0xdead"); dots.open_retry("0x4"); dots.task_manager()
 -- Window peek (the shell's WindowPeek.qml): the other windows on that window's screen tagged see-through, then none
@@ -348,9 +355,9 @@ for bad in '' 'return {' 'error("boom")' 'return 42' 'return { ["windows.cascade
 done
 # Its notification that the settings failed to load: not when it's only a check (hypr-config-check: dotfiles-check says it)
 out=$(run_config 'return 42' 0)
-grep -q "^exec notify-send" <<<"$out" || fail "settings that failed to load not said"
+grep -q "^exec dots-warn" <<<"$out" || fail "settings that failed to load not said"
 out=$(VERIFY=1 run_config 'return 42' 0)
-grep -q "^exec notify-send" <<<"$out" && fail "a notification sent by the config check (DOTS_VERIFY_CONFIG)"
+grep -q "^exec dots-warn" <<<"$out" && fail "a notification sent by the config check (DOTS_VERIFY_CONFIG)"
 # Synced screens: what the keys, the workspace event, a screen unplugged and plugged back and the laptop lid do, played
 # on the stand-in (a reload: the config loaded again in the same Lua, its handlers and binds from scratch, as Hyprland
 # drops them; what's kept for a screen survives it in XDG_RUNTIME_DIR)
@@ -445,12 +452,14 @@ local function last_rule(output)
 end
 SCREENS = { first, panel }; LID = "state:      closed\n"; load()
 check("panel at a load with the lid closed", last_rule("eDP-1"), true)
--- (a rule set from the switch would do nothing in Hyprland until the next load: the switch reloads, and that load reads
--- the lid)
-LID = "state:      open\n"; load(); local rules = #MONITOR_RULES; LID = "state:      closed\n"; press("switch:on:Lid Switch")
-check("the lid closing reloads", RELOADED, true); check("rules set from the lid switch", #MONITOR_RULES, rules)
-panel.enabled = false; RELOADED = nil; LID = "state:      open\n"; press("switch:off:Lid Switch")
-check("the lid opening reloads", RELOADED, true); load()
+-- From the switch: the rule at once, no reload (it takes a game out of fullscreen); opened, only the panel the close
+-- turned off on again
+LID = "state:      open\n"; load(); RELOADED = nil; LID = "state:      closed\n"; press("switch:on:Lid Switch")
+check("the lid closing turns the panel off", last_rule("eDP-1"), true); check("the lid closing reloads", RELOADED, nil)
+panel.enabled = false; LID = "state:      open\n"; press("switch:off:Lid Switch")
+check("the lid opening turns the panel on", last_rule("eDP-1"), false); check("the lid opening reloads", RELOADED, nil)
+local rules = #MONITOR_RULES; press("switch:off:Lid Switch")
+check("opened again: no rule", #MONITOR_RULES, rules); load()
 check("panel at a load with the lid open", last_rule("eDP-1"), nil)
 panel.enabled = true; SCREENS = { panel }; LID = "state:      closed\n"; load()
 check("panel alone with the lid closed", last_rule("eDP-1"), nil)
@@ -458,6 +467,30 @@ check("panel alone with the lid closed", last_rule("eDP-1"), nil)
 -- not one with nothing but "on" replacing it
 panel.enabled = false; load()
 check("panel off, alone, with the lid closed", last_rule("eDP-1"), nil)
+-- A host file's rule for the panel by make and model: off with it, and on again last (Hyprland applies the latest rule
+-- that matches a screen: the by-name one the close added has none of its mode or scale)
+local hf = io.open("/proc/sys/kernel/hostname"); local host = hf:read("l"); hf:close()
+local host_file = home .. "/.config/caelestia/user/hosts/" .. host .. ".lua"
+local saved = io.open(host_file); local kept = saved and saved:read("a"); if saved then saved:close() end
+local function rule_of(output)
+    local found
+    for _, r in ipairs(MONITOR_RULES) do if r.output == output then found = r end end
+    return found or {}
+end
+-- (no rule by its name before: the one closing it made from the one that applied, else opened it got Hyprland's
+-- defaults, placed and sized anew; with none for it in the host file, any screen's)
+local w = io.open(host_file, "w"); w:write(""); w:close()
+panel.enabled = true; SCREENS = { first, panel }; LID = "state:      closed\n"; load()
+check("the panel's rule from any screen's", rule_of("eDP-1").position, "auto")
+w = io.open(host_file, "w"); w:write('dots.monitor({ output = "desc:Some Panel", mode = "2560x1600@240", scale = 1.6 })\n'); w:close()
+panel.enabled = true; SCREENS = { first, panel }; LID = "state:      open\n"; load()
+LID = "state:      closed\n"; press("switch:on:Lid Switch")
+check("the lid closing turns the panel's desc: rule off", last_rule("desc:Some Panel"), true)
+check("the panel's rule from its desc: one", rule_of("eDP-1").mode .. " " .. rule_of("eDP-1").scale, "2560x1600@240 1.6")
+panel.enabled = false; LID = "state:      open\n"; press("switch:off:Lid Switch")
+local last = MONITOR_RULES[#MONITOR_RULES]
+check("the lid opening: the panel's desc: rule on, last", last.output .. " " .. tostring(last.disabled), "desc:Some Panel false")
+if kept then w = io.open(host_file, "w"); w:write(kept); w:close() else os.remove(host_file) end
 for _, e in ipairs(config_errors) do error("config error " .. e, 0) end
 L
 out=$(cd "$t" && HOME=$t/home XDG_RUNTIME_DIR=$t/run HYPRLAND_INSTANCE_SIGNATURE=test lua sync.lua stub.lua 2>&1) \
@@ -666,4 +699,20 @@ out=$(cd "$t" && HOME=$t/home XDG_RUNTIME_DIR=$t/run HYPRLAND_INSTANCE_SIGNATURE
 grep -q '^loaded false .*user.workspaces.*renamed API' <<<"$out" || fail "a broken user module wasn't reported: $(head -3 <<<"$out")"
 grep -qx "bind SHIFT + Space" <<<"$out" || fail "a broken user module took the ones after it down: $(head -5 <<<"$out")"
 cp "$t/workspaces.lua.bak" "$t/home/.config/caelestia/user/workspaces.lua"
+
+# VMware's vmw-dmabuf shim (Hyprland's only) taken out of LD_PRELOAD for the apps, wherever it is in the list, the
+# session's other preloads kept as they were (no stray ':'); none there: LD_PRELOAD left alone
+cat >"$t/preload.lua" <<'L'
+package.path = os.getenv("HOME") .. "/.config/caelestia/?.lua;" .. package.path
+dofile(arg[1])
+local getenv, shim = os.getenv, "/usr/lib/agros/vmw-dmabuf.so"
+for _, c in ipairs({ { shim, "" }, { shim .. ":/a.so", "/a.so" }, { "/a.so:" .. shim, "/a.so" },
+                     { "/a.so:" .. shim .. ":/b.so", "/a.so:/b.so" }, { "/a.so", nil }, { nil, nil } }) do
+    os.getenv = function(k) if k == "LD_PRELOAD" then return c[1] end return getenv(k) end
+    ENV, package.loaded["hypr-vars"] = {}, nil
+    require("hypr-vars")
+    if ENV.LD_PRELOAD ~= c[2] then error(tostring(c[1]) .. ": " .. tostring(ENV.LD_PRELOAD) .. ", not " .. tostring(c[2]), 0) end
+end
+L
+out=$(cd "$t" && HOME=$t/home lua preload.lua stub.lua 2>&1) || fail "LD_PRELOAD without the shim: $out"
 echo "ok hypr-config"

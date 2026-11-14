@@ -1,6 +1,7 @@
 # Maintainer: Filipe Agra
 # The desktop's programs (game focus, tray keeper, the Updates app's updater, the Settings app's CLI, Lutris and
-# Claude Code wrappers...) and the data they use, in /usr/lib/agros, linked into each home (agros-links)
+# Claude Code wrappers...) and the data they use, in /usr/lib/agros, linked into each home (/etc/skel for new accounts,
+# agros-links at login)
 pkgname=agros-scripts
 pkgver=0
 pkgrel=1
@@ -11,7 +12,7 @@ license=('GPL-3.0-or-later')
 depends=('bash' 'python' 'python-gobject' 'jq' 'libnotify' 'git' 'curl' 'util-linux')
 _root=$(realpath "${startdir}/../..")
 # The data folders that are code (the rest of ~/.local/share is settings: agros-hyprland-settings)
-_share=(caelestia-overlay lutris-overlay dots-settings github-release hyprbars camera-switch
+_share=(caelestia-overlay lutris-overlay dots-settings github-release hyprbars
     caelestia-greeter)
 
 pkgver() {
@@ -20,16 +21,21 @@ pkgver() {
 
 package() {
     cd "$_root"
-    install -d "$pkgdir/usr/lib/agros/bin" "$pkgdir/usr/lib/agros/share"
-    local f d
+    local skel="$pkgdir/etc/skel/.local" f d
+    install -d "$pkgdir/usr/lib/agros/bin" "$pkgdir/usr/lib/agros/share" "$skel/bin" "$skel/share"
+    # Each with its link for new accounts beside it: the links come and go with what they point to, from this one list
     for f in .local/bin/*; do
-        [[ -f $f ]] && install -m755 "$f" "$pkgdir/usr/lib/agros/bin/"
+        [[ -f $f ]] || continue
+        install -m755 "$f" "$pkgdir/usr/lib/agros/bin/"
+        ln -s "/usr/lib/agros/bin/${f##*/}" "$skel/bin/${f##*/}"
     done
     for d in "${_share[@]}"; do
         cp -r --no-preserve=ownership ".local/share/$d" "$pkgdir/usr/lib/agros/share/"
+        ln -s "/usr/lib/agros/share/$d" "$skel/share/$d"
     done
     find "$pkgdir/usr/lib/agros" -name __pycache__ -prune -exec rm -rf {} +
-    # The links each login adds (programs that came with an update since the account was made)
+    # The links each login adds (programs that came with an update since the account was made), and the settings an
+    # update changed: before the desktop starts, which runs them through those links and reads those settings
     install -Dm644 "$startdir/agros-links.service" "$pkgdir/usr/lib/systemd/user/agros-links.service"
     install -d "$pkgdir/usr/lib/systemd/user/default.target.wants"
     ln -s ../agros-links.service "$pkgdir/usr/lib/systemd/user/default.target.wants/agros-links.service"

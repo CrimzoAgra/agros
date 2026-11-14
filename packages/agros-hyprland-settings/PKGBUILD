@@ -1,8 +1,8 @@
 # Maintainer: Filipe Agra
 # The desktop's settings for every new account (/etc/skel): Caelestia's own configs (pinned, what `caelestia install`
 # would put in your home), AgrOS's over them (Hyprland user modules, Caelestia's shell.json, the widgets, switcher,
-# Updates and Settings apps, launcher entries, LibreWolf and VSCodium settings, the user services), and the links to
-# AgrOS's programs (agros-scripts). Fonts and icons go system-wide.
+# Updates and Settings apps, launcher entries, LibreWolf and VSCodium settings, the user services), and every version
+# each of them has had, so agros-links can update the ones you never edited. Fonts and icons go system-wide.
 pkgname=agros-hyprland-settings
 pkgver=0
 pkgrel=1
@@ -10,7 +10,7 @@ pkgdesc='AgrOS Hyprland + Caelestia settings for new users (/etc/skel), fonts an
 arch=('any')
 url='https://github.com/CrimzoAgra/agros'
 license=('GPL-3.0-or-later' 'OFL-1.1')
-depends=('agros-scripts')
+depends=('agros-scripts' 'caelestia-shell')  # (caelestia-shell: the wallpaper folder's link to its wallpaper)
 # CachyOS's own fish and micro settings put their files in /etc/skel too: AgrOS's replace them
 conflicts=('cachyos-fish-config' 'cachyos-micro-settings')
 replaces=('cachyos-fish-config' 'cachyos-micro-settings')
@@ -22,24 +22,52 @@ sha256sums=('SKIP')
 _root=$(realpath "${startdir}/../..")
 # Caelestia's components AgrOS takes (its installer's defaults, plus uwsm and the Spotify theme), as "source|dest"
 _components=(hypr fish foot fastfetch btop micro "thunar|Thunar" starship.toml uwsm spicetify)
+# Its shell started by caelestia-start: on AgrOS's changes to it from the first login (checked at every login, rebuilt
+# when out of date or missing), else it came up on Caelestia's own config (no dock, the bar laid out otherwise) and jumped when agros-welcome
+# rebuilt it and restarted it; and each start logged
+_execs_sed='s|^\( *\)hl.exec_cmd("caelestia shell -d")$|\1hl.exec_cmd("~/.local/bin/caelestia-start")|'
+# Settings that are yours to change, through the apps that write them (Caelestia's settings and weather location, the
+# dock's pins, default apps, Settings > Startup, VSCodium, Legion Control) or one machine's own (hosts/): copied into a
+# home once, never updated (one an app wrote back to an older AgrOS version would read as never edited)
+_own=(.config/caelestia/shell.json .config/quickshell/sidedock/pins.json .config/mimeapps.list '.config/autostart/*'
+    '.config/VSCodium/*' '.config/legion-control/*' '.config/caelestia/user/hosts/*')
+
+# _versions <skel>: "<sha256>  <path>" of each version every settings file in <skel> has had: from
+# AgrOS's history and Caelestia's, as package() copies them (thunar as Thunar, execs.lua changed), and as it is now
+# (the only one known for a file changed some other way at build time)
+_versions() {
+    local skel=$1 c src dest r b p s o fix
+    {
+        git -C "$_root" log --format= --raw --root --no-abbrev --no-renames HEAD -- .config .local/share |
+            while read -r _ _ _ b _ p; do echo "$_root $b $p"; done
+        for c in "${_components[@]}"; do
+            src=${c%%|*} dest=${c#*|}
+            git -C "$srcdir/caelestia-dots" log --format= --raw --root --no-abbrev --no-renames HEAD -- "$src" |
+                while read -r _ _ _ b _ p; do echo "$srcdir/caelestia-dots $b .config/$dest${p#"$src"}"; done
+        done
+    } | LC_ALL=C sort -u | while read -r r b p; do
+        # (deleted in that commit, or not a settings file any more)
+        [[ $b != 0000000000000000000000000000000000000000 && -f $skel/$p && ! -L $skel/$p ]] || continue
+        [[ $p == .config/hypr/hyprland/execs.lua ]] && fix=(sed "$_execs_sed") || fix=(cat)
+        s=$(git -C "$r" cat-file blob "$b" | "${fix[@]}" | sha256sum) && echo "${s%% *}  $p"
+    done
+    (cd "$skel" && find .config .local/share -type f -exec sha256sum {} +)
+}
 
 pkgver() {
     cd "$_root" && printf 'r%s.%s' "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
 }
 
 package() {
-    local skel="$pkgdir/etc/skel" c src dest f d
+    local skel="$pkgdir/etc/skel" c src dest s p o
     install -d "$skel/.config"
     # 1. Caelestia's configs
     for c in "${_components[@]}"; do
         src=${c%%|*} dest=${c#*|}
         cp -r --no-preserve=ownership "$srcdir/caelestia-dots/$src" "$skel/.config/$dest"
     done
-    # Its shell started by caelestia-start: on AgrOS's changes to it from the first login (built first when missing),
-    # else it came up on Caelestia's own config (no dock, the bar laid out otherwise) and jumped when agros-welcome
-    # rebuilt it and restarted it; and each start logged
-    sed -i 's|^\( *\)hl.exec_cmd("caelestia shell -d")$|\1hl.exec_cmd("~/.local/bin/caelestia-start")|' \
-        "$skel/.config/hypr/hyprland/execs.lua"
+    # Its shell started by caelestia-start (_execs_sed)
+    sed -i "$_execs_sed" "$skel/.config/hypr/hyprland/execs.lua"
     grep -q 'hl.exec_cmd("~/.local/bin/caelestia-start")' "$skel/.config/hypr/hyprland/execs.lua" ||
         { echo "Caelestia's execs.lua changed: its shell's start not found" >&2; return 1; }
     # 2. AgrOS's, over them
@@ -52,18 +80,16 @@ package() {
     install -d "$skel/.local/share"
     cp -r --no-preserve=ownership .local/share/applications .local/share/firefox .local/share/lutris "$skel/.local/share/"
     # (lutris: the Rockstar Games Launcher's cover and banner, which Lutris has none of)
-    # 3. The links to AgrOS's programs and their data (agros-scripts; agros-links adds later ones at login)
-    install -d "$skel/.local/bin"
-    for f in .local/bin/*; do
-        [[ -f $f ]] && ln -s "/usr/lib/agros/bin/${f##*/}" "$skel/.local/bin/${f##*/}"
-    done
-    for d in caelestia-overlay lutris-overlay dots-settings github-release hyprbars camera-switch \
-        caelestia-greeter; do
-        ln -s "/usr/lib/agros/share/$d" "$skel/.local/share/$d"
-    done
     # Fonts and icons: system-wide
     install -Dm644 .local/share/fonts/Bangers-Regular.ttf "$pkgdir/usr/share/fonts/agros/Bangers-Regular.ttf"
     install -Dm644 .local/share/fonts/OFL.txt "$pkgdir/usr/share/licenses/$pkgname/OFL-Bangers.txt"
     cp -r --no-preserve=ownership .local/share/icons "$pkgdir/usr/share/"
     find "$skel" -name __pycache__ -prune -exec rm -rf {} +
+    # 3. Every version of each settings file (agros-links: yours updated at login while it's one of them)
+    install -d "$pkgdir/usr/share/agros"
+    _versions "$skel" | while read -r s p; do
+        # shellcheck disable=SC2053  # (_own's are patterns)
+        for o in "${_own[@]}"; do [[ $p == $o ]] && continue 2; done
+        echo "$s  $p"
+    done | LC_ALL=C sort -u >"$pkgdir/usr/share/agros/skel-versions"
 }

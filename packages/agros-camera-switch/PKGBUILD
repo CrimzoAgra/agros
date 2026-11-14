@@ -7,7 +7,7 @@ pkgdesc='AgrOS: make the Lenovo Legion physical camera switch work'
 arch=('any')
 url='https://github.com/CrimzoAgra/agros'
 license=('GPL-3.0-or-later')
-depends=('python' 'libnotify')
+depends=('python' 'libnotify' 'agros-scripts')  # (agros-scripts: agros-each-user, who's logged in)
 install=agros-camera-switch.install
 _root=$(realpath "${startdir}/../..")
 

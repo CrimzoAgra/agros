@@ -3,6 +3,7 @@
 # titled with the project folder and the answer's start, whatever that starts with ("- " a list: notify-send took it
 # for options), cut at 200 characters, not bytes
 set -euo pipefail
+# shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 mkdir -p "$t/bin"
 printf '#!/bin/sh\necho "{\\"class\\": \\"$FOCUSED\\"}"\n' >"$t/bin/hyprctl"

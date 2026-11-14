@@ -3,6 +3,7 @@
 # Only the last tar of the { tar; tar; tar; } group sets its status, so the first ones' errors are dropped: "Saved",
 # the older full save replaced by one missing that file
 set -euo pipefail
+# shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 export GNUPGHOME=$t/gnupg; mkdir -m 700 "$GNUPGHOME"; echo pass >"$t/pass"; export PERSONAL_PASSFILE=$t/pass
 h=$t/home; mkdir -p "$h/.local/share/keyrings" "$h/.config/Proton/VPN" "$t/drive"

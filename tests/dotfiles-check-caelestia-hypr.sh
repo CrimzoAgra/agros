@@ -6,6 +6,7 @@
 # beside edited ones (and links of yours), checks the config on a copy before anything goes live, leaves files turned
 # into folders (or back) for you, and counts from the version it refreshed to
 set -uo pipefail
+# shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 export HOME=$t/home XDG_STATE_HOME=$t/home/.local/state GIT_CONFIG_GLOBAL=/dev/null
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
@@ -61,7 +62,7 @@ printf '#!/bin/sh\necho "notify $*" >>%s/notified\n' "$t" >"$t/notify-send"; chm
 PATH=$t:$PATH "$here/.local/bin/dotfiles-check" --notify >/dev/null 2>&1
 PATH=$t:$PATH "$here/.local/bin/dotfiles-check" --notify >/dev/null 2>&1
 { [[ $(grep -c "Hyprland config has an update" "$t/notified") == 1 ]] && grep -q "^notify -u low .*Hyprland config has an update" "$t/notified" &&
-    ! grep "^notify -u critical" "$t/notified" | grep -q "Hyprland config"; } ||
+    ! grep -q "Hyprland config" <<<"$(grep "^notify -u critical" "$t/notified")"; } ||
     fail "the update not notified once, at low urgency: $(cat "$t/notified")"
 # caelestia-hypr-refresh: the unedited file replaced, the new one added, the edited one kept with the new version
 # beside it; then the config checked (Hyprland's stand-in: fine); after it, nothing newer
@@ -138,7 +139,7 @@ refresh --check >/dev/null || fail "after a refresh put back, no longer said to 
 # nothing half done, and its staging folder gone; one an earlier kill left, taken away at the next run
 export TMPDIR=$t/tmpd
 # (a runtime folder there already: else the check makes one of its own in TMPDIR)
-[[ -d ${XDG_RUNTIME_DIR:-} ]] || { export XDG_RUNTIME_DIR=$t/run; mkdir -p -m 700 "$t/run"; }
+[[ -d ${XDG_RUNTIME_DIR:-} ]] || { export XDG_RUNTIME_DIR=$t/run; mkdir -m 700 "$t/run"; }
 mkdir -p "$TMPDIR/caelestia-hypr-refresh.old"; touch -d '1 hour ago' "$TMPDIR/caelestia-hypr-refresh.old"
 for sig in HUP TERM; do
     rm -f "$t/slow"

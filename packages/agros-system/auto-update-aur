@@ -1,0 +1,350 @@
+#!/usr/bin/env bash
+# The boot's AUR builds (agros-system: /usr/lib/agros/auto-update-aur, run by auto-update once its download finished):
+# the AUR apps with a newer version (not in a repo: paru -Qua's), and those built on a runtime the download brings a new
+# version of (update-kinds' runtimes: Qt's Quickshell, Caelestia, qtengine...; Python's modules), from the AUR or
+# [agros] (which builds them from it). Built as an account of their own (agros-aur: never root, nor a person's), in a
+# sandbox that sees the system as the download leaves it (its packages unpacked over /usr), so they fit the new runtime
+# before it's installed; installed at shutdown in auto-update's own pacman transaction (from a local repo, agros-aur).
+# Each base on its own: one that fails keeps its version (dotfiles-check names it), the others go on; only a new
+# runtime's own rebuilds hold it back.
+#   auto-update-aur <dbpath>             as root: plan, build (as agros-aur), collect. Writes /var/lib/auto-update/aur/:
+#                                        planned (it ran to the end), rebuild (those a new runtime needs rebuilt),
+#                                        runtime-target (the new runtimes), wanted ("<name> <AUR version>" each one
+#                                        planned), failed ("<base>: <why>" each one that failed, or why none was
+#                                        built), log/ (each step's), repo/ and built ("<name> <version>" each built)
+#   auto-update-aur --sandbox <fetch|run|build> <build folder> [--ro <path>]... -- <command>
+#                                        the build account's part: a command in the sandbox (refused as root); --fetch,
+#                                        --unpack and --build are what runs in it (--jail: its network closed off first)
+#
+# Their build scripts are unreviewed (the user's choice), so what runs them can reach neither root, nor any home or
+# session, nor the users: every step that touches what the AUR sent (git's clone, makepkg, unpacking what it built) runs
+# in the sandbox, as agros-aur (agros-system's sysusers.d: a system account of its own, no login, no password, owning
+# nothing but this run's build folder; setpriv: no PAM, so no logind session, and in auto-update.service's cgroup, under
+# its time limit). Not the main user's account: any process of theirs (no password needed) could have changed a build
+# between its fetch and its build, or entered its namespaces, its uid the same; agros-aur's are out of their reach
+# (another uid: no ptrace, no signal, no setns), and its build folder too (0700, its own, in root's 0755). The sandbox
+# (bwrap, no new privileges): /usr, /etc and /opt read-only, nothing else of the system (no /home, /root, /run, /mnt,
+# /media, /srv, /var but the build folder: the system bus, the session's, other drives all out of sight), its own /tmp,
+# /var/tmp and home (empty, gone after each step), every namespace its own. The network, for the step that fetches their
+# build files and sources and for the build (Go, Rust and Node apps fetch their own dependencies in prepare() or
+# build()), is a network namespace of its own with outbound internet through pasta (passt): not the host's, so none of
+# the host's own services is reachable (127.0.0.1 and ::1 are the sandbox's own loopback, abstract sockets are per
+# network namespace, and pasta maps neither the gateway's address nor any port to the host: --no-map-gw, -t/-u/-T/-U
+# none; the host's main address is the sandbox's own; its other addresses and the networks it routes to, a second card,
+# docker0, a VM's vmnet or virbr0, a VPN's tunnel, are closed off in the sandbox's namespace before it starts: --jail);
+# DNS through pasta to the host's resolver only. The LAN is reachable as from any machine on it. Each base is fetched
+# and built on its own: one that fails leaves the others. Only this run's build folder is writable, made anew each run
+# and removed after (no cache a build could leave something in for the next). Root opens nothing in it: what a step
+# prints, root writes to its own log folder; the packages a build made are read through the sandbox, right after it,
+# into root's own folder, and only those the plan names (their .PKGINFO's name and version, as their file names them)
+# are kept
+set -uo pipefail
+au=/var/lib/auto-update
+aur=$au/aur
+dir=$au/aur-build
+self=/usr/lib/agros/auto-update-aur
+kinds=/usr/lib/agros/bin/update-kinds
+# a package or dependency's name ("name", "name>=1.2"): what goes to pacman, never an option
+name_re='^[A-Za-z0-9@_+][A-Za-z0-9@._+-]*$'
+dep_re='^[A-Za-z0-9@_+][A-Za-z0-9@._+-]*(([<>]=?|=)[A-Za-z0-9.:_+~-]+)?$'
+
+# ---- The build account's part: the AUR's build scripts are unreviewed, so never root
+if [[ ${1:-} == --sandbox || ${1:-} == --fetch || ${1:-} == --unpack || ${1:-} == --build ]]; then
+    ((EUID)) || { echo "auto-update-aur: AUR packages are never built as root"; exit 1; }
+fi
+if [[ ${1:-} == --sandbox ]]; then
+    mode=$2 dir=$3
+    shift 3
+    # (pacman's list of what's installed: makepkg writes it in the package's .BUILDINFO)
+    args=(--unshare-all --die-with-parent --new-session
+        --ro-bind /etc /etc --ro-bind-try /opt /opt --ro-bind-try /var/lib/pacman/local /var/lib/pacman/local
+        --symlink usr/bin /bin --symlink usr/bin /sbin --symlink usr/lib /lib --symlink usr/lib /lib64
+        --dev /dev --proc /proc --tmpfs /tmp --tmpfs /var/tmp --dir /tmp/home --bind "$dir" "$dir" --chdir "$dir")
+    while [[ ${1:-} == --ro ]]; do args+=(--ro-bind "$2" "$2"); shift 2; done
+    [[ ${1:-} == -- ]] && shift
+    net=false
+    case $mode in
+        fetch) args+=(--ro-bind /usr /usr) net=true ;;
+        run) args+=(--ro-bind /usr /usr) ;;
+        # (the system as the download leaves it: its packages, unpacked in stage/, laid over /usr)
+        build) args+=(--overlay-src /usr --overlay-src "$dir/stage/usr" --ro-overlay /usr) net=true ;;
+        *) echo "auto-update-aur: no sandbox $mode"; exit 2 ;;
+    esac
+    env=(env -i PATH=/usr/bin LANG=C.UTF-8 HOME=/tmp/home GNUPGHOME=/tmp/home/.gnupg "$@")
+    $net || exec bwrap "${args[@]}" -- "${env[@]}"
+    # The network: a namespace of its own, outbound only, through pasta (which makes it and the user namespace bwrap
+    # starts in: pasta's maps the account to its root, so bwrap maps them back to its own ids, and nothing in the
+    # sandbox can change the namespace's routes). No port of the host's forwarded in (-T, -U: pasta's default binds
+    # the host's listening ports in the sandbox's loopback) nor out (-t, -u), the gateway's address not mapped to the
+    # host's loopback (--no-map-gw, --map-guest-addr none). The host's own addresses and every network it routes to
+    # (its main table's, but the default route) closed off in it (--jail, as that root, before bwrap): through pasta
+    # they'd be reached from the host itself, which LAN machines can't (a second card, docker0, a VM's vmnet, virbr0,
+    # a VPN's tunnel, and what listens on them). Its main address is the sandbox's own (pasta copies it), and its
+    # LAN stays reachable (the route the namespace has for it is pasta's, kept). Link-local ones aren't routes pasta
+    # takes there. DNS: an address of each family of its own, which pasta sends to the host's resolver of that family
+    # (its stub on 127.0.0.53 included; an IPv6-only resolv.conf too), in a resolv.conf of the sandbox's own over the
+    # host's (where /etc/resolv.conf leads: a link into /run too)
+    command -v pasta >/dev/null || { echo "auto-update-aur: no pasta (passt): the sandbox has no network"; exit 1; }
+    dns4=169.254.0.53 dns6=fd53:a6e4:2c3a::53
+    jail=$({ ip -j addr show && ip -j -4 route show table main && { ip -j -6 route show table main 2>/dev/null || echo '[]'; }; } |
+        jq -r '.[] | if has("addr_info") then .addr_info[] | select(.scope != "host" and .scope != "link") | .local else .dst end
+            | select(. != "default" and (test("^(169\\.254\\.|fe[89ab].:|ff..:)") | not))
+            | if contains("/") then . elif contains(":") then . + "/128" else . + "/32" end' | LC_ALL=C sort -u) ||
+        { echo "auto-update-aur: the host's addresses couldn't be listed"; exit 1; }
+    resolv=$(mktemp) && printf 'nameserver %s\n' "$dns4" "$dns6" >"$resolv" || exit 1
+    args+=(--share-net --unshare-user --uid "$(id -u)" --gid "$(id -g)" --ro-bind "$resolv" "$(readlink -f /etc/resolv.conf)")
+    # shellcheck disable=SC2086  # (one word each)
+    pasta --config-net --foreground --quiet -t none -u none -T none -U none --no-map-gw --map-guest-addr none \
+        --dns-forward "$dns4" --dns-forward "$dns6" -- "$self" --jail $jail -- bwrap "${args[@]}" -- "${env[@]}"
+    rc=$?
+    rm -f "$resolv"
+    exit $rc
+fi
+# In the sandbox's network namespace, as its user namespace's root (pasta's), before bwrap: each of the host's addresses
+# and networks (<cidr>...) unreachable from it. Closed, or nothing runs: one the namespace has a route for already
+# (pasta's, for the LAN) is left as it is
+if [[ ${1:-} == --jail ]]; then
+    shift
+    while (($#)) && [[ $1 != -- ]]; do
+        r=(route); [[ $1 == *:* ]] && r=(-6 route)
+        ip "${r[@]}" add prohibit "$1" 2>/dev/null || [[ -n $(ip "${r[@]}" show exact "$1" 2>/dev/null) ]] ||
+            { echo "auto-update-aur: $1 couldn't be closed off in the sandbox's network"; exit 1; }
+        shift
+    done
+    shift
+    exec "$@"
+fi
+# In the sandbox (fetch): each package's build files, fresh from the AUR, the keys its signed sources name (by
+# fingerprint, as paru fetches them; from a keyserver that keeps their names), and its sources, downloaded and checked
+if [[ ${1:-} == --fetch ]]; then
+    dir=$2
+    shift 2
+    mkdir -p "$dir/work" "$HOME/.gnupg" && chmod 700 "$HOME/.gnupg"
+    for base; do
+        echo "== $base"
+        timeout 5m git clone -q --depth 1 "https://aur.archlinux.org/$base.git" "$dir/$base" &&
+            cd "$dir/$base" || { echo "$base: its build files couldn't be fetched"; exit 1; }
+        for k in $(sed -n 's/^[[:space:]]*validpgpkeys = //p' .SRCINFO); do
+            [[ $k =~ ^[0-9A-Fa-f]{16,40}$ ]] || continue
+            timeout 2m gpg --batch --keyserver hkps://keyserver.ubuntu.com --recv-keys "$k" >/dev/null 2>&1 || echo "$base: key $k not fetched"
+        done
+        mkdir -p "$dir/src/$base"
+        SRCDEST=$dir/src/$base BUILDDIR=$dir/work timeout 1h makepkg --verifysource --nodeps --noconfirm --noprogressbar ||
+            { echo "$base: its sources couldn't be fetched or don't match"; exit 1; }
+    done
+    exit 0
+fi
+# In the sandbox (run): packages unpacked into stage/, laid over /usr for the builds (kernel modules, firmware and
+# docs left out: nothing builds on them)
+if [[ ${1:-} == --unpack ]]; then
+    stage=$2
+    shift 2
+    mkdir -p "$stage/usr"
+    for f; do
+        bsdtar -xf "$f" -C "$stage" --exclude usr/lib/modules --exclude usr/lib/firmware --exclude usr/share/doc \
+            --exclude usr/share/man --exclude usr/share/locale usr 2>/dev/null || true
+    done
+    exit 0
+fi
+# In the sandbox (build, the network through pasta: dependencies a Go, Rust or Node app fetches itself): one package,
+# its sources fetched before (--holdver: VCS ones not updated; their signatures checked when fetched). --nodeps: makepkg would check them against what's installed now, not what the
+# download brings; pacman checks them at the install. --nocheck: their tests can need what isn't there
+if [[ ${1:-} == --build ]]; then
+    dir=$2 base=$3
+    mkdir -p "$dir/pkg/$base" && cd "$dir/$base" || exit 1
+    # (each base's sources apart: two bases' same-named files don't collide)
+    export BUILDDIR=$dir/work PKGDEST=$dir/pkg/$base SRCDEST=$dir/src/$base
+    exec timeout 1h makepkg -f --nodeps --nocheck --noconfirm --noprogressbar --holdver --skippgpcheck
+fi
+
+# ---- Root's part
+db=${1:?usage: auto-update-aur <dbpath>}
+rm -rf "$aur"
+mkdir -p "$aur/log"
+# fail <why>: none built; drop <base> <why>: that one not built, the others go on
+fail() { echo "AUR: $1"; echo "$1" >"$aur/failed"; touch "$aur/planned"; exit 1; }
+drop() { echo "AUR: $1: $2"; echo "$1: $2" >>"$aur/failed"; }
+
+# What the download brings ("name old -> new"), those pacman.conf holds back left out
+pending=$(LC_ALL=C pacman -Qu --dbpath "$db" 2>/dev/null | /usr/lib/agros/bin/updates-pending)
+target=$("$kinds" --runtime-target <<<"$pending")
+# The AUR's apps here: in no repo (foreign to the download's lists), or in [agros] (built there from the AUR)
+mapfile -t foreign < <(pacman -Qmq --dbpath "$db" 2>/dev/null)
+agros=$(pacman -Slq --dbpath "$db" agros 2>/dev/null)
+ours() { grep -qxF -- "$1" <<<"$(printf '%s\n' "${foreign[@]}")"$'\n'"$agros"; }
+# Those a new runtime needs rebuilt: built on it (update-kinds --built-on: needing it, or with files in its versioned
+# folder), not a prebuilt -bin, and not rebuilt by their repo in this same download
+rebuild=()
+if [[ -n $target ]]; then
+    for p in $("$kinds" --built-on "$db" <<<"$pending"); do
+        [[ $p != *-bin ]] && ours "$p" && ! grep -q "^$p " <<<"$pending" && rebuild+=("$p")
+    done
+    printf '%s\n' "${rebuild[@]}" | sed '/^$/d' >"$aur/rebuild"
+    echo "$target" >"$aur/runtime-target"
+    ((${#rebuild[@]})) && echo "AUR: a new runtime ($target): ${rebuild[*]} rebuilt for it"
+fi
+((${#foreign[@]} + ${#rebuild[@]})) || { touch "$aur/planned"; exit 0; }
+
+# The AUR's versions (its RPC), the newer ones that pacman.conf doesn't hold back (IgnorePkg)
+args=()
+for p in "${foreign[@]}" "${rebuild[@]}"; do args+=(--data-urlencode "arg[]=$p"); done
+info=$(curl -fsS --connect-timeout 10 -m 120 -G "https://aur.archlinux.org/rpc/v5/info" "${args[@]}" |
+    jq -r '.results[] | [.Name, .PackageBase, .Version] | @tsv') || fail "the AUR couldn't be reached"
+mapfile -t ignored < <(pacman-conf IgnorePkg 2>/dev/null)
+declare -A bases=()
+while IFS=$'\t' read -r name base ver; do
+    [[ -n $name ]] || continue
+    [[ $name =~ $name_re && $base =~ $name_re && $ver =~ ^[A-Za-z0-9.:_+~-]+$ ]] || fail "the AUR named a package oddly"
+    have=$(pacman -Q "$name" 2>/dev/null | cut -d' ' -f2)
+    for g in "${ignored[@]}"; do
+        # shellcheck disable=SC2053  # (IgnorePkg's entries are patterns)
+        [[ $name == $g ]] && continue 2
+    done
+    if grep -qxF -- "$name" <<<"$(printf '%s\n' "${rebuild[@]}")" || { [[ -n $have ]] && (($(vercmp "$ver" "$have") > 0)); }; then
+        bases[$base]+=" $name"
+        echo "$name $ver" >>"$aur/wanted"
+    fi
+done <<<"$info"
+# (one a new runtime needs rebuilt that isn't there: that runtime waits, auto-update holds it; the others go on)
+for p in "${rebuild[@]}"; do grep -q "^$p	" <<<"$info" || drop "$p" "it isn't on the AUR: it can't be rebuilt for the new $target"; done
+((${#bases[@]})) || { touch "$aur/planned"; [[ ! -s $aur/failed ]]; exit; }
+for b in "${!bases[@]}"; do echo "$b${bases[$b]}"; done | sort >"$aur/plan"
+echo "AUR: building $(cut -d' ' -f1 "$aur/plan" | paste -sd' ')"
+
+# The build account: agros-aur (agros-system's sysusers.d), never root nor a person's. (AGROS_AUR_USER: the tests')
+each_user=${AGROS_EACH_USER:-/usr/lib/agros/bin/agros-each-user}
+user=${AGROS_AUR_USER:-agros-aur}
+uid=$(id -u "$user" 2>/dev/null)
+[[ $uid =~ ^[0-9]+$ ]] && ((uid)) || fail "no account to build them as ($user)"
+# box <fetch|run|build> [--ro <path>]... -- <command>: in the sandbox, as that account (agros-each-user --as: setpriv,
+# no PAM), at the lowest priority
+box() { "$each_user" --as "$user" nice -n 19 ionice -c 3 "$self" --sandbox "$1" "$dir" "${@:2}" </dev/null; }
+# get <file> [<most bytes>]: a file of the build folder, read through the sandbox into root's: a regular file only (a
+# FIFO a build left there blocked the read for good; nothing of the builds runs any more to swap it), within 10 min
+get() { box run -- timeout 10m sh -c '[ -f "$1" ] && exec head -c "$2" -- "$1"' sh "$1" "${2:-1000000000000}"; }
+# Its folder made anew (nothing a build left in it reaches the next run), the account's alone (0700) in root's
+# /var/lib/auto-update; removed at the end
+rm -rf "$dir"
+mkdir -m 700 "$dir" && chown "$user": "$dir" || fail "its build folder couldn't be made"
+trap 'rm -rf "$dir"' EXIT
+# Each one's build files and sources (its own sandbox: one that fails leaves the others), then its .SRCINFO, read
+# through the sandbox into root's own copy
+mkdir -p "$aur/info"
+order=()
+while read -r b _; do
+    if ! box fetch -- "$self" --fetch "$dir" "$b" >>"$aur/log/fetch.log" 2>&1; then
+        tail -n 10 "$aur/log/fetch.log" | cat -v  # (the build's own text: no terminal escapes into root's log)
+        drop "$b" "its build files or sources couldn't be fetched (its log: $aur/log/fetch.log)"
+    elif ! get "$dir/$b/.SRCINFO" 1000000 >"$aur/info/$b"; then
+        drop "$b" "it has no .SRCINFO"
+    else
+        order+=("$b")
+    fi
+done <"$aur/plan"
+# finish: their repo (those built), for the shutdown's install
+finish() {
+    if [[ -s $aur/built ]]; then
+        repo-add -q "$aur/repo/agros-aur.db.tar.gz" "$aur"/repo/*.pkg.tar.* >/dev/null || fail "their repo couldn't be made"
+        echo "AUR: built, installed at shutdown: $(cut -d' ' -f1 "$aur/built" | paste -sd' ')"
+    fi
+    touch "$aur/planned"
+    [[ ! -s $aur/failed ]]
+    exit
+}
+((${#order[@]})) || finish
+# Built in their dependency order (one built on another's new version sees it: Quickshell before Caelestia): by their
+# .SRCINFO's depends and makedepends on each other's packages (pkgname or provides), else by name (tsort)
+declare -A base_of=()
+for b in "${order[@]}"; do
+    for n in $(sed -n 's/^[[:space:]]*\(pkgname\|provides\) = \([^<>=]*\).*/\2/p' "$aur/info/$b"); do base_of[$n]=$b; done
+done
+mapfile -t order < <(for b in "${order[@]}"; do
+    echo "$b $b"
+    for d in $(sed -n 's/^[[:space:]]*\(make\)\{0,1\}depends\(_x86_64\)\{0,1\} = \([^<>=]*\).*/\3/p' "$aur/info/$b"); do
+        [[ -n ${base_of[$d]:-} && ${base_of[$d]} != "$b" ]] && echo "${base_of[$d]} $b"
+    done
+done | tsort)
+
+# What each needs that isn't installed nor in the download: from the repos, downloaded (not installed: unpacked in the
+# sandbox alone; pacman brings what they need to run at the install); one needing what's only on the AUR isn't built
+# here. Each one a dependency's name (a build's .SRCINFO can say anything: never an option to root's pacman)
+cache=$(pacman-conf CacheDir 2>/dev/null | head -1)
+cache=${cache:-/var/cache/pacman/pkg/}
+need=() ok=()
+for b in "${order[@]}"; do
+    mapfile -t deps < <(sed -n 's/^[[:space:]]*\(make\)\{0,1\}depends\(_x86_64\)\{0,1\} = //p' "$aur/info/$b" | sort -u)
+    why='' missing=()
+    # (the .SRCINFO's text never written as it is: dotfiles-check shows this on the desktop)
+    for d in "${deps[@]}"; do [[ $d =~ $dep_re ]] || { why="it needs something that isn't a package's name: ${d//[^A-Za-z0-9@._+<>=-]/}"; break; }; done
+    [[ -z $why ]] && ((${#deps[@]})) && mapfile -t missing < <(pacman -T --dbpath "$db" -- "${deps[@]}" 2>/dev/null)
+    mine=()
+    for d in "${missing[@]}"; do
+        [[ -n $d && -z $why ]] || continue
+        grep -q " ${d%%[<>=]*}\( \|$\)" "$aur/plan" && continue  # (built here)
+        pacman -Sp --dbpath "$db" -- "$d" >/dev/null 2>&1 || why="${d%%[<>=]*}, which it needs, isn't in the repos (only the AUR: Updates builds it)"
+        mine+=("$d")
+    done
+    if [[ -n $why ]]; then drop "$b" "$why"; else ok+=("$b"); need+=("${mine[@]}"); fi
+done
+order=("${ok[@]}")
+((${#order[@]})) || finish
+if ((${#need[@]})); then
+    # (pacman's cache written: marked, so Updates' update-apps waits on it, never both writing it at once)
+    touch "$au/downloading"
+    pacman -Sw --dbpath "$db" --noconfirm --logfile /dev/null -- "${need[@]}" >/dev/null
+    rc=$?
+    rm -f "$au/downloading"
+    ((rc == 0)) || fail "what they need couldn't be downloaded"
+fi
+# The files to unpack: every package the shutdown's transaction installs (pacman -Su's: upgrades, new dependencies,
+# replacements; IgnorePkg's left out), and those
+mapfile -t files < <(
+    { pacman -Sup --dbpath "$db" --print-format '%f' 2>/dev/null
+      ((${#need[@]})) && pacman -Sp --dbpath "$db" --print-format '%f' -- "${need[@]}" 2>/dev/null; } |
+        while read -r f; do [[ $f == *.pkg.tar.* && -f $cache$f ]] && echo "$cache$f"; done
+)
+box run --ro "$cache" -- timeout 30m "$self" --unpack "$dir/stage" "${files[@]}" >"$aur/log/unpack.log" 2>&1 ||
+    fail "the download's packages couldn't be unpacked for the builds"
+
+# Each one built, then what it made collected at once into root's own repo (read through the sandbox: a link there
+# reads nothing of anyone's), only the packages the plan names, as their file names them (not sudo, pacman or linux,
+# which a build could leave there), and only when it made them all; unpacked from root's copy for the next ones, which
+# may build on it
+mkdir -p "$aur/repo"
+for b in "${order[@]}"; do
+    echo "$b: building"
+    if ! box build -- "$self" --build "$dir" "$b" >"$aur/log/$b.log" 2>&1; then
+        echo "$b: the build failed:"; tail -n 20 "$aur/log/$b.log" | cat -v
+        drop "$b" "its build failed (its log: $aur/log/$b.log)"
+        continue
+    fi
+    names=" $(grep "^$b " "$aur/plan" | cut -d' ' -f2-) "
+    got=() made=() why=''
+    for f in $(box run -- timeout 1m find "$dir/pkg/$b" -maxdepth 1 -type f -name '*.pkg.tar.*' ! -name '*.sig' -printf '%f\n'); do
+        [[ $f =~ ^[A-Za-z0-9@_+][A-Za-z0-9@._+:-]*\.pkg\.tar\.(zst|xz|gz)$ ]] || continue
+        get "$dir/pkg/$b/$f" >"$aur/repo/.part" || { why="$f couldn't be collected"; break; }
+        read -r n v a < <(bsdtar -xOf "$aur/repo/.part" .PKGINFO 2>/dev/null |
+            awk '/^pkgname = / { n = $3 } /^pkgver = / { v = $3 } /^arch = / { a = $3 } END { print n, v, a }')
+        want=$(awk -v n="$n" '$1 == n { print $2 }' "$aur/wanted")
+        if [[ -n $n && $names == *" $n "* && $f == "$n-$v-$a.pkg.tar."* && ($a == x86_64 || $a == any) && -n $want ]] &&
+            (($(vercmp "$v" "$want") >= 0)); then
+            mv "$aur/repo/.part" "$aur/repo/$f"
+            made+=("$n $v")
+            got+=("$aur/repo/$f")
+        else
+            echo "AUR: $b made $f, which isn't one planned (${n//[^A-Za-z0-9@._+-]/} ${v//[^A-Za-z0-9.:_+~-]/}): left out"
+        fi
+    done
+    rm -f "$aur/repo/.part"
+    for n in $names; do
+        [[ -n $why ]] || grep -q "^$n " <<<"$(printf '%s\n' "${made[@]}")" || why="its build didn't make $n"
+    done
+    if [[ -n $why ]]; then
+        rm -f "${got[@]}"
+        drop "$b" "$why"
+        continue
+    fi
+    printf '%s\n' "${made[@]}" >>"$aur/built"
+    box run --ro "$aur/repo" -- timeout 30m "$self" --unpack "$dir/stage" "${got[@]}" >>"$aur/log/unpack.log" 2>&1
+done
+finish

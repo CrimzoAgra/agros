@@ -4,18 +4,81 @@
 # update, which run as root and serve every user.
 #   agros-each-user <command> [args...]    the command's name in ~/.local/bin
 #   agros-each-user --list                 the users, one per line
+#   agros-each-user --as <user> <command...>   a command as that user (or account: the boot's AUR builds' agros-aur),
+#                                          from root: setpriv, never PAM (runuser, su and
+#                                          sudo open a logind session through pam_systemd: its processes left the
+#                                          calling service's cgroup and limits, and the user counted as logged in)
+#   agros-each-user --sessions             the session bus of each one logged in to a desktop (/run/user/<uid>/bus),
+#                                          one per line: for a system service's notes (not root's, nor the login
+#                                          screen's greeter, nor a session with no desktop: an SSH login, a background
+#                                          one)
+#   agros-each-user --notify [--user <name>] <notify-send options and text>
+#                                          said on each one's desktop (or that user's), now or once they log in (up to
+#                                          12 h): in a unit of its own (systemd-run), so it returns at once and outlives
+#                                          the caller. The system's one way to say something to the users
+#   agros-each-user --notify-wait [--user <name>] ...   the same, waiting for it here: exit 0 once someone was told
+#   (AGROS_RUN_USER: another /run/user, the tests', for both)
 set -uo pipefail
+helpers=$(dirname "$(readlink -f "$0")")
 users() {
     getent passwd | awk -F: '$3 >= 1000 && $3 < 60000 && $7 !~ /(nologin|false)$/ {print $1 ":" $6}' |
         while IFS=: read -r u h; do [[ -d $h ]] && echo "$u:$h"; done
 }
-if [[ ${1:-} == --list ]]; then users | cut -d: -f1; exit 0; fi
+as() { local u=$1; shift; setpriv --reuid="$(id -u "$u")" --regid="$(id -g "$u")" --init-groups --reset-env "$@"; }
+# desktop <user>: one of their logind sessions is a desktop's (Wayland or X11, a user's class: not a greeter's, a
+# background one, nor a text or SSH login)
+desktop() {
+    local s p
+    for s in $(loginctl show-user "$1" -p Sessions --value 2>/dev/null); do
+        p=$(loginctl show-session "$s" -p Type -p Class 2>/dev/null)
+        grep -qxE 'Type=(wayland|x11)' <<<"$p" && grep -qx 'Class=user' <<<"$p" && return 0
+    done
+    return 1
+}
+# (only a bus that's the user's own, not a link: theirs to replace, e.g. by a link to another's socket or a root file)
+sessions() {
+    local u b uid
+    while IFS=: read -r u _; do
+        [[ -z ${1:-} || $u == "$1" ]] || continue
+        uid=$(id -u "$u")
+        b=${AGROS_RUN_USER:-/run/user}/$uid/bus
+        [[ -e $b && ! -L $b && $(stat -c %u "$b") == "$uid" ]] && desktop "$u" && echo "$b"
+    done < <(users)
+}
+case ${1:-} in
+    --list) users | cut -d: -f1; exit 0 ;;
+    --sessions) sessions; exit 0 ;;
+    --as) shift; as "$@"; exit ;;
+    --notify)
+        shift
+        exec systemd-run --quiet --collect "$helpers/agros-each-user" --notify-wait "$@" ;;
+    --notify-wait)
+        shift
+        only=
+        [[ ${1:-} == --user ]] && { only=$2; shift 2; }
+        for _ in $(seq 1440); do
+            buses=$(sessions "$only")
+            [[ -n $buses ]] && break
+            sleep 30
+        done
+        told=1
+        for bus in $buses; do
+            uid=${bus%/bus} uid=${uid##*/}
+            # (notify-when-up: the desktop's notification server may still be starting. The group the account's, not
+            # the bus file's: theirs to change)
+            setpriv --reuid="$uid" --regid="$(id -g "$uid")" --init-groups \
+                env DBUS_SESSION_BUS_ADDRESS="unix:path=$bus" XDG_RUNTIME_DIR="${bus%/bus}" \
+                "$helpers/notify-when-up" "$@" </dev/null >/dev/null 2>&1 && told=0
+        done
+        exit $told ;;
+esac
 cmd=${1:?usage: agros-each-user <command> [args...]}
 shift
 rc=0
-while IFS=: read -r u h; do
+# (the list read on a descriptor of its own: a command reading its stdin took the next users with it)
+while IFS=: read -r -u 4 u h; do
     [[ -x $h/.local/bin/$cmd ]] || continue
-    runuser -u "$u" -- env HOME="$h" USER="$u" LOGNAME="$u" XDG_RUNTIME_DIR="/run/user/$(id -u "$u")" \
-        DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$(id -u "$u")/bus" "$h/.local/bin/$cmd" "$@" || rc=1
-done < <(users)
+    run=${AGROS_RUN_USER:-/run/user}/$(id -u "$u")
+    as "$u" env XDG_RUNTIME_DIR="$run" DBUS_SESSION_BUS_ADDRESS="unix:path=$run/bus" "$h/.local/bin/$cmd" "$@" || rc=1
+done 4< <(users)
 exit $rc

@@ -6,7 +6,7 @@ hl.layer_rule({ match = { namespace = "desktop-widgets" }, blur = true, ignore_a
 hl.on("hyprland.start", function() hl.exec_cmd("~/.local/bin/widgets-start") end)
 
 -- Login screen: copy the current wallpaper and Caelestia colours to it
--- Code: ~/.local/share/caelestia-greeter (install with sudo bash install.sh)
+-- Code: ~/.local/share/caelestia-greeter (installed by the agros-greeter package)
 hl.on("hyprland.start", function() hl.exec_cmd("~/.local/bin/greeter-theme-sync") end)
 
 -- Clear the text console under the desktop, so no old text shows when the desktop closes (shutdown)

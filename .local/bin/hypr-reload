@@ -1,0 +1,28 @@
+#!/bin/sh
+# hypr-reload [--tell]: Hyprland's config loaded again, the scripts' one way to do it (dots-settings, capri-update,
+# vm-screen-follow, workspaces.lua). After any game: a reload takes a fullscreen game out of fullscreen (after-games
+# beside this file). Hyprland named, as after-games does: from an SSH login or a text console the reload failed with
+# nothing said. Quiet, its output let go at once: a caller that runs it in the background (setsid -f) isn't held
+# until the game closes. --tell: a change the user made (the Settings app's), said once in a notification when it
+# waits for a game; the scripts' own reloads (a screen plugged in, a workspace) wait without one
+exec >/dev/null 2>&1
+bin=$(dirname "$(readlink -f "$0")")
+tell=false; [ "${1:-}" = --tell ] && tell=true
+# A game open: one waiter per game (as caelestia-restart's); later requests during it leave it to that one's reload,
+# which reads the config then (the lock held through the reload). A --tell one said even when a waiter is there
+if "$bin/game-focus" --game-open; then
+    exec 7>"${XDG_RUNTIME_DIR:-/tmp}/hypr-reload-pending"
+    if ! flock -n 7; then
+        $tell && [ ! -e "${XDG_RUNTIME_DIR:-/tmp}/hypr-reload-told" ] && : >"${XDG_RUNTIME_DIR:-/tmp}/hypr-reload-told" &&
+            setsid -f "$bin/notify-when-up" -a Hyprland "Applied once your game closes" \
+                "Your change to the desktop applies then: now it would take the game out of fullscreen" </dev/null 7>&-
+        exit 0
+    fi
+    rm -f "${XDG_RUNTIME_DIR:-/tmp}/hypr-reload-told"
+    $tell && : >"${XDG_RUNTIME_DIR:-/tmp}/hypr-reload-told" &&
+        setsid -f "$bin/notify-when-up" -a Hyprland "Applied once your game closes" \
+            "Your change to the desktop applies then: now it would take the game out of fullscreen" </dev/null 7>&-
+    "$bin/after-games" 7>&-
+    rm -f "${XDG_RUNTIME_DIR:-/tmp}/hypr-reload-told"
+fi
+exec hyprctl -i "${HYPRLAND_INSTANCE_SIGNATURE:-0}" reload

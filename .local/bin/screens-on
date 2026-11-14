@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# screens-on: the screens Hyprland has switched off (DPMS) switched back on, in each of your Hyprland sessions. Run
+# after waking from sleep, as each user (agros-system's sleep hook, agros-screens-resume): Caelestia's idle switches the
+# screens off (10 min) before its idle sleep (30 min), and on again only at the next key or mouse move, so the PC woke to
+# black screens. Only when one is off: nothing done to screens already on (a fullscreen game's left as it is). No
+# reload, no pointer moved. Tried 10 times, a second apart: just after waking, Hyprland (a frozen session thawed, the
+# NVIDIA driver resumed) may not answer or take it yet. Each of its answers waited for up to 3 s, so a Hyprland that
+# doesn't answer holds this for up to ~40 s (~70 s when it answers the check but not the switch), each session in turn
+on='hl.dsp.dpms({ action = "enable" })'  # (the Lua config's dispatcher, as Caelestia's idle sends it)
+for sock in "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"/hypr/*/.socket.sock; do
+    [[ -S $sock ]] || continue
+    sig=${sock%/.socket.sock} sig=${sig##*/}
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+        # (a screen off: "dpmsStatus: 0"; no answer: tried again)
+        out=$(timeout 3 hyprctl -i "$sig" monitors 2>/dev/null) && ! grep -q 'dpmsStatus: 0' <<<"$out" && break
+        [[ -z $out ]] || timeout 3 hyprctl -i "$sig" dispatch "$on" >/dev/null 2>&1
+        sleep 1
+    done
+done
+exit 0

@@ -5,6 +5,8 @@
 //   click pick)
 // Alt+Tab opens the same panel for the windows of the current workspace instead (minimised ones too, which come
 // back when picked), most recently used first, so a quick Alt+Tab goes to the previous window; releasing Alt picks
+// A × on the selected card and the one under the mouse closes that window (Alt+Tab), or moves that workspace's windows
+// to the nearest one with windows (Super+Tab: dots.clean_workspace in user/workspaces.lua); the switcher stays open
 // The keys are bound in ~/.config/caelestia/user/keys.lua to these global shortcuts: Hyprland hands them over in the
 // order they happen, so a quick Super+Tab (Super let go before this has even opened) still switches. Workspaces are columns as in
 // the synced Super+N: workspace N is N on every screen, and switching goes through dots.goto_workspace(N) there.
@@ -50,7 +52,10 @@ ShellRoot {
 
     property bool open: false
     // Super+click free for the previews while open (Caelestia's window drag otherwise takes it: keys.lua)
-    onOpenChanged: Quickshell.execDetached(["hyprctl", "eval", `dots.switcher_open(${open})`])
+    onOpenChanged: {
+        cleaning = [];
+        Quickshell.execDetached(["hyprctl", "eval", `dots.switcher_open(${open})`]);
+    }
     property string mode: "workspaces" // or "windows" (Alt+Tab)
     property var cards: [] // workspace columns (1-10), or windows, in the order shown
     property int selected: 0
@@ -59,9 +64,10 @@ ShellRoot {
     readonly property HyprlandMonitor monitor: Hyprland.focusedMonitor
     readonly property int current: column(activeId())
 
-    // Workspaces as Hyprland last reported them (the IPC data, refreshed before each use), not Quickshell's objects: a
-    // window that opened on a workspace Quickshell wasn't tracking yet (this starts at login, before workspace 1 exists)
-    // has none, and Alt+Tab then found no windows at all until the switcher was restarted
+    // A window's workspace as Hyprland last reported it (the IPC data, refreshed before each use), Quickshell's object
+    // only when that's missing: a window that opened on a workspace Quickshell wasn't tracking yet (this starts at
+    // login, before workspace 1 exists) has none, and Alt+Tab then found no windows at all until the switcher was
+    // restarted
     function wsOf(t: var): var {
         return t.lastIpcObject?.workspace ?? t.workspace ?? null;
     }
@@ -84,6 +90,12 @@ ShellRoot {
 
     function windowsIn(col: int): var {
         return Hyprland.toplevels.values.filter(t => wsOf(t) && columnOf(t) === col && t.lastIpcObject?.mapped);
+    }
+
+    // Whether a workspace has windows the Super+Tab × moves or joins: not pinned ones, which show on every workspace
+    // (dots.clean_workspace's place(), user/workspaces.lua)
+    function movableIn(col: int): bool {
+        return windowsIn(col).some(t => !t.lastIpcObject?.pinned);
     }
 
     // The current workspace's windows (and its minimised ones, on special:minimised-N: user/windows.lua), last used first.
@@ -152,13 +164,22 @@ ShellRoot {
         function onValuesChanged(): void {
             if (!root.open || root.mode !== "windows")
                 return;
-            const picked = root.cards[root.selected];
-            root.cards = root.cards.filter(c => Hyprland.toplevels.values.includes(c));
+            root.keepCards(root.cards.filter(c => Hyprland.toplevels.values.includes(c)));
             if (!root.cards.length)
                 root.open = false;
-            else // the same window stays picked (its index moves when one before it goes)
-                root.selected = root.cards.includes(picked) ? root.cards.indexOf(picked) : Math.min(root.selected, root.cards.length - 1);
         }
+    }
+
+    // Cards gone (a window closed, a workspace emptied by its ×): the selection stays on the card it was on (its index
+    // moves when one before it goes), else goes to the one before it: not on to the next, which releasing would pick
+    // though it was never chosen
+    function keepCards(kept: var): void {
+        const old = cards;
+        let i = selected;
+        while (i > 0 && !kept.includes(old[i]))
+            i--;
+        cards = kept;
+        selected = Math.max(0, kept.indexOf(old[i]));
     }
 
     function commit(): void {
@@ -179,12 +200,82 @@ ShellRoot {
             Quickshell.execDetached(["hyprctl", "eval", `dots.goto_workspace(${col})`]);
     }
 
+    // A card's ×: on the selected card and the one under the mouse; clicking it only does this (not a pick). The title
+    // bars' close button (user/titlebars.lua, the hyprbars patch): 40x32, no background, Material Symbols "close" at
+    // 16 px in onSurface; under the mouse a 6 px-rounded pill 4 px in from its edges, in error with an onError icon. On a
+    // frame narrower than three of it (a tall window's in Alt+Tab), all of it smaller in proportion
+    component CloseButton: Item {
+        id: cb
+
+        property bool shown
+        readonly property bool hovered: cbMouse.containsMouse
+        signal clicked
+
+        anchors.top: parent.top
+        anchors.right: parent.right
+        anchors.margins: 6
+        implicitWidth: 40
+        implicitHeight: 32
+        scale: Math.min(1, (parent?.width ?? 120) / 120)
+        transformOrigin: Item.TopRight
+        visible: shown || hovered
+
+        Rectangle {
+            anchors.fill: parent
+            anchors.margins: 4
+            radius: 6
+            color: root.c("error")
+            visible: cb.hovered
+        }
+
+        Text {
+            anchors.centerIn: parent
+            text: "close"
+            font.family: "Material Symbols Rounded"
+            font.pixelSize: 16
+            color: cb.hovered ? root.c("onError") : root.c("onSurface")
+        }
+
+        MouseArea {
+            id: cbMouse
+
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: cb.clicked()
+        }
+    }
+
+    // Alt+Tab's ×: the window closes as with its close key (asked, not killed; its card goes when it has: the toplevels
+    // Connections above)
+    function closeWindow(w: var): void {
+        Quickshell.execDetached(["hyprctl", "eval", `hl.dispatch(hl.dsp.window.close({ window = "address:0x${w.address}" }))`]);
+    }
+
+    // Super+Tab's ×: its windows go to the nearest workspace with windows (dots.clean_workspace, user/workspaces.lua);
+    // its card goes too, unless it's the current one, once its windows have left (Hyprland's movewindow events refresh
+    // the windows' data, the Connections below): with nowhere to go (merge_target found none) they stay, and so does it
+    property var cleaning: []
+    function cleanWorkspace(col: int): void {
+        Quickshell.execDetached(["hyprctl", "eval", `dots.clean_workspace(${col})`]);
+        if (col !== current && cards.includes(col))
+            cleaning = [...cleaning, col];
+    }
+    readonly property var cleaned: open && mode === "workspaces" ? cleaning.filter(c => !movableIn(c)) : []
+    onCleanedChanged: {
+        if (!cleaned.length)
+            return;
+        keepCards(cards.filter(c => !cleaned.includes(c)));
+        cleaning = cleaning.filter(c => !cleaned.includes(c));
+    }
+
     // A window's icon: the dock's and bar's lookup, ../common/WindowApps.qml
     Loader {
         id: windowApps
         source: `file://${Quickshell.shellPath("../common/WindowApps.qml")}`
     }
-    function iconFor(cls: string): string {
+    // (apps: the app list's length, passed only so a binding calling this is looked up again once that list has loaded)
+    function iconFor(cls: string, apps: int): string {
         return Quickshell.iconPath(windowApps.item?.iconName(cls) ?? "", "application-x-executable");
     }
 
@@ -321,8 +412,12 @@ ShellRoot {
                 anchors.centerIn: parent
                 spacing: win.spacing
 
+                // (kept per workspace as cards go, like Alt+Tab's: a plain list rebuilt every live picture at once,
+                // what crashed Caelestia's shell)
                 Repeater {
-                    model: root.open && root.mode === "workspaces" ? root.cards : []
+                    model: ScriptModel {
+                        values: root.open && root.mode === "workspaces" ? root.cards : []
+                    }
 
                     ColumnLayout {
                         id: card
@@ -343,7 +438,7 @@ ShellRoot {
                             radius: 18
                             color: "transparent"
                             // Picked: the full colour; under the mouse only: a faint one
-                            border.color: card.isSelected ? root.c("primary") : cardMouse.containsMouse ? Qt.alpha(root.c("primary"), 0.35) : "transparent"
+                            border.color: card.isSelected ? root.c("primary") : cardMouse.containsMouse || cardClose.hovered ? Qt.alpha(root.c("primary"), 0.35) : "transparent"
                             border.width: 3
 
                             Behavior on border.color {
@@ -404,6 +499,14 @@ ShellRoot {
                                     root.commit();
                                 }
                             }
+
+                            // (none on an empty workspace, or with no other workspace's windows to join)
+                            CloseButton {
+                                id: cardClose
+
+                                shown: (card.isSelected || cardMouse.containsMouse) && root.movableIn(card.modelData) && root.cards.some(c => c !== card.modelData && root.movableIn(c))
+                                onClicked: root.cleanWorkspace(card.modelData)
+                            }
                         }
 
                         // Number and app icons, grouped in the middle under the preview
@@ -437,7 +540,7 @@ ShellRoot {
                                     anchors.verticalCenter: parent?.verticalCenter
                                     implicitSize: 22
                                     // Looked up again once the app list has loaded (it loads in the background)
-                                    source: (DesktopEntries.applications.values.length, root.iconFor(modelData))
+                                    source: root.iconFor(modelData, DesktopEntries.applications.values.length)
                                 }
                             }
                         }
@@ -474,7 +577,7 @@ ShellRoot {
                             radius: 18
                             color: "transparent"
                             // Picked: the full colour; under the mouse only: a faint one
-                            border.color: wcard.isSelected ? root.c("primary") : wcardMouse.containsMouse ? Qt.alpha(root.c("primary"), 0.35) : "transparent"
+                            border.color: wcard.isSelected ? root.c("primary") : wcardMouse.containsMouse || wcardClose.hovered ? Qt.alpha(root.c("primary"), 0.35) : "transparent"
                             border.width: 3
 
                             Behavior on border.color {
@@ -491,7 +594,7 @@ ShellRoot {
                                 IconImage {
                                     anchors.centerIn: parent
                                     implicitSize: 48
-                                    source: (DesktopEntries.applications.values.length, root.iconFor(wcard.ipc.class))
+                                    source: root.iconFor(wcard.ipc.class, DesktopEntries.applications.values.length)
                                 }
 
                                 ScreencopyView {
@@ -513,6 +616,13 @@ ShellRoot {
                                     root.commit();
                                 }
                             }
+
+                            CloseButton {
+                                id: wcardClose
+
+                                shown: wcard.isSelected || wcardMouse.containsMouse
+                                onClicked: root.closeWindow(wcard.modelData)
+                            }
                         }
 
                         // App icon and title, in the middle under the preview
@@ -524,7 +634,7 @@ ShellRoot {
                             IconImage {
                                 anchors.verticalCenter: parent.verticalCenter
                                 implicitSize: 22
-                                source: (DesktopEntries.applications.values.length, root.iconFor(wcard.ipc.class))
+                                source: root.iconFor(wcard.ipc.class, DesktopEntries.applications.values.length)
                             }
 
                             Text {

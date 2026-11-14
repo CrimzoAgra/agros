@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# pacman-lock-holder [<pacman's db folder>]: something running that may hold pacman's lock, "<pid> <its command>" (exit
+# 1: none). The one list of what takes it (dotfiles-check, auto-update): pacman (paru, yay and the shutdown install run
+# it) and the programs built on its library (pamac's daemon, PackageKit's); pacman-key and paccache don't. Not pacman on
+# other lists (-b/--dbpath elsewhere: checkupdates', the boot's download; -r/--root another system's, whose list is in
+# that root) nor one only reading: a query (-Q..., paru -Qua), a dependency test (-T), a search, info, list or group
+# listing (-Ss, -Si, -Sl, -Sg, without -y/-u), what it would do printed (-p/--print), the files database read (-F, not
+# -Fy), paru's and yay's PKGBUILD download (-G)
+def=${PACMAN_DB_DIR:-/var/lib/pacman}  # (pacman's own list; PACMAN_DB_DIR: the tests' stand-in for it)
+pacdb=${1:-$def}
+# read_only <its arguments>: the operation only reads (its letters gathered across -S -s too; the long forms as well)
+read_only() {
+    local a letters='' long=' ' op
+    for a; do
+        case $a in
+            --) break ;;
+            --*) long+="${a%%=*} " ;;
+            -*) letters+=${a#-} ;;
+        esac
+    done
+    op=${letters//[!A-Z]/}
+    op=${op:0:1}
+    case $long in
+        *' --query '*) op=Q ;; *' --deptest '*) op=T ;; *' --files '*) op=F ;; *' --getpkgbuild '*) op=G ;;
+        *' --sync '*) op=S ;;
+    esac
+    # (refreshing the lists, upgrading or cleaning: these write)
+    if [[ $letters == *[yuc]* || $long == *' --refresh '* || $long == *' --sysupgrade '* || $long == *' --clean '* ]]; then
+        [[ $op == [QTG] ]]
+        return
+    fi
+    case $op in
+        Q | T | G | F) return 0 ;;
+        S) [[ $letters == *[silgp]* || $long =~ \ --(search|info|list|groups|print)\  ]] ;;
+        U | R) [[ $letters == *p* || $long == *' --print '* ]] ;;
+        *) return 1 ;;
+    esac
+}
+for p in $(pgrep -x 'pacman|paru|yay|pamac|pamac-daemon|packagekitd|octopi-helper'); do
+    # (split at spaces too: a program that renamed itself, as perl's $0, has its whole command line as one argument)
+    # (2>/dev/null first: a process gone since pgrep fails the redirect itself, whose message it then covers)
+    read -ra argv < <(tr '\0' ' ' 2>/dev/null <"/proc/$p/cmdline") || [[ ${#argv[@]} -gt 0 ]] || continue
+    # Its list: -b/--dbpath's, else the one in -r/--root's system, else pacman's own. Those options' values left out of
+    # what read_only judges (a path's letters taken for -y, -u, -c)
+    db='' root='' args=()
+    for ((i = 1; i < ${#argv[@]}; i++)); do
+        a=${argv[i]}
+        case $a in
+            --) args+=("${argv[@]:i}"); break ;;
+            --dbpath | -b) db=${argv[i + 1]-}; i=$((i + 1)) ;;
+            --dbpath=*) db=${a#--dbpath=} ;;
+            -b?*) db=${a#-b} ;;
+            --root | -r) root=${argv[i + 1]-}; i=$((i + 1)) ;;
+            --root=*) root=${a#--root=} ;;
+            -r?*) root=${a#-r} ;;
+            *) args+=("$a") ;;
+        esac
+    done
+    [[ -n $db || -z $root ]] || db=${root%/}/var/lib/pacman
+    db=${db:-$def}
+    [[ ${db%/} != "${pacdb%/}" ]] && continue
+    read_only "${args[@]}" && continue
+    echo "$p ${argv[*]}"
+    exit 0
+done
+exit 1

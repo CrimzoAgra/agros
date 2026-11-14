@@ -74,7 +74,7 @@ def on_window_open(addr, ws):
         hidden_at_loss = None
         if ws != "special:hidden":
             subprocess.run(["hyprctl", "eval", f'dots.spotify_hide("{addr}")'], capture_output=True)
-        subprocess.Popen([os.path.expanduser("~/.local/bin/spotify-tray")], start_new_session=True,
+        subprocess.Popen([os.path.join(os.path.dirname(os.path.realpath(__file__)), "spotify-tray")], start_new_session=True,
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 

@@ -3,8 +3,9 @@
 # inherits the game's id) isn't, nor is the game unmuted for having Steam's window above it; a Flatpak game's sound
 # (its sandbox's pid) is muted too, but not a pid two games' sandboxes both have
 set -euo pipefail
+# shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
-cleanup() { kill $(cat "$t"/{helper,sound,windowless,browser,game} 2>/dev/null) 2>/dev/null || true; pkill -P $$ 2>/dev/null || true; kill -KILL $(cat "$t/unshare" 2>/dev/null) 2>/dev/null || true; rm -rf "$t"; }  # (grandchildren too)
+cleanup() { cat "$t"/{helper,sound,windowless,browser,game} 2>/dev/null | xargs -r kill 2>/dev/null || true; pkill -P $$ 2>/dev/null || true; kill -KILL "$(cat "$t/unshare" 2>/dev/null)" 2>/dev/null || true; rm -rf "$t"; }  # (grandchildren too)
 trap cleanup EXIT
 # (the Flatpak case runs a sandbox of its own: user namespaces, which containers like CI's don't allow)
 unshare -Urpf true 2>/dev/null || { echo "skip game-focus-audio (no user namespaces)"; exit 0; }
@@ -71,5 +72,11 @@ other.kill(); other.wait()
 if not same: sys.exit("FAIL: the second sandbox's process didn't get the same pid")
 if found != -1: sys.exit(f"FAIL: a pid two games' sandboxes have was taken as one's ({found})")
 if own <= 0: sys.exit("FAIL: the game's process not found in its own sandbox beside another's")
+# A Steam id kept for a pid now another process's (its start time not the one kept): dropped, the live ones kept
+stale = (pid["windowless"], "1")
+gf.steam_ids[stale] = ("9999", True)
+gf._update()
+if stale in gf.steam_ids: sys.exit("FAIL: a Steam id kept for a pid used again by another process")
+if (pid["game"], gf.started(pid["game"])) not in gf.steam_ids: sys.exit("FAIL: the running game's Steam id dropped")
 print("ok game-focus-audio")
 P

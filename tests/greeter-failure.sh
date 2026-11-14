@@ -3,6 +3,7 @@
 # password"), the other obvious ones too, anything else as it came. Its failureText function run by node (its type
 # annotations taken off), and the file parsing (qmllint), where they're installed
 set -euo pipefail
+# shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 qml=$here/.local/share/caelestia-greeter/shell.qml
 grep -q 'root.message = root.pamMessage || root.failureText(message);' "$qml" || fail "onAuthFailure doesn't use failureText (PAM's own message first)"

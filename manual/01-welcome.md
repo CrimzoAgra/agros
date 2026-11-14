@@ -15,7 +15,8 @@ to piece together.
   [Apps](08-apps.md).
 - **Gaming**: Steam, Lutris (one library for Steam, EA, Ubisoft, Epic, GOG, Battle.net and Rockstar), Proton,
   MangoHud and Gamescope. See [Gaming](09-gaming.md).
-- **Updates that look after themselves**: everything is updated at boot and installed when you shut down. See
+- **Updates that look after themselves**: Flatpaks, AppImages, Proton builds and developer tools are updated at boot,
+  and the system's updates, your AUR apps and firmware are prepared then and installed when you shut down. See
   [Updates](12-updates.md).
 
 ## What it isn't

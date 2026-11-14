@@ -158,12 +158,13 @@ ShellRoot {
     }
 
     // One long-running nvidia-smi instead of spawning one every few seconds. Only when the NVIDIA card drives a
-    // screen: on a laptop that shows the desktop on its other GPU, asking every 2 s would keep the NVIDIA card awake
-    // and drain the battery. Looked for again every 10 s until there is one (a screen plugged in later), and every
-    // minute while there is (unplugged: nvidia-smi stopped, the meter hidden); not at all without NVIDIA's driver
+    // screen (~/.local/bin/nvidia-screen, VA-API's check too): on a laptop that shows the desktop on its other GPU,
+    // asking every 2 s would keep the NVIDIA card awake and drain the battery. Looked for again every 10 s until there is one (a screen plugged in later), and every
+    // minute while there is (unplugged: nvidia-smi stopped, the meter hidden); not at all without NVIDIA's driver.
+    // That card only (--id=<its PCI address>): two printed a line each, the meter jumping between them
     Process {
         running: true
-        command: ["sh", "-c", "[ -d /sys/module/nvidia ] || exit 0; while :; do on=; for s in /sys/class/drm/card*-*/status; do c=${s%/*}; c=${c##*/}; [ \"$(cat \"$s\")\" = connected ] && [ \"$(basename \"$(readlink /sys/class/drm/${c%%-*}/device/driver)\")\" = nvidia ] && on=1; done; if [ -n \"$on\" ]; then timeout 60 nvidia-smi --query-gpu=utilization.gpu,temperature.gpu --format=csv,noheader,nounits -l 2; [ $? = 124 ] && continue; fi; echo off; sleep 10; done"]
+        command: ["sh", "-c", "[ -d /sys/module/nvidia ] || exit 0; while :; do on=$(\"$1\" --id); if [ -n \"$on\" ]; then timeout 60 nvidia-smi --id=\"$on\" --query-gpu=utilization.gpu,temperature.gpu --format=csv,noheader,nounits -l 2; [ $? = 124 ] && continue; fi; echo off; sleep 10; done", "sh", `${root.home}/.local/bin/nvidia-screen`]
         stdout: SplitParser {
             onRead: line => {
                 if (line.trim() === "off") {
@@ -174,7 +175,7 @@ ShellRoot {
                 const [u, t] = line.split(",").map(s => parseInt(s));
                 if (!isNaN(u)) {
                     root.gpu = u / 100;
-                    root.gpuTemp = t;
+                    root.gpuTemp = isNaN(t) ? 0 : t; // ("[N/A]": no heat shown, as the CPU's)
                 }
             }
         }
@@ -1181,7 +1182,7 @@ ShellRoot {
                             visible: root.gpu >= 0
                             label: "GPU"
                             value: root.gpu
-                            detail: root.gpuTemp + "°C"
+                            detail: root.gpuTemp > 0 ? root.gpuTemp + "°C" : ""
                         }
                         Meter {
                             label: "SSD"

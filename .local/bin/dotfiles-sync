@@ -6,11 +6,9 @@
 #   dotfiles-sync add <file>   start keeping a new file (e.g. ~/.config/foo/bar.conf), then sync
 # Only files already in the repo are synced; use "add" for new ones. Only what it copies (or what matches yours at home)
 # is committed: a repo copy you edit there, newer than yours, is skipped and left out, as is any other edit in the repo.
-# The repos: $DOTFILES_DIR (default: where setup ran from, else ~/Projects/agros) and $LEGION_CONTROL_DIR (~/Projects/legion-control-linux).
+# The repos: $DOTFILES_DIR (default: ~/Projects/agros) and $LEGION_CONTROL_DIR (~/Projects/legion-control-linux).
 set -euo pipefail
-# Where setup ran from (it records it), while that is still a repo
-rec=$(cat "$HOME/.local/state/dotfiles-repo" 2>/dev/null) && [[ -e $rec/.git ]] || rec=$HOME/Projects/agros
-repo=${DOTFILES_DIR:-$rec}
+repo=${DOTFILES_DIR:-$HOME/Projects/agros}
 legion=${LEGION_CONTROL_DIR:-$HOME/Projects/legion-control-linux}
 dry=false
 git -C "$repo" rev-parse --git-dir >/dev/null 2>&1 || { echo "No dotfiles repo at $repo (DOTFILES_DIR)"; exit 1; }
@@ -62,7 +60,8 @@ if [[ ${1:-} == add ]]; then
         f=$(readlink -f "$f")
         [[ $f == "$HOME"/* && -f $f ]] || { echo "Not a file in your home: $f"; exit 1; }
         rel=${f#"$HOME"/}
-        # Only these are synced back and installed by setup: anything else would be committed once, then forgotten
+        # Only these are synced back and installed by the packages (/etc/skel): anything else would be committed once,
+        # then forgotten
         [[ $rel == .config/* || $rel == .local/* ]] || { echo "Only files in ~/.config or ~/.local are kept: $f"; exit 1; }
         # (the Settings app's values and keys are this machine's, kept out of the repo)
         [[ $rel != .config/dots/* && $rel != *.key ]] || { echo "Kept out of the repo on purpose (per-machine settings, keys): $f"; exit 1; }
@@ -76,7 +75,7 @@ elif [[ ${1:-} == -n ]]; then
 fi
 
 # shared <file> <path in repo>: the file as the repo keeps it. Caelestia's settings without the weather location, which
-# is each machine's own (a fresh install finds it by IP; setup keeps yours)
+# is each machine's own (a fresh install finds it by IP)
 shared() {
     if [[ $2 == .config/caelestia/shell.json ]] && jq -e . "$1" >/dev/null 2>&1; then
         jq --indent 4 '.services.weatherLocation = ""' "$1"
@@ -100,15 +99,19 @@ forget() { awk -v p="$2" 'substr($0, 67) != p' "$1" 2>/dev/null || true; }
 # own_copy <repo> <file>: the repo's copy is still the one the sync wrote
 own_copy() { grep -qxF "$(sum "$1/$2")  $2" "$(written "$1")" 2>/dev/null; }
 
+# linked <live dir> <file>: the file is a link, or reached through one (its real path isn't where it's named)
+linked() { [[ -L $1/$2 || $(realpath "$1/$2") != "$(realpath "$1")/$2" ]]; }
+
 # sync <repo> <live dir> <files...>: copy changed live files over the repo copies
 sync() {
     local dir=$1 live=$2 f
     shift 2
     for f in "$@"; do
         [[ -f $live/$f ]] || continue
-        # A link setup left in place (e.g. Claude Code's installer's ~/.local/bin/claude): copying it would put the
-        # ~200 MB program it points to over the repo's script, and GitHub refuses it
-        [[ -L $live/$f ]] && continue
+        # A link, or a file in a linked folder (the packages' links into /usr/lib/agros; Claude Code's installer's
+        # ~/.local/bin/claude): copying it would put what it points to over the repo's copy (a ~200 MB program GitHub
+        # refuses; an installed version over your edit)
+        linked "$live" "$f" && continue
         if ! shared "$live/$f" "$f" | cmp -s - "$dir/$f"; then
             # The repo's copy changed after yours (pulled from the other machine, not yet copied home: a pull sets the
             # file's time to then; this script's own copies leave it older than your edit): yours would undo that
@@ -188,7 +191,7 @@ push() {
     # in the folder). Only they are committed (commit -- <files>: anything else staged stays staged)
     ((${#synced[@]} == 0)) || mapfile -d '' -t changed < <(git -C "$dir" diff -z --name-only HEAD -- "${synced[@]}" 2>/dev/null)
     for f in "${changed[@]}"; do
-        [[ -f $live/$f && ! -L $live/$f ]] && shared "$live/$f" "$f" | cmp -s - "$dir/$f" && commit+=("$f")
+        [[ -f $live/$f ]] && ! linked "$live" "$f" && shared "$live/$f" "$f" | cmp -s - "$dir/$f" && commit+=("$f")
     done
     ((${#made[@]} == 0)) ||
         mapfile -d '' -t -O "${#commit[@]}" commit < <(git -C "$dir" diff -z --name-only HEAD -- "${made[@]}" 2>/dev/null)
@@ -268,8 +271,8 @@ import os, re, sys
 path, dry, prof = sys.argv[1], sys.argv[2] == "true", sys.argv[3]
 if not prof or not os.path.exists(path) or not os.path.exists(f"{prof}/prefs.js"):
     sys.exit()
-# A profile setup never applied settings.js to (LibreWolf was open, or it was made since): its prefs.js lacks them, and
-# each one would be dropped as "back to the default" and pushed to every machine
+# A profile agros-welcome never applied settings.js to (LibreWolf was open, or it was made since): its prefs.js lacks
+# them, and each one would be dropped as "back to the default" and pushed to every machine
 if not os.path.exists(f"{prof}/.dotfiles-imported"):
     print("  LibreWolf settings not refreshed: not applied to this profile yet (agros-welcome)")
     sys.exit()

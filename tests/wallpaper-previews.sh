@@ -4,6 +4,7 @@
 # fixed link to it (~/.local/state/caelestia/wallpaper/current), whose URL never changes, so the image cache kept the
 # old picture after a change; and a video wallpaper's still (thumbnail.jpg) only for that one, a new one tried first
 set -euo pipefail
+# shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 for f in "$here"/.config/quickshell/*/shell.qml "$here"/.local/share/caelestia-overlay/*.qml; do
     if grep -n 'source:.*wallpaper/current' "$f"; then fail "${f#"$here"/} shows the wallpaper by its fixed link"; fi

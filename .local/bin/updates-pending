@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# The updates waiting, from a list of pacman -Qu's or paru -Qua's ("name old -> new") on stdin: those pacman.conf holds
+# back (IgnorePkg, IgnoreGroup: "[ignored]" at the end) left out, so nothing counts them as waiting. Its callers run
+# pacman/paru in English (LC_ALL=C): translated, "[ignored]" isn't found. Shared by update-apps and auto-update
+# (/usr/lib/agros/bin/updates-pending)
+# (none left isn't a failure: grep's own error, 2, is)
+grep -v '\[ignored\]'
+(($? < 2))

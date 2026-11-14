@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# notify-when-up <notify-send options and text>: notify-send once the notification server takes it, the scripts' one
+# way to notify at login or from a hook. Caelestia is the server: sent while it isn't up (at login, during a restart or
+# a rebuild) a notification went to nobody, so tried again until it takes it, for up to a minute
+# (NOTIFY_WHEN_UP_TRIES, half a second apart: the tests'). As notify-send, the action picked (-A) is printed. A caller
+# that can't wait that long runs it in the background
+for _ in $(seq "${NOTIFY_WHEN_UP_TRIES:-120}"); do
+    notify-send "$@" 2>/dev/null && exit 0
+    sleep 0.5
+done
+exit 1

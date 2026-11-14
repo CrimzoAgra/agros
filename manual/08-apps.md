@@ -9,7 +9,7 @@ Everything here comes installed, listed next to the Windows app it replaces.
 | **Spotify**, themed in your colours | Spotify |
 | **LibreOffice** | Microsoft Office |
 | **VSCodium**, VS Code's open-source build | VS Code |
-| **Thunar** | File Explorer |
+| **Thunar**: the bar at the bottom shows how full the drive is (it changes colour when the drive is nearly full) | File Explorer |
 | **File Roller** + 7-Zip (Extract/Compress in the right-click menu) | WinRAR, 7-Zip |
 | **qBittorrent** | qBittorrent |
 | **Proton VPN** | Proton VPN |

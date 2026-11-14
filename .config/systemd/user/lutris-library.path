@@ -4,6 +4,7 @@ Description=Add uninstalled store games to the Lutris library
 PartOf=graphical-session.target
 
 [Path]
-PathChanged=%h/.local/share/lutris/pga.db
+# (%D: the user manager's XDG_DATA_HOME, ~/.local/share without it: where Lutris keeps its library too)
+PathChanged=%D/lutris/pga.db
 # Not stopped by bursts of writes either (the service waits them out)
 TriggerLimitIntervalSec=0

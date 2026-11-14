@@ -2,7 +2,7 @@
 local vars = {
     -- The pointer: Bibata (Caelestia's sweet-cursors isn't installed)
     cursorTheme = "Bibata-Modern-Ice",
-    browser = "librewolf",  -- Super+W: Caelestia's is Firefox, which setup leaves out (LibreWolf instead)
+    browser = "librewolf",  -- Super+W: Caelestia's is Firefox, which AgrOS leaves out (LibreWolf instead)
     -- Sleep (Super+Shift+L, the touchpad's 4-finger swipe down): plain suspend where hibernating can't work, as on
     -- CachyOS's default zram-only swap (Caelestia's suspend-then-hibernate alone then did nothing)
     sleepGestureCmd = "systemctl suspend-then-hibernate || systemctl suspend",
@@ -30,16 +30,19 @@ local vars = {
     kbClearNotifs              = "CTRL + ALT + C",
 }
 
--- Its shortcuts changed in the Settings app (Keyboard page): caelestia-keys.<variable>, a list of shortcuts, in
+-- Its shortcuts changed in the Settings app (Shortcuts page): caelestia-keys.<variable>, a list of shortcuts, in
 -- ~/.config/dots/settings.lua (~/.local/bin/dots-settings). One as a plain string: the "mod + 0-9" ones must be.
 -- The ones turned off above aren't listed there, so these can't undo them. A value that isn't a list (a hand edit of
 -- settings.json) is left alone: an error here, in the first file Caelestia loads and unguarded, would take the whole
--- config down
+-- config down. Its other variables changed there (Look and Mouse and keyboard pages: gaps, borders, the touchpad):
+-- caelestia-vars.<variable>, a number, true/false or text, over the ones above
 local ok, settings = pcall(dofile, os.getenv("HOME") .. "/.config/dots/settings.lua")
 for key, keys in pairs(ok and type(settings) == "table" and settings or {}) do
     -- (a key that isn't a string, from a hand edit of settings.lua, is skipped too: indexing it errored)
     local var = type(key) == "string" and key:match("^caelestia%-keys%.(kb%w+)$")
     if var and type(keys) == "table" then vars[var] = #keys == 1 and keys[1] or (#keys == 0 and "" or keys) end
+    local other = type(key) == "string" and key:match("^caelestia%-vars%.(%w+)$")
+    if other and type(keys) ~= "table" then vars[other] = keys end
 end
 -- In a VMware virtual machine (its virtual GPU, PCI vendor 0x15ad): Hyprland draws on that GPU (window animations,
 -- blur), the apps on the CPU. Apps' GPU-drawn buffers from it are refused ("invalid arguments for wl_surface.attach")
@@ -47,9 +50,15 @@ end
 -- Hyprland is up, from here because this file loads before Caelestia's own start-up (hyprland/execs.lua), so this runs
 -- first and the shell starts with it: set before, it took Hyprland's own renderer down to the CPU too
 -- (agros-system's agros-vm.sh used to set it for the whole session, in every VM: Hyprland too, on the CPU)
--- Not when Hyprland runs with agros-vmware's vmw-dmabuf shim (uwsm/env.d/vmw-dmabuf.sh): it makes Hyprland accept those
--- buffers, so the apps stay on the GPU too. The shim is Hyprland's only: cleared for every app it starts
-if os.getenv("LD_PRELOAD") == "/usr/lib/agros/vmw-dmabuf.so" then hl.env("LD_PRELOAD", "") end
+-- Not when Hyprland runs with agros-vmware's vmw-dmabuf shim (its drop-in for Hyprland's uwsm unit): it makes Hyprland accept those
+-- buffers, so the apps stay on the GPU too. The shim is Hyprland's only: taken out for every app it starts (any other
+-- preload of the session's kept)
+-- (entry by entry: a pattern left a trailing ':' when the shim wasn't first)
+local preload, kept = os.getenv("LD_PRELOAD") or "", {}
+for entry in preload:gmatch("[^:]+") do
+    if entry ~= "/usr/lib/agros/vmw-dmabuf.so" then kept[#kept + 1] = entry end
+end
+if table.concat(kept, ":") ~= preload then hl.env("LD_PRELOAD", table.concat(kept, ":")) end
 hl.on("hyprland.start", function()
     local f = io.open("/sys/class/drm/card0/device/vendor")
     local vendor = f and f:read("l")

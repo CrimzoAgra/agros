@@ -1,33 +1,104 @@
+# (AGROS_ROOT: another root, the tests' throwaway one; / when pacman runs this)
+_r=${AGROS_ROOT:-}
 # UFW's logging off, once (where UFW is installed; its setting yours after): it logged a BLOCK line every 20 s for the
-# router's multicast queries, filling the journal
+# router's multicast queries, filling the journal. The note it's done holds the level it had (the removal's to put back)
+_ufw_done=$_r/var/lib/agros/ufw-logging-off
 quiet_ufw() {
-    local done=/var/lib/agros/ufw-logging-off
-    [[ -f /etc/ufw/ufw.conf && ! -e $done ]] || return 0
+    local level
+    [[ -f $_r/etc/ufw/ufw.conf && ! -e $_ufw_done ]] || return 0
+    level=$(sed -n 's/^LOGLEVEL=//p' "$_r/etc/ufw/ufw.conf")
     # (ufw's own command: it rewrites its LOG rules too, firewall on or off; the setting alone left them. Where it
     # can't run (the installer's chroot), tried again at the next upgrade)
     ufw logging off >/dev/null 2>&1 || return 0
-    mkdir -p "${done%/*}" && touch "$done"
+    mkdir -p "${_ufw_done%/*}" && echo "$level" >"$_ufw_done"
+}
+# Passim off, once (its note: removal puts it back): fwupd's optional LAN cache, a network listener (mDNS, HTTPS on
+# 27500) sharing fwupd's metadata with the LAN, started over D-Bus by fwupd. fwupd works without it (it only logs, at
+# debug, that it isn't there), so masked: not started, by fwupd or anything else. Your own unmask stays
+_passim_done=$_r/var/lib/agros/passim-masked
+quiet_passim() {
+    [[ -e $_passim_done ]] && return 0
+    systemctl mask passim.service >/dev/null 2>&1 || return 0
+    systemctl stop passim.service >/dev/null 2>&1
+    mkdir -p "${_passim_done%/*}" && : >"$_passim_done"
 }
 
 # The services on, and the keyring's password changed with yours (passwd's PAM)
 post_install() {
-    systemctl enable bluetooth.service paccache.timer auto-update.service auto-update-install.service >/dev/null 2>&1 || true
+    systemctl enable bluetooth.service paccache.timer auto-update.service auto-update-install.service \
+        agros-wired-link.service >/dev/null 2>&1 || true
     # (the keyring's own user services masked: the one started at login, unlocked by PAM, is the one used)
     systemctl --global mask gnome-keyring-daemon.service gnome-keyring-daemon.socket >/dev/null 2>&1 || true
-    if [[ -f /etc/pam.d/passwd ]] && ! grep -q pam_gnome_keyring /etc/pam.d/passwd; then
-        echo '-password   optional     pam_gnome_keyring.so' >>/etc/pam.d/passwd
+    if [[ -f $_r/etc/pam.d/passwd ]] && ! grep -q pam_gnome_keyring "$_r/etc/pam.d/passwd"; then
+        echo '-password   optional     pam_gnome_keyring.so' >>"$_r/etc/pam.d/passwd"
     fi
-    systemctl daemon-reload >/dev/null 2>&1 || true
     quiet_ufw
+    quiet_passim
 }
 
 post_upgrade() {
-    systemctl daemon-reload >/dev/null 2>&1 || true
     quiet_ufw
+    quiet_passim
+    # The wired-link watch on, once, where an update brought it (its folder made at its first start: one turned off since
+    # stays off)
+    [[ -d $_r/var/lib/agros/wired-link ]] || systemctl enable --now agros-wired-link.service >/dev/null 2>&1 || true
+    # The running one restarted on the new version, as agros-camera-switch's is: marked here, restarted by systemd's
+    # own hooks once the transaction is over (its daemon-reload, then its enqueue-marked), on the new unit
+    systemctl -q is-active agros-wired-link.service 2>/dev/null &&
+        systemctl set-property agros-wired-link.service Markers=+needs-restart >/dev/null 2>&1
+    true
 }
 
 pre_remove() {
-    systemctl disable --now auto-update.service auto-update-install.service >/dev/null 2>&1 || true
+    # (not stopped: stopping auto-update-install runs the shutdown install, inside this pacman transaction)
+    systemctl disable --now auto-update.service >/dev/null 2>&1 || true
+    systemctl disable auto-update-install.service >/dev/null 2>&1 || true
+    systemctl disable --now agros-wired-link.service >/dev/null 2>&1 || true
     systemctl --global unmask gnome-keyring-daemon.service gnome-keyring-daemon.socket >/dev/null 2>&1 || true
-    sed -i '/^-password   optional     pam_gnome_keyring.so$/d' /etc/pam.d/passwd 2>/dev/null || true
+    sed -i '/^-password   optional     pam_gnome_keyring.so$/d' "$_r/etc/pam.d/passwd" 2>/dev/null || true
+}
+
+post_remove() {
+    # The name from before AgrOS's back in os-release and lsb-release: the copy agros-branding kept of each (all of it,
+    # PRIVACY_POLICY_URL too); made before that copy was kept, CachyOS's own script (cachyos-branding) writes CachyOS's
+    local x b=$_r/usr/share/libalpm/scripts/cachyos-branding
+    for x in "$_r/etc/os-release" "$_r/etc/lsb-release"; do
+        grep -qE '^(DISTRIB_)?ID=agros$' "$x" 2>/dev/null || continue
+        if [[ -f $x.agros-orig ]]; then
+            cp "$x.agros-orig" "$x"
+        elif [[ -x $b ]]; then
+            "$b" "${x##*/}"
+        else
+            echo "agros-system: ${x#"$_r"} still names AgrOS (no copy from before it was kept): set its names back by hand"
+        fi
+    done
+    rm -f "$_r/etc/os-release.agros-orig" "$_r/etc/lsb-release.agros-orig"
+    # What it made itself: the update's package lists, notes, AUR builds and log, and UFW's logging back as it was where it turned it off
+    # (and it's still off: a level set since is yours)
+    rm -rf "$_r/var/lib/auto-update"
+    rm -f "$_r/var/log/auto-update.log"
+    # The wired-link watch's changes in NetworkManager profiles are kept (the link was dropping without them): said, with
+    # the way back. Its ethtool ones go at the next restart
+    local f k how uuid
+    for f in "$_r"/var/lib/agros/wired-link/*; do
+        [[ -f $f ]] || continue
+        while read -r k how uuid; do
+            [[ $how == nm ]] || continue
+            case $k in
+                eee) echo "agros-system: EEE stays off in NetworkManager profile $uuid (back: nmcli connection modify uuid $uuid ethtool.eee-enabled \"\")" ;;
+                speed) echo "agros-system: NetworkManager profile $uuid still offers only 1 Gbps (back: nmcli connection modify uuid $uuid 802-3-ethernet.speed \"\" 802-3-ethernet.duplex \"\" && nmcli connection up uuid $uuid)" ;;
+            esac
+        done <"$f"
+    done
+    rm -rf "$_r/var/lib/agros/wired-link"
+    if [[ -e $_passim_done ]]; then
+        systemctl unmask passim.service >/dev/null 2>&1
+        rm -f "$_passim_done"
+    fi
+    if [[ -f $_ufw_done ]]; then
+        x=$(cat "$_ufw_done")
+        grep -qx 'LOGLEVEL=off' "$_r/etc/ufw/ufw.conf" 2>/dev/null && [[ $x != off ]] && ufw logging "${x:-low}" >/dev/null 2>&1
+        rm -f "$_ufw_done"
+    fi
+    true
 }

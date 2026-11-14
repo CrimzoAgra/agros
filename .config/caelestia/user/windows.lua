@@ -148,10 +148,6 @@ hl.bind("mouse:272", function()
     hl.timer(function() raise(hl.get_active_window()) end, { timeout = 1, type = "oneshot" })
 end, { non_consuming = true })
 
--- The window picked in the Alt+Tab switcher or the dock: focused and to the front. A minimised one comes back too
--- (the focus hook below)
--- switcher: picked with Alt+Tab, which minimises a fullscreen window you leave (a game), as on Windows; it comes back
--- fullscreen from the switcher, the dock or the restore key (Super+Alt+M)
 -- Windows' fade in (Hyprland hides the rest of a workspace behind a fullscreen window, and fades it back in when that
 -- one goes: the bare desktop showed first). Off while Alt+Tab leaves a fullscreen game, on again a moment later, as
 -- animations.lua has it (the "fade" speed and curve)
@@ -161,6 +157,10 @@ function dots.window_fades(on)
     end
 end
 
+-- The window picked in the Alt+Tab switcher or the dock: focused and to the front. A minimised one comes back too
+-- (the focus hook below)
+-- switcher: picked with Alt+Tab, which minimises a fullscreen window you leave (a game), as on Windows; it comes back
+-- fullscreen from the switcher, the dock or the restore key (Super+Alt+M)
 function dots.focus_window(address, switcher)
     local win = by_address(address)
     if not win then return end
@@ -399,7 +399,8 @@ dots.bind("window_mode", function() dots.toggle_window_mode() end)
 -- Fullscreen windows are left as they are, and games (dots.is_game) keep their own size and place: most run borderless
 -- over the whole screen, which would count as maximised and shrink them into the gaps
 local function on_open(win, retried)
-    if not (win and win.workspace) or win.floating or win.fullscreen == 2 then return end
+    -- (fullscreen: 2, or 3 maximised and fullscreen, as focus_window's; 1 is only maximised)
+    if not (win and win.workspace) or win.floating or (win.fullscreen or 0) >= 2 then return end
     -- At login a window can open before its workspace has an id: looked at again a moment later, by its address (it
     -- may have closed meanwhile). A sleep in its own process, not hl.timer: a config reload (likely at login, as the
     -- screens come up) would drop the timer, and the window, and every one opened next to it, would stay tiled
@@ -465,11 +466,6 @@ local function peek_rules()
     peek.rules = true
 end
 
-local function has_tag(w, tag)
-    for _, g in ipairs(w.tags or {}) do if g == tag then return true end end
-    return false
-end
-
 -- Drawn whole without the peek (the tags whose rules make a window opaque; a rule's tag has a "*")
 local function opaque(w)
     for _, g in ipairs(w.tags or {}) do
@@ -507,7 +503,7 @@ local function peek_set(screen, keep)
     peek_rules()
     peek_blur(true)
     peek.gen = peek.gen + 1
-    for _, w in ipairs(hl.get_windows()) do
+    for _, w in ipairs(hl.get_windows() or {}) do
         if screen ~= nil and w.monitor ~= nil and w.monitor.name == screen and not keep[w.address] then
             peek_tag(w, "dots-peek")
         elseif has_tag(w, "dots-peek") then
@@ -518,7 +514,7 @@ local function peek_set(screen, keep)
     local gen = peek.gen
     hl.timer(function()
         if gen ~= peek.gen then return end
-        for _, w in ipairs(hl.get_windows()) do peek_tag(w, nil) end
+        for _, w in ipairs(hl.get_windows() or {}) do peek_tag(w, nil) end
         peek_blur(false)
     end, { timeout = PEEK_BACK_MS, type = "oneshot" })
 end

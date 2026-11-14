@@ -2,6 +2,7 @@
 # A Steam game with no icon gets one from Steam's library cache (its hash-named .jpg, not its banners), as
 # steam_icon_<id>; one it already has is left alone
 set -euo pipefail
+# shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 HOME=$t python3 -I - "$here/.local/bin/game-focus" "$t" <<'P'
 import importlib.machinery, importlib.util, os, sys

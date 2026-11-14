@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # The camera switch's saved position (camera-switchd, its state file in a stand-in folder): written whole (beside it,
 # then renamed over it: never an empty file), and read as on only when it says on, anything else (off, empty, broken,
-# none) off; the udev rule reads it the same way (on, or the camera taken out)
+# none) off; the udev rule reads it the same way (on, or the camera taken out). Its notification run as the user's own
+# group (the account's, not the bus file's)
 set -euo pipefail
-here=$(cd "$(dirname "$0")/.." && pwd)
-t=$(mktemp -d); trap 'rm -rf "$t"' EXIT
-fail() { echo "FAIL: $*"; exit 1; }
+# shellcheck source=lib.sh source-path=SCRIPTDIR
+. "$(dirname "$0")/lib.sh"
 c=$here/.local/share/camera-switch
 python3 -I - "$c/camera-switchd" "$t" <<'P' || fail "camera-switchd's saved position"
 import importlib.machinery, importlib.util, os, sys
@@ -23,6 +23,22 @@ for text, want in (("on", True), ("on\n", True), ("off", False), ("", False), ("
     assert cs.saved_on() is want, f"{text!r} read as {cs.saved_on()}"
 os.remove(cs.STATE)
 assert cs.saved_on() is False, "no saved position read as on"
+# notify: the group from the account, never the bus file's (a user's bus a link to a root-group file gave group root);
+# a bus not owned by the uid in its path skipped
+import pwd, types
+uid = os.getuid()
+for u in (uid, 0):
+    os.makedirs(f"{sys.argv[2]}/run/{u}")
+os.symlink("/etc/passwd", f"{sys.argv[2]}/run/{uid}/bus")
+open(f"{sys.argv[2]}/run/0/bus", "w").close()
+calls = []
+def run(args, **kw):
+    calls.append(args)
+    return types.SimpleNamespace(stdout=f"{sys.argv[2]}/run/{uid}/bus {sys.argv[2]}/run/0/bus\n")
+cs.subprocess.run = run
+cs.notify(True)
+sp = [c for c in calls if c[0] == "setpriv"]
+assert len(sp) == 1 and sp[0][1:3] == [f"--reuid={uid}", f"--regid={pwd.getpwuid(uid).pw_gid}"], sp
 P
 rule=$(grep -o "RUN+=\"[^\"]*\"" "$here/packages/agros-camera-switch/90-agros-camera-switch.rules")
 sh_cmd=${rule#*-c \'}; sh_cmd=${sh_cmd%\'\"}

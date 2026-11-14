@@ -1,20 +1,27 @@
 #!/usr/bin/env bash
-# ~/.config/uwsm/env.d/nvidia-vaapi.sh (sourced by sh at login), on a stand-in /sys and driver folder: VA-API on the
-# NVIDIA card only when that card drives a connected screen (a desktop on it, or a screen plugged into it); a laptop
+# ~/.config/uwsm/env.d/nvidia-vaapi.sh (sourced by sh at login) and its nvidia-screen, on a stand-in /sys and driver
+# folder: VA-API on the NVIDIA card only when that card drives a connected screen (nvidia-screen --id: that card's PCI
+# address, the desktop widgets' stats panel's) (a desktop on it, or a screen plugged into it); a laptop
 # showing the desktop on its other GPU keeps VA-API there (the NVIDIA card left asleep); without NVIDIA's VA-API driver,
 # nothing. Nothing of its own left in the session's environment
 set -euo pipefail
+# shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 drm=$t/sys/class/drm
 mkdir -p "$t/dri" "$t/bus/drivers/i915" "$t/bus/drivers/nvidia"
-sed -e "s|/usr/lib/dri|$t/dri|g" -e "s|/sys/class/drm|$drm|g" "$here/.config/uwsm/env.d/nvidia-vaapi.sh" >"$t/env.sh"
-grep -q "$drm" "$t/env.sh" || fail "the screen check not found in nvidia-vaapi.sh"
+sed "s|/sys/class/drm|$drm|g" "$here/.local/bin/nvidia-screen" >"$t/nvidia-screen"; chmod +x "$t/nvidia-screen"
+grep -q "$drm" "$t/nvidia-screen" || fail "the screen check not found in nvidia-screen"
+sed -e "s|/usr/lib/dri|$t/dri|g" -e "s|/usr/lib/agros/bin/nvidia-screen|$t/nvidia-screen|g" \
+    "$here/.config/uwsm/env.d/nvidia-vaapi.sh" >"$t/env.sh"
+grep -q "$t/nvidia-screen" "$t/env.sh" || fail "nvidia-screen not called by its installed path in nvidia-vaapi.sh"
 if command -v shellcheck >/dev/null; then
-    out=$(shellcheck -s sh "$here/.config/uwsm/env.d/nvidia-vaapi.sh") || fail "shellcheck: $out"
+    out=$(shellcheck -s sh "$here/.config/uwsm/env.d/nvidia-vaapi.sh" "$here/.local/bin/nvidia-screen") || fail "shellcheck: $out"
 fi
-# card <n> <driver> <connector> <status>: a GPU on that driver with one screen connector
+# card <n> <driver> <connector> <status>: a GPU on that driver with one screen connector (its device: PCI address
+# 0000:0<n>:00.0)
 card() {
-    mkdir -p "$drm/card$1/device" "$drm/card$1-$3"
+    mkdir -p "$t/pci/0000:0$1:00.0" "$drm/card$1" "$drm/card$1-$3"
+    ln -sfn "$t/pci/0000:0$1:00.0" "$drm/card$1/device"
     ln -sfn "$t/bus/drivers/$2" "$drm/card$1/device/driver"
     echo "$4" >"$drm/card$1-$3/status"
 }
@@ -23,7 +30,7 @@ env_of() {
     local sh=$1
     # shellcheck disable=SC2016  # (expanded by that sh)
     env -u LIBVA_DRIVER_NAME -u NVD_BACKEND -u MOZ_DISABLE_RDD_SANDBOX "$sh" -c \
-        '. "$1"; echo "${LIBVA_DRIVER_NAME-}|${NVD_BACKEND-}|${MOZ_DISABLE_RDD_SANDBOX-}|${_nv_on-}${_nv_s-}${_nv_c-}${_nv_st-}"' _ "$t/env.sh"
+        '. "$1"; echo "${LIBVA_DRIVER_NAME-}|${NVD_BACKEND-}|${MOZ_DISABLE_RDD_SANDBOX-}|${_nv-}"' _ "$t/env.sh"
 }
 shells=(sh); command -v dash >/dev/null && shells+=(dash)
 expect() {
@@ -39,6 +46,7 @@ expect "|||" "hybrid laptop on its iGPU: VA-API sent to the NVIDIA card"
 # A screen plugged into the NVIDIA card's HDMI: it draws that one, VA-API on it
 echo connected >"$drm/card2-HDMI-A-1/status"
 expect "$on" "a screen on the NVIDIA card: VA-API not on it"
+[[ $("$t/nvidia-screen" --id) == 0000:02:00.0 ]] || fail "nvidia-screen --id: $("$t/nvidia-screen" --id)"
 # A desktop with only the NVIDIA card
 rm -r "$drm"/card1 "$drm"/card1-*
 card 0 nvidia DP-1 connected

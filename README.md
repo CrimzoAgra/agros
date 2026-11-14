@@ -23,7 +23,7 @@ Alt+Tab works the way you expect, and every app is listed next to the Windows ap
   <img alt="Latest ISO" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fsourceforge.net%2Fprojects%2Fagros-iso%2Fbest_release.json&query=%24.release.date&label=latest%20ISO&color=4c6ef5">
 </p>
 
-The ISO is about 3.7 GB and always the newest: a new one is built and published by itself after each change. Put it
+The ISO is about 3.6 GB and always the newest: a new one is built and published by itself after each change. Put it
 on a USB stick and install: [Installing](manual/02-installing.md). Earlier ISOs, with their checksums and signatures:
 [all downloads](https://sourceforge.net/projects/agros-iso/files/iso/).
 

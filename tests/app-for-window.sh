@@ -2,6 +2,7 @@
 # app-for-window: a window's app file by its class's last part, by its program (through a link: LibreOffice), a Wine
 # .exe, hidden apps last, or none
 set -euo pipefail
+# shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 a=$t/share/applications
 mkdir -p "$a" "$t/bin"

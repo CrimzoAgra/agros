@@ -1,0 +1,19 @@
+#!/bin/sh
+# The store launchers that run under Wine next to their games (in the game's prefix), the one list: their programs,
+# one per line, lowercase, as the end of a Windows path. A process is one when its command line (lowercase, "/" and its
+# argument breaks read as "\") has "\<line>" in it. Read by game-focus (a launcher's window isn't a game's, though under
+# Proton it gets the games' class; closing a game closes its launcher) and user/apps.lua (dots.is_game)
+cat <<'LIST'
+eadesktop.exe
+ealauncher.exe
+eabackgroundservice.exe
+upc.exe
+ubisoftconnect.exe
+epicgameslauncher.exe
+battle.net.exe
+galaxyclient.exe
+rockstarlauncher.exe
+launcher_patcher.exe
+rockstar games\launcher\launcher.exe
+rockstar games\launcher\launcherpatcher.exe
+LIST

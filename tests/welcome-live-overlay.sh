@@ -6,15 +6,19 @@
 #   /etc/xdg): caelestia-restart --rebuild (stopped, rebuilt, started), never a build under it
 # - none running: built, unless caelestia-start just built it (its shell not up yet)
 set -euo pipefail
+# shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 h=$t/home sb=$t/bin; mkdir -p "$h/.local/bin" "$h/.config/quickshell/caelestia" "$h/.local/state/agros" "$sb"
 touch "$h/.local/state/agros/wallpaper-set"
-printf '#!/bin/sh\necho built >>"%s"\n' "$t/calls" >"$h/.local/bin/caelestia-overlay"
+# (beside it: the programs it runs are the ones beside itself; the overlay's build stubbed, its --running the real one)
+cp -r "$here/.local/bin/." "$h/.local/bin/"
+mv "$h/.local/bin/caelestia-overlay" "$h/.local/bin/caelestia-overlay.real"
+printf '#!/bin/sh\n[ "$1" = --running ] && exec "$0.real" --running\necho built >>"%s"\n' "$t/calls" >"$h/.local/bin/caelestia-overlay"
 # (qs list's own format; the file says where the running one is from: the overlay, or Caelestia's own in /etc/xdg)
 printf '#!/bin/sh\n[ "$1 $2" = "list --all" ] && [ -e "%s" ] && echo "  Config path: $(cat "%s")"\nexit 0\n' "$t/running" "$t/running" >"$sb/qs"
-printf '#!/bin/sh\necho "hyprctl $*" >>"%s"\n' "$t/calls" >"$sb/hyprctl"
-chmod +x "$sb"/* "$h/.local/bin/caelestia-overlay"
-run() { rm -f "$t/calls"; env -i HOME="$h" PATH="$sb:/usr/bin" bash -c 'st=$HOME/.local/state/agros; source "$1/.local/bin/agros-welcome"; caelestia_setup' _ "$here" </dev/null; }
+printf '#!/bin/sh\necho "caelestia-restart $*" >>"%s"\n' "$t/calls" >"$h/.local/bin/caelestia-restart"
+chmod +x "$sb"/* "$h/.local/bin/caelestia-overlay" "$h/.local/bin/caelestia-restart"
+run() { rm -f "$t/calls"; env -i HOME="$h" PATH="$sb:/usr/bin" bash -c 'st=$HOME/.local/state/agros; source "$HOME/.local/bin/agros-welcome"; caelestia_setup' </dev/null; }
 calls() { cat "$t/calls" 2>/dev/null; }
 skipped=$h/.local/state/caelestia-overlay-skipped
 
@@ -37,10 +41,10 @@ touch "$ours"
 out=$(run) || fail "from /etc/xdg, overlay there: $out"
 grep -q -- 'caelestia-restart --rebuild' "$t/calls" || fail "Caelestia from /etc/xdg taken for one on the overlay: $(calls)"
 rm "$ours"
-# A failure returned (the step tried again at the next login, not marked done): the dispatch refused, nothing running
-printf '#!/bin/sh\nexit 1\n' >"$sb/hyprctl"
-run >/dev/null && fail "the restart not dispatched, yet the step reported done"
-printf '#!/bin/sh\necho "hyprctl $*" >>"%s"\n' "$t/calls" >"$sb/hyprctl"
+# A failure returned (the step tried again at the next login, not marked done): the restart failed
+printf '#!/bin/sh\nexit 1\n' >"$h/.local/bin/caelestia-restart"
+run >/dev/null && fail "the restart failed, yet the step reported done"
+printf '#!/bin/sh\necho "caelestia-restart $*" >>"%s"\n' "$t/calls" >"$h/.local/bin/caelestia-restart"
 
 rm "$t/running"
 touch "$h/.config/quickshell/caelestia/shell.qml"
