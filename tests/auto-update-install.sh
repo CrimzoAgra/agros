@@ -54,7 +54,7 @@ grep -q 'systemd-inhibit' <<<"$unit" && fail "the boot's download blocks shutdow
 # Flatpaks from a file at boot: downloaded with nothing held, then reinstalled with sleep and power off held by root
 # (logind refuses the user that hold outside a session) around that step alone
 # shellcheck disable=SC2016  # (the generated script's own text)
-{ grep -q -- '--as "$user" "$home/.local/bin/flatpak-bundle-update" --fetch "$fetched"$' "$t/auto-update" &&
+{ grep -q -- "--as \"\$user\" $here/.local/bin/flatpak-bundle-update --fetch \"\$fetched\"$" "$t/auto-update" &&
     ! grep -q systemd-inhibit <<<"$(grep -- '--fetch "$fetched"' "$t/auto-update")" &&
     grep -q '^ *timeout 30m systemd-inhibit --what=sleep:shutdown --mode=block ' <<<"$(grep -B2 -- '--install-fetched "$fetched"' "$t/auto-update")"; } ||
     fail "the boot's Flatpak reinstall not held by root around that step alone: $(grep -n -A6 'Those from a file' "$t/auto-update")"

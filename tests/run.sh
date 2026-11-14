@@ -13,7 +13,7 @@ for t in "${tests[@]}"; do
         boot-video-mode) out=$(python3 "$here/../system/boot-video-mode" --test 2>&1 </dev/null) && out="ok boot-video-mode" ;;
         # (no test can wait on the terminal: no stdin, and in a session of its own, without it, as sudo asks there)
         *) out=$(setsid -w "$here/$t.sh" 2>&1 </dev/null) ;;
-    esac || { failed=1; out="FAIL $t: ${out##*$'\n'}"; }
+    esac || { failed=1; f=$(grep -m1 "^FAIL: " <<<"$out") || f=${out##*$'\n'}; out="FAIL $t: ${f#FAIL: }"; }
     echo "$out" | tail -1
 done
 exit $failed

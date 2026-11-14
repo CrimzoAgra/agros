@@ -360,7 +360,6 @@ command -v flatpak >/dev/null && timeout 30m flatpak update -y --noninteractive
 # --as: setpriv, no PAM, so no logind session: they'd count as logged in, and leave this unit's time limit)
 # (the list read on a descriptor of its own: a command in the loop reading its stdin took the next users with it)
 while IFS= read -r -u 4 user; do
-    home=$(getent passwd "$user" | cut -d: -f6)
     uid=$(id -u "$user")
     echo "-- $user"
     # (what it has to say (a new Proton: restart Steam, pick it in Lutris) handed back on fd 3, a file of root's, and
@@ -377,13 +376,13 @@ while IFS= read -r -u 4 user; do
     # Usually seconds; a runtime the new version needs is downloaded in it too, so given up on after half an hour too.
     # Not with less than 35 min of the run's 4 h left (auto-update.service's RuntimeMaxSec): cut off between the old
     # one's removal and the new one's install, the app would be gone (the next boot does it)
-    if command -v flatpak >/dev/null && [[ -x "$home/.local/bin/flatpak-bundle-update" ]] && fetched=$("$each_user" --as "$user" mktemp -d); then
-        "$each_user" --as "$user" "$home/.local/bin/flatpak-bundle-update" --fetch "$fetched"
+    if command -v flatpak >/dev/null && [[ -x /usr/lib/agros/bin/flatpak-bundle-update ]] && fetched=$("$each_user" --as "$user" mktemp -d); then
+        "$each_user" --as "$user" /usr/lib/agros/bin/flatpak-bundle-update --fetch "$fetched"
         if [[ -s $fetched/fetched ]] && ((SECONDS > 4 * 3600 - 35 * 60)); then
             echo "Flatpaks from a file: too little of the run's time left to reinstall them, at the next boot"
         elif [[ -s $fetched/fetched ]]; then
             timeout 30m systemd-inhibit --what=sleep:shutdown --mode=block --who="Flatpak update" \
-                --why="Reinstalling apps from their files" "$each_user" --as "$user" "$home/.local/bin/flatpak-bundle-update" --install-fetched "$fetched"
+                --why="Reinstalling apps from their files" "$each_user" --as "$user" /usr/lib/agros/bin/flatpak-bundle-update --install-fetched "$fetched"
         fi
         rm -rf "$fetched"
     fi
