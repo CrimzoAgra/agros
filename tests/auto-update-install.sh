@@ -123,9 +123,9 @@ printf '#!/bin/sh\n[ -z "$BOOT_UNMOUNTED" ]\n' >"$t/bin/mountpoint"
 # line); the rest: nothing. systemctl list-jobs: $JOBS
 # (a pacman on these lists: its --dbpath the test's, as pacman-lock-holder reads it)
 printf '#!/bin/sh\nsleep 300\n' >"$t/holder"; chmod +x "$t/holder"
-"$t/holder" --dbpath "$t/pac" & holder=$!
+"$t/holder" --dbpath "$t/pac" 2>/dev/null & holder=$!
 disown "$holder"  # (killed at the end without a job notice after "ok")
-trap 'pkill -P $holder; kill $holder 2>/dev/null; rm -rf "$t"' EXIT
+trap '{ pkill -P $holder; kill $holder; } 2>/dev/null; rm -rf "$t"; true' EXIT
 # shellcheck disable=SC2016  # (expanded by the stand-ins)
 printf '#!/bin/sh\n[ "$1" = -x ] && [ -n "$HOLDER_RUNS" ] && { echo %s; exit 0; }\nexit 1\n' "$holder" >"$t/bin/pgrep"
 # shellcheck disable=SC2016
@@ -347,7 +347,7 @@ lists
     fail "a stale pacman lock not taken out before the install: $(cat "$t/log")"
 lists
 : >"$t/pac/db.lck"; : >"$t/calls"
-sleep 300 3<"$t/pac/db.lck" & opener=$!
+sleep 300 3<"$t/pac/db.lck" 2>/dev/null & opener=$!
 disown "$opener"
 : >"$t/log"; "$t/auto-update" --install || fail "the install with pacman's lock open failed"; out=$(cat "$t/log")
 kill $opener
