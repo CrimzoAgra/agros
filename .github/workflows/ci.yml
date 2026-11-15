@@ -105,7 +105,7 @@ jobs:
         run: |
           # (every IgnorePkg line, as update-gate reads them; one not installed (renamed, dropped by Arch) fails here,
           # not left out of the list, which held the whole set on every machine)
-          read -ra gated < <(sed -n 's/^[[:space:]]*IgnorePkg[[:space:]]*=[[:space:]]*//p' packages/agros-system/agros-gate.conf | tr '\n' ' ')
+          read -ra gated < <(sed -n 's/^[[:space:]]*IgnorePkg[[:space:]]*=[[:space:]]*//p' packages/agros-system/agros-gate.conf | paste -sd' ')
           : >/tmp/approved
           for p in "${gated[@]}"; do
             v=$(pacman -Q "$p") || { echo "::error::$p isn't installed: its version can't be approved"; exit 1; }
