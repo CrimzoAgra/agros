@@ -72,6 +72,9 @@ PATH=$t/bin:$PATH timeout 1 "$here/.local/bin/agros-each-user" --as "$me" sh -c 
     fail "a timed-out --as (a timeout inside) reported success"
 sleep 0.3
 grep -qx 'sleep 37.4' <<<"$(ps -eo args=)" && fail "a command's own timeout (a group of its own) left running after its caller's timeout"
+# Its output all out to a reader slower than the few seconds what it leaves gets (CI's terminal: the last lines lost)
+got=$({ PATH=$t/bin:$PATH "$here/.local/bin/agros-each-user" --as "$me" sh -c 'seq 100000; echo LAST'; } | { sleep 5; cat; } | grep -cx '100000\|LAST' || true)
+[[ $got == 2 ]] || fail "a command's output cut off for a slow reader"
 # What a command leaves running (a notification waiting for the desktop) kept, but not waited for while it holds the
 # output: a few seconds at most
 start=$SECONDS

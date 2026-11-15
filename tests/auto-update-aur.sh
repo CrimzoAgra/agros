@@ -323,7 +323,7 @@ if [[ -n $real ]] && "$real" --unshare-all --ro-bind / / true 2>/dev/null; then
     # the stand-in, its command run as it is, for what's hidden)
     pasta=$(command -v -p pasta || true)
     if [[ -n $pasta ]] && ! why=$("$pasta" --config-net --quiet -t none -u none -T none -U none -- true 2>&1); then
-        skipped "pasta can't make its namespace here ($(tail -n 2 <<<"$why" | paste -sd' ')): its stand-in used"
+        skipped "pasta can't make its namespace here ($(tail -n 2 <<<"$why" | paste -sd' '); ptrace_scope $(cat /proc/sys/kernel/yama/ptrace_scope 2>/dev/null), AppArmor $(cat /sys/module/apparmor/parameters/enabled 2>/dev/null)): its stand-in used"
         pasta=
     fi
     [[ -z $pasta ]] || rm "$t/bin/pasta" "$t/bin/ip"

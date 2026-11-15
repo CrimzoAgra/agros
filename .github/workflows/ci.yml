@@ -48,7 +48,11 @@ jobs:
           # (Ubuntu's host lets no unprivileged user namespace act as root in it: game-focus-audio makes them)
           [ ! -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ] ||
             echo 0 >/proc/sys/kernel/apparmor_restrict_unprivileged_userns
-          # (the AUR sandbox's network, pasta, opens /dev/net/tun in its namespace: the container may not have the node)
+          # (the AUR sandbox's network, pasta: it opens its child's user namespace, which Ubuntu's ptrace and AppArmor
+          # limits refused ("Couldn't open user namespace ... Permission denied"); and /dev/net/tun in it)
+          for k in kernel/yama/ptrace_scope kernel/apparmor_restrict_unprivileged_unconfined; do
+            [ ! -e /proc/sys/$k ] || echo 0 >/proc/sys/$k
+          done
           [ -c /dev/net/tun ] || { mkdir -p /dev/net && mknod /dev/net/tun c 10 200; }
           chmod 666 /dev/net/tun
       - uses: actions/checkout@v7

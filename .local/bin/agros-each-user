@@ -65,9 +65,10 @@ as() {
     done
     trap - TERM INT HUP
     exec {o}>&- {e}>&-
-    # (its output's end: once what it left running (a notification waiting for the desktop, kept: not this one's to
-    # stop) lets go of the pipes, or after 3 s at most, not for as long as that lives)
-    ( sleep 3; kill "${outs[@]}" ) 2>/dev/null & w=$!
+    # (its output's end: all of it, however long a slow terminal takes to read it, but not for as long as something
+    # holds the pipes: 3 s at most when what it left still runs in its session (a notification waiting for the desktop,
+    # kept: not this one's to stop), 60 s at most for one gone to a session of its own)
+    ( sleep 3; pgrep -s "$p" >/dev/null || sleep 57; kill "${outs[@]}" ) 2>/dev/null & w=$!
     wait "${outs[@]}" 2>/dev/null
     pkill -P "$w" sleep 2>/dev/null; kill "$w" 2>/dev/null
     [[ -z $sig ]] || kill -s "$sig" "$BASHPID"
