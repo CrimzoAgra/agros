@@ -100,7 +100,7 @@ stub gpg 'true'
 # package beside it too, and a link to a file of the user's
 # shellcheck disable=SC2016
 stub makepkg 'b=${PWD##*/}
-case " $* " in *" --verifysource "*) echo "verify $b $SRCDEST $(grep "^pkgrel=" PKGBUILD) ${SANDBOXED:+(sandboxed)}" >>'"$t"'/calls
+case " $* " in *" --verifysource "*) echo "verify $b $SRCDEST pkgrel=$(. ./PKGBUILD; echo "$pkgrel") ${SANDBOXED:+(sandboxed)}" >>'"$t"'/calls
     [ -z "${FIFO:-}" ] || { rm .SRCINFO; mkfifo .SRCINFO; }; exit 0 ;; esac
 [ "$b" = "${FAIL_BASE:-}" ] && { echo "==> ERROR: build failed"; exit 1; }
 case $b in equibop | caelestia-shell) v=1.1-1 ;; python-foo) v=1.0-1 ;; *) v=0.4-1 ;; esac

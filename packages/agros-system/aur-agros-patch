@@ -13,6 +13,7 @@ cd "$dir"
 grep -q '^pkgrel=[0-9]*$' PKGBUILD && ! grep -q '^prepare()' PKGBUILD ||
     { echo "$base: its PKGBUILD changed (a pkgrel with a dot, or a prepare() of its own): AgrOS's fix not added" >&2; exit 1; }
 cp "$patch" agros-fix.patch
-sed -i 's/^pkgrel=\([0-9]*\)$/pkgrel=\1.1/' PKGBUILD
+# (the ".1" on a line of its own: makepkg sets pkgrel=1 again when pkgver() finds a new version, and the patched build
+# was published under the unpatched one's name, the published file then kept)
 # shellcheck disable=SC2016  # (makepkg's variables, expanded there)
-printf '\n# AgrOS (aur-agros-patch)\nprepare() {\n    patch -Np1 -d "$srcdir" -i "$startdir/agros-fix.patch"\n}\n' >>PKGBUILD
+printf '\n# AgrOS (aur-agros-patch)\npkgrel+=.1\nprepare() {\n    patch -Np1 -d "$srcdir" -i "$startdir/agros-fix.patch"\n}\n' >>PKGBUILD
