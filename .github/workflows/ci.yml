@@ -48,6 +48,9 @@ jobs:
           # (Ubuntu's host lets no unprivileged user namespace act as root in it: game-focus-audio makes them)
           [ ! -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ] ||
             echo 0 >/proc/sys/kernel/apparmor_restrict_unprivileged_userns
+          # (the AUR sandbox's network, pasta, opens /dev/net/tun in its namespace: the container may not have the node)
+          [ -c /dev/net/tun ] || { mkdir -p /dev/net && mknod /dev/net/tun c 10 200; }
+          chmod 666 /dev/net/tun
       - uses: actions/checkout@v7
       - name: Caelestia (from the published [agros] repo) and its dots' shortcuts, for the tests that check against it
         run: |

@@ -322,8 +322,8 @@ if [[ -n $real ]] && "$real" --unshare-all --ro-bind / / true 2>/dev/null; then
     # (pasta: the real one where it's installed and can make its namespace here (/dev/net/tun, user namespaces); else
     # the stand-in, its command run as it is, for what's hidden)
     pasta=$(command -v -p pasta || true)
-    if [[ -n $pasta ]] && ! "$pasta" --config-net --quiet -t none -u none -T none -U none -- true 2>/dev/null; then
-        skipped "pasta can't make its namespace here, no /dev/net/tun or user namespaces: its stand-in used"
+    if [[ -n $pasta ]] && ! why=$("$pasta" --config-net --quiet -t none -u none -T none -U none -- true 2>&1); then
+        skipped "pasta can't make its namespace here ($(tail -n 2 <<<"$why" | paste -sd' ')): its stand-in used"
         pasta=
     fi
     [[ -z $pasta ]] || rm "$t/bin/pasta" "$t/bin/ip"
