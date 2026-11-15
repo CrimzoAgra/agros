@@ -59,7 +59,8 @@ grep -qxE 'sleep 37\.[69]' <<<"$(ps -eo args=)" && fail "a stopped command, or i
 for _ in 1 2 3 4 5; do
     script -qec "PATH=$t/bin:\$PATH $here/.local/bin/agros-each-user --as $me sh -c 'seq 20000; echo LAST >&2'; echo AFTER" "$t/typescript" >/dev/null
     got=$(tr -d '\r' <"$t/typescript" | grep -x '20000\|LAST\|AFTER' | paste -sd,)
-    [[ $got == "20000,LAST,AFTER" || $got == "LAST,20000,AFTER" ]] ||
+    # (both to the one terminal: in the order written, LAST whole on a line of its own)
+    [[ $got == "20000,LAST,AFTER" ]] ||
         fail "a command's output lost, or after the caller's next line: $(tr -d '\r' <"$t/typescript" | grep -x '20000\|LAST\|AFTER' | paste -sd,)"
 done
 # ...stopped by INT or HUP the same; and what it started in a group of its own (a timeout inside it) stopped too

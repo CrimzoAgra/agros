@@ -41,7 +41,15 @@ as() {
     local u=$1 p='' sig='' rc o e s f n w keep=' ' outs=(); shift
     while [[ ${1:-} == --fd ]]; do keep+="$2 "; shift 2; done
     exec {o}> >(cat) && outs+=($!)
-    exec {e}> >(cat >&2) && outs+=($!)
+    # (one pipe for both when they go to the same place (a terminal, the log): its lines in the order it wrote them,
+    # not a stderr line cut into a stdout one by two readers)
+    local f1 f2 fds=/proc/$BASHPID/fd  # (this shell's: $BASHPID in a $(...) is that subshell's)
+    f1=$(stat -L -c %d:%i "$fds/1" 2>/dev/null) f2=$(stat -L -c %d:%i "$fds/2" 2>/dev/null)
+    if [[ $f1 == "$f2" ]]; then
+        exec {e}>&"$o"
+    else
+        exec {e}> >(cat >&2) && outs+=($!)
+    fi
     # (set before it starts: a stop in between not missed)
     for s in TERM INT HUP; do
         # shellcheck disable=SC2064  # (each signal's name, now)
