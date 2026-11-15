@@ -22,7 +22,7 @@ for f in "$here"/.config/quickshell/*/shell.qml "$here"/.config/quickshell/commo
     syntax "$f"
 done
 
-[[ -d /etc/xdg/quickshell/caelestia ]] || { echo "ok qml-parse (Caelestia not installed: its patched files not checked)"; exit 0; }
+[[ -d /etc/xdg/quickshell/caelestia ]] || { echo "ok qml-parse (SKIPPED: Caelestia not installed, its patched files not checked)"; exit 0; }
 # Every feature on, whatever your Settings app says
 printf '#!/bin/sh\necho "{}"\n' >"$t/dots-settings"; chmod +x "$t/dots-settings"
 cp -as /etc/xdg/quickshell/caelestia "$t/caelestia"

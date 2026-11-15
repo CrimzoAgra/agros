@@ -3,10 +3,12 @@
 # Waking from sleep resets the USB controllers: the Bluetooth adapter comes back as a new device, switched off.
 # Before sleep: note whether Bluetooth was on. After waking: if it was, switch it back on once the adapter is back.
 state=/run/bluetooth-was-powered
-# (the kernel's adapters: $BT_SYSFS elsewhere, for the tests)
+# (the kernel's adapters: $BT_SYSFS elsewhere, for the tests; as are $BT_TIMEOUT and $BT_BUDGET, the time limits below,
+# shortened)
 sysfs=${BT_SYSFS:-/sys/class/bluetooth}
+budget=${BT_BUDGET:-15}
 # bluetoothctl with a time limit: with bluetoothd stopped or stuck it waits for it forever, and sleep waited on this
-bt() { timeout 3 bluetoothctl "$@"; }
+bt() { timeout "${BT_TIMEOUT:-3}" bluetoothctl "$@"; }
 # adapters: each adapter the kernel has, by its entry's inode: a reset makes the adapter anew, and its entry with it
 # (a new inode, even under the same name)
 adapters() { stat -L -c '%n %i' "$sysfs"/hci* 2>/dev/null; }
@@ -39,7 +41,7 @@ post)
     # sleep service's leftover processes when this returns. The desktop is already awake meanwhile
     # (and given up on after those 15 s even when bluetoothctl's answers take their whole time limit)
     for try in $(seq 30); do
-        ((SECONDS < 15)) || break
+        ((SECONDS < budget)) || break
         rfkill unblock bluetooth
         bt power on >/dev/null 2>&1
         if bt show 2>/dev/null | grep -q "Powered: yes"; then
@@ -54,7 +56,7 @@ post)
         fi
         sleep 0.5
     done
-    logger -t bluetooth-resume "Bluetooth still off 15 s after waking"
+    logger -t bluetooth-resume "Bluetooth still off $budget s after waking"
     ;;
 esac
 exit 0

@@ -43,7 +43,7 @@ local plugin = os.getenv("PLUGIN") == "1"
 handlers, binds, config_errors, hidden_rules, unset_gestures, WINDOW_RULES = {}, {}, {}, {}, {}, {}
 -- CONFIG: what hl.get_config answers (the blur setting window peek turns off and back); HELD_TIMERS: timers queued
 -- there while HOLD_TIMERS is on (else run at once); PEEK_TAGS: window peek's tag dispatches, in order
-CONFIG, HELD_TIMERS, PEEK_TAGS = { ["decoration.blur.ignore_opacity"] = true }, {}, {}
+CONFIG, HELD_TIMERS, PEEK_TAGS, TIMER_SETS = { ["decoration.blur.ignore_opacity"] = true }, {}, {}, {}
 BIND_ACTIONS, MONITOR_RULES, FOCUS, ENV = {}, {}, 1, {}
 local popen = io.popen
 io.popen = function(cmd, ...)
@@ -89,6 +89,20 @@ end })
 hl = {
     config = function(c)
         check(type(c) == "table", "hl.config: not a table")
+        -- (every setting's path written down, those in handlers too: checked against Hyprland's own list at the end)
+        local function record(tbl, prefix)
+            for k, v in pairs(tbl) do
+                local path = prefix and (prefix .. "." .. tostring(k)) or tostring(k)
+                if type(v) == "table" and #v == 0 then record(v, path) else
+                    local f = io.open("config-keys", "a")
+                    if f then f:write(path, "\n"); f:close() end
+                end
+            end
+        end
+        if type(c) == "table" then record(c) end
+        if type(c) == "table" and type(c.cursor) == "table" and c.cursor.no_hardware_cursors ~= nil then
+            HW_CURSORS = c.cursor.no_hardware_cursors
+        end
         local blur = type(c) == "table" and c.decoration and c.decoration.blur
         if blur and blur.ignore_opacity ~= nil then CONFIG["decoration.blur.ignore_opacity"] = blur.ignore_opacity end
     end,
@@ -125,7 +139,8 @@ hl = {
             local w = a.window or hl.get_active_window()
             if type(w) == "string" then w = hl.get_window(w) end
             local id = tonumber(a.workspace)
-            if w then w.workspace = id and ws(id) or { name = a.workspace, special = true } end
+            -- (a move to a place, x and y, leaves its workspace)
+            if w and a.workspace ~= nil then w.workspace = id and ws(id) or { name = a.workspace, special = true } end
             -- (followed unless follow = false: the window's workspace shown)
             if w and id and a.follow ~= false then hl.dispatch(hl.dsp.focus({ workspace = id })) end
         elseif name == "workspace.move" then
@@ -135,11 +150,13 @@ hl = {
                 elseif m.active_workspace and m.active_workspace.id == a.workspace then m.active_workspace = ws((k - 1) * 10 + 1) end
             end
         elseif name == "window.tag" then
-            -- (window peek's tags added, "+name", or taken off, "-name", as Hyprland's tag dispatcher; others only recorded)
+            -- (tags added, "+name", or taken off, "-name", as Hyprland's tag dispatcher: window peek's and snapping's; the
+            -- maximised tag only recorded, as the drag tests set it themselves)
             local w = type(a.window) == "string" and hl.get_window(a.window) or a.window
             local sign, tag = tostring(a.tag):match("^([+-])(.+)$")
-            if w and tag and tag:match("^dots%-peek") then
-                PEEK_TAGS[#PEEK_TAGS + 1] = w.address .. sign .. tag
+            if w and tag and (tag:match("^dots%-peek") or tag:match("^snap")) then
+                if tag:match("^dots%-peek") then PEEK_TAGS[#PEEK_TAGS + 1] = w.address .. sign .. tag end
+                w.tags = w.tags or {}
                 for k = #w.tags, 1, -1 do if w.tags[k] == tag then table.remove(w.tags, k) end end
                 if sign == "+" then w.tags[#w.tags + 1] = tag end
             end
@@ -147,7 +164,13 @@ hl = {
             RELOADED = true
         end
     end,
-    timer = function(fn) if HOLD_TIMERS then HELD_TIMERS[#HELD_TIMERS + 1] = fn else fn() end end,
+    -- (a held one's timeout, and each time it's set again, noted: TIMER_SETS)
+    timer = function(fn, opts)
+        if not HOLD_TIMERS then return fn() end
+        HELD_TIMERS[#HELD_TIMERS + 1] = fn
+        TIMER_SETS[#TIMER_SETS + 1] = opts and opts.timeout
+        return { set_timeout = function(_, ms) TIMER_SETS[#TIMER_SETS + 1] = ms end }
+    end,
     window_rule = function(r)
         check(type(r.match) == "table", "hl.window_rule: no match")
         -- Caelestia's tags with effects (its rules.lua) come before this config: tagged from here, they never apply
@@ -188,6 +211,8 @@ hl = {
     end,
     get_devices = function() return { { type = "keyboard", main = true, name = "kb", caps_lock = false, num_lock = true } } end,
     get_cursor_pos = function() return { x = 100, y = 100 } end,
+    get_monitor_at_cursor = function() return SCREENS[FOCUS] or SCREENS[1] end,
+    animation = function() end,
     env = function(k, v) check(type(k) == "string" and type(v) == "string", "hl.env: not strings"); ENV[k] = v end,
     dsp = dsp,
     plugin = plugin and { hyprbars = { add_button = function(b) check(b.icon and b.action, "add_button") end } } or {},
@@ -235,7 +260,7 @@ for i = 1, rules_before do
 end
 local function blur() return tostring(CONFIG["decoration.blur.ignore_opacity"]) end
 local function run_timers() local q = HELD_TIMERS; HELD_TIMERS = {}; for _, fn in ipairs(q) do fn() end end
-dots.peek("0x1"); io.write("peeked ", peeked(), " blur over opacity ", blur(), "\n")
+dots.peek_screen("DP-1", "0x1"); io.write("peeked ", peeked(), " blur over opacity ", blur(), "\n")
 local made = {}
 for i = rules_before + 1, #WINDOW_RULES do
     local r = WINDOW_RULES[i]
@@ -243,7 +268,7 @@ for i = rules_before + 1, #WINDOW_RULES do
 end
 io.write("peek rules ", table.concat(made, ","), "\n")
 PEEK_TAGS = {}
-dots.peek("0x2"); io.write("peeked then ", peeked(), "\n")
+dots.peek_screen("DP-1", "0x2"); io.write("peeked then ", peeked(), "\n")
 io.write("peek tags then ", table.concat(PEEK_TAGS, ","), "\n")
 io.write("peek rules after another peek ", #WINDOW_RULES - rules_before, "\n")
 HOLD_TIMERS = true
@@ -252,12 +277,26 @@ run_timers(); io.write("peek ended ", peeked(), " blur over opacity ", blur(), "
 dots.peek_screen("DP-1", "0x1", "0x5"); io.write("peek screen ", peeked(), "\n")
 dots.peek_screen("DP-1"); io.write("peek screen bare ", peeked(), "\n")
 -- (an end's clean-up, due after its fade back, left alone by a peek meanwhile)
-dots.peek_end(); dots.peek("0x1"); run_timers(); io.write("peek again meanwhile ", peeked(), " blur over opacity ", blur(), "\n")
+dots.peek_end(); dots.peek_screen("DP-1", "0x1"); run_timers(); io.write("peek again meanwhile ", peeked(), " blur over opacity ", blur(), "\n")
 dots.peek_screen("NOPE-1", "0x1"); run_timers(); io.write("peek of no screen ", peeked(), " blur over opacity ", blur(), "\n")
-dots.peek("0xdead"); run_timers(); io.write("peek of no window ", peeked(), "\n")
+dots.peek_screen("NO-SCREEN", "0xdead"); run_timers(); io.write("peek on no screen ", peeked(), "\n")
 -- (the blur setting already off in the config: left off)
 CONFIG["decoration.blur.ignore_opacity"] = false
-dots.peek("0x1"); dots.peek_end(); run_timers(); io.write("peek with the blur setting off ", blur(), "\n")
+dots.peek_screen("DP-1", "0x1"); dots.peek_end(); run_timers(); io.write("peek with the blur setting off ", blur(), "\n")
+-- (each tag that makes a window opaque, as Hyprland reports a rule's tag live (with its star): faded back whole)
+local spot
+for _, w in ipairs(WINDOWS) do if w.address == "0x5" then spot = w end end
+for _, tag in ipairs({ "none", "opaque", "dots_opaque*", "xwl_popup*", "game*" }) do
+    spot.tags = tag == "none" and {} or { tag }
+    dots.peek_screen("DP-1", "0x1"); dots.peek_end(); io.write("peek ending with ", tag, " ", peeked(), "\n"); run_timers()
+end
+spot.tags = {}
+-- (an end with nothing peeked, as the shell's start sends: the blur setting not touched, nothing queued)
+CONFIG["decoration.blur.ignore_opacity"] = true
+dots.peek_end(); io.write("peek end of nothing ", blur(), " ", #HELD_TIMERS, "\n")
+-- (a peek that faded nothing, each window on that screen kept: its end still sets the blur back)
+dots.peek_screen("HDMI-A-1", "0x3", "0x4"); io.write("peek of none faded ", peeked(), " ", blur(), "\n")
+dots.peek_end(); run_timers(); io.write("peek of none ended ", blur(), "\n")
 HOLD_TIMERS = false
 -- The second screen unplugged: its windows come back to 1-10, maximised ones refit, Super+N on one screen
 SCREENS = { SCREENS[1] }
@@ -272,6 +311,7 @@ for _, e in ipairs(config_errors) do io.write("config error ", e, "\n") end
 for _, tag in ipairs(hidden_rules) do io.write("hidden rule tag ", tag, "\n") end
 for _, g in ipairs(unset_gestures) do io.write("gesture unset ", g, "\n") end
 for name, f in pairs(dots) do if type(f) == "function" then io.write("function ", name, "\n") end end
+if HW_CURSORS ~= nil then io.write("no_hardware_cursors ", tostring(HW_CURSORS), "\n") end
 L
 
 # One load: HOME with the given settings.lua (none if empty), the title bar plugin on or off, [one screen]
@@ -281,6 +321,11 @@ run_config() {
     (cd "$t" && HOME=$t/home PLUGIN=$2 ONE_SCREEN=${3:-0} DOTS_VERIFY_CONFIG=${VERIFY:-} XDG_CONFIG_HOME=${XCH:-} XDG_RUNTIME_DIR=$t/run HYPRLAND_INSTANCE_SIGNATURE=test \
         lua run.lua stub.lua 2>&1)
 }
+# A game open at the load (the stand-in's): the pointer drawn into the picture with lower input lag on (tearing
+# allowed), the cursor layer kept with it off (no tearing to keep from it)
+grep -qx 'no_hardware_cursors 1' <<<"$(run_config '' 0)" || fail "the pointer not drawn into the picture with a game open"
+grep -qx 'no_hardware_cursors 2' <<<"$(run_config 'return { ["games.low_latency"] = false }' 0)" ||
+    fail "the cursor layer taken away with lower input lag off"
 good='return { ["keys.windows_next"] = { "ALT + TAB" }, ["keys.minimise"] = { "SUPER + M", "SUPER + DOWN" },
   ["keys.screenshot"] = {}, ["windows.cascade"] = true, ["windows.titlebars"] = true, ["windows.focus"] = "hover",
   ["startup.lutris"] = true, ["caelestia-keys.kbTerminal"] = { "SUPER + RETURN" }, ["caelestia-keys.kbGoToWs"] = { "ALT" } }'
@@ -311,8 +356,15 @@ for plugin in 0 1; do
     p "peek screen bare 0x1=dots-peek,0x2=dots-peek,0x5=dots-peek"
     p "peek again meanwhile 0x1=dots-peek-back-see,0x2=dots-peek,0x5=dots-peek blur over opacity false"
     p "peek of no screen  blur over opacity true"
-    p "peek of no window "
+    p "peek on no screen "
     p "peek with the blur setting off false"
+    p "peek ending with none 0x2=dots-peek-back,0x5=dots-peek-back-see"
+    p "peek end of nothing true 0"
+    p "peek of none faded  false"
+    p "peek of none ended true"
+    for tag in 'opaque' 'dots_opaque*' 'xwl_popup*' 'game*'; do
+        p "peek ending with $tag 0x2=dots-peek-back,0x5=dots-peek-back"
+    done
     # ...by rules made once, at the first peek (after the config's, LibreWolf's opaque one too), that win over opaque ones
     ! grep -q "^peek rule made as the config loads" <<<"$out" || fail "window peek's rules made as the config loads"
     p "peek rules dots-peek:dots-peek:0 override:false,dots-peek-back:dots-peek-back:1 override:false,dots-peek-back-see:dots-peek-back-see:0.95 override:false,dots-peek-back-see-full:dots-peek-back-see:1 override:false"
@@ -328,6 +380,20 @@ grep -q '^config error' <<<"$out" && fail "config errors on one screen: $(grep '
 # Every function of the Lua API table (docs/how-it-works.md) is there once the config has loaded
 for f in $(grep -E '^\| `[a-z_]+\(' "$here/docs/how-it-works.md" | cut -d'|' -f2 | grep -oE '`[a-z_]+\(' | tr -d '`('); do
     grep -qx "function $f" <<<"$out" || fail "dots.$f (README's Lua API) isn't defined"
+done
+# The installer's rule (apps.lua) matches its main window's whole title, as Hyprland matches (RE2 FullMatch), in the
+# languages it starts in; not its dialogs
+python3 -I - "$here/.config/caelestia/user/apps.lua" <<'PY' || fail "the installer's window rule doesn't match its titles (whole-title match)"
+import re, sys
+line = next(l for l in open(sys.argv[1]) if "calamares" in l and "initial_title" in l)
+pat = re.search(r'initial_title = "([^"]*)"', line).group(1).replace("\\\\", "\\")
+ok = all(re.fullmatch(pat, t) for t in ("AgrOS Installer", "Instalador AgrOS", "Instalador de AgrOS", "Программа установки AgrOS", "AgrOS"))
+sys.exit(0 if ok and not re.fullmatch(pat, "Error") else 1)
+PY
+# ...and every one called from outside the config (scripts, the shell's overlay, the hyprbars patch) is in that table
+table=$(grep -E '^\| `[a-z_]+\(' "$here/docs/how-it-works.md" | cut -d'|' -f2 | grep -oE '`[a-z_]+\(' | tr -d '`(')
+for f in $(grep -rhoE 'dots\.[a-z_]+\(' "$here/.local" "$here/packages" "$here/system" 2>/dev/null | sort -u | sed 's/^dots\.//; s/($//'); do
+    grep -qx "$f" <<<"$table" || fail "dots.$f is called from outside the config but isn't in the Lua API table (docs/how-it-works.md)"
 done
 # Caelestia's launcher interrupt on Super+scroll: the workspace keys take Super+scroll with two screens, and give the
 # interrupt back only where Caelestia's own keybinds.lua binds it (its newer releases don't)
@@ -356,8 +422,16 @@ done
 # Its notification that the settings failed to load: not when it's only a check (hypr-config-check: dotfiles-check says it)
 out=$(run_config 'return 42' 0)
 grep -q "^exec dots-warn" <<<"$out" || fail "settings that failed to load not said"
+# ...nor the Scroll Lock keymap made (scroll-lock keymap: files written, xkbcli run) for a check, which only loads it
+mkdir -p "$t/home/.local/bin"
+printf '#!/bin/sh\necho "$*" >>"%s/scroll-lock-calls"\n' "$t" >"$t/home/.local/bin/scroll-lock"
+chmod +x "$t/home/.local/bin/scroll-lock"
 out=$(VERIFY=1 run_config 'return 42' 0)
 grep -q "^exec dots-warn" <<<"$out" && fail "a notification sent by the config check (DOTS_VERIFY_CONFIG)"
+[[ ! -e $t/scroll-lock-calls ]] || fail "the Scroll Lock keymap made by the config check: $(cat "$t/scroll-lock-calls")"
+run_config 'return {}' 0 >/dev/null
+grep -qx keymap "$t/scroll-lock-calls" || fail "the Scroll Lock keymap not made at a real load"
+rm "$t/home/.local/bin/scroll-lock" "$t/scroll-lock-calls"
 # Synced screens: what the keys, the workspace event, a screen unplugged and plugged back and the laptop lid do, played
 # on the stand-in (a reload: the config loaded again in the same Lua, its handlers and binds from scratch, as Hyprland
 # drops them; what's kept for a screen survives it in XDG_RUNTIME_DIR)
@@ -501,10 +575,11 @@ cat >"$t/drag.lua" <<'L'
 local home = os.getenv("HOME")
 package.path = home .. "/.config/caelestia/?.lua;" .. home .. "/.config/hypr/?.lua;" .. package.path
 dofile(arg[1])
-local general, config = {}, hl.config
+local general, cursor, config = {}, {}, hl.config
 hl.config = function(c)
     config(c)
     for k, v in pairs(c.general or {}) do general[k] = v end
+    for k, v in pairs(c.cursor or {}) do cursor[k] = v end
 end
 local vars = require("variables")
 for k, v in pairs(require("hypr-vars")) do vars[k] = v end
@@ -516,9 +591,12 @@ end
 -- the stand-in's game 0x2 at the load, closing (still listed then), another opening, a non-game, a window tagged later
 local function fire(name, ...) for _, fn in ipairs(handlers[name] or {}) do fn(...) end end
 check("edges with a game open at load", general.resize_on_border, false)
+-- (and the pointer drawn into the picture meanwhile: no tearing, the lower input lag, with the cursor layer showing one)
+check("software pointer with a game open", cursor.no_hardware_cursors, 1)
 local game = WINDOWS[2]
 fire("window.close", game); WINDOWS = { WINDOWS[1] }
 check("edges once the game closed", general.resize_on_border, true)
+check("the cursor layer back once the game closed", cursor.no_hardware_cursors, 2)
 local other = { address = "0x7", class = "org.gnome.Calculator", title = "c", floating = true, fullscreen = 0, pid = 1,
                 tags = {}, workspace = ws(1), monitor = SCREENS[1], at = { x = 0, y = 0 }, size = { x = 400, y = 300 },
                 focus_history_id = 1 }
@@ -590,6 +668,33 @@ check("pinned minimised", steps(), "window.pin:off window.tag:+minimised_pinned 
 pip.pinned, pip.tags = false, { "minimised_pinned" }
 fire("window.active", pip)
 check("pinned restored", steps(), "window.move:1 window.tag:-minimised_pinned window.pin:on window.alter_zorder:nil")
+-- Maximised, minimised, the screen shrunk while it was away: it comes back filling the screen as it is now
+local mx = { address = "0xm", class = "thunar", title = "m", floating = true, fullscreen = 0, pid = 1, tags = { "maximised" },
+             workspace = ws(1), monitor = SCREENS[1], at = { x = 11, y = 83 }, size = { x = 1898, y = 986 }, focus_history_id = 5 }
+WINDOWS[#WINDOWS + 1] = mx
+dots.minimise_window(mx); sent = {}
+local was_w = SCREENS[1].width
+SCREENS[1].width = 1600
+fire("window.active", mx)
+local back_w
+for _, d in ipairs(sent) do if d[1] == "window.resize" then back_w = d[2].x end end
+sent, SCREENS[1].width = {}, was_w
+table.remove(WINDOWS)
+check("maximised, minimised, back after the screen shrank: fits it", back_w, 1600 - 22)
+-- ...a snapped one (left half, the free part it was placed for noted) the same: back as the left half of the screen
+-- as it is now, scaled from that note
+local sn = { address = "0xn", class = "thunar", title = "n", floating = true, fullscreen = 0, pid = 1,
+             tags = { "snapped", "snap_left", "snaparea_DP-1_11_51_1898_1018_12_32" }, workspace = ws(1), monitor = SCREENS[1],
+             at = { x = 11, y = 83 }, size = { x = 943, y = 986 }, focus_history_id = 6 }
+WINDOWS[#WINDOWS + 1] = sn
+dots.minimise_window(sn); sent = {}
+SCREENS[1].width = 1600
+fire("window.active", sn)
+back_w = nil
+for _, d in ipairs(sent) do if d[1] == "window.resize" then back_w = d[2].x end end
+sent, SCREENS[1].width = {}, was_w
+table.remove(WINDOWS)
+check("snapped, minimised, back after the screen shrank: the left half of it", back_w and math.abs(back_w - (1578 - 12) / 2) <= 1, true)
 -- An app's minimise request with no window to it (gone by then): nothing, not the focused window minimised instead
 fire("window.minimize", nil, true)
 check("minimise request with no window", steps(), "")
@@ -608,6 +713,426 @@ for _, d in ipairs(sent) do
 end
 check("notification click: the most recent window", focused, "0xe3")
 sent = {}
+-- Snapping (floating mode, the first screen: 1920x1080, 40 px reserved at the top; gaps 10 out, 5 in, border 1 or 2):
+-- let go at the left edge it takes the left half, below its title bar; dragged away, its old size back; in the top right
+-- corner the top right quarter; at the top edge maximised; mid-screen nothing. Caelestia told of the drag and the zone
+local events = {}
+-- (the second screen away from the first while its edges are tried: a side with a screen beyond isn't a snap edge)
+SCREENS[2].x = 5000
+local function snap(address, x, y)
+    hl.get_cursor_pos = function() return { x = x, y = y } end
+    dots.window_drag_start(address, "move")
+    dots.window_drag_end(address, "move")
+    local r = result()
+    for _, d in ipairs(sent) do if d[1] == "event" then events[#events + 1] = d[2] end end
+    return r
+end
+local hdispatch = hl.dispatch
+hl.dispatch = function(d) if d[1] == "event" then events[#events + 1] = d[2] end; hdispatch(d) end
+local ed = { address = "0xa", class = "org.gnome.TextEditor", title = "t", floating = true, fullscreen = 0, pid = 1,
+             tags = {}, workspace = ws(1), monitor = SCREENS[1], at = { x = 500, y = 400 }, size = { x = 800, y = 600 },
+             focus_history_id = 0 }
+WINDOWS = { ed }
+local bar = dots.titlebar_height(ed)
+local a = { x = 11, y = 51 }  -- (0 + 10 + 1, 40 + 10 + 1: the gaps and border inside the reserved space)
+a.w, a.h = 1920 - 2 * a.x, 1080 - 40 - 2 * 11
+-- (its snapping and maximised tags; the free part it was placed for, snaparea_<screen>_<x>_<y>_<w>_<h>_<seam>_<bar>, on its own)
+local function tags(w) local t = {}; for _, x in ipairs(w.tags) do if not x:match("^snaparea_") then t[#t + 1] = x end end; table.sort(t); return table.concat(t, " ") end
+local function areas(w) local t = {}; for _, x in ipairs(w.tags) do if x:match("^snaparea_") then t[#t + 1] = x end end; table.sort(t); return table.concat(t, " ") end
+r = snap("0xa", 0, 540)
+check("snapped left: tags", tags(ed), "snap_left snapped")
+check("snapped left: place", r.x .. "," .. r.y, a.x .. "," .. (a.y + bar))
+check("snapped left: the free part noted, once", areas(ed), "snaparea_DP-1_11_51_" .. a.w .. "_" .. a.h .. "_12_" .. bar)
+check("snapped left: half, a seam between", math.abs(2 * r.w + 12 - a.w) <= 1 and r.h == a.h - bar, true)
+check("drag told", table.concat(events, "|"):match("^agros_drag 1|agros_snap DP%-1 11 51 %d+ %d+|agros_drag 0|agros_snap none") ~= nil, true)
+ed.at, ed.size = { x = r.x, y = r.y }, { x = r.w, y = r.h }
+hl.get_cursor_pos = function() return { x = 300, y = 500 } end
+dots.window_drag_start("0xa", "move")
+r = result()
+check("unsnapped: tags", tags(ed), ""); check("unsnapped: old size", r.w .. "x" .. r.h, "800x600")
+check("unsnapped: the free part's note gone", areas(ed), "")
+dots.window_drag_end("0xa", "move"); result()
+ed.size, ed.tags = { x = 800, y = 600 }, {}
+r = snap("0xa", 1919, 0)
+check("top right quarter", r.x > 960 and r.y == a.y + bar and math.abs(2 * (r.h + bar) + 12 - a.h) <= 1, true)
+dots.window_drag_start("0xa", "move"); dots.window_drag_end("0xa", "move"); result()
+-- Slid along the edge mid-drag (each step: the plugin's dots.window_drag_step): from the top right corner down to the
+-- right edge's middle, the preview follows (the right half told) and the window takes the right half
+events = {}
+hl.get_cursor_pos = function() return { x = 1919, y = 0 } end
+dots.window_drag_start("0xa", "move")
+hl.get_cursor_pos = function() return { x = 1919, y = 540 } end
+dots.window_drag_step("0xa", "move")
+dots.window_drag_end("0xa", "move")
+r = result()
+check("slid to the right edge: preview", table.concat(events, "|"):match("agros_snap DP%-1 %d+ 51 %d+ %d+|agros_drag 0") ~= nil, true)
+check("slid to the right edge: right half", r.x > 960 and r.y == a.y + bar and r.h == a.h - bar, true)
+dots.window_drag_start("0xa", "move"); dots.window_drag_end("0xa", "move"); result()
+ed.size, ed.tags = { x = 800, y = 600 }, {}
+r = snap("0xa", 960, 41)
+check("top edge (the free part's, below the reserved 40 px) maximises", r.tag, "+maximised")
+ed.tags = {}
+dots.window_drag_start("0xa", "move"); dots.window_drag_end("0xa", "move"); result()
+r = snap("0xa", 960, 540)
+check("mid-screen: nothing", r.tag, nil)
+-- Two snapped side by side: resizing the left one moves the right one's edge with it
+local right = { address = "0xb", class = "thunar", title = "f", floating = true, fullscreen = 0, pid = 1, tags = {},
+                workspace = ws(1), monitor = SCREENS[1], at = { x = 0, y = 0 }, size = { x = 800, y = 600 },
+                focus_history_id = 1 }
+WINDOWS = { ed, right }
+r = snap("0xa", 0, 540); ed.at, ed.size = { x = r.x, y = r.y }, { x = r.w, y = r.h }
+r = snap("0xb", 1919, 540); right.at, right.size = { x = r.x, y = r.y }, { x = r.w, y = r.h }
+local right_end = right.at.x + right.size.x
+dots.window_drag_start("0xa", "resize")
+ed.size = { x = ed.size.x + 100, y = ed.size.y }
+dots.window_drag_end("0xa", "resize")
+r = result()
+check("seam: the right one follows", r.x .. "," .. r.w, (right.at.x + 100) .. "," .. (right_end - right.at.x - 100))
+-- The right one's app can't go below 700 px wide: dragged 400 px into it, it stops at 700 and the left one is held back
+-- to it (as the left one stops at its own smallest, which Hyprland does)
+hl.plugin.hyprbars.min_size = function(address) if address == "0xb" then return 700, 200 end return 1, 1 end
+ed.size = { x = ed.size.x - 100, y = ed.size.y }
+dots.window_drag_start("0xa", "resize")
+local was_w = ed.size.x
+ed.size = { x = was_w + 400, y = ed.size.y }
+dots.window_drag_step("0xa", "resize")
+local moved, held = {}, {}
+for _, d in ipairs(sent) do
+    local w = d[2] and d[2].window
+    local who = type(w) == "table" and w.address or w
+    if d[1] == "window.resize" then (who == right and moved or who == ed and held or (who == "0xb" and moved or held)).w = d[2].x end
+    if d[1] == "window.move" then (who == right and moved or who == ed and held or (who == "0xb" and moved or held)).x = d[2].x end
+end
+dots.window_drag_end("0xa", "resize"); result()
+check("seam at the neighbour's smallest: its width", moved.w, 700)
+check("seam at the neighbour's smallest: the left one held back", held.w, right_end - 700 - 12 - ed.at.x)
+hl.plugin.hyprbars.min_size = nil
+-- Always within reach: let go with its title bar above the top border (40 px reserved), it comes down below it; mostly
+-- off the left edge, 150 px of it stays in (no screen to the left); a screen that shrinks re-fits the snapped one
+local free = { address = "0xc", class = "org.gnome.Calculator", title = "c", floating = true, fullscreen = 0, pid = 1,
+               tags = {}, workspace = ws(1), monitor = SCREENS[1], at = { x = 500, y = 20 }, size = { x = 800, y = 600 },
+               focus_history_id = 2 }
+WINDOWS = { free, ed, right }
+r = snap("0xc", 900, 500)
+check("dropped above the top: below it", r.y, 40 + bar)
+free.at = { x = -700, y = 300 }
+r = snap("0xc", 50, 500)
+check("dropped off the left: 150 px in", r.x, 150 - 800)
+local was = SCREENS[1].width
+SCREENS[1].width = 1600
+dots.refit_maximised()
+r = result()
+check("screen shrunk: the left one fits its half", r.w, math.floor((1600 - 22 - 12) / 2))
+SCREENS[1].width = was
+-- A pair resized off halves (1200 | 686 of 1898) keeps its split when the screen shrinks: the seam's middle in
+-- proportion, the gap the same, the outer edges on the border
+dots.refit_maximised(); result()
+ed.at, ed.size = { x = 11, y = 51 + bar }, { x = 1200, y = a.h - bar }
+right.at, right.size = { x = 1223, y = 51 + bar }, { x = 686, y = a.h - bar }
+SCREENS[1].width = 1600
+dots.refit_maximised()
+local fit = {}
+for _, d in ipairs(sent) do
+    local w = d[2] and d[2].window
+    local who = type(w) == "table" and w.address or w
+    if who and d[1] == "window.resize" then fit[who] = fit[who] or {}; fit[who].w = d[2].x end
+    if who and d[1] == "window.move" then fit[who] = fit[who] or {}; fit[who].x = d[2].x end
+end
+sent = {}
+SCREENS[1].width = was
+check("screen shrunk: a resized pair keeps its split", (fit["0xa"] and fit["0xa"].w) .. "," .. (fit["0xb"] and fit["0xb"].x) .. ","
+    .. (fit["0xb"] and fit["0xb"].x + fit["0xb"].w), "997,1020,1589")
+check("screen shrunk: the free part's note replaced", areas(ed), "snaparea_DP-1_11_51_" .. (1600 - 22) .. "_" .. a.h .. "_12_" .. bar)
+-- Its workspace moved to the other screen (Hyprland moves its windows by the screens' offset only): placed in its zone
+-- there, not scaled from the first screen's free part
+ed.monitor = SCREENS[2]
+dots.refit_maximised()
+local moved_ed
+for _, d in ipairs(sent) do
+    local w = d[2] and d[2].window
+    if d[1] == "window.move" and (w == ed or w == "0xa" or (type(w) == "table" and w.address == "0xa")) then moved_ed = d[2].x end
+end
+sent = {}
+ed.monitor = SCREENS[1]
+check("its workspace on the other screen: into its zone there", moved_ed ~= nil and moved_ed >= SCREENS[2].x, true)
+check("its workspace on the other screen: that screen's free part noted", areas(ed):match("^snaparea_HDMI%-A%-1_[%d_]+$") ~= nil, true)
+-- The second screen back beside the first: its right edge isn't a snap edge (the pointer goes on across there)
+SCREENS[2].x = 1920
+free.tags = {}
+free.at = { x = 1000, y = 300 }
+r = snap("0xc", 1919, 540)
+check("the edge toward another screen: no snap", r.tag == nil and tags(free) == "", true)
+-- Off the right edge with the second screen beyond it: left there (it reaches across)
+free.at = { x = 1880, y = 300 }
+r = snap("0xc", 1000, 500)
+check("off the edge, a screen beyond: left there", r.x, nil)
+-- ...and the same toward a screen on the left, above and below (the second one is 1152 x 2048 in its turned units): its
+-- edge no snap zone, a window reaching across left there
+local was_x, was_y = SCREENS[2].x, SCREENS[2].y
+for _, c in ipairs({ { "left", -1152, 0, { 0, 540 }, { -700, 300 } }, { "above", 0, -2048, { 960, 0 }, { 500, -400 } },
+                     { "below", 0, 1080, { 100, 1079 }, { 500, 1040 } } }) do
+    SCREENS[2].x, SCREENS[2].y = c[2], c[3]
+    free.tags, free.at = {}, { x = 1000, y = 300 }
+    r = snap("0xc", c[4][1], c[4][2])
+    check("the edge toward a screen " .. c[1] .. ": no snap", r.tag == nil and tags(free) == "", true)
+    free.at = { x = c[5][1], y = c[5][2] }
+    r = snap("0xc", 1000, 500)
+    check("off the edge toward a screen " .. c[1] .. ": left there", (r.x or "") .. (r.y or ""), "")
+end
+SCREENS[2].x, SCREENS[2].y = was_x, was_y
+-- Each window's box as dispatched (address -> x, y, w, h), the dispatches then cleared
+local function placed()
+    local p = {}
+    for _, d in ipairs(sent) do
+        local w = d[2] and d[2].window
+        local who = type(w) == "table" and w.address or w
+        if who and (d[1] == "window.resize" or d[1] == "window.move") then
+            p[who] = p[who] or {}
+            if d[1] == "window.resize" then p[who].w, p[who].h = d[2].x, d[2].y else p[who].x, p[who].y = d[2].x, d[2].y end
+        end
+    end
+    sent = {}
+    return p
+end
+local function at(w, b) w.at, w.size = { x = b.x, y = b.y }, { x = b.w, y = b.h } end
+local function snapped(w, x, y)
+    w.tags = {}
+    hl.get_cursor_pos = function() return { x = x, y = y } end
+    dots.window_drag_start(w.address, "move"); dots.window_drag_end(w.address, "move")
+    at(w, placed()[w.address])
+end
+-- Quarters: the top left one resized against a right half moves the bottom left one's edge on the same seam too; the
+-- top right one resized down moves the bottom right one's top (a seam across)
+local tl = { address = "0x21", class = "a", title = "a", floating = true, fullscreen = 0, pid = 1, tags = {}, workspace = ws(1),
+             monitor = SCREENS[1], at = { x = 300, y = 300 }, size = { x = 600, y = 400 }, focus_history_id = 5 }
+local bl, rh, tr, br = {}, {}, {}, {}
+for k, v in pairs(tl) do bl[k], rh[k], tr[k], br[k] = v, v, v, v end
+bl.address, rh.address, tr.address, br.address = "0x22", "0x23", "0x24", "0x25"
+WINDOWS = { tl, bl, rh }
+SCREENS[2].x = 5000
+snapped(tl, 0, 0); snapped(bl, 0, 1079); snapped(rh, 1919, 540)
+local bl_w = bl.size.x
+dots.window_drag_start("0x21", "resize")
+tl.size = { x = tl.size.x + 100, y = tl.size.y }
+dots.window_drag_step("0x21", "resize")
+local p = placed()
+dots.window_drag_end("0x21", "resize"); placed()
+check("quarters: the right half follows", p["0x23"] and p["0x23"].x, rh.at.x + 100)
+check("quarters: the bottom left one along the seam", p["0x22"] and p["0x22"].w, bl_w + 100)
+check("quarters: nothing moved for nothing", p["0x21"], nil)
+WINDOWS = { tr, br }
+snapped(tr, 1919, 0); snapped(br, 1919, 1079)
+dots.window_drag_start("0x24", "resize")
+tr.size = { x = tr.size.x, y = tr.size.y + 50 }
+dots.window_drag_step("0x24", "resize")
+p = placed()
+dots.window_drag_end("0x24", "resize"); placed()
+check("seam across: the bottom one's top follows", p["0x25"] and (p["0x25"].y .. "," .. p["0x25"].h), (br.at.y + 50) .. "," .. (br.size.y - 50))
+-- Four quarters: the top left one widened, the whole vertical seam moves (the bottom row's too)
+local q = {}
+for k, addr in ipairs({ "0x31", "0x32", "0x33", "0x34" }) do
+    q[k] = {}
+    for f, v in pairs(tl) do q[k][f] = v end
+    q[k].address = addr
+end
+WINDOWS = q
+snapped(q[1], 0, 0); snapped(q[2], 1919, 0); snapped(q[3], 0, 1079); snapped(q[4], 1919, 1079)
+dots.window_drag_start("0x31", "resize")
+q[1].size = { x = q[1].size.x + 100, y = q[1].size.y }
+dots.window_drag_step("0x31", "resize")
+p = placed()
+dots.window_drag_end("0x31", "resize"); placed()
+check("four quarters: the seam moves whole", table.concat({ p["0x32"] and p["0x32"].x or "-", p["0x33"] and p["0x33"].w or "-",
+    p["0x34"] and p["0x34"].x or "-" }, ","), (q[2].at.x + 100) .. "," .. (q[3].size.x + 100) .. "," .. (q[4].at.x + 100))
+SCREENS[2].x = 1920
+-- Let go at the second screen's top edge, most of the window still on the first: maximised on the second (the
+-- preview's), onto its workspace
+local far = { address = "0x26", class = "a", title = "a", floating = true, fullscreen = 0, pid = 1, tags = {}, workspace = ws(1),
+              monitor = SCREENS[1], at = { x = 1000, y = 300 }, size = { x = 800, y = 600 }, focus_history_id = 6 }
+WINDOWS = { far }
+FOCUS = 2
+r = snap("0x26", 2400, 0)
+FOCUS = 1
+check("let go on the other screen: maximised there", r.tag == "+maximised" and r.x >= 1920, true)
+check("let go on the other screen: its workspace", far.workspace.id, 11)
+-- Snapped, then maximised (the button): no longer snapped; restored, its next drag keeps its size (not the one it had
+-- before it snapped)
+far.workspace, far.monitor, far.at = ws(1), SCREENS[1], { x = 1000, y = 300 }
+snapped(far, 0, 540)
+dots.maximise_window(far); far.tags = { "maximised" }
+check("maximised: no longer snapped", tostring(far.tags[2]), "nil")
+dots.maximise_window(far); far.tags = {}; result()
+dots.window_drag_start("0x26", "move")
+check("restored, then dragged: its size kept", result().w, nil)
+dots.window_drag_end("0x26", "move"); result()
+-- A drag's end the plugin saw no start of (or after a reload mid-drag): Caelestia's panels and the preview let go of
+events = {}
+dots.window_drag_end("", "")
+check("a lone drag end: dragging over", table.concat(events, "|"), "agros_drag 0")
+events = {}
+dots.window_drag_end("0x26", "move"); result()
+check("a lone move end: the preview gone", table.concat(events, "|"), "agros_drag 0|agros_snap none")
+-- A popup (opens floating) keeps its own size; one wider than the screen is shrunk to its free part, in the middle
+local pop = { address = "0x27", class = "xdg-desktop-portal-gtk", title = "Open With…", floating = true, fullscreen = 0,
+              pid = 1, tags = {}, workspace = ws(1), monitor = SCREENS[1], at = { x = 760, y = 400 },
+              size = { x = 400, y = 200 }, focus_history_id = 7 }
+WINDOWS = { pop }
+sent = {}
+for _, fn in ipairs(handlers["window.open"] or {}) do fn(pop) end
+check("a popup: its own size", result().w, nil)
+pop.at, pop.size = { x = -540, y = 400 }, { x = 3000, y = 200 }
+for _, fn in ipairs(handlers["window.open"] or {}) do fn(pop) end
+r = result()
+check("a wide popup: as wide as the screen's free part, in the middle", r.w .. "," .. r.x .. "," .. r.h, a.w .. "," .. a.x .. ",200")
+-- An X11 menu or tooltip (Caelestia's xwl_popup tag): no title bar counted, and left where its app put it
+local menu = { address = "0x28", class = "steam", title = "", floating = true, fullscreen = 0, pid = 1, tags = { "xwl_popup*" },
+               workspace = ws(1), monitor = SCREENS[1], at = { x = 100, y = 45 }, size = { x = 300, y = 200 }, focus_history_id = 8 }
+check("an X11 menu: no title bar", dots.titlebar_height(menu), 0)
+-- Caelestia's Game mode (no gaps, a 1 px border, set at runtime: Hyprland's settings, not Caelestia's variables): a pair
+-- snapped before it refitted as it comes on (Hyprland's config.props_refreshed), against the screen's free part and
+-- across the new seam (2 px), as the title bar plugin's seams expect; and back as it goes off
+local gl = { address = "0x29", class = "thunar", title = "g", floating = true, fullscreen = 0, pid = 1, tags = {},
+             workspace = ws(1), monitor = SCREENS[1], at = { x = 500, y = 400 }, size = { x = 800, y = 600 }, focus_history_id = 9 }
+local gr = { address = "0x2a", class = "thunar", title = "h", floating = true, fullscreen = 0, pid = 1, tags = {},
+             workspace = ws(1), monitor = SCREENS[1], at = { x = 500, y = 400 }, size = { x = 800, y = 600 }, focus_history_id = 9 }
+WINDOWS, SCREENS[2].x = { gl, gr }, 5000
+snapped(gl, 0, 540); snapped(gr, 1919, 540)
+check("before Game mode: a 12 px seam", gr.at.x - (gl.at.x + gl.size.x), 12)
+local function refit()
+    fire("config.props_refreshed", true)
+    local p = placed()
+    for _, w in ipairs({ gl, gr }) do
+        local b = p[w.address] or {}
+        w.at = { x = b.x or w.at.x, y = b.y or w.at.y }; w.size = { x = b.w or w.size.x, y = b.h or w.size.y }
+    end
+end
+CONFIG["general.gaps_in"], CONFIG["general.gaps_out"] = { top = 0, right = 0, bottom = 0, left = 0 }, { top = 0, right = 0, bottom = 0, left = 0 }
+CONFIG["general.border_size"] = 1
+refit()
+check("Game mode on: the pair against the free part", gl.at.x .. "," .. gl.at.y .. "," .. (gr.at.x + gr.size.x), "1," .. (40 + 1 + bar) .. ",1919")
+check("Game mode on: a 2 px seam", gr.at.x - (gl.at.x + gl.size.x), 2)
+-- (snapped during it: the right half across the 2 px seam)
+gr.tags = {}
+snapped(gr, 1919, 540)
+check("Game mode: snapped right across its seam", gr.at.x, 1 + (1918 - 2) / 2 + 2)
+CONFIG["general.gaps_in"], CONFIG["general.gaps_out"], CONFIG["general.border_size"] = nil, nil, nil
+refit()
+check("Game mode off: the 12 px seam back", gr.at.x - (gl.at.x + gl.size.x) .. "," .. gl.at.x, "12,11")
+-- A pair split off halves, Game mode on and off ten times (each reload with it on is a round trip), on a screen whose
+-- scale Hyprland gives as a float (its size in those units a hair off whole): the split where it was, not creeping a
+-- pixel a time (each placed box rounded, then worked out again from)
+local was_scale = SCREENS[1].scale
+SCREENS[1].scale = 1920 / 1919.99998
+gl.size.x = 1200 - gl.at.x; gr.at.x = 1200 + 12; gr.size.x = 1909 - gr.at.x
+for _ = 1, 10 do
+    CONFIG["general.gaps_in"], CONFIG["general.gaps_out"] = { top = 0, right = 0, bottom = 0, left = 0 }, { top = 0, right = 0, bottom = 0, left = 0 }
+    CONFIG["general.border_size"] = 1
+    refit()
+    CONFIG["general.gaps_in"], CONFIG["general.gaps_out"], CONFIG["general.border_size"] = nil, nil, nil
+    refit()
+end
+check("ten Game mode round trips: the split kept", (gl.at.x + gl.size.x) .. "," .. gr.at.x, "1200,1212")
+SCREENS[1].scale = was_scale
+-- A screen an odd number of pixels wide (its halves on half pixels): the window snapped right ends on the free part's
+-- edge (its edges rounded, not its size), and the preview showed the box it went to, to the pixel
+local was_width = SCREENS[1].width
+SCREENS[1].width = 1921
+events = {}
+gr.tags = {}
+snapped(gr, 1920, 540)
+local shown
+for _, e in ipairs(events) do if e:match("^agros_snap DP") then shown = e end end
+check("an odd width: the right half ends on the free part's edge", gr.at.x + gr.size.x, 1921 - 11)
+check("an odd width: the preview where it went", shown,
+    string.format("agros_snap DP-1 %d %d %d %d", gr.at.x, gr.at.y - bar, gr.size.x, gr.size.y + bar))
+SCREENS[1].width = was_width
+gr.tags = {}
+snapped(gr, 1919, 540)
+-- Title bars turned off (the Settings app): the snapped pair fits the free part without them, its top there; and back
+local titlebar_height = dots.titlebar_height
+dots.titlebar_height = nil
+refit()
+check("title bars off: up to the free part's top, as tall", gl.at.y .. "," .. gl.size.y, "51," .. a.h)
+dots.titlebar_height = titlebar_height
+refit()
+check("title bars on: below its bar again", gl.at.y .. "," .. gl.size.y, (51 + bar) .. "," .. (a.h - bar))
+-- Only the maximised and snapped ones: a maximised one already at its box, a floating one off the screen's edge and an
+-- X11 menu mostly off the left edge are left where they are
+local mxd = { address = "0x2b", class = "thunar", title = "x", floating = true, fullscreen = 0, pid = 1, tags = { "maximised" },
+              workspace = ws(1), monitor = SCREENS[1], at = { x = 11, y = 51 + bar }, size = { x = 1898, y = a.h - bar },
+              focus_history_id = 9 }
+local off = { address = "0x2c", class = "foot", title = "o", floating = true, fullscreen = 0, pid = 1, tags = {},
+              workspace = ws(1), monitor = SCREENS[1], at = { x = -700, y = 300 }, size = { x = 800, y = 600 }, focus_history_id = 9 }
+local xmenu = { address = "0x2d", class = "steam", title = "", floating = true, fullscreen = 0, pid = 1, tags = { "xwl_popup*" },
+                workspace = ws(1), monitor = SCREENS[1], at = { x = -350, y = 980 }, size = { x = 400, y = 100 }, focus_history_id = 9 }
+WINDOWS = { gl, gr, mxd, off, xmenu }
+fire("config.props_refreshed", true)
+local p = placed()
+check("a refresh: nothing moved that was in place", (p["0x2b"] and "max" or "") .. (p["0x2c"] and "off" or "") .. (p["0x2d"] and "menu" or "")
+    .. (p["0x29"] and "l" or "") .. (p["0x2a"] and "r" or ""), "")
+mxd.size = { x = 1500, y = 700 }
+fire("config.props_refreshed", true)
+p = placed()
+check("a refresh: a maximised one off its box filled again", p["0x2b"] and p["0x2b"].w, 1898)
+dots.refit_window(xmenu)
+check("an X11 menu never moved into reach", placed()["0x2d"], nil)
+-- A burst of events (a layer opened and closed, a setting made; Caelestia's bar's space changed, its call): one refit,
+-- a second after the last (the timer set again by each), then as before
+HOLD_TIMERS, HELD_TIMERS, TIMER_SETS = true, {}, {}
+mxd.size = { x = 1500, y = 700 }
+fire("layer.opened"); fire("layer.closed"); fire("config.props_refreshed", true); dots.refit_placed_soon()
+check("a burst: one timer, set again by each, a second", #HELD_TIMERS .. ":" .. table.concat(TIMER_SETS, ","), "1:1000,1000,1000,1000")
+check("a burst: nothing moved before it settles", placed()["0x2b"], nil)
+HELD_TIMERS[1]()
+p = placed()
+check("a burst: refitted once it settles", p["0x2b"] and p["0x2b"].w, 1898)
+HELD_TIMERS, TIMER_SETS = {}, {}
+fire("layer.opened")
+check("after it: a new timer", #HELD_TIMERS, 1)
+HOLD_TIMERS, HELD_TIMERS = false, {}
+WINDOWS = { gl, gr }
+dots.window_drag_start("0x29", "move"); dots.window_drag_end("0x29", "move"); result()
+SCREENS[2].x = 1920
+-- The title bar counted (titlebar_height) exactly where the plugin's rules give one (hyprbars:no_bar): a store
+-- launcher under Proton (steam_app_default, Caelestia's game tag, yet not a game to dots.is_game) included
+local function rx(pat, str)
+    local alts = pat:match("^%^%((.*)%)%$$")
+    if alts then
+        for alt in (alts .. "|"):gmatch("(.-)|") do if str == alt:gsub("\\(.)", "%1") then return true end end
+        return false
+    end
+    return str:match((pat:gsub("\\d", "%%d"):gsub("\\%.", "%%."))) ~= nil
+end
+local function no_bar(w)
+    for _, r in ipairs(WINDOW_RULES) do
+        if r["hyprbars:no_bar"] then
+            local m, hit = r.match, true
+            if m.float ~= nil and w.floating ~= m.float then hit = false end
+            if m.fullscreen ~= nil and (w.fullscreen ~= 0) ~= m.fullscreen then hit = false end
+            if m.class and not rx(m.class, w.class) then hit = false end
+            if m.tag then
+                local has = false
+                for _, t in ipairs(w.tags) do if t == m.tag or t == m.tag .. "*" then has = true end end
+                hit = hit and has
+            end
+            if hit then return true end
+        end
+    end
+    return false
+end
+for _, w in ipairs({
+    { class = "steam_app_default", tags = { "game" } }, { class = "steam_app_2357570", tags = {} },
+    { class = "SomeNativeGame", tags = { "game*" } }, { class = "thunar", tags = {} }, { class = "steam", tags = {} },
+    { class = "proton.vpn.app.gtk", tags = {} }, { class = "wine", tags = { "xwl_popup*" } },
+    { class = "thunar", tags = {}, fullscreen = 2 }, { class = "thunar", tags = {}, floating = false },
+}) do
+    w.floating = w.floating ~= false; w.fullscreen = w.fullscreen or 0
+    check("title bar counted where the plugin draws one (" .. w.class .. " " .. table.concat(w.tags, ",") .. ")",
+        dots.titlebar_height(w) == 0, no_bar(w))
+end
+for _, fn in ipairs(handlers["window.open"] or {}) do fn(menu) end
+check("an X11 menu: left where it is", result().x, nil)
+hl.dispatch = hdispatch
 for _, e in ipairs(config_errors) do error("config error " .. e, 0) end
 L
 out=$(cd "$t" && HOME=$t/home PLUGIN=1 XDG_RUNTIME_DIR=$t/run HYPRLAND_INSTANCE_SIGNATURE=test lua drag.lua stub.lua 2>&1)     || fail "window drags: $out"
@@ -715,4 +1240,28 @@ for _, c in ipairs({ { shim, "" }, { shim .. ":/a.so", "/a.so" }, { "/a.so:" .. 
 end
 L
 out=$(cd "$t" && HOME=$t/home lua preload.lua stub.lua 2>&1) || fail "LD_PRELOAD without the shim: $out"
+# Every setting the config makes (at load and in its handlers, as the runs above played them) in Hyprland's own list of
+# them (its Lua stubs; the plugins' own aside): a setting renamed or gone found here, not only at the next login
+stubs=/usr/share/hypr/stubs/hl.meta.lua
+if [[ -f $stubs ]]; then
+    python3 -I - "$stubs" "$t/config-keys" <<'PY' || fail "settings the installed Hyprland doesn't have (above)"
+import re, sys
+keys, alias = set(), None
+for line in open(sys.argv[1]):
+    if m := re.match(r"---@alias ([\w.]+)", line):
+        alias = m[1]
+    elif (m := re.match(r'---\| "([^"]+)"', line)) and alias == "HL.ConfigKey":
+        keys.add(m[1])
+assert keys, "the stubs' layout changed: this check needs updating"
+bad = set()
+for path in open(sys.argv[2]).read().split():
+    parts = path.split(".")
+    if parts[0] == "plugin" or any(".".join(parts[:i]) in keys for i in range(1, len(parts) + 1)):
+        continue
+    bad.add(path)
+for b in sorted(bad):
+    print(f"hl.config: {b}")
+sys.exit(1 if bad else 0)
+PY
+fi
 echo "ok hypr-config"

@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# Hides the mouse pointer as the computer powers off or restarts, however that's asked for (the shell's buttons, the
+# lock screen's, a terminal's systemctl poweroff): logind's PrepareForShutdown signal. The pointer is on the graphics
+# card's cursor layer (hardware cursors: no lag behind the mouse), which nothing clears when the desktop closes, so it
+# stayed on the shutdown screen. A delay lock (logind waits for it, 5 s at most) holds the shutdown until it's hidden.
+# Run at login (user/desktop.lua), for the session; idle until then (it only waits on D-Bus). One listener all along, so
+# a shutdown called off after all (PrepareForShutdown false: a job that failed) is never missed: the pointer back, the
+# lock taken again
+# (the lock: systemd-inhibit around a cat reading from here; closing that pipe ends it, letting the shutdown go on. Taken
+# once its command says so, a line: only then is it held. Refused, or gone since (logind restarted): the pointer still
+# hidden at the signal, with no lock to let go)
+hold() {
+    coproc LOCK { exec systemd-inhibit --what=shutdown --mode=delay --who="Desktop" \
+        --why="Hiding the pointer before the shutdown screen" sh -c 'echo; exec cat >/dev/null'; }
+    read -r -t 5 -u "${LOCK[0]}" _ || true
+}
+# (the traps first: a TERM from the watcher below, its Hyprland gone already, ends this cleanly, its listener with it)
+monitor='' watcher=''
+trap 'exit 0' TERM
+trap 'kill $monitor $watcher 2>/dev/null' EXIT
+exec 3< <(exec gdbus monitor --system --dest org.freedesktop.login1 --object-path /org/freedesktop/login1)
+monitor=$!
+# (its Hyprland gone, the session logged out of or crashed: ended, its lock with it, not one more left at each login;
+# logind keeps a user's processes past a logout by default. Hyprland's process, from its lock file: its socket outlives
+# a crash. Watched beside the listener, which reads whole lines, never cut off by a timeout)
+hpid=$(head -n1 "${XDG_RUNTIME_DIR:-/run/user/$UID}/hypr/${HYPRLAND_INSTANCE_SIGNATURE:-}/hyprland.lock" 2>/dev/null)
+if [[ $hpid =~ ^[0-9]+$ ]]; then
+    { while kill -0 "$hpid" 2>/dev/null; do sleep "${CURSOR_HIDE_POLL:-10}"; done; kill -TERM $$; } &
+    watcher=$!
+fi
+hold
+hidden=0
+# (logind's PrepareForShutdown by its exact name: since systemd 255 a PrepareForShutdownWithMetadata comes with it)
+while read -r line <&3; do
+    case $line in
+        *.PrepareForShutdown\ \(true*)
+            ((hidden)) && continue
+            hidden=1
+            hyprctl eval 'hl.config({ cursor = { invisible = true } })' >/dev/null 2>&1
+            # (Hyprland takes the setting up at its next cursor update, every half second at most: the lock held until then)
+            sleep 0.7
+            if [[ -n ${LOCK[1]:-} ]]; then
+                fd=${LOCK[1]}
+                exec {fd}>&-
+            fi ;;
+        *.PrepareForShutdown\ \(false*)
+            ((hidden)) || continue
+            hidden=0
+            hyprctl eval 'hl.config({ cursor = { invisible = false } })' >/dev/null 2>&1
+            hold ;;
+    esac
+done

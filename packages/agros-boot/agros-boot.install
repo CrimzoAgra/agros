@@ -32,28 +32,8 @@ post_install() {
 }
 
 post_upgrade() {
-    # A changed boot-menu applied (it sets the same settings each run). GRUB's settings from before AgrOS: an earlier
-    # boot-menu kept them as grub.bak (copied, not moved: it may be a .bak of yours, from before AgrOS all the same)
-    # Not noted yet (an install from before the note): noted as it is, not run (that would put the settings back over
-    # yours once, on everyone's next update); the backup still kept under AgrOS's own name
-    # (Limine's limine.conf.bak the same, wherever boot-loader says Limine keeps it)
-    local c g=$_r/etc/default/grub
-    for c in "$g" $("$_lib/boot-loader" --limine-all); do
-        [[ -f $c.bak && ! -e $c.agros-orig ]] && cp -p "$c.bak" "$c.agros-orig"
-    done
-    if [[ ! -f $_stamp ]]; then
-        "$_lib/boot-menu" --note
-    elif [[ $(sha256sum <"$_lib/boot-menu") != "$(cat "$_stamp")" ]]; then
-        _boot_menu
-    fi
-    # GRUB on CachyOS's theme (installs from before AgrOS had its own): AgrOS's, once; a theme you set yourself is kept.
-    # Only GRUB that boots (boot-loader's: a machine moved to Limine keeps an old /etc/default/grub). After boot-menu: run
-    # just now, it set AgrOS's itself and made the menu (made once, not twice)
-    if [[ $("$_lib/boot-loader") == grub ]] && grep -q '^GRUB_THEME=.*/themes/cachyos/' "$g" &&
-        [[ -f $_r/usr/share/grub/themes/agros/theme.txt ]]; then
-        sed -i 's|^GRUB_THEME=.*|GRUB_THEME=/usr/share/grub/themes/agros/theme.txt|' "$g"
-        grub-mkconfig -o "$_r/boot/grub/grub.cfg" >/dev/null 2>&1 || echo "agros-boot: GRUB's menu not remade (run: sudo grub-mkconfig -o /boot/grub/grub.cfg)"
-    fi
+    # A changed boot-menu applied (it sets the same settings each run)
+    [[ $(sha256sum <"$_lib/boot-menu") == "$(cat "$_stamp" 2>/dev/null)" ]] || _boot_menu
     # The faster splash made again (a changed splash-theme; the boot images: mkinitcpio's hook, after the transaction)
     "$_lib/splash-theme" --update --no-initramfs >/dev/null 2>&1 ||
         echo "agros-boot: the splash not made again (run: sudo /usr/lib/agros/splash-theme)"
@@ -107,7 +87,7 @@ pre_remove() {
         rm -f "$c.agros-orig"
     done
     # The motherboard's wait before the boot loader (boot-menu's efibootmgr -t 0) back, where boot-menu noted it. Not
-    # noted (boot-menu from before the note, or no timeout set then): left at 0, its firmware setup changes it
+    # noted (no timeout set then): left at 0, its firmware setup changes it
     if [[ -f $_r/var/lib/agros/efi-timeout ]]; then
         line=$(cat "$_r/var/lib/agros/efi-timeout")
         [[ $line =~ ^[1-9][0-9]?$ ]] && efibootmgr -q -t "$line" 2>/dev/null

@@ -65,6 +65,8 @@ Scope {
         id: placeNamesFile
 
         path: `${Quickshell.env("HOME")}/.local/state/desktop-widgets/place-names.json`
+        // (none until a place is first picked from the suggestions: not an error worth logging on every start)
+        printErrors: false
         watchChanges: true
         onFileChanged: reload()
         onLoaded: {

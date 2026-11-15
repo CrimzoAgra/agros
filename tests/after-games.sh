@@ -16,7 +16,7 @@ waits() { rm -f "$t/waited"; HYPRLAND_INSTANCE_SIGNATURE='' PATH=$t/bin:$PATH ti
 (exec -a 'C:\EA\EADesktop.exe' sleep 30) & ea=$!
 # ...and Rockstar's, by its folder (its program is only Launcher.exe), with Proton's class
 (exec -a 'C:\Program Files\Rockstar Games\Launcher\Launcher.exe' sleep 30) & rockstar=$!
-trap 'kill $ea $rockstar 2>/dev/null; rm -rf "$t"' EXIT
+on_exit 'kill $ea $rockstar'
 echo "[{\"title\": \"EA\", \"tags\": [\"game*\"], \"pid\": $ea}, {\"title\": \"foot\", \"tags\": []}]" >"$t/clients"
 [[ $(waits) == 0 ]] || fail "waited for a store launcher"
 echo "[{\"title\": \"Rockstar Games Launcher\", \"class\": \"steam_app_12210\", \"tags\": [\"game\"], \"pid\": $rockstar}]" >"$t/clients"

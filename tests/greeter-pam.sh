@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # greetd-pam (the login screen's PAM service, /etc/pam.d/greetd, made from greetd.pam and the system's stack: here a
 # stand-in Arch one): the system's auth lines as they are, nodelay on pam_unix and pam_faillock, the keyring's lines
-# kept, greetd's own kept aside once, the same again when run again; a change to system-auth followed; a stack it can't
-# follow (a substack, a module not there, no pam_unix) leaves the file as it was, said. Its pacman hook: on pambase and
-# pam updates
+# from the template (once, whatever the file had), greetd's own kept aside once, the same again when run again; a change
+# to system-auth followed; a stack it can't follow (a substack, a module not there, no pam_unix) leaves the file as it
+# was, said. Its pacman hook: on pambase and pam updates
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
@@ -11,7 +11,11 @@ set -euo pipefail
 . "$here/tests/fixtures/arch-pam.sh"
 i=$here/.local/share/caelestia-greeter
 arch_pam "$t/pam.d" "$t/mod"
+# (a file from before, with the keyring's lines but not the one that keeps it from the greeter account: made whole)
 printf '%s\n' '-auth       optional     pam_gnome_keyring.so' '-session    optional     pam_gnome_keyring.so auto_start' >>"$t/pam.d/greetd"
+keyring=$(printf '%s\n' '-auth       optional     pam_gnome_keyring.so' 'session    [success=1 default=ignore]  pam_succeed_if.so quiet user = greeter' \
+    '-session    optional     pam_gnome_keyring.so auto_start')
+kept='pam_gnome_keyring|pam_succeed_if\.so quiet user = greeter'
 cp "$t/pam.d/greetd" "$t/before"
 gen() { PAM_DIR=$t/pam.d PAM_MODULES=$t/mod "$i/greetd-pam" "$@"; }
 auth() { grep -E '^-?auth[[:space:]]' "$t/pam.d/greetd" | grep -v pam_gnome_keyring | sed -E 's/[[:space:]]+/ /g'; }
@@ -25,10 +29,11 @@ want=$(printf '%s\n' 'auth required pam_securetty.so' 'auth requisite pam_nologi
 [[ $(auth) == "$want" ]] || fail "not the system's auth lines with nodelay: $(auth)"
 { grep -qxE 'account +include +system-local-login' "$t/pam.d/greetd" && grep -qxE 'session +include +system-local-login' "$t/pam.d/greetd"; } ||
     fail "account or session not the system's: $(cat "$t/pam.d/greetd")"
-[[ $(grep -c pam_gnome_keyring "$t/pam.d/greetd") == 2 && $(tail -2 "$t/pam.d/greetd") == "$(grep pam_gnome_keyring "$t/before")" ]] ||
-    fail "the keyring's lines not kept after it (once): $(cat "$t/pam.d/greetd")"
+# (with the line that keeps the keyring from the login screen's own account, greeter, just before its session one)
+[[ $(grep -cE "$kept" "$t/pam.d/greetd") == 3 && $(tail -3 "$t/pam.d/greetd") == "$keyring" ]] ||
+    fail "the keyring's lines not there at the end (once): $(cat "$t/pam.d/greetd")"
 cmp -s "$t/pam.d/greetd.orig" "$t/before" || fail "greetd's own file not kept aside (or overwritten the second time)"
-[[ $(gen --print) == "$(grep -v pam_gnome_keyring "$t/pam.d/greetd")" ]] || fail "--print isn't what it writes"
+[[ $(gen --print) == "$(cat "$t/pam.d/greetd")" ]] || fail "--print isn't what it writes"
 
 # system-auth changed by an update (a new module, faillock's options): followed
 sed -i 's/^\(auth .*pam_faillock.so *authfail\)$/\1 audit/' "$t/pam.d/system-auth"

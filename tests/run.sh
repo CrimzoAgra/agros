@@ -14,6 +14,12 @@ for t in "${tests[@]}"; do
         # (no test can wait on the terminal: no stdin, and in a session of its own, without it, as sudo asks there)
         *) out=$(setsid -w "$here/$t.sh" 2>&1 </dev/null) ;;
     esac || { failed=1; f=$(grep -m1 "^FAIL: " <<<"$out") || f=${out##*$'\n'}; out="FAIL $t: ${f#FAIL: }"; }
+    # (on CI a pass approves that Hyprland for AgrOS's machines (the upstream gate), and CI has all the tests need: a
+    # test skipped there, in part or whole (offline, a check that couldn't run), isn't a pass)
+    last=${out##*$'\n'}
+    if [[ -n ${CI:-} && ( $last == skip\ * || $last == *SKIPPED* ) ]]; then
+        failed=1; out="FAIL $t: skipped on CI, where a pass approves Hyprland: ${last}"
+    fi
     echo "$out" | tail -1
 done
 exit $failed

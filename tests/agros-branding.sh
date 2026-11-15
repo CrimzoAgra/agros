@@ -46,4 +46,9 @@ out=$(remove)
 rm "$r/usr/share/libalpm/scripts/cachyos-branding"
 out=$(remove)
 [[ $out == *"/etc/os-release still names AgrOS"* ]] || fail "no copy and no CachyOS script not said: $out"
+# The removal takes pacman.conf's Include of the upstream gate's file (gone with the package) out, the rest kept: pacman
+# can't read a config including a missing file
+printf '%s\n' '[options]' 'Include = /etc/pacman.d/agros-gate.conf' 'Architecture = auto' >"$r/etc/pacman.conf"
+remove >/dev/null
+[[ $(cat "$r/etc/pacman.conf") == $'[options]\nArchitecture = auto' ]] || fail "the gate's Include left in pacman.conf: $(cat "$r/etc/pacman.conf")"
 echo "ok agros-branding"

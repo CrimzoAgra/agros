@@ -25,7 +25,7 @@ env -u GAME_NAME -u SteamGameId sleep 30 & byhand=$!
 mkdir -p "$t/home/.local/bin"; ln -s "$here/.local/bin/store-launchers" "$t/home/.local/bin/"
 # A program whose name has ") " in it (the start time in /proc/<pid>/stat is after the last ")")
 cp /usr/bin/sleep "$t/a) b"; "$t/a) b" 30 & odd=$!
-trap 'kill $game $native $relative $forlutris $forsteam $byentry $byhand $origins $odd $rockstar $ea 2>/dev/null; rm -rf "$t"' EXIT
+on_exit 'kill $game $native $relative $forlutris $forsteam $byentry $byhand $origins $odd $rockstar $ea'
 for _ in $(seq 50); do [[ $(cat "/proc/$odd/comm") == "a) b" && $(cat "/proc/$relative/comm") == game ]] && break; sleep 0.05; done
 start=$(sed 's/.*) //' "/proc/$odd/stat" | cut -d' ' -f20)
 out=$(cd "$here" && HOME=$t/home lua -e '

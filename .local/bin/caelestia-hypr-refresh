@@ -63,7 +63,7 @@ done < <(jq -r '.deployed_files // {} | to_entries[] | "\(.key)\t\(.value)"' "$s
 mkdir -p "$state"
 exec {lockfd}>>"$state/caelestia-hypr-refresh.lock"
 flock -n "$lockfd" || { echo "Another caelestia-hypr-refresh is running: try again once it's done"; exit 2; }
-# (not passed on to the check: its Hyprland, in a process group of its own under timeout, outlived a kill and kept it)
+# (not passed on to the check: its Hyprland, up to a minute under timeout, outlived a kill of this script alone and kept it)
 tmpdir=${TMPDIR:-/tmp}
 find "$tmpdir" -maxdepth 1 -name 'caelestia-hypr-refresh.*' -user "$(id -u)" -exec rm -rf {} + 2>/dev/null
 tmp=$(mktemp -d "$tmpdir/caelestia-hypr-refresh.XXXXXX") || exit 2

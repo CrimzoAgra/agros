@@ -11,6 +11,10 @@ hl.on("hyprland.start", function() hl.exec_cmd("~/.local/bin/greeter-theme-sync"
 
 -- Clear the text console under the desktop, so no old text shows when the desktop closes (shutdown)
 hl.on("hyprland.start", function() hl.exec_cmd("~/.local/bin/console-clear") end)
+-- The pointer on the graphics card's cursor layer (Hyprland's default: it follows the mouse with no lag; drawn into the
+-- picture it trailed behind, floaty, most in a VM), hidden as the computer powers off, as nothing clears that layer
+-- when the desktop closes and it stayed on the shutdown screen
+hl.on("hyprland.start", function() hl.exec_cmd("~/.local/bin/cursor-hide-at-shutdown") end)
 
 -- Passwords keyring: make "login" (unlocked by the login password) the default, before apps use it
 hl.on("hyprland.start", function() hl.exec_cmd("~/.local/bin/keyring-default") end)

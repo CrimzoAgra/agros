@@ -4,8 +4,9 @@
 # it) and the programs built on its library (pamac's daemon, PackageKit's); pacman-key and paccache don't. Not pacman on
 # other lists (-b/--dbpath elsewhere: checkupdates', the boot's download; -r/--root another system's, whose list is in
 # that root) nor one only reading: a query (-Q..., paru -Qua), a dependency test (-T), a search, info, list or group
-# listing (-Ss, -Si, -Sl, -Sg, without -y/-u), what it would do printed (-p/--print), the files database read (-F, not
-# -Fy), paru's and yay's PKGBUILD download (-G)
+# listing (-Ss, -Si, -Sl, -Sg, without -y/-u), what it would do printed (-p/--print, an upgrade's too: -Sup, the
+# upstream gate's dry run; not with -y, nor -c for -S, which cleans there: for -R it's --cascade), the files database
+# read (-F, not -Fy), paru's and yay's PKGBUILD download (-G)
 def=${PACMAN_DB_DIR:-/var/lib/pacman}  # (pacman's own list; PACMAN_DB_DIR: the tests' stand-in for it)
 pacdb=${1:-$def}
 # read_only <its arguments>: the operation only reads (its letters gathered across -S -s too; the long forms as well)
@@ -24,8 +25,17 @@ read_only() {
         *' --query '*) op=Q ;; *' --deptest '*) op=T ;; *' --files '*) op=F ;; *' --getpkgbuild '*) op=G ;;
         *' --sync '*) op=S ;;
     esac
+    # (what an upgrade would do printed (-Sup, the upstream gate's dry run): pacman takes no lock for it; with the lists
+    # refreshed or the cache cleaned, it does)
+    # (-u and -c mean upgrade and clean for -S only: for -R, unneeded and cascade)
+    local writes=y
+    [[ $op == S ]] && writes=yuc
+    if [[ $op == [SUR] && ( $letters == *p* || $long =~ \ --print(-format)?\  ) && $letters != *[y${writes//[!c]/}]* &&
+        $long != *' --refresh '* && $long != *' --clean '* ]]; then
+        return 0
+    fi
     # (refreshing the lists, upgrading or cleaning: these write)
-    if [[ $letters == *[yuc]* || $long == *' --refresh '* || $long == *' --sysupgrade '* || $long == *' --clean '* ]]; then
+    if [[ $letters == *[$writes]* || $long == *' --refresh '* || $long == *' --sysupgrade '* || $long == *' --clean '* ]]; then
         [[ $op == [QTG] ]]
         return
     fi

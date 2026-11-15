@@ -3,11 +3,30 @@
 -- the clicked or picked window to the front.
 -- Called from outside this file through hyprctl eval 'dots.<name>(...)': focus_window (Alt+Tab switcher, dock,
 -- game-focus), focus_app (a click on a notification), minimise_window and maximise_window (title bar buttons),
--- toggle_window_mode (bar menu), refit_maximised (after a screen change), window_drag_start and titlebar_drag_start
--- (the title bar plugin, my patch to it: ~/.local/share/hyprbars/hyprbars.patch)
+-- toggle_window_mode (bar menu, the Settings app's window mode), refit_placed_soon (Caelestia's bar, its space changed:
+-- the overlay's bar_space_refit), peek_screen and peek_end (window peek: the overlay's WindowPeek.qml),
+-- window_drag_start, window_drag_step, window_drag_end and titlebar_drag_start (the title bar plugin, my patch to it:
+-- ~/.local/share/hyprbars/hyprbars.patch, which also gives hl.plugin.hyprbars.min_size). Caelestia is told of drags
+-- through Hyprland's custom events ("agros_drag 1/0", "agros_snap <screen> x y w h" / "agros_snap none": its
+-- WindowDrag.qml). And from this file itself, a moment later (a sleep in its own process: a config reload would drop a
+-- timer): refit_maximised, window_fades, open_retry
 -- Caelestia's settings module (gaps, border): its defaults if an update renames it, not this whole file failing
 local ok, vars = pcall(require, "variables")
 if not ok or type(vars) ~= "table" then vars = {} end
+-- Hyprland's gaps and border as they are now (Caelestia's Game mode sets them at runtime; its variables keep the ones
+-- configured): a gap's largest side, as the title bar plugin reads them, so snapping and its seams agree with it
+local function live(key, fallback)
+    local v = hl.get_config and hl.get_config(key)
+    if type(v) == "table" then
+        local m
+        for _, x in pairs(v) do if type(x) == "number" and (not m or x > m) then m = x end end
+        return m or fallback
+    end
+    return type(v) == "number" and v or fallback
+end
+local function gaps_in() return live("general.gaps_in", vars.windowGapsIn or 5) end
+local function gaps_out() return live("general.gaps_out", vars.windowGapsOut or 10) end
+local function border() return live("general.border_size", vars.windowBorderSize or 2) end
 
 local function by_address(address)
     return hl.get_window("address:" .. address)
@@ -32,19 +51,23 @@ local function set_maximised(win, on)
     hl.dispatch(hl.dsp.window.tag({ tag = (on and "+" or "-") .. "maximised", window = "address:" .. win.address }))
 end
 
+-- A value to the nearest pixel
+local function px(v) return math.floor(v + 0.5) end
 -- A screen's size in the units windows are placed in: its mode over its scale, width and height swapped when it's
--- turned sideways (Hyprland gives the mode as it is, not turned)
+-- turned sideways (Hyprland gives the mode as it is, not turned). Whole: Hyprland keeps a screen's size in those units
+-- whole, but gives its scale as a float (1.6 as 1.60000002), and the fraction left made every refit's proportion off
+-- by a hair, so seams crept
 local function screen_size(m)
-    local w, h = m.width / m.scale, m.height / m.scale
+    local w, h = px(m.width / m.scale), px(m.height / m.scale)
     if (m.transform or 0) % 2 == 1 then return h, w end
     return w, h
 end
 
 -- Maximised: the screen inside the same gaps as tiled windows (the wallpaper still shows round it), with room for the
 -- window's title bar (titlebars.lua, while the plugin is on)
-local function maximised_box(win)
-    local m = win.monitor or hl.get_active_monitor()
-    local r, edge = m.reserved, (vars.windowGapsOut or 10) + (vars.windowBorderSize or 2)
+local function maximised_box(win, m)
+    m = m or win.monitor or hl.get_active_monitor()
+    local r, edge = m.reserved, gaps_out() + border()
     local bar = dots.titlebar_height and dots.titlebar_height(win) or 0
     local mw, mh = screen_size(m)
     return { x = m.x + r.left + edge, y = m.y + r.top + edge + bar,
@@ -61,9 +84,12 @@ local function standard_box(win)
     local width = height * full.w / full.h
     return { x = m.x + (mw - width) / 2, y = m.y + (mh - height + bar) / 2, w = width, h = height }
 end
+-- (its edges rounded, not its place and size each: a box ending on a screen's border ends there, not a pixel short;
+-- to the nearest pixel (px), so a box worked out from a placed one, then placed, doesn't creep one way)
 local function place(win, box)
-    hl.dispatch(hl.dsp.window.resize({ x = math.floor(box.w), y = math.floor(box.h), window = win }))
-    hl.dispatch(hl.dsp.window.move({ x = math.floor(box.x), y = math.floor(box.y), relative = false, window = win }))
+    local x, y = px(box.x), px(box.y)
+    hl.dispatch(hl.dsp.window.resize({ x = px(box.x + box.w) - x, y = px(box.y + box.h) - y, window = win }))
+    hl.dispatch(hl.dsp.window.move({ x = x, y = y, relative = false, window = win }))
 end
 -- Windows opened (or floated by a switch) one after another, none moved meanwhile: each one a step down and right of the one before, as on
 -- Windows, so none hides another (a window that's been moved frees its spot). The step is the title bar's height, so
@@ -95,9 +121,18 @@ local function cascaded(win, box)
     end
     return box
 end
+-- Snapping's state (Snapping, below): the size each snapped window had before (address -> w, h; lost on a reload: the
+-- standard size then), and its tags taken off. A window placed another way (maximised, floated by the switch) is no
+-- longer snapped: else a screen change put it back in its zone, and its next drag took an old size
+local snap_before, unsnap = {}, nil
+local function forget_snap(win)
+    unsnap(win)
+    snap_before[win.address] = nil
+end
 -- Where a window goes when it starts floating (it opens, or a switch floats it): maximised windows (tagged) to the
 -- maximised box, any other to the standard size, cascading
 local function place_floating(win)
+    forget_snap(win)
     place(win, is_maximised(win) and maximised_box(win) or cascaded(win, standard_box(win)))
 end
 
@@ -242,6 +277,7 @@ function dots.minimise_window(win)
 end
 local function restore(win, ws)
     hl.dispatch(hl.dsp.window.move({ workspace = ws, window = win }))
+    dots.refit_window(by_address(win.address))
     if has_tag(win, "minimised_pinned") then
         hl.dispatch(hl.dsp.window.tag({ tag = "-minimised_pinned", window = "address:" .. win.address }))
         hl.dispatch(hl.dsp.window.pin({ action = "on", window = win }))
@@ -283,14 +319,9 @@ end)
 
 -- Maximise ------------------------------------------------------------------------------------------------------------
 
--- A screen added or removed moves workspaces to other screens: maximised windows fit the screen they're on now (not
--- one bigger than it). After a moment, once the workspaces have moved; from a process of its own, as workspaces.lua
+-- A screen added or removed moves workspaces to other screens: windows fit the screen they're on now (dots.refit_maximised,
+-- below with snapping). After a moment, once the workspaces have moved; from a process of its own, as workspaces.lua
 -- reloads the config on a screen change, which drops a timer here
-function dots.refit_maximised()
-    for _, w in ipairs(hl.get_windows() or {}) do
-        if w.floating and is_maximised(w) then place(w, maximised_box(w)) end
-    end
-end
 local function refit_soon() hl.exec_cmd("sh -c 'sleep 1.5; exec hyprctl eval \"dots.refit_maximised()\"'") end
 hl.on("monitor.added", refit_soon)
 hl.on("monitor.removed", refit_soon)
@@ -302,6 +333,7 @@ function dots.maximise_window(win)
     if not win then return end
     if not win.floating then return hl.dispatch(hl.dsp.window.fullscreen({ mode = "maximized", window = win })) end
     local maximised = is_maximised(win)
+    forget_snap(win)
     set_maximised(win, not maximised)
     place(win, maximised and standard_box(win) or maximised_box(win))
 end
@@ -332,12 +364,18 @@ end)
 -- button shows "maximise" again and a title bar drag doesn't shrink it. The title bar plugin calls this as any drag of
 -- a window starts (my patch hooks Hyprland's drag start), so the drag goes on from the new size. Apps can't do it
 -- themselves: Hyprland never tells them they're maximised. Without the plugin, a drag leaves it maximised in name
+local snap_drag_start, snap_drag_end, keep_reachable  -- (Snapping and Always within reach, below)
 function dots.window_drag_start(address, kind)
     local win = by_address(address)
-    if not (win and win.floating and is_maximised(win)) then return end
-    set_maximised(win, false)
+    if not win then return end
+    -- A snapped window (below) dragged away: back to the size it had before it was snapped (Windows' way); a maximised
+    -- one too, when it was snapped there (else to the standard size)
+    local before = snap_drag_start(win, kind)
+    if not (win.floating and (is_maximised(win) or before)) then return end
+    if is_maximised(win) then set_maximised(win, false) end
     if kind ~= "move" then return end
     local box, cursor = standard_box(win), hl.get_cursor_pos()
+    if before then box.w, box.h = before.w, before.h end
     box.x = cursor.x - box.w * (cursor.x - win.at.x) / win.size.x
     -- The pointer as far below the top as before (on the title bar), or as far down in proportion when the smaller
     -- window can't keep that (a Super+drag low in it)
@@ -351,6 +389,443 @@ end
 function dots.titlebar_drag_start(address, phase)
     if phase ~= "after" then dots.window_drag_start(address, "move") end
 end
+
+-- Snapping ------------------------------------------------------------------------------------------------------------
+
+-- As on Windows: a floating window let go with the pointer at a screen's top edge is maximised; at its left or right
+-- edge it takes that half; in a corner, that quarter (near a corner: the last sixth of the edge). A see-through preview
+-- shows where while it's dragged (Caelestia's drawers draw it: SnapPreview.qml in ~/.local/share/caelestia-overlay, told
+-- through Hyprland's custom events, "agros_snap <screen> x y w h" or "agros_snap none"), and Caelestia's panels don't
+-- open meanwhile ("agros_drag 1"/"agros_drag 0"). Dragged away, it gets back the size it had. Snapped windows next to
+-- each other share their seam: resizing one moves the other's edge with it, in the same frame, as tiled windows do (the
+-- plugin calls dots.window_drag_step after each step of a drag), with a two-way resize cursor over the gap (the plugin's).
+-- Floating mode only (tiling places windows itself), not games nor fullscreen windows. Drags reach here from the title
+-- bar plugin (my patch: dots.window_drag_start and dots.window_drag_end); without it, no snapping
+-- Its zone is kept on the window, as maximised is (tags: "snapped", "snap_<zone>", and "snaparea_..." for the free
+-- part it was placed for: set_area, below), so it survives the config
+-- reloads (a screen plugged in reloads it) and a screen change re-fits it there. A closed window's size before is
+-- dropped (a new window may get its address)
+local snap_zone, snap_screen, follow, moving = nil, nil, nil, false  -- (moving: a snappable window's move is going on)
+hl.on("window.close", function(win) if win then snap_before[win.address] = nil end end)
+
+-- The free part of a screen (inside its reserved space and the outer gaps), and the gap between two snapped windows
+-- (as between tiled ones: both inner gaps and both borders)
+local function snap_area(m)
+    local r, edge = m.reserved, gaps_out() + border()
+    local mw, mh = screen_size(m)
+    return { x = m.x + r.left + edge, y = m.y + r.top + edge,
+             w = mw - r.left - r.right - 2 * edge, h = mh - r.top - r.bottom - 2 * edge }
+end
+local function seam() return 2 * (gaps_in() + border()) end
+
+-- The zone the pointer is in on its screen, or nil; and its box there (with the title bar: the window goes below it)
+local zones = { left = { 0, 0, 1, 2 }, right = { 1, 0, 1, 2 }, tl = { 0, 0, 1, 1 }, tr = { 1, 0, 1, 1 },
+                bl = { 0, 1, 1, 1 }, br = { 1, 1, 1, 1 } }  -- column, row, columns wide, rows high (of 2 x 2)
+-- Another screen at that point (beside or above this one: a window, or the pointer, may go on across there)
+local function screen_beyond(m, px, py)
+    for _, o in ipairs(hl.get_monitors() or {}) do
+        if o.name ~= m.name then
+            local ow, oh = screen_size(o)
+            if px >= o.x and px < o.x + ow and py >= o.y and py < o.y + oh then return true end
+        end
+    end
+    return false
+end
+-- The edges are the free part's (inside Caelestia's border and bar: the title bar plugin keeps a dragged window's
+-- pointer there, as a screen's edge would) or past them; not a side with another screen beyond, where the pointer goes
+-- on across (the preview flashed on the way over, and a drop there snapped)
+local function zone_at(m, c)
+    local mw, mh = screen_size(m)
+    local x, y, r = c.x - m.x, c.y - m.y, m.reserved
+    local left, right, top, bottom = x <= r.left + 1, x >= mw - r.right - 2, y <= r.top + 1, y >= mh - r.bottom - 2
+    left = left and not screen_beyond(m, m.x - 1, c.y)
+    right = right and not screen_beyond(m, m.x + mw, c.y)
+    top = top and not screen_beyond(m, c.x, m.y - 1)
+    bottom = bottom and not screen_beyond(m, c.x, m.y + mh)
+    local near_top, near_bottom = y < mh / 6, y > mh * 5 / 6
+    local near_left, near_right = x < mw / 6, x > mw * 5 / 6
+    if (left and near_top) or (top and near_left) then return "tl" end
+    if (right and near_top) or (top and near_right) then return "tr" end
+    if (left and near_bottom) or (bottom and near_left) then return "bl" end
+    if (right and near_bottom) or (bottom and near_right) then return "br" end
+    if top then return "max" end
+    if left then return "left" end
+    if right then return "right" end
+end
+local function zone_box(m, zone)
+    local a, g = snap_area(m), seam()
+    if zone == "max" then return a end
+    local z = zones[zone]
+    local cw, ch = (a.w - g) / 2, (a.h - g) / 2
+    return { x = a.x + z[1] * (cw + g), y = a.y + z[2] * (ch + g),
+             w = z[3] * cw + (z[3] - 1) * g, h = z[4] * ch + (z[4] - 1) * g }
+end
+
+local function snappable(win)
+    return win and win.floating and (win.fullscreen or 0) == 0 and window_mode() == "floating"
+        and not (dots.is_game and dots.is_game(win)) and win.workspace and (win.workspace.id or 0) > 0
+end
+local function tell(event) hl.dispatch(hl.dsp.event(event)) end
+-- The zone under the pointer and its screen (where the window goes: the pointer's, not the one most of the window is
+-- on), the preview told when either changes
+local function update_zone()
+    local m, c = hl.get_monitor_at_cursor(), hl.get_cursor_pos()
+    local zone = m and c and zone_at(m, c) or nil
+    local screen = zone and m.name or nil
+    if zone == snap_zone and screen == snap_screen then return end
+    snap_zone, snap_screen = zone, screen
+    if not zone then return tell("agros_snap none") end
+    -- (rounded as place() rounds the window that goes there)
+    local b = zone_box(m, zone)
+    local x, y = px(b.x), px(b.y)
+    tell(string.format("agros_snap %s %d %d %d %d", m.name, x - m.x, y - m.y, px(b.x + b.w) - x, px(b.y + b.h) - y))
+end
+
+-- A box as the window has it (below its title bar) and the edges it shares with a snapped neighbour
+local function outer(w)
+    local bar = dots.titlebar_height and dots.titlebar_height(w) or 0
+    return { x = w.at.x, y = w.at.y - bar, w = w.size.x, h = w.size.y + bar, bar = bar }
+end
+-- The windows on each of the window's seams. A seam is a line: every snapped window with an edge on it (the window's
+-- own edge, "same", or across the gap from it, "sides") that joins up along it, so the whole line moves together
+-- (with four quarters, resizing the top left one against the top right one moves the bottom row's seam too)
+local function neighbours(win)
+    local o, g, found = outer(win), seam(), {}
+    local function near(a, b) return math.abs(a - b) <= 3 end
+    local others = {}
+    for _, w in ipairs(hl.get_windows() or {}) do
+        if w.address ~= win.address and has_tag(w, "snapped") and w.floating and w.workspace and win.workspace
+            and w.workspace.id == win.workspace.id then
+            others[#others + 1] = { address = w.address, box = outer(w) }
+        end
+    end
+    local by = {}
+    local function entry(n)
+        if not by[n.address] then
+            by[n.address] = { address = n.address, box = n.box, sides = {}, same = {} }
+            found[#found + 1] = by[n.address]
+        end
+        return by[n.address]
+    end
+    -- side: which of the window's edges; line: where it is; along: the span along it (y for a side edge, x for top or
+    -- bottom); edge_same/edge_across: a window's edge on the line on this side / across the gap
+    local function line(side, opposite, at, lo, hi, same_at, across_at)
+        local spans, picked, grew, list, seam_here = { { lo(o), hi(o) } }, {}, true, {}, false
+        while grew do
+            grew = false
+            for _, n in ipairs(others) do
+                if not picked[n.address] then
+                    local same, across = near(same_at(n.box), at), near(across_at(n.box), at)
+                    local touches = false
+                    for _, sp in ipairs(spans) do
+                        if lo(n.box) <= sp[2] + g + 3 and hi(n.box) >= sp[1] - g - 3 then touches = true end
+                    end
+                    if (same or across) and touches then
+                        picked[n.address], grew = true, true
+                        spans[#spans + 1] = { lo(n.box), hi(n.box) }
+                        list[#list + 1] = { n = n, same = same }
+                        seam_here = seam_here or not same
+                    end
+                end
+            end
+        end
+        -- (a seam only with a window across it: the screen's edge, windows only lined up along it, isn't one)
+        if not seam_here then return end
+        for _, p in ipairs(list) do
+            local e = entry(p.n)
+            if p.same then e.same[side] = true else e.sides[side] = opposite end
+        end
+    end
+    local function y0(b) return b.y end
+    local function y1(b) return b.y + b.h end
+    local function x0(b) return b.x end
+    local function x1(b) return b.x + b.w end
+    line("right", "left", o.x + o.w, y0, y1, x1, function(b) return b.x - g end)
+    line("left", "right", o.x, y0, y1, x0, function(b) return b.x + b.w + g end)
+    line("bottom", "top", o.y + o.h, x0, x1, y1, function(b) return b.y - g end)
+    line("top", "bottom", o.y, x0, x1, y0, function(b) return b.y + b.h + g end)
+    return found
+end
+
+-- The neighbours' shared edges follow the resized window's (each step of the drag); window moves unanimated meanwhile,
+-- or each step animated after the pointer. The seam stops where either window can't shrink further, as with tiled ones:
+-- Hyprland stops the resized one at its app's smallest size, and a neighbour at its own (the title bar plugin tells it:
+-- hl.plugin.hyprbars.min_size), the resized one held back to it
+local function min_size(w)
+    local f = hl.plugin and hl.plugin.hyprbars and hl.plugin.hyprbars.min_size
+    local mw, mh = 1, 1
+    if f then mw, mh = f(w.address) end
+    return math.max(mw or 1, 50), math.max(mh or 1, 50)
+end
+local function follow_step()
+    local win = follow and by_address(follow.address)
+    if not win then return end
+    local now, g = outer(win), seam()
+    -- The resized window's edges, held back where a neighbour (or one along the seam) is at its smallest; then each
+    -- placed from them, only when it changed (not every step: its app asked to resize for nothing)
+    local L, R, T, B = now.x, now.x + now.w, now.y, now.y + now.h
+    local list = {}
+    for _, n in ipairs(follow.with) do
+        local w = by_address(n.address)
+        if w then
+            local mw, mh = min_size(w)
+            mh = mh + n.box.bar
+            local nb = n.box
+            if n.sides.right then R = math.min(R, nb.x + nb.w - mw - g) end
+            if n.sides.left then L = math.max(L, nb.x + mw + g) end
+            if n.sides.bottom then B = math.min(B, nb.y + nb.h - mh - g) end
+            if n.sides.top then T = math.max(T, nb.y + mh + g) end
+            if n.same.right then R = math.max(R, nb.x + mw) end
+            if n.same.left then L = math.min(L, nb.x + nb.w - mw) end
+            if n.same.bottom then B = math.max(B, nb.y + mh) end
+            if n.same.top then T = math.min(T, nb.y + nb.h - mh) end
+            list[#list + 1] = { w = w, n = n }
+        end
+    end
+    for _, e in ipairs(list) do
+        local n, nb = e.n, e.n.box
+        -- (each of its edges on its own: one on a seam follows it, the rest stay)
+        local l, r, t, bt = nb.x, nb.x + nb.w, nb.y, nb.y + nb.h
+        if n.sides.right then l = R + g end
+        if n.sides.left then r = L - g end
+        if n.sides.bottom then t = B + g end
+        if n.sides.top then bt = T - g end
+        if n.same.right then r = R end
+        if n.same.left then l = L end
+        if n.same.bottom then bt = B end
+        if n.same.top then t = T end
+        local b = { x = l, y = t, w = r - l, h = bt - t }
+        local last = n.last or nb
+        if b.x ~= last.x or b.y ~= last.y or b.w ~= last.w or b.h ~= last.h then
+            place(e.w, { x = b.x, y = b.y + nb.bar, w = b.w, h = b.h - nb.bar })
+            n.last = b
+        end
+    end
+    -- (held back: a neighbour at its smallest)
+    if L ~= now.x or T ~= now.y or R ~= now.x + now.w or B ~= now.y + now.h then
+        place(win, { x = L, y = T + now.bar, w = R - L, h = B - T - now.bar })
+    end
+end
+
+-- The screen and its free part a snapped window was last placed for, kept on the window as its zone is (a tag,
+-- "snaparea_<screen>_<x>_<y>_<w>_<h>_<seam>_<title bar>", relative to the screen: config reloads, which a VM's resize
+-- and a screen plugged in make, keep it), for a screen change to keep seams where they were dragged to, in proportion,
+-- a change of the gaps (Caelestia's Game mode) to keep them where they were, the gap across them the new one, and title
+-- bars turned on or off (the Settings app) to fit the window under its bar, or without it, in the same place
+local function bar_of(win) return dots.titlebar_height and dots.titlebar_height(win) or 0 end
+local function set_area(win, m)
+    local a = snap_area(m)
+    local tag = string.format("snaparea_%s_%d_%d_%d_%d_%d_%d", m.name, math.floor(a.x - m.x), math.floor(a.y - m.y),
+        math.floor(a.w), math.floor(a.h), math.floor(seam()), bar_of(win))
+    local list = {}
+    for _, t in ipairs(win.tags or {}) do list[#list + 1] = t end
+    for _, t in ipairs(list) do
+        if t:match("^snaparea_") and t ~= tag then hl.dispatch(hl.dsp.window.tag({ tag = "-" .. t, window = "address:" .. win.address })) end
+    end
+    if not has_tag(win, tag) then hl.dispatch(hl.dsp.window.tag({ tag = "+" .. tag, window = "address:" .. win.address })) end
+end
+local function recorded_area(win, m)
+    for _, t in ipairs(win.tags or {}) do
+        local name, x, y, w, h, g, bar = t:match("^snaparea_(.+)_(%-?%d+)_(%-?%d+)_(%d+)_(%d+)_(%d+)_(%d+)$")
+        if name then
+            if name ~= m.name then return nil end
+            return { x = m.x + tonumber(x), y = m.y + tonumber(y), w = tonumber(w), h = tonumber(h), g = tonumber(g),
+                     bar = tonumber(bar) }
+        end
+    end
+end
+local function place_in_zone(win, m, zone)
+    local b, bar = zone_box(m, zone), dots.titlebar_height and dots.titlebar_height(win) or 0
+    place(win, { x = b.x, y = b.y + bar, w = b.w, h = b.h - bar })
+    set_area(win, m)
+end
+-- A snapped window after its screen's size, the gaps or its title bar changed (old: the free part, the seam and the bar
+-- it had): each of its edges on the screen's border kept there, each on a seam moved with the seam's middle in
+-- proportion (so its neighbour's edge, across the same gap, moves the same: a resized pair keeps its split, not back to
+-- halves), the new gap either side of that middle; its outer box (the bar's top down) the same, the bar as it is now
+local function place_scaled(win, old, a, m)
+    local o = { x = win.at.x, y = win.at.y - old.bar, w = win.size.x, h = win.size.y + old.bar }
+    local g, h, bar = seam(), old.g / 2, bar_of(win)
+    local function near(p, q) return math.abs(p - q) <= 3 end
+    local function sx(v) return a.x + (v - old.x) * a.w / old.w end
+    local function sy(v) return a.y + (v - old.y) * a.h / old.h end
+    local l = near(o.x, old.x) and a.x or sx(o.x - h) + g / 2
+    local r = near(o.x + o.w, old.x + old.w) and a.x + a.w or sx(o.x + o.w + h) - g / 2
+    local t = near(o.y, old.y) and a.y or sy(o.y - h) + g / 2
+    local b = near(o.y + o.h, old.y + old.h) and a.y + a.h or sy(o.y + o.h + h) - g / 2
+    place(win, { x = l, y = t + bar, w = r - l, h = b - t - bar })
+    set_area(win, m)
+end
+unsnap = function(win)
+    local list = {}
+    for _, t in ipairs(win.tags or {}) do list[#list + 1] = t end  -- (a copy: taking tags off may change the window's)
+    for _, t in ipairs(list) do
+        if t == "snapped" or t:match("^snap_") or t:match("^snaparea_") then
+            hl.dispatch(hl.dsp.window.tag({ tag = "-" .. t, window = "address:" .. win.address }))
+        end
+    end
+end
+local function snapped_zone(win)
+    for _, t in ipairs(win.tags or {}) do
+        local z = t:match("^snap_(%a+)$")
+        if z and zones[z] then return z end
+    end
+end
+
+snap_drag_start = function(win, kind)
+    tell("agros_drag 1")  -- (any drag: Caelestia's panels wait)
+    if not snappable(win) then return nil end
+    if kind == "move" then
+        local before = snap_before[win.address]
+        snap_before[win.address] = nil
+        if not (has_tag(win, "snapped") or is_maximised(win)) then before = nil end
+        if has_tag(win, "snapped") then
+            before = before or standard_box(win)
+            unsnap(win)
+        end
+        snap_zone, snap_screen, moving = nil, nil, true
+        update_zone()
+        return before
+    end
+    -- A resize of a snapped window: its snapped neighbours follow
+    if has_tag(win, "snapped") then
+        local with = neighbours(win)
+        if #with > 0 then
+            follow = { address = win.address, with = with }
+            hl.animation({ leaf = "windowsMove", enabled = false })
+        end
+    end
+    return nil
+end
+
+-- (every drag's end, also one whose start went unseen, or after a reload mid-drag: the preview and "dragging" end)
+snap_drag_end = function(win, kind)
+    local zone, screen = snap_zone, snap_screen
+    moving, snap_zone, snap_screen = false, nil, nil
+    tell("agros_drag 0")
+    if zone or kind == "move" then tell("agros_snap none") end
+    if follow then
+        follow_step()
+        follow = nil
+        hl.animation({ leaf = "windowsMove", enabled = true, speed = 6, bezier = "standard" })  -- (animations.lua's)
+    end
+    if kind ~= "move" or not win then return end
+    if not zone then return keep_reachable(win) end
+    if not snappable(win) then return end
+    local m
+    for _, o in ipairs(hl.get_monitors() or {}) do if o.name == screen then m = o end end
+    if not m then return keep_reachable(win) end
+    local before = { w = win.size.x, h = win.size.y }
+    -- (let go on another screen than most of it is on: onto that screen's workspace too)
+    local mws = m.active_workspace
+    if mws and mws.id and win.workspace and mws.id ~= win.workspace.id then
+        hl.dispatch(hl.dsp.window.move({ workspace = mws.id, follow = false, window = win }))
+    end
+    if zone == "max" then
+        set_maximised(win, true)
+        place(win, maximised_box(win, m))
+    else
+        unsnap(win)
+        hl.dispatch(hl.dsp.window.tag({ tag = "+snapped", window = "address:" .. win.address }))
+        hl.dispatch(hl.dsp.window.tag({ tag = "+snap_" .. zone, window = "address:" .. win.address }))
+        place_in_zone(win, m, zone)
+    end
+    snap_before[win.address] = before
+    raise(win)
+end
+function dots.window_drag_step(_, kind)
+    if kind == "move" and moving then update_zone() elseif follow then follow_step() end
+end
+function dots.window_drag_end(address, kind)
+    snap_drag_end(by_address(address), kind)
+end
+
+-- Always within reach --------------------------------------------------------------------------------------------------
+
+-- As on Windows, a floating window can always be dragged again: its title bar (the plugin's, or the app's own at its
+-- top) all below the screen's top border (Caelestia's), and at least 150 px of it (or all, if narrower) inside its left
+-- and right borders and above the bottom one. Not on a side with another screen beyond (it may reach across). After
+-- each move, and after a screen change (below)
+keep_reachable = function(win)
+    if not (win and win.floating and (win.fullscreen or 0) == 0 and win.workspace and (win.workspace.id or 0) > 0)
+        or (dots.is_game and dots.is_game(win)) then return end
+    -- (an X11 menu or tooltip, Caelestia's xwl_popup tag: placed by its app, by the pointer)
+    for _, t in ipairs(win.tags or {}) do
+        if t == "xwl_popup" or t == "xwl_popup*" then return end
+    end
+    local m = win.monitor or hl.get_active_monitor()
+    if not m then return end
+    local r, mw, mh = m.reserved, screen_size(m)
+    local bar = dots.titlebar_height and dots.titlebar_height(win) or 0
+    local fx, fy, fw, fh = m.x + r.left, m.y + r.top, mw - r.left - r.right, mh - r.top - r.bottom
+    local function beyond(px, py) return screen_beyond(m, px, py) end
+    -- (another screen beyond: looked for along the title bar's line, kept within this screen: the window's own y or
+    -- middle may be off it)
+    local function clamp(v, lo, hi) return math.max(lo, math.min(hi, v)) end
+    local keep, x, y = math.min(150, win.size.x), win.at.x, win.at.y
+    local keep_down = math.min(150, win.size.y + bar)
+    local ty = clamp(y - bar, m.y, m.y + mh - 1)
+    if x + win.size.x < fx + keep and not beyond(m.x - 1, ty) then x = fx + keep - win.size.x end
+    if x > fx + fw - keep and not beyond(m.x + mw, ty) then x = fx + fw - keep end
+    local tx = clamp(x + win.size.x / 2, m.x, m.x + mw - 1)
+    if y - bar < fy and not beyond(tx, m.y - 1) then y = fy + bar end
+    if y - bar > fy + fh - keep_down and not beyond(tx, m.y + mh) then y = fy + fh - keep_down + bar end
+    if x ~= win.at.x or y ~= win.at.y then
+        hl.dispatch(hl.dsp.window.move({ x = math.floor(x), y = math.floor(y), relative = false, window = win }))
+    end
+end
+
+-- A screen's size changed (its resolution, a VM's window resized), or screens added or removed: every floating window
+-- fits the screen it's on now, as tiled ones do. Maximised ones fill it again, snapped ones their zone, the rest are
+-- kept within reach. Once per change (Hyprland's event), nothing watching in between
+-- (a snapped window: from the free part it was placed for, on this screen, if that changed; moved with its workspace
+-- to another screen, or with none recorded, into its zone there)
+-- (one window: also as a minimised one comes back, the screens maybe changed while it was away)
+function dots.refit_window(w)
+    if not (w and w.floating and (w.fullscreen or 0) == 0 and w.workspace and (w.workspace.id or 0) > 0
+        and not (dots.is_game and dots.is_game(w))) then return end
+    local zone, m = snapped_zone(w), w.monitor
+    local old = zone and m and recorded_area(w, m)
+    local a = m and snap_area(m)
+    if is_maximised(w) then
+        local b = maximised_box(w)
+        local x, y = px(b.x), px(b.y)
+        if w.at.x ~= x or w.at.y ~= y or w.size.x ~= px(b.x + b.w) - x or w.size.y ~= px(b.y + b.h) - y then
+            place(w, b)
+        end
+    elseif old and old.w > 0 and old.h > 0 then
+        if old.w ~= math.floor(a.w) or old.h ~= math.floor(a.h) or old.x ~= math.floor(a.x) or old.y ~= math.floor(a.y)
+            or old.g ~= math.floor(seam()) or old.bar ~= bar_of(w) then
+            place_scaled(w, old, a, m)
+        end
+    elseif zone and m then place_in_zone(w, m, zone)
+    else keep_reachable(w) end
+end
+function dots.refit_maximised()
+    for _, w in ipairs(hl.get_windows() or {}) do dots.refit_window(w) end
+end
+hl.on("monitor.layout_changed", function() dots.refit_maximised() end)
+-- ...and the maximised and snapped ones (no other: they're where they were put) after what can change their box: the
+-- gaps or border (a config reload: the Settings app, Caelestia's Game mode off; a setting made while running: Game mode
+-- on), title bars on or off, the reserved space (Caelestia's bar back after a restart). Hyprland's events for those
+-- come for much else too (any setting or rule made, a workspace renamed; a layer, a notification, opened or closed):
+-- each window placed only if its box changed, once things settle (a second after the last of a burst: the timer
+-- started again by each; a reload with Game mode on puts its gaps back straight after, so nothing moves out and back).
+-- Also called from Caelestia (the overlay's bar_space_refit): its bar's reserved space changes with no event here
+local refit_timer = nil
+local function refit_placed()
+    refit_timer = nil
+    for _, w in ipairs(hl.get_windows() or {}) do
+        if is_maximised(w) or snapped_zone(w) then dots.refit_window(w) end
+    end
+end
+function dots.refit_placed_soon()
+    if refit_timer then return refit_timer:set_timeout(1000) end
+    refit_timer = hl.timer(refit_placed, { timeout = 1000, type = "oneshot" })
+end
+hl.on("config.props_refreshed", dots.refit_placed_soon)
+hl.on("layer.opened", dots.refit_placed_soon)
+hl.on("layer.closed", dots.refit_placed_soon)
 
 -- Floating and tiling -------------------------------------------------------------------------------------------------
 
@@ -398,7 +873,19 @@ dots.bind("window_mode", function() dots.toggle_window_mode() end)
 -- windows are: Hyprland maximised it while still tiled, so it came out filling the screen with no room for its title bar.
 -- Fullscreen windows are left as they are, and games (dots.is_game) keep their own size and place: most run borderless
 -- over the whole screen, which would count as maximised and shrink them into the gaps
+-- A window that opens floating (a popup, a dialog: Hyprland floats those itself) keeps its own size, in the middle;
+-- only one bigger than the screen's free part is shrunk to it (a wide one went off the screen), and one opening off it
+-- is brought within reach. Not games
+local function fit_popup(win)
+    if (win.fullscreen or 0) ~= 0 or not win.workspace or (win.workspace.id or 0) < 1
+        or (dots.is_game and dots.is_game(win)) then return end
+    local full = maximised_box(win)
+    if win.size.x <= full.w and win.size.y <= full.h then return keep_reachable(win) end
+    local w, h = math.min(win.size.x, full.w), math.min(win.size.y, full.h)
+    place(win, { x = full.x + (full.w - w) / 2, y = full.y + (full.h - h) / 2, w = w, h = h })
+end
 local function on_open(win, retried)
+    if win and win.floating and not retried then return fit_popup(win) end
     -- (fullscreen: 2, or 3 maximised and fullscreen, as focus_window's; 1 is only maximised)
     if not (win and win.workspace) or win.floating or (win.fullscreen or 0) >= 2 then return end
     -- At login a window can open before its workspace has an id: looked at again a moment later, by its address (it
@@ -500,6 +987,15 @@ end
 -- peek_set(screen, keep): every window on that screen (its name) out of sight but those in keep (addresses), every
 -- other window back; no screen: all back, and once faded back, nothing of the peek left
 local function peek_set(screen, keep)
+    -- (an end with nothing peeked, as the shell's start sends: nothing done, the blur setting not touched; but one whose
+    -- peek faded nothing, every window kept, still sets the blur back)
+    if screen == nil and peek.blur == nil then
+        local any = false
+        for _, w in ipairs(hl.get_windows() or {}) do
+            for _, t in ipairs(w.tags or {}) do any = any or t:match("^dots%-peek") ~= nil end
+        end
+        if not any then return end
+    end
     peek_rules()
     peek_blur(true)
     peek.gen = peek.gen + 1
@@ -520,13 +1016,6 @@ local function peek_set(screen, keep)
 end
 
 function dots.peek_end() peek_set(nil, {}) end
-
--- dots.peek(address): that window alone on its screen
-function dots.peek(address)
-    local win = by_address(address)
-    if not win or not win.monitor then return dots.peek_end() end
-    peek_set(win.monitor.name, { [win.address] = true })
-end
 
 -- dots.peek_screen(screen, address...): only those windows on that screen (none: the bare desktop, for the shell's
 -- pictures of windows not on it); a screen that isn't there, the peek ends

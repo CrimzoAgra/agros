@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # pacman-lock-holder: pacman, paru or yay installing or upgrading holds pacman's lock; one only reading (a query, a
-# search, info, what it would do printed, the files database read, paru's PKGBUILD download) doesn't, nor one on
-# another database (-b/--dbpath, or another system's: -r/--root)
+# search, info, what it would do printed (an upgrade's too, -Sup, unless it refreshes the lists or cleans the cache),
+# the files database read, paru's PKGBUILD download) doesn't, nor one on another database (-b/--dbpath, or another
+# system's: -r/--root)
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
@@ -12,21 +13,22 @@ printf '#!/bin/sh\necho "$FAKE"\n' >"$t/bin/pgrep"
 chmod +x "$t/fake" "$t/bin/pgrep"
 pids=()
 cleanup() { local p; for p in "${pids[@]}"; do pkill -P "$p"; kill "$p"; done 2>/dev/null; wait 2>/dev/null; rm -rf "$t"; true; }
-trap cleanup EXIT
+on_exit cleanup
 holds() {
     "$t/fake" "$@" 2>/dev/null & pids+=($!)
     for _ in $(seq 50); do [[ $(tr '\0' ' ' <"/proc/$!/cmdline") == *"$t/fake"* ]] && break; sleep 0.02; done
     FAKE=$! PATH=$t/bin:$PATH "$here/.local/bin/pacman-lock-holder" /var/lib/pacman >/dev/null
 }
 for a in "-Syu" "-S foo" "-U x.pkg" "-Rns foo" "-Fy" "-Syi foo" "--sync --refresh" "--dbpath /var/lib/pacman/ -S foo" \
-    "--dbpath=/var/lib/pacman -Syu" "-b /var/lib/pacman -S foo" "-b/var/lib/pacman -Su" "-r / -Syu" "--root=/ -S foo" ""; do
+    "--dbpath=/var/lib/pacman -Syu" "-b /var/lib/pacman -S foo" "-b/var/lib/pacman -Su" "-r / -Syu" "--root=/ -S foo" "-Syup" "-Scp" "--sync --refresh --print foo" "--sync --clean --print" ""; do
     # shellcheck disable=SC2086  # (the arguments, one per word)
     holds $a || fail "not taken for the lock's holder: pacman $a"
 done
 for a in "-Q" "-Qua" "-Qu" "--query foo" "-Ss foo" "-S -s foo" "-Si foo" "-Sl" "-Sg" "--sync --search foo" "-F foo" \
     "-T foo" "-G foo" "-Gp foo" "--dbpath /tmp/check -Sy" "--dbpath=/tmp/check -Syu" "-b /tmp/check -Sy" \
     "-b/tmp/check -Syu" "-r /mnt -Syu" "--root /mnt -S foo" "--root=/mnt -Syu" "-Sp foo" "--sync --print foo" "-Up x.pkg" \
-    "-Rp foo" "-b/var/lib/pacman/cache -Ss foo" "-b/var/lib/pacman -Ss foo"; do
+    "-Rp foo" "-b/var/lib/pacman/cache -Ss foo" "-b/var/lib/pacman -Ss foo" "-Sup --print-format %n" \
+    "--sync --sysupgrade --print-format %n" "-Su --print" "-Rcp foo" "-Rup foo" "-Rnscp foo"; do
     # shellcheck disable=SC2086
     holds $a && fail "taken for the lock's holder: pacman $a"
 done

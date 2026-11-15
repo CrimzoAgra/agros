@@ -26,7 +26,7 @@ printf '#!/bin/sh\nexit 0\n' >"$t/bin/rfkill"
 chmod +x "$t/bin/"* "$t/hook"
 # The kernel's adapters: a folder of their entries ($t/sys/hci0)
 mkdir -p "$t/sys/hci0"
-hook() { rm -f "$t/calls"; BT_SYSFS=$t/sys PATH=$t/bin:$PATH timeout 30 "$t/hook" "$@" >/dev/null 2>&1; }
+hook() { rm -f "$t/calls"; BT_SYSFS=$t/sys BT_TIMEOUT=0.3 BT_BUDGET=2 PATH=$t/bin:$PATH timeout 30 "$t/hook" "$@" >/dev/null 2>&1; }
 
 # Bluetooth's service stopped: nothing asked, nothing noted (an old mark taken out)
 touch "$t/was-powered"
@@ -36,7 +36,7 @@ hook pre || fail "pre failed with the service stopped"
 # bluetoothd stuck: given up on in a few seconds
 start=$SECONDS
 BT_ACTIVE=1 BT_HANG=1 hook pre || fail "pre failed with bluetoothd stuck"
-((SECONDS - start <= 6)) || fail "pre waited $((SECONDS - start)) s on a stuck bluetoothd"
+((SECONDS - start <= 2)) || fail "pre waited $((SECONDS - start)) s on a stuck bluetoothd"
 [[ ! -e $t/was-powered ]] || fail "noted as on with bluetoothd stuck"
 # On: noted, and switched back on after waking
 BT_ACTIVE=1 BT_POWERED=yes hook pre || fail "pre failed"
@@ -68,7 +68,7 @@ BT_ACTIVE=1 BT_POWERED=yes hook post || fail "post failed with nothing connected
 BT_ACTIVE=1 BT_POWERED=yes hook pre
 start=$SECONDS
 BT_ACTIVE=1 BT_HANG=1 hook post || fail "post failed with bluetoothd stuck"
-((SECONDS - start <= 22)) || fail "post waited $((SECONDS - start)) s on a stuck bluetoothd"
+((SECONDS - start <= 4)) || fail "post waited $((SECONDS - start)) s on a stuck bluetoothd"
 # Off before sleep: nothing done after waking
 BT_ACTIVE=1 BT_POWERED=no hook pre
 [[ ! -e $t/was-powered ]] || fail "Bluetooth off noted as on"

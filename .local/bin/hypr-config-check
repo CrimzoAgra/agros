@@ -17,9 +17,11 @@ if [[ -z ${XDG_RUNTIME_DIR:-} || ! -d ${XDG_RUNTIME_DIR:-} ]]; then
     trap 'rm -rf "$XDG_RUNTIME_DIR"' EXIT
 fi
 # (outside the session, so it loads the files on disk rather than asking the running Hyprland. DOTS_VERIFY_CONFIG:
-# hypr-user.lua only checks then, with none of its side effects: no "failed to load" notification, which
-# dotfiles-check gives itself, and no settings file written)
-out=$(timeout 60 env -u HYPRLAND_INSTANCE_SIGNATURE -u WAYLAND_DISPLAY DOTS_VERIFY_CONFIG=1 \
+# the config only checks then, with none of its side effects: no "failed to load" notification, which dotfiles-check
+# gives itself, no settings file written (hypr-user.lua), and no keymap read or cached (user/keys.lua))
+# (--foreground: Hyprland kept in its caller's process group, so a refresh stopped as a group (a closed terminal) stops it
+# too; in a group of its own it ran on, up to the minute, writing into the staging folder already taken away)
+out=$(timeout --foreground 60 env -u HYPRLAND_INSTANCE_SIGNATURE -u WAYLAND_DISPLAY DOTS_VERIFY_CONFIG=1 \
     Hyprland --verify-config -c "${XDG_CONFIG_HOME:-$HOME/.config}/hypr/hyprland.lua" 2>&1)
 rc=$?
 if ((rc == 0)); then

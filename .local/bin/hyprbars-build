@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
-# Builds hyprbars (the title bars on floating windows: ~/.config/caelestia/user/titlebars.lua) with my hover
-# highlight and the rest of my patch (~/.local/share/hyprbars/hyprbars.patch: the button under the mouse lightens,
-# a restore icon on maximised windows, maximised windows un-maximise when dragged by the title bar) for the running
-# Hyprland, into ~/.local/lib/hyprbars/, and swaps it in.
+# Builds hyprbars (the title bars on floating windows: ~/.config/caelestia/user/titlebars.lua) with my patch
+# (~/.local/share/hyprbars/hyprbars.patch: the button under the mouse lightens, a restore icon on maximised windows;
+# every move and resize, by the bar, an app's own header or an edge, handed to windows.lua's drag hooks, which
+# un-maximise and snap; resizing from the bar's top and from 15 px outside the border; the seam between snapped windows
+# with its cursor and press; the apps' smallest sizes for Lua, hl.plugin.hyprbars.min_size) for the running Hyprland,
+# into ~/.local/lib/hyprbars/, and swaps it in.
+# (the patch made with `git diff -U1` in a patched hyprland-plugins clone: one line of context, so the same patch applies
+# to this series' tag and to main, whose hyprbars changed around it; tests/hyprbars.sh checks both)
 #   hyprbars-build          build it now
 #   hyprbars-build --login  what titlebars.lua runs as Hyprland starts: load my build if it was made for this
 #                           Hyprland and this patch; after a Hyprland update or a patch change, load the AUR one (no
@@ -85,11 +89,14 @@ trap 'rm -rf "$tmp"' EXIT
 # (still offline: on to the clone anyway, whose tries and message say so; set -e left with no message)
 $prebuild || "$helpers/wait-online" https://github.com || true
 # A stalled clone is given up on and tried again, 3 times (at a login on 2026-11-04 one hung for minutes, the AUR plugin
-# staying loaded meanwhile); still failing: the notification of --login says so
-for try in 1 2 3; do
+# staying loaded meanwhile); still failing: the notification of --login says so. From the pacman hook once, no waits:
+# offline there, each try held the update up (for every user) for a build the next login makes anyway
+tries=3
+$prebuild && tries=1
+for ((try = 1; ; try++)); do
     rm -rf "$tmp/src"
     timeout 180 git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=30 clone -q https://github.com/hyprwm/hyprland-plugins.git "$tmp/src" && break
-    [[ $try == 3 ]] && { echo "Couldn't download hyprland-plugins from GitHub (3 tries)."; exit 1; }
+    ((try < tries)) || { echo "Couldn't download hyprland-plugins from GitHub ($tries $( ((tries == 1)) && echo try || echo tries))."; exit 1; }
     echo "The download of hyprland-plugins failed or stalled: trying again."
     sleep 10
 done

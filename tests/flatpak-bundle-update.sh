@@ -46,7 +46,7 @@ out=$(PATH=$t/bin:$PATH "$here/.local/bin/flatpak-bundle-update" --check) || tru
 cat >"$t/bin/flatpak" <<F
 #!/bin/bash
 case "\$*" in
-    list*) printf 'com.x.App\tapp-origin\tuser\n' ;;
+    list*) printf 'com.x.App\tapp-origin\tuser\ncom.x.Sys\tsys-origin\tsystem\n' ;;
     *--show-location*) echo "$t/app" ;;
     info*) echo '  Version: 1.0' ;;
     install*) echo "flatpak \$*" >>"$t/installs" ;;
@@ -63,7 +63,16 @@ release App-x86_64.flatpak
 mkdir -p "$t/fetched"
 out=$(PATH=$t/bin:$PATH "$here/.local/bin/flatpak-bundle-update" --fetch "$t/fetched" 2>&1) || fail "--fetch failed: $out"
 [[ ! -e $t/installs && $(cut -f1,3,4 "$t/fetched/fetched") == $'user\tcom.x.App\t1.1' && $(cat "$(cut -f2 "$t/fetched/fetched")") == bundle ]] ||
-    fail "--fetch didn't only download the update: $out / $(cat "$t/fetched/fetched" 2>/dev/null) / $(cat "$t/installs" 2>/dev/null)"
+    fail "--fetch didn't only download the user's own update (a system-wide one is root's, done once): $out / $(cat "$t/fetched/fetched" 2>/dev/null) / $(cat "$t/installs" 2>/dev/null)"
+# As root (the boot's own run: here in a user namespace, root in name only), the system-wide one is fetched too
+if unshare -r true 2>/dev/null; then
+    mkdir -p "$t/fetched-root"
+    out=$(PATH=$t/bin:$PATH unshare -r "$here/.local/bin/flatpak-bundle-update" --fetch "$t/fetched-root" 2>&1) || fail "--fetch as root failed: $out"
+    [[ $(cut -f1,3 "$t/fetched-root/fetched" | sort | paste -sd' ') == $'system\tcom.x.Sys user\tcom.x.App' ]] ||
+        fail "--fetch as root didn't take the system-wide one too: $out / $(cat "$t/fetched-root/fetched" 2>/dev/null)"
+else
+    skipped "no user namespace to be root in: the root run's system-wide fetch not run"
+fi
 out=$(PATH=$t/bin:$PATH "$here/.local/bin/flatpak-bundle-update" --install-fetched "$t/fetched" 2>&1) || fail "--install-fetched failed: $out"
 { grep -qx "flatpak install --user -y --noninteractive --reinstall --bundle $t/fetched/com.x.App/App-x86_64.flatpak" "$t/installs" &&
     [[ $out == *"com.x.App: updated to 1.1"* ]]; } || fail "--install-fetched didn't reinstall from the file: $out / $(cat "$t/installs")"

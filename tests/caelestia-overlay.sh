@@ -22,6 +22,9 @@ dst=$t/.config/quickshell/caelestia skipped=$t/state/caelestia-overlay-skipped
 out=$(run) || fail "overlay failed: $(tail -3 <<<"$out")"
 grep -q '^WARNING\|Traceback' <<<"$out" && fail "patches no longer fit: $(grep '^WARNING' <<<"$out")"
 [[ -d $dst && ! -s $skipped ]] || fail "not installed"
+# The bar's reserved space changing (Hyprland has no event for it): maximised and snapped windows fitted again
+grep -q 'onExclusiveZoneChanged: Quickshell.execDetached(\["hyprctl", "eval", "dots.refit_placed_soon()"\])' "$dst/modules/drawers/Exclusions.qml" ||
+    fail "the bar's space changing doesn't refit windows: $(grep -A3 'anchors.left: true' "$dst/modules/drawers/Exclusions.qml")"
 # The notification sidebar closes on a curve that doesn't overshoot (opens as before), and its hover edge doesn't open
 # it while a pop-up shows, nor afterwards for a pointer that stayed there until it leaves (the window too)
 w=$dst/modules/sidebar/Wrapper.qml i=$dst/modules/drawers/Interactions.qml
@@ -40,6 +43,8 @@ r.push(sidebarHoverOpens(false));                                    // the poin
 r.push(sidebarHoverOpens(true));                                     // and comes back
 console.log(r.join(' '));")
     [[ $seq == "false false false true" ]] || fail "the sidebar's hover edge with a pop-up: $seq (want: false false false true)"
+else
+    skipped "no node: the sidebar's hover edge not run"
 fi
 # ...let go of wherever the pointer leaves the edge: every move, before the paths that return early (a detached popout,
 # fullscreen) or don't test it (the power menu open, a button held), by the same edge Caelestia's hover tests; and held
@@ -58,6 +63,38 @@ sidebar_edge_released() { # <Interactions.qml>
         grep -q '^        target: root.panels.notifications$' "$1" || echo "not held by a pop-up under a resting pointer"
 }
 r=$(sidebar_edge_released "$i"); [[ -z $r ]] || fail "the sidebar's hover edge not let go on every path: $r"
+# The panels' hover from the screen's very edge reads WindowDrag (a service): imported where it's used (without it every
+# hover check failed, a ReferenceError, and the panels opened only by dragging)
+for f in "$i" "$dst/modules/drawers/SnapPreview.qml"; do
+    ! grep -q 'WindowDrag\.' "$f" || grep -qx 'import qs.services' "$f" || fail "WindowDrag used without importing qs.services: $f"
+done
+# The panels' edge hover (edgeHover): opens only at the edge, with no button held and no window dragged; an open one
+# stays while hovered, a button held over it or not
+if command -v node >/dev/null; then
+    fn=$(sed -n '/^    function edgeHover(open: bool, atEdge: bool): bool {$/,/^    }$/p' "$i" | sed 's/(open: bool, atEdge: bool): bool {/(open, atEdge) {/')
+    [[ -n $fn ]] || fail "edgeHover not patched in"
+    seq=$(node -e "let pressed = false; const WindowDrag = { dragging: false };
+$fn
+const r = [];
+r.push(edgeHover(false, true));                              // closed, at the edge: opens
+r.push(edgeHover(false, false));                             // closed, off the edge: no
+pressed = true; r.push(edgeHover(false, true));              // a button held at the edge: no
+r.push(edgeHover(true, false));                              // open, a button held over it: stays
+pressed = false; WindowDrag.dragging = true; r.push(edgeHover(false, true)); // a window dragged to the edge: no
+console.log(r.join(' '));")
+    [[ $seq == "true false false true false" ]] || fail "the panels' edge hover: $seq (want: true false false true false)"
+    # ...and on a side with another screen beyond (two side by side): the old band there, the last pixel elsewhere
+    fn=$(sed -n '/^    function sideShared(side: string): bool {$/,/^    }$/p' "$i" | sed 's/(side: string): bool {/(side) {/')
+    seq=$(node -e "const a = { x: 0, y: 0, width: 1920, height: 1080 }, b = { x: 1920, y: 0, width: 1152, height: 2048 };
+const Quickshell = { screens: [a, b] }; let root = { screen: a };
+$fn
+const r = [sideShared('right'), sideShared('left'), sideShared('top')];
+root = { screen: b }; r.push(sideShared('left'), sideShared('right'));
+console.log(r.join(' '));")
+    [[ $seq == "true false false true false" ]] || fail "the panels' sides shared with another screen: $seq (want: true false false true false)"
+else
+    skipped "no node: the panels' edge hover not run"
+fi
 # The sidebar's shortcut mode: added once on a Caelestia without its own (2.5.0)
 grep -q 'property bool sidebarShortcutActive' /etc/xdg/quickshell/caelestia/modules/drawers/Interactions.qml ||
     [[ $(grep -c 'property bool sidebarShortcutActive' "$i") == 1 ]] || fail "the sidebar's shortcut mode not patched in"

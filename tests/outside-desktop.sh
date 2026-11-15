@@ -29,8 +29,43 @@ export PATH=$t/bin:$PATH
 outside=(env -u HYPRLAND_INSTANCE_SIGNATURE -u WAYLAND_DISPLAY)
 
 "${outside[@]}" "$here/.local/bin/caelestia-restart" >/dev/null 2>&1 || true
-grep -q '^hyprctl dispatch .*caelestia-restart' "$log" || fail "Hyprland not asked to restart Caelestia: $(cat "$log")"
+grep -q '^hyprctl dispatch .*env CAELESTIA_RESTART_HANDED=1 .*caelestia-restart' "$log" ||
+    fail "Hyprland not asked to restart Caelestia (marked as handed over): $(cat "$log")"
 grep -q '^qs ' "$log" && fail "Caelestia restarted from outside the desktop: $(cat "$log")"
+: >"$log"
+# Hyprland's and Wayland's names set by hand, but not the desktop's environment (no XDG_CURRENT_DESKTOP): handed to
+# Hyprland too (started from there, the shell had no Qt theme, and drew Papirus-only icons as missing)
+env -u XDG_CURRENT_DESKTOP HYPRLAND_INSTANCE_SIGNATURE=x WAYLAND_DISPLAY=w "$here/.local/bin/caelestia-restart" >/dev/null 2>&1 || true
+grep -q '^hyprctl dispatch .*caelestia-restart' "$log" || fail "a restart without the desktop's environment not handed to Hyprland: $(cat "$log")"
+grep -q '^qs ' "$log" && fail "Caelestia restarted without the desktop's environment: $(cat "$log")"
+# The run Hyprland starts, in a desktop whose XDG_CURRENT_DESKTOP is another name (Hyprland keeps one set before it):
+# not handed back again (it went round forever)
+: >"$log"
+# (its qs as the real one: the running shell listed until it's stopped, none then, the new one once started; started
+# through a stand-in systemd-run, there being no user manager here)
+mkdir -p "$t/bin2"
+cat >"$t/bin2/qs" <<'Q'
+#!/bin/sh
+echo "qs $*" >>"$log"
+case "$1 $2" in
+    "kill --pid") echo stopped >"$log.state" ;;
+    "-c caelestia") echo started >"$log.state" ;;
+    "list --all")
+        case $(cat "$log.state" 2>/dev/null) in
+            stopped) ;;
+            started) printf 'Process ID: 102\nConfig path: /h/.config/quickshell/caelestia/shell.qml\n' ;;
+            *) printf 'Process ID: 101\nConfig path: /h/.config/quickshell/caelestia/shell.qml\n' ;;
+        esac ;;
+esac
+Q
+printf '#!/bin/sh\nwhile [ "${1#-}" != "$1" ]; do shift; done\nexec "$@"\n' >"$t/bin2/systemd-run"
+chmod +x "$t/bin2/"*
+rc=0
+PATH=$t/bin2:$PATH env CAELESTIA_RESTART_HANDED=1 XDG_CURRENT_DESKTOP=GNOME HYPRLAND_INSTANCE_SIGNATURE=x WAYLAND_DISPLAY=w \
+    timeout 20 "$here/.local/bin/caelestia-restart" >/dev/null 2>&1 </dev/null || rc=$?
+grep -q '^hyprctl dispatch .*caelestia-restart' "$log" && fail "the restart Hyprland ran handed back to it again: $(cat "$log")"
+{ ((rc == 0)) && grep -q '^qs kill --pid 101$' "$log" && grep -q '^qs -c caelestia -n -d$' "$log"; } ||
+    fail "the restart Hyprland ran didn't restart the shell (exit $rc): $(cat "$log")"
 
 : >"$log"
 "${outside[@]}" python3 -I - "$here" <<'P'

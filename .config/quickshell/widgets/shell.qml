@@ -692,15 +692,16 @@ ShellRoot {
                 y: (win.height - height * fit) / 2
                 scale: fit
                 transformOrigin: Item.TopLeft
+                // How far all three columns move down together (0 at 1920x1080 and larger): the left column's top kept below
+                // the band along the top that Caelestia keeps for itself on an empty workspace (dragging its panels out: its
+                // dragThreshold, 80, and its border), 120 screen pixels, where the weather panel's tab and pencil were out of
+                // the mouse's reach (a screen scaled down, or cropped: a wide one). All three, so they keep their places
+                readonly property real drop: Math.max(0, (120 - y) / fit - 120)
 
                 // ---- Left column: weather, calendar ----
                 ColumnLayout {
                     x: stage.width * 0.30
-                    // Below the band along the top that Caelestia keeps for itself on an empty workspace (dragging its
-                    // panels out: its dragThreshold, 80, and its border): the weather panel's tab and pencil were in it,
-                    // so the mouse never reached them. 120 screen pixels, not the stage's: scaled (1.5) or cropped (a wide
-                    // screen) the stage's 120 landed inside the band, or above the screen
-                    y: Math.max(stage.height * 0.08, (120 - stage.y) / stage.fit)
+                    y: 120 + stage.drop
                     width: 290
                     spacing: 34
 
@@ -1091,7 +1092,7 @@ ShellRoot {
                 // ---- Narration in the strip of sky above the falling figure's feet ----
                 Caption {
                     x: stage.width * 0.463
-                    y: stage.height * 0.13
+                    y: stage.height * 0.13 + stage.drop
                     rotation: -4
                     size: 22
                     wrapWidth: 140
@@ -1101,7 +1102,7 @@ ShellRoot {
                 // ---- Right column: clock, sixth sense, media ----
                 ColumnLayout {
                     x: stage.width * 0.555
-                    y: stage.height * 0.05
+                    y: stage.height * 0.05 + stage.drop
                     width: 430
                     spacing: 0
 

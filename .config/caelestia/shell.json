@@ -281,23 +281,7 @@
                 "name": "Pin to dock"
             }
         ],
-        "favouriteApps": [
-            "equibop",
-            "foot",
-            "librewolf",
-            "com.nuvio.media.desktop",
-            "proton.vpn.app.gtk",
-            "org.qbittorrent.qBittorrent",
-            "com.spotify.Client",
-            "steam",
-            "org.gnome.FileRoller",
-            "vscodium",
-            "legion-control",
-            "thunar",
-            "ai.storyteller.artcraft-launcher",
-            "net.lutris.Lutris",
-            "net.lutris.epic-games-store-1"
-        ],
+        "favouriteApps": [],
         "hiddenApps": [
             "^xfce4-about$",
             "^footclient$",

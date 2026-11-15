@@ -10,8 +10,9 @@
 #   auto-update-aur <dbpath>             as root: plan, build (as agros-aur), collect. Writes /var/lib/auto-update/aur/:
 #                                        planned (it ran to the end), rebuild (those a new runtime needs rebuilt),
 #                                        runtime-target (the new runtimes), wanted ("<name> <AUR version>" each one
-#                                        planned), failed ("<base>: <why>" each one that failed, or why none was
-#                                        built), log/ (each step's), repo/ and built ("<name> <version>" each built)
+#                                        planned), failed ("<base>: <why>" each one that failed, its own name for one
+#                                        the AUR doesn't know; or why none was built), log/ (each step's), repo/ and
+#                                        built ("<name> <version>" each built)
 #   auto-update-aur --sandbox <fetch|run|build> <build folder> [--ro <path>]... -- <command>
 #                                        the build account's part: a command in the sandbox (refused as root); --fetch,
 #                                        --unpack and --build are what runs in it (--jail: its network closed off first)
@@ -124,6 +125,8 @@ if [[ ${1:-} == --fetch ]]; then
         echo "== $base"
         timeout 5m git clone -q --depth 1 "https://aur.archlinux.org/$base.git" "$dir/$base" &&
             cd "$dir/$base" || { echo "$base: its build files couldn't be fetched"; exit 1; }
+        # (AgrOS's fix for it, as [agros]'s build has it: Quickshell's)
+        "$(dirname "$self")/aur-agros-patch" "$dir/$base" "$base" || exit 1
         for k in $(sed -n 's/^[[:space:]]*validpgpkeys = //p' .SRCINFO); do
             [[ $k =~ ^[0-9A-Fa-f]{16,40}$ ]] || continue
             timeout 2m gpg --batch --keyserver hkps://keyserver.ubuntu.com --recv-keys "$k" >/dev/null 2>&1 || echo "$base: key $k not fetched"
@@ -166,8 +169,13 @@ fail() { echo "AUR: $1"; echo "$1" >"$aur/failed"; touch "$aur/planned"; exit 1;
 drop() { echo "AUR: $1: $2"; echo "$1: $2" >>"$aur/failed"; }
 
 # What the download brings ("name old -> new"), those pacman.conf holds back left out
-pending=$(LC_ALL=C pacman -Qu --dbpath "$db" 2>/dev/null | /usr/lib/agros/bin/updates-pending)
+# (pacman's config through the upstream gate, as the boot's download used it: $AGROS_PACMAN_CONF, auto-update's. What
+# it holds (Hyprland not checked yet, a library held with it) neither listed here nor built against)
+conf=${AGROS_PACMAN_CONF:-/etc/pacman.conf}
+pending=$(LC_ALL=C pacman -Qu --config "$conf" --dbpath "$db" 2>/dev/null | /usr/lib/agros/bin/updates-pending)
 target=$("$kinds" --runtime-target <<<"$pending")
+# (as said: "<name> <version>", a comma between two; the list's own form is "<name> <version> " each)
+said_target=$(awk '{ for (i = 1; i < NF; i += 2) printf "%s%s %s", (i > 1 ? ", " : ""), $i, $(i + 1) }' <<<"$target")
 # The AUR's apps here: in no repo (foreign to the download's lists), or in [agros] (built there from the AUR)
 mapfile -t foreign < <(pacman -Qmq --dbpath "$db" 2>/dev/null)
 agros=$(pacman -Slq --dbpath "$db" agros 2>/dev/null)
@@ -181,7 +189,7 @@ if [[ -n $target ]]; then
     done
     printf '%s\n' "${rebuild[@]}" | sed '/^$/d' >"$aur/rebuild"
     echo "$target" >"$aur/runtime-target"
-    ((${#rebuild[@]})) && echo "AUR: a new runtime ($target): ${rebuild[*]} rebuilt for it"
+    ((${#rebuild[@]})) && echo "AUR: a new runtime ($said_target): ${rebuild[*]} rebuilt for it"
 fi
 ((${#foreign[@]} + ${#rebuild[@]})) || { touch "$aur/planned"; exit 0; }
 
@@ -190,23 +198,40 @@ args=()
 for p in "${foreign[@]}" "${rebuild[@]}"; do args+=(--data-urlencode "arg[]=$p"); done
 info=$(curl -fsS --connect-timeout 10 -m 120 -G "https://aur.archlinux.org/rpc/v5/info" "${args[@]}" |
     jq -r '.results[] | [.Name, .PackageBase, .Version] | @tsv') || fail "the AUR couldn't be reached"
-mapfile -t ignored < <(pacman-conf IgnorePkg 2>/dev/null)
-declare -A bases=()
+mapfile -t ignored < <(pacman-conf --config "$conf" IgnorePkg 2>/dev/null)
+declare -A bases=() held_bases=()
 while IFS=$'\t' read -r name base ver; do
     [[ -n $name ]] || continue
     [[ $name =~ $name_re && $base =~ $name_re && $ver =~ ^[A-Za-z0-9.:_+~-]+$ ]] || fail "the AUR named a package oddly"
     have=$(pacman -Q "$name" 2>/dev/null | cut -d' ' -f2)
     for g in "${ignored[@]}"; do
         # shellcheck disable=SC2053  # (IgnorePkg's entries are patterns)
-        [[ $name == $g ]] && continue 2
+        [[ $name == $g ]] || continue
+        # (one a new runtime needs rebuilt: that runtime waits as for any rebuild that can't be done, and says why)
+        # (its whole base: one of a split base held, the base isn't built, its others with it (a new one beside an old
+        # one held, of one build, won't install); said once: a rebuild's here, else below if another was planned)
+        if grep -qxF -- "$name" <<<"$(printf '%s\n' "${rebuild[@]}")"; then
+            [[ ${held_bases[$base]:-} == said ]] ||
+                drop "$base" "pacman.conf holds it back (IgnorePkg): it can't be rebuilt for the new $said_target"
+            held_bases[$base]=said
+        else
+            held_bases[$base]=${held_bases[$base]:-$name}
+        fi
+        continue 2
     done
     if grep -qxF -- "$name" <<<"$(printf '%s\n' "${rebuild[@]}")" || { [[ -n $have ]] && (($(vercmp "$ver" "$have") > 0)); }; then
         bases[$base]+=" $name"
         echo "$name $ver" >>"$aur/wanted"
     fi
 done <<<"$info"
+for b in "${!held_bases[@]}"; do
+    [[ ${held_bases[$b]} == said || -z ${bases[$b]:-} ]] ||
+        drop "$b" "${held_bases[$b]}, of the same build, is held back by pacman.conf (IgnorePkg): not built"
+    for n in ${bases[$b]:-}; do sed -i "/^${n//./\\.} /d" "$aur/wanted" 2>/dev/null; done
+    unset "bases[$b]"
+done
 # (one a new runtime needs rebuilt that isn't there: that runtime waits, auto-update holds it; the others go on)
-for p in "${rebuild[@]}"; do grep -q "^$p	" <<<"$info" || drop "$p" "it isn't on the AUR: it can't be rebuilt for the new $target"; done
+for p in "${rebuild[@]}"; do grep -q "^$p	" <<<"$info" || drop "$p" "it isn't on the AUR: it can't be rebuilt for the new $said_target"; done
 ((${#bases[@]})) || { touch "$aur/planned"; [[ ! -s $aur/failed ]]; exit; }
 for b in "${!bases[@]}"; do echo "$b${bases[$b]}"; done | sort >"$aur/plan"
 echo "AUR: building $(cut -d' ' -f1 "$aur/plan" | paste -sd' ')"
@@ -265,6 +290,18 @@ mapfile -t order < <(for b in "${order[@]}"; do
     done
 done | tsort)
 
+# The package pacman.conf holds back (IgnorePkg) that a dependency resolves to, if any: pacman takes one asked for by
+# name in a dry run
+held_by() {
+    local n g
+    for n in $(LC_ALL=C pacman -Sp --config "$conf" --dbpath "$db" --print-format '%n' -- "$1" 2>/dev/null); do
+        for g in "${ignored[@]}"; do
+            # shellcheck disable=SC2053  # (IgnorePkg's entries are patterns)
+            [[ $n == $g ]] && { echo "$n"; return 0; }
+        done
+    done
+    return 1
+}
 # What each needs that isn't installed nor in the download: from the repos, downloaded (not installed: unpacked in the
 # sandbox alone; pacman brings what they need to run at the install); one needing what's only on the AUR isn't built
 # here. Each one a dependency's name (a build's .SRCINFO can say anything: never an option to root's pacman)
@@ -280,8 +317,36 @@ for b in "${order[@]}"; do
     mine=()
     for d in "${missing[@]}"; do
         [[ -n $d && -z $why ]] || continue
-        grep -q " ${d%%[<>=]*}\( \|$\)" "$aur/plan" && continue  # (built here)
-        pacman -Sp --dbpath "$db" -- "$d" >/dev/null 2>&1 || why="${d%%[<>=]*}, which it needs, isn't in the repos (only the AUR: Updates builds it)"
+        # (built here: another planned one's package, or what it provides)
+        [[ -n ${base_of[${d%%[<>=]*}]:-} ]] && continue
+        # (can't be had: why said as it is. pacman names what it can't satisfy for it, "unable to satisfy dependency";
+        # that one held back by pacman.conf (IgnorePkg: the upstream gate's Hyprland) at an older version, or not in the
+        # repos at all. Or the dependency itself in the repos only at an older version, or not at all)
+        if ! got=$(LC_ALL=C pacman -Sp --config "$conf" --dbpath "$db" --print-format '%n' -- "$d" 2>"$aur/sp-err"); then
+            un=$(sed -nE "s/^:: unable to satisfy dependency '([^']*)'.*/\1/p" "$aur/sp-err" | head -n1)
+            un=${un//[^A-Za-z0-9@._+<>=-]/}
+            if [[ -n $un ]] && h=$(held_by "$un"); then
+                why="${d%%[<>=]*}, which it needs, needs a newer $h, which pacman.conf holds back (IgnorePkg)"
+            elif [[ -n $un ]]; then
+                why="${d%%[<>=]*}, which it needs, needs ${un%%[<>=]*}, which isn't in the repos (at that version)"
+            elif ! grep -q "target not found" "$aur/sp-err"; then
+                why="${d%%[<>=]*}, which it needs, couldn't be worked out: $(grep -m1 . "$aur/sp-err" | tr -dc 'A-Za-z0-9@._+<>=:,()/ -')"
+            # (by the name alone: a package's, or what one provides, a library's soname too)
+            elif LC_ALL=C pacman -Sp --config "$conf" --dbpath "$db" --print-format '%n' -- "${d%%[<>=]*}" >/dev/null 2>&1; then
+                why="${d%%[<>=]*}, which it needs, is in the repos only at an older version than it needs"
+            else
+                why="${d%%[<>=]*}, which it needs, isn't in the repos (only the AUR: Updates builds it)"
+            fi
+            continue
+        fi
+        # (one held back itself: pacman takes it when asked for it by name, so built against what the shutdown won't
+        # install)
+        for n in $got; do
+            for g in "${ignored[@]}"; do
+                # shellcheck disable=SC2053  # (IgnorePkg's entries are patterns)
+                [[ $n == $g ]] && why="${d%%[<>=]*}, which it needs, is held back by pacman.conf (IgnorePkg: $n)"
+            done
+        done
         mine+=("$d")
     done
     if [[ -n $why ]]; then drop "$b" "$why"; else ok+=("$b"); need+=("${mine[@]}"); fi
@@ -291,7 +356,7 @@ order=("${ok[@]}")
 if ((${#need[@]})); then
     # (pacman's cache written: marked, so Updates' update-apps waits on it, never both writing it at once)
     touch "$au/downloading"
-    pacman -Sw --dbpath "$db" --noconfirm --logfile /dev/null -- "${need[@]}" >/dev/null
+    pacman -Sw --config "$conf" --dbpath "$db" --noconfirm --logfile /dev/null -- "${need[@]}" >/dev/null
     rc=$?
     rm -f "$au/downloading"
     ((rc == 0)) || fail "what they need couldn't be downloaded"
@@ -299,8 +364,8 @@ fi
 # The files to unpack: every package the shutdown's transaction installs (pacman -Su's: upgrades, new dependencies,
 # replacements; IgnorePkg's left out), and those
 mapfile -t files < <(
-    { pacman -Sup --dbpath "$db" --print-format '%f' 2>/dev/null
-      ((${#need[@]})) && pacman -Sp --dbpath "$db" --print-format '%f' -- "${need[@]}" 2>/dev/null; } |
+    { pacman -Sup --config "$conf" --dbpath "$db" --print-format '%f' 2>/dev/null
+      ((${#need[@]})) && pacman -Sp --config "$conf" --dbpath "$db" --print-format '%f' -- "${need[@]}" 2>/dev/null; } |
         while read -r f; do [[ $f == *.pkg.tar.* && -f $cache$f ]] && echo "$cache$f"; done
 )
 box run --ro "$cache" -- timeout 30m "$self" --unpack "$dir/stage" "${files[@]}" >"$aur/log/unpack.log" 2>&1 ||

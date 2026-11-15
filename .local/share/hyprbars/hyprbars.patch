@@ -1,28 +1,24 @@
 diff --git a/hyprbars/barDeco.cpp b/hyprbars/barDeco.cpp
-index e57f77b..bfeb258 100644
+index e57f77b..d6179a8 100644
 --- a/hyprbars/barDeco.cpp
 +++ b/hyprbars/barDeco.cpp
-@@ -24,6 +24,8 @@
- #include <hyprland/src/layout/LayoutManager.hpp>
- #include <hyprland/src/render/OpenGL.hpp>
+@@ -26,2 +26,4 @@
  #include <hyprland/src/state/MonitorState.hpp>
 +#include <hyprland/src/pointer/cursor/CursorShapeOverrideController.hpp>
 +#include <hyprland/src/protocols/core/DataDevice.hpp>
  
- #include "globals.hpp"
- #include "BarPassElement.hpp"
-@@ -58,6 +60,8 @@ CHyprBar::CHyprBar(PHLWINDOW pWindow) : IHyprWindowDecoration(pWindow) {
- 
- CHyprBar::~CHyprBar() {
+@@ -60,2 +62,4 @@ CHyprBar::~CHyprBar() {
      std::erase(g_pGlobalState->bars, m_self);
 +    if (m_bEdgeCursor)
 +        Pointer::Cursor::overrideController->unsetOverride(Pointer::Cursor::CURSOR_OVERRIDE_DND);
  }
- 
- SDecorationPositioningInfo CHyprBar::getPositioningInfo() {
-@@ -152,9 +156,26 @@ void CHyprBar::onTouchUp(Event::SCallbackInfo& info, ITouch::SUpEvent e) {
- }
- 
+@@ -127,3 +131,4 @@ bool CHyprBar::inputIsValid() {
+ void CHyprBar::onMouseButton(Event::SCallbackInfo& info, IPointer::SButtonEvent e) {
+-    if (!inputIsValid())
++    // (a press already taken: the seam's between snapped windows, main.cpp)
++    if (!inputIsValid() || (info.cancelled && e.state == WL_POINTER_BUTTON_STATE_PRESSED))
+         return;
+@@ -154,5 +159,22 @@ void CHyprBar::onTouchUp(Event::SCallbackInfo& info, ITouch::SUpEvent e) {
  void CHyprBar::onMouseMove(Vector2D coords) {
 -    // ensure proper redraws of button icons on hover when using hardware cursors
 -    if (g_pGlobalState->config.iconOnHover->value())
@@ -48,35 +44,31 @@ index e57f77b..bfeb258 100644
 +        m_bEdgeCursor = false;
 +    }
  
-     // buttons_on_hover: the buttons only exist while the cursor is over the bar,
-     // so the whole bar has to be redrawn as the cursor crosses its edge.
-@@ -171,6 +192,10 @@ void CHyprBar::onMouseMove(Vector2D coords) {
-     if (!m_bDragPending || m_bTouchEv || !validMapped(m_pWindow) || m_touchId != 0)
-         return;
+@@ -173,2 +195,6 @@ void CHyprBar::onMouseMove(Vector2D coords) {
  
 +    // A click that wobbles a pixel isn't a drag (on a maximised window a drag un-maximises it)
 +    if ((cursorRelativeToBar() - m_vDragStart).size() < 5)
 +        return;
 +
      m_bDragPending = false;
-     handleMovement();
- }
-@@ -180,6 +205,10 @@ void CHyprBar::onTouchMove(Event::SCallbackInfo& info, ITouch::SMotionEvent e) {
-         return;
- 
+@@ -182,2 +208,6 @@ void CHyprBar::onTouchMove(Event::SCallbackInfo& info, ITouch::SMotionEvent e) {
      if (!m_bDraggingThis) {
 +        // Floated and pinned only for the drag (undone by endTouchDrag): a floating window, the only kind with a bar
 +        // here, was tiled when the finger lifted
 +        m_bTouchFloated = !m_pWindow->isFloating();
 +        m_bTouchPinned  = !(m_pWindow->m_state & Desktop::View::WINDOW_STATE_PINNED);
          // Initial setup for dragging a window.
-         (void)Config::Actions::floatWindow(Config::Actions::eTogglableAction::TOGGLE_ACTION_ENABLE, m_pWindow.lock());
-         // Pin it so you can change workspaces while dragging a window
-@@ -219,11 +248,19 @@ void CHyprBar::handleDownEvent(Event::SCallbackInfo& info, std::optional<ITouch:
+@@ -187,3 +217,8 @@ void CHyprBar::onTouchMove(Event::SCallbackInfo& info, ITouch::SMotionEvent e) {
  
-     const bool BUTTONSRIGHT = ALIGNBUTTONS != "left";
++        // (the bar's own drag: main.cpp's hook not to wait for a mouse move, which a finger's never makes. The config not
++        // told (titlebar_drag_start: its snapping and un-maximising go by the pointer, which a finger doesn't move: they
++        // acted on wherever the mouse rested); its drag end still runs, finding no zone)
++        g_barMove = true;
+         g_layoutManager->beginDragTarget(m_pWindow.lock()->layoutTarget(), MBIND_MOVE);
++        g_barMove       = false;
+         m_bDraggingThis = true;
+@@ -213,2 +248,10 @@ void CHyprBar::handleDownEvent(Event::SCallbackInfo& info, std::optional<ITouch:
  
--    if (!VECINRECT(COORDS, 0, 0, assignedBoxGlobal().w, HEIGHT - 1)) {
 +    if (const int SIDES = m_bTouchEv ? 0 : resizeEdgeAt(COORDS)) {
 +        info.cancelled   = true;
 +        m_bCancelledDown = true; // (the release too: the app never saw the press)
@@ -85,6 +77,10 @@ index e57f77b..bfeb258 100644
 +        return;
 +    }
 +
+     const auto HEIGHT           = g_pGlobalState->config.barHeight->value();
+@@ -221,7 +264,7 @@ void CHyprBar::handleDownEvent(Event::SCallbackInfo& info, std::optional<ITouch:
+ 
+-    if (!VECINRECT(COORDS, 0, 0, assignedBoxGlobal().w, HEIGHT - 1)) {
 +    // (its bottom row too, which upstream leaves to Hyprland: a top resize edge between the bar and the app)
 +    if (!VECINRECT(COORDS, 0, 0, assignedBoxGlobal().w, HEIGHT)) {
  
@@ -93,35 +89,22 @@ index e57f77b..bfeb258 100644
 -                (void)Config::Actions::floatWindow(Config::Actions::eTogglableAction::TOGGLE_ACTION_DISABLE);
 +            endTouchDrag();
              g_layoutManager->endDragTarget();
-             LOG(Log::DEBUG, "[hyprbars] Dragging ended on {:x}", (uintptr_t)PWINDOW.get());
-         }
-@@ -252,11 +289,12 @@ void CHyprBar::handleDownEvent(Event::SCallbackInfo& info, std::optional<ITouch:
- 
-     if (!ON_DOUBLE_CLICK.empty() &&
+@@ -254,3 +297,3 @@ void CHyprBar::handleDownEvent(Event::SCallbackInfo& info, std::optional<ITouch:
          std::chrono::duration_cast<std::chrono::milliseconds>(Time::steadyNow() - m_lastMouseDown).count() < 400 /* Arbitrary delay I found suitable */) {
 -        Config::Supplementary::executor()->spawn(ON_DOUBLE_CLICK);
 +        Config::Supplementary::executor()->spawn(withAddress(ON_DOUBLE_CLICK));
          m_bDragPending = false;
-     } else {
-         m_lastMouseDown = Time::steadyNow();
+@@ -259,2 +302,3 @@ void CHyprBar::handleDownEvent(Event::SCallbackInfo& info, std::optional<ITouch:
          m_bDragPending  = true;
 +        m_vDragStart    = COORDS;
      }
- }
- 
-@@ -272,8 +310,7 @@ void CHyprBar::handleUpEvent(Event::SCallbackInfo& info) {
-     if (m_bDraggingThis) {
-         g_layoutManager->endDragTarget();
+@@ -274,4 +318,3 @@ void CHyprBar::handleUpEvent(Event::SCallbackInfo& info) {
          m_bDraggingThis = false;
 -        if (m_bTouchEv)
 -            (void)Config::Actions::floatWindow(Config::Actions::eTogglableAction::TOGGLE_ACTION_DISABLE);
 +        endTouchDrag();
  
-         LOG(Log::DEBUG, "[hyprbars] Dragging ended on {:x}", (uintptr_t)m_pWindow.lock().get());
-     }
-@@ -284,23 +321,94 @@ void CHyprBar::handleUpEvent(Event::SCallbackInfo& info) {
- }
- 
+@@ -286,3 +329,18 @@ void CHyprBar::handleUpEvent(Event::SCallbackInfo& info) {
  void CHyprBar::handleMovement() {
 +    if (!m_pWindow.lock())
 +        return;
@@ -135,12 +118,12 @@ index e57f77b..bfeb258 100644
 +    HOOK("before");
 +    if (!m_pWindow.lock()) // the hook closed it
 +        return;
++    g_barMove = true;
      g_layoutManager->beginDragTarget(m_pWindow.lock()->layoutTarget(), MBIND_MOVE);
++    g_barMove = false;
 +    HOOK("after");
      m_bDraggingThis = true;
-     LOG(Log::DEBUG, "[hyprbars] Dragging initiated on {:x}", (uintptr_t)m_pWindow.lock().get());
-     return;
- }
+@@ -292,2 +350,59 @@ void CHyprBar::handleMovement() {
  
 +// With general:resize_on_border, the bar's top is the window's top edge: a press on its top 4 px or just above it
 +// (Hyprland's grab area: border_size + extend_border_grab_area) resizes upwards, and one just beside the bar resizes
@@ -200,10 +183,7 @@ index e57f77b..bfeb258 100644
 +}
 +
  bool CHyprBar::doButtonPress(Config::INTEGER barPadding, Config::INTEGER barButtonPadding, Config::INTEGER barHeight, Vector2D COORDS, const bool BUTTONSRIGHT) {
-     //check if on a button
-     float offset = barPadding;
- 
-     for (auto& b : g_pGlobalState->buttons) {
+@@ -298,7 +413,8 @@ bool CHyprBar::doButtonPress(Config::INTEGER barPadding, Config::INTEGER barButt
          const auto BARBUF     = Vector2D{assignedBoxGlobal().w, sc<double>(barHeight)};
 -        Vector2D   currentPos = Vector2D{(BUTTONSRIGHT ? BARBUF.x - barButtonPadding - b.size - offset : offset), (BARBUF.y - b.size) / 2.0}.floor();
 +        const double buttonH    = std::min<double>(b.size, BARBUF.y); // as drawn: no taller than the bar
@@ -215,20 +195,12 @@ index e57f77b..bfeb258 100644
 -            Config::Supplementary::executor()->spawn(b.cmd);
 +            Config::Supplementary::executor()->spawn(withAddress(b.cmd));
              return true;
-         }
- 
-@@ -326,7 +434,7 @@ void CHyprBar::renderBarTitle(const Vector2D& bufferSize, const float scale) {
-     const int  scaledSize        = std::round(SIZE * scale);
-     const auto scaledButtonsSize = buttonSizes * scale;
+@@ -328,3 +444,3 @@ void CHyprBar::renderBarTitle(const Vector2D& bufferSize, const float scale) {
      const auto scaledBarPadding  = BARPADDING * scale;
 -    const int  paddingTotal      = scaledBarPadding * 2 + scaledButtonsSize + (ALIGN != "left" ? scaledButtonsSize : 0);
 +    const int  paddingTotal      = scaledBarPadding * 2 + scaledButtonsSize + (ALIGN != "left" ? scaledButtonsSize : 0) + (bufferSize.y - scaledSize) / 2.0;
      const int  maxWidth          = std::clamp(sc<int>(bufferSize.x - paddingTotal), 0, INT_MAX);
- 
-     if (m_szLastTitle.empty() || maxWidth < 1) {
-@@ -375,19 +483,55 @@ void CHyprBar::renderBarButtons(Render::CRenderContext& ctx, CBox* barBox, const
- 
-         auto       color = button.bgcol;
+@@ -377,15 +493,51 @@ void CHyprBar::renderBarButtons(Render::CRenderContext& ctx, CBox* barBox, const
  
 -        if (INACTIVECOLOR > 0) {
 +        // A see-through button (no background) stays so on unfocused windows
@@ -286,11 +258,7 @@ index e57f77b..bfeb258 100644
 +            }
 +        }
  
-         offset += scaledButtonsPad + scaledButtonSize;
-     }
-@@ -417,31 +561,40 @@ void CHyprBar::renderBarButtonsText(Render::CRenderContext& ctx, CBox* barBox, c
- 
-         // check if hovering here
+@@ -419,23 +571,32 @@ void CHyprBar::renderBarButtonsText(Render::CRenderContext& ctx, CBox* barBox, c
          const auto BARBUF     = Vector2D{assignedBoxGlobal().w, sc<double>(HEIGHT)};
 -        Vector2D   currentPos = Vector2D{(BUTTONSRIGHT ? BARBUF.x - BARBUTTONPADDING - button.size - noScaleOffset : noScaleOffset), (BARBUF.y - button.size) / 2.0}.floor();
 -        bool       hovering   = VECINRECT(COORDS, currentPos.x, currentPos.y, currentPos.x + button.size + BARBUTTONPADDING, currentPos.y + button.size);
@@ -335,26 +303,18 @@ index e57f77b..bfeb258 100644
 +        const auto iconY = barBox->y + barBox->height / 2.0 - iconTex->m_size.y / 2.0;
 +        CBox       pos   = {iconX, iconY, iconTex->m_size.x, iconTex->m_size.y};
          pos.round(); // snap to whole pixels, otherwise the icon is sampled at a half-pixel offset and blurs
- 
+@@ -443,3 +604,3 @@ void CHyprBar::renderBarButtonsText(Render::CRenderContext& ctx, CBox* barBox, c
          if (!ICONONHOVER || (ICONONHOVER && m_iButtonHoverState > 0))
 -            g_pHyprOpenGL->renderTexture(ctx, button.iconTex, pos, {.a = a});
 +            g_pHyprOpenGL->renderTexture(ctx, iconTex, pos, {.a = a});
          offset += scaledButtonsPad + scaledButtonSize;
- 
-         bool currentBit = (m_iButtonHoverState & (1 << i)) != 0;
-@@ -600,7 +753,8 @@ void CHyprBar::renderPass(Render::CRenderContext& ctx, PHLMONITOR pMonitor, cons
-         const auto scaledBorderSize  = PWINDOW->presentation().borderSize() * pMonitor->m_scale;
-         const auto scaledButtonsSize = buttonSizes * pMonitor->m_scale;
+@@ -602,3 +763,4 @@ void CHyprBar::renderPass(Render::CRenderContext& ctx, PHLMONITOR pMonitor, cons
          const auto scaledBarPadding  = BARPADDING * pMonitor->m_scale;
 -        const auto xOffset           = ALIGN == "left" ? std::round(scaledBarPadding + (BUTTONSRIGHT ? 0 : scaledButtonsSize)) :
 +        // Left of the title, the same gap as above it (bar_padding is also the gap right of the buttons, which may be 0)
 +        const auto xOffset           = ALIGN == "left" ? std::round(scaledBarPadding + (BARBUF.y - m_pTextTex->m_size.y) / 2.0 + (BUTTONSRIGHT ? 0 : scaledButtonsSize)) :
                                                           std::round(((BARBUF.x - scaledBorderSize) / 2.0 - m_pTextTex->m_size.x / 2.0));
-         const auto yOffset           = std::round((BARBUF.y - m_pTextTex->m_size.y) / 2.0);
-         CBox       titleBox          = {textBox.x + xOffset, textBox.y + yOffset, m_pTextTex->m_size.x, m_pTextTex->m_size.y};
-@@ -713,17 +867,22 @@ void CHyprBar::damageOnButtonHover() {
- 
-     const auto COORDS = cursorRelativeToBar();
+@@ -715,12 +877,12 @@ void CHyprBar::damageOnButtonHover() {
  
 -    for (auto& b : g_pGlobalState->buttons) {
 -        const auto BARBUF     = Vector2D{assignedBoxGlobal().w, sc<double>(HEIGHT)};
@@ -376,7 +336,7 @@ index e57f77b..bfeb258 100644
 +        if (VECINRECT(COORDS, currentPos.x, currentPos.y, currentPos.x + b.size + BARBUTTONPADDING, currentPos.y + hitH))
 +            state |= 1 << i;
  
-         offset += BARBUTTONPADDING + b.size;
+@@ -728,2 +890,7 @@ void CHyprBar::damageOnButtonHover() {
      }
 +
 +    if (state != m_iButtonHoverState) {
@@ -388,19 +348,13 @@ diff --git a/hyprbars/barDeco.hpp b/hyprbars/barDeco.hpp
 index d0d54d5..969d82e 100644
 --- a/hyprbars/barDeco.hpp
 +++ b/hyprbars/barDeco.hpp
-@@ -96,6 +96,9 @@ class CHyprBar : public IHyprWindowDecoration {
-     void handleDownEvent(Event::SCallbackInfo& info, std::optional<ITouch::SDownEvent> touchEvent);
-     void handleUpEvent(Event::SCallbackInfo& info);
+@@ -98,2 +98,5 @@ class CHyprBar : public IHyprWindowDecoration {
      void handleMovement();
 +    void endTouchDrag();
 +    std::string withAddress(std::string cmd);
 +    int  resizeEdgeAt(const Vector2D& COORDS);
      bool doButtonPress(Config::INTEGER barPadding, Config::INTEGER barButtonPadding, Config::INTEGER barHeight, Vector2D COORDS, bool BUTTONSRIGHT);
- 
-     CBox assignedBoxGlobal();
-@@ -113,7 +116,11 @@ class CHyprBar : public IHyprWindowDecoration {
-     bool                m_bDraggingThis  = false;
-     bool                m_bTouchEv       = false;
+@@ -115,3 +118,7 @@ class CHyprBar : public IHyprWindowDecoration {
      bool                m_bDragPending   = false;
 +    Vector2D            m_vDragStart;
      bool                m_bCancelledDown = false;
@@ -408,23 +362,15 @@ index d0d54d5..969d82e 100644
 +    bool                m_bTouchFloated  = false;
 +    bool                m_bTouchPinned   = false;
      int                 m_touchId        = 0;
- 
-     // store hover state for buttons as a bitfield
 diff --git a/hyprbars/globals.hpp b/hyprbars/globals.hpp
-index 2911644..e05c28a 100644
+index 2911644..018a6e7 100644
 --- a/hyprbars/globals.hpp
 +++ b/hyprbars/globals.hpp
-@@ -9,6 +9,7 @@
- #include <hyprland/src/config/values/types/FontWeightValue.hpp>
- 
+@@ -11,2 +11,3 @@
  #include <optional>
 +#include <unordered_map>
  
- inline HANDLE PHANDLE = nullptr;
- 
-@@ -19,8 +20,19 @@ struct SHyprButton {
-     CHyprColor           bgcol   = CHyprColor(0, 0, 0, 0);
-     float                size    = 10;
+@@ -21,4 +22,15 @@ struct SHyprButton {
      std::string          icon    = "";
 -    SP<Render::ITexture> iconTex;
 -    std::optional<float> m_fIconScale;
@@ -442,24 +388,38 @@ index 2911644..e05c28a 100644
 +    // redraw them every frame, each throwing out the other's
 +    std::unordered_map<int, SP<Render::ITexture>> iconTexByScale;
  };
- 
- class CHyprBar;
+@@ -47 +59,4 @@ struct SGlobalState {
+ inline UP<SGlobalState> g_pGlobalState;
++
++// A move started by the bar itself: past its own 5 px and the config told already (main.cpp's hook not to wait again)
++inline bool g_barMove = false;
 diff --git a/hyprbars/main.cpp b/hyprbars/main.cpp
-index 3d88b57..92eed62 100644
+index 3d88b57..becaed9 100644
 --- a/hyprbars/main.cpp
 +++ b/hyprbars/main.cpp
-@@ -14,6 +14,8 @@
- #include <hyprland/src/config/lua/bindings/LuaBindingsInternal.hpp>
- #include <hyprland/src/config/lua/types/LuaConfigColor.hpp>
+@@ -12,2 +12,3 @@
+ #include <hyprland/src/event/EventBus.hpp>
++#include <hyprland/src/managers/eventLoop/EventLoopManager.hpp>
+ #include <hyprland/src/desktop/rule/windowRule/WindowRuleEffectContainer.hpp>
+@@ -16,4 +17,17 @@
  #include <hyprland/src/state/MonitorState.hpp>
++#include <hyprland/src/state/MonitorQuery.hpp>
++#include <hyprland/src/pointer/PointerManager.hpp>
++#include <hyprland/src/pointer/cursor/CursorShapeOverrideController.hpp>
++#include <hyprland/src/desktop/state/ViewState.hpp>
++#include <hyprland/src/desktop/state/ViewHitTester.hpp>
++#include <hyprland/src/desktop/view/LayerSurface.hpp>
++#include <hyprland/src/output/Monitor.hpp>
++#include <hyprland/src/protocols/core/DataDevice.hpp>
++#include <hyprland/protocols/wlr-layer-shell-unstable-v1.hpp>
++#include <hyprland/src/desktop/rule/windowRule/WindowRuleApplicator.hpp>
 +#include <hyprland/src/layout/LayoutManager.hpp>
 +#include <hyprland/src/layout/supplementary/DragController.hpp>
  
  #include <algorithm>
++#include <linux/input-event-codes.h>
  
-@@ -30,6 +32,44 @@ APICALL EXPORT std::string PLUGIN_API_VERSION() {
-     return HYPRLAND_API_VERSION;
- }
+@@ -32,2 +46,165 @@ APICALL EXPORT std::string PLUGIN_API_VERSION() {
  
 +// Every drag of a window, whatever starts it: this bar, the app's own title bar (GTK header bars, Electron's, Qt's: the
 +// app asks Hyprland to move it), its edges, Super+drag. The config's dots.window_drag_start(address, "move"/"resize")
@@ -471,6 +431,17 @@ index 3d88b57..92eed62 100644
 +// Hyprland shows a corner cursor (rounding + border_size + 10 px along each edge from the corner, as
 +// InputManager::setCursorIconOnBorder); one inside it (a rounded corner, Super+right-drag) keeps Hyprland's corner
 +static CFunctionHook* g_pBeginDragHook = nullptr;
++// The drag going on (its window and kind), for its end: dots.window_drag_end(address, kind) (the config snaps a window
++// let go at a screen's edge or corner, and stops a snapped neighbour following a resize)
++static std::string g_dragAddress, g_dragKind;
++static std::string g_seamCursor; // the seam cursor shown (kept through a drag that started on the seam: seamAt, below)
++// A move's start told only once the pointer has gone 5 px (as the bar's own drags, which come here past them and told already): a click with no movement on a
++// maximised or snapped window's title bar (an app's own: Electron's, GTK's ask Hyprland to move on the press itself; or
++// Super+click) leaves it as it was, not moved either. Its new size then taken up by the drag (Hyprland's
++// updateDragWindow: the grab point mapped onto the new box), else the window kept the grab point of its old size and
++// jumped from the pointer
++static bool     g_pendingMove = false;
++static Vector2D g_pressPos;
 +typedef void (*origBeginDrag)(Layout::CLayoutManager*, SP<Layout::ITarget>, eMouseBindMode, std::optional<Layout::eRectCorner>, bool);
 +static void hkBeginDrag(Layout::CLayoutManager* thisptr, SP<Layout::ITarget> target, eMouseBindMode mode, std::optional<Layout::eRectCorner> edge, bool exclusive) {
 +    if (mode == MBIND_RESIZE && !edge && target && target->window()) {
@@ -493,18 +464,128 @@ index 3d88b57..92eed62 100644
 +        if (sides != Layout::CORNER_NONE)
 +            edge = sc<Layout::eRectCorner>(sides);
 +    }
-+    if (target && target->window() && (mode == MBIND_MOVE || mode == MBIND_RESIZE))
-+        HyprlandAPI::invokeHyprctlCommand("eval", std::format("if dots and dots.window_drag_start then dots.window_drag_start(\"0x{:x}\", \"{}\") end",
-+                                                              (uintptr_t)target->window().get(), mode == MBIND_MOVE ? "move" : "resize"));
++    g_dragAddress.clear();
++    g_dragKind.clear();
++    g_pendingMove = false;
++    if (target && target->window() && mode == MBIND_MOVE) {
++        g_dragAddress   = std::format("0x{:x}", (uintptr_t)target->window().get());
++        g_dragKind      = "move";
++        g_pendingMove   = !g_barMove;
++        g_pressPos      = Pointer::mgr()->position();
++    } else if (target && target->window() && mode == MBIND_RESIZE) {
++        g_dragAddress = std::format("0x{:x}", (uintptr_t)target->window().get());
++        g_dragKind    = "resize";
++        HyprlandAPI::invokeHyprctlCommand("eval", std::format("if dots and dots.window_drag_start then dots.window_drag_start(\"{}\", \"{}\") end",
++                                                              g_dragAddress, g_dragKind));
++    }
 +    (*(origBeginDrag)g_pBeginDragHook->m_original)(thisptr, target, mode, edge, exclusive);
++    // A press on the seam: its cursor stays (Hyprland's drag sets the edge's as it starts, shown until the first move)
++    if (mode == MBIND_RESIZE && !g_seamCursor.empty())
++        Pointer::Cursor::overrideController->setOverride(g_seamCursor, Pointer::Cursor::CURSOR_OVERRIDE_SPECIAL_ACTION);
++}
++
++// Each step of a drag, once Hyprland has moved or resized the window: dots.window_drag_step(address, kind) (the config
++// updates the snap preview, and a snapped neighbour's shared edge, in the same frame: as tiled windows, not after it)
++static CFunctionHook* g_pMoveMouseHook = nullptr;
++typedef void (*origMoveMouse)(Layout::CLayoutManager*, const Vector2D&);
++static void hkMoveMouse(Layout::CLayoutManager* thisptr, const Vector2D& pos) {
++    const auto TARGET = g_layoutManager->dragController()->target();
++    if (g_pendingMove && TARGET && TARGET->window()) {
++        // (under 5 px: the window not moved yet, so a click with a wobble leaves it exactly where it was)
++        if (Pointer::mgr()->position().distance(g_pressPos) < 5)
++            return;
++        g_pendingMove   = false;
++        const auto W    = TARGET->window();
++        const auto SIZE = W->geometricBox(Desktop::View::IGeometric::GEOMETRIC_CURRENT).size();
++        HyprlandAPI::invokeHyprctlCommand("eval", std::format("if dots and dots.window_drag_start then dots.window_drag_start(\"{}\", \"move\") end",
++                                                              g_dragAddress));
++        if (W->geometricBox(Desktop::View::IGeometric::GEOMETRIC_CURRENT).size() != SIZE && g_layoutManager->dragController()->updateDragWindow())
++            return; // (Hyprland refused the drag there, and ended it)
++    }
++    (*(origMoveMouse)g_pMoveMouseHook->m_original)(thisptr, pos);
++    if (!g_dragAddress.empty() && g_layoutManager->dragController()->target())
++        HyprlandAPI::invokeHyprctlCommand("eval", std::format("if dots and dots.window_drag_step then dots.window_drag_step(\"{}\", \"{}\") end",
++                                                              g_dragAddress, g_dragKind));
++}
++
++// The seam between two snapped windows (the config's snapping tags them "snapped"), as on Windows: a two-way resize
++// cursor over the gap between them, side by side (left-right) or one above the other, and a press there resizes the
++// left or top one by that one edge (seamPress, below), the config moving the other's edge with it. The gap alone, cursor
++// and press alike (as on Windows): within a window, its scrollbar or edge is the app's. None when the seam is covered there (a window over it that isn't snapped:
++// another floating one, a fullscreen game, an open special workspace; a panel of the shell's)
++struct SSeam {
++    std::string shape; // "" when not on one
++    PHLWINDOW   first; // the left or top one
++};
++static SSeam seamAt(const Vector2D& p) {
++    const auto MON = State::monitorState()->query().vec(p).run();
++    // (an open special workspace over it: the dimmed one behind isn't the one in use)
++    if (!MON || !MON->m_activeWorkspace || MON->m_activeSpecialWorkspace)
++        return {};
++    constexpr double INSIDE = 0;
++    std::vector<std::pair<CBox, PHLWINDOW>> boxes;
++    for (auto const& w : Desktop::viewState()->windows()) {
++        if (!w->mapped() || w->isHidden() || !w->isFloating() || w->m_workspace != MON->m_activeWorkspace ||
++            !w->m_ruleApplicator->m_tagKeeper.isTagged("snapped"))
++            continue;
++        const auto BOX = w->getWindowBoxUnified(Desktop::View::RESERVED_EXTENTS); // (its title bar included)
++        if (BOX.copy().expand(-INSIDE).containsPoint(p))
++            return {};
++        boxes.emplace_back(BOX, w);
++    }
++    // (fewer than two snapped there, the usual case and a game's: nothing more looked at, on every motion)
++    if (boxes.size() < 2)
++        return {};
++    const auto HIT = Desktop::viewState()->hitTest();
++    for (const auto LAYER : {ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY, ZWLR_LAYER_SHELL_V1_LAYER_TOP}) {
++        Vector2D coords;
++        PHLLS    found;
++        if (HIT.layerSurfaceAt(p, &MON->m_layerSurfaceLayers[LAYER], &coords, &found))
++            return {};
++    }
++    const auto ON = HIT.windowAt(p, Desktop::View::RESERVED_EXTENTS | Desktop::View::INPUT_EXTENTS | Desktop::View::ALLOW_FLOATING);
++    if (ON && !ON->m_ruleApplicator->m_tagKeeper.isTagged("snapped"))
++        return {};
++    // (the gap between snapped windows: both inner gaps and both borders, as the config's snapping leaves, within 3 px as
++    // the config's own seams (windows.lua's neighbours): a gap it doesn't take as a seam, its other window wouldn't follow)
++    static auto  PGAPSIN = CConfigValue<Config::IComplexConfigValue>("general:gaps_in");
++    static auto  PBORDER = CConfigValue<Config::INTEGER>("general:border_size");
++    const auto*  GAPS    = sc<Config::CCssGapData*>(PGAPSIN.ptr());
++    const double GAP     = 2 * (std::max({GAPS->m_top, GAPS->m_right, GAPS->m_bottom, GAPS->m_left}) + *PBORDER);
++    for (auto const& [a, aw] : boxes) {
++        for (auto const& [b, bw] : boxes) {
++            const double GX = b.x - (a.x + a.w), GY = b.y - (a.y + a.h);
++            if (std::abs(GX - GAP) <= 3 && p.x >= a.x + a.w - INSIDE && p.x <= b.x + INSIDE && p.y >= std::max(a.y, b.y) && p.y <= std::min(a.y + a.h, b.y + b.h))
++                return {"ew-resize", aw};
++            if (std::abs(GY - GAP) <= 3 && p.y >= a.y + a.h - INSIDE && p.y <= b.y + INSIDE && p.x >= std::max(a.x, b.x) && p.x <= std::min(a.x + a.w, b.x + b.w))
++                return {"ns-resize", aw};
++        }
++    }
++    return {};
++}
++// A press on the seam taken here (the app, the bar's buttons and Hyprland's corner resize never see it): the left or top
++// window resized by its right or bottom edge alone, until the release
++static bool g_seamPress = false;
++
++// hl.plugin.hyprbars.min_size("0x<address>"): the smallest size its app accepts (w, h; 1, 1 when it names none), which
++// Lua can't read: the config's seam stops when either snapped window reaches it, not only the one Hyprland resizes
++int luaMinSize(lua_State* L) {
++    const char* ADDRESS = lua_tostring(L, 1);
++    if (!ADDRESS)
++        return 0;
++    for (auto const& w : Desktop::viewState()->windows()) {
++        if (std::format("0x{:x}", (uintptr_t)w.get()) != ADDRESS)
++            continue;
++        const auto MIN = w->minSize().value_or(Vector2D{1, 1});
++        lua_pushnumber(L, MIN.x);
++        lua_pushnumber(L, MIN.y);
++        return 2;
++    }
++    return 0;
 +}
 +
  static void onNewWindow(PHLWINDOW window) {
-     if (true) {
-         if (std::ranges::any_of(window->presentation().decorations(), [](const auto& d) { return d->getDisplayName() == "Hyprbar"; }))
-@@ -131,6 +171,56 @@ int newLuaButton(lua_State* L) {
-         button.cmd = lua_tostring(L, -1);
-     }
+@@ -133,2 +310,52 @@ int newLuaButton(lua_State* L) {
  
 +    {
 +        Hyprutils::Utils::CScopeGuard x([L] { lua_pop(L, 1); });
@@ -557,16 +638,108 @@ index 3d88b57..92eed62 100644
 +    }
 +
      g_pGlobalState->buttons.push_back(std::move(button));
- 
-     for (auto& b : g_pGlobalState->bars) {
-@@ -172,6 +262,21 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
- 
-     static auto P  = Event::bus()->m_events.window.open.listen([&](PHLWINDOW w) { onNewWindow(w); });
+@@ -174,2 +401,121 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
      static auto P3 = Event::bus()->m_events.window.updateRules.listen([&](PHLWINDOW w) { onUpdateWindowRules(w); });
 +    // A drag's end shows the cursor for where the pointer is, as the next motion would (Hyprland's, or the bar's resize
 +    // cursor: onMouseMove). Until then the one left from the drag showed: Hyprland's top corner where the bar meets the
 +    // app, the app's own over the bar
-+    static auto P6 = g_layoutManager->dragController()->m_events.ended.listen([] { g_pInputManager->simulateMouseMovement(); });
++    static auto P6 = g_layoutManager->dragController()->m_events.ended.listen([] {
++        g_pendingMove = false;
++        // Let go on the seam: its cursor again at once (Hyprland's drag end took it off); elsewhere, none
++        g_seamCursor = seamAt(Pointer::mgr()->position()).shape;
++        if (!g_seamCursor.empty())
++            Pointer::Cursor::overrideController->setOverride(g_seamCursor, Pointer::Cursor::CURSOR_OVERRIDE_SPECIAL_ACTION);
++        g_pInputManager->simulateMouseMovement();
++        // (always, also for a drag whose start this didn't see: the bar's own start told the config "dragging", and only
++        // this ends it)
++        HyprlandAPI::invokeHyprctlCommand("eval", std::format("if dots and dots.window_drag_end then dots.window_drag_end(\"{}\", \"{}\") end",
++                                                              g_dragAddress, g_dragKind));
++        g_dragAddress.clear();
++        g_dragKind.clear();
++    });
++    // A seam covered while the pointer rests on it (a special workspace opened, a window opened over it): its cursor
++    // looked at again, as the next motion would
++    static auto P9  = Event::bus()->m_events.workspace.specialActive.listen([](PHLWORKSPACE, PHLMONITOR) {
++        if (!g_seamCursor.empty())
++            g_pInputManager->simulateMouseMovement();
++    });
++    // (after the open: Hyprland decides the new window's focus after this event, and a motion before that could focus one
++    // meant to open without it)
++    static auto P10 = Event::bus()->m_events.window.open.listen([](PHLWINDOW) {
++        if (!g_seamCursor.empty())
++            g_pEventLoopManager->doLater([] {
++                if (!g_seamCursor.empty())
++                    g_pInputManager->simulateMouseMovement();
++            });
++    });
++    // While a window is moved, the pointer stays inside the screen's free part (Caelestia's border and bar reserve the
++    // rest), as a screen's edge would keep it: it reaches the snap edges there (the config's snapping) without passing
++    // over the shell. Not on a side with another screen beyond: it crosses over to that one. Before Hyprland moves the
++    // window (this event comes first), so the window follows the pointer where it's kept
++    // A press where the seam cursor shows: the seam's (seamAt), the left or top window resized by that one edge; its
++    // release ends it. Taken from everyone else (cancelled: the bar, the app, Hyprland's own resize from a corner)
++    static auto P8 = Event::bus()->m_events.input.mouse.button.listen([](IPointer::SButtonEvent e, Event::SCallbackInfo& info) {
++        // (while it's held: the left button's release ends it; the other buttons kept from it, as their press would end
++        // the drag in Hyprland's keybinds with the left one still down)
++        if (g_seamPress) {
++            info.cancelled = true;
++            if (e.button == BTN_LEFT && e.state != WL_POINTER_BUTTON_STATE_PRESSED) {
++                g_seamPress = false;
++                g_layoutManager->endDragTarget();
++            }
++            return;
++        }
++        if (e.state != WL_POINTER_BUTTON_STATE_PRESSED || e.button != BTN_LEFT || g_seamCursor.empty())
++            return;
++        const auto SEAM = seamAt(Pointer::mgr()->position());
++        if (SEAM.shape.empty() || !SEAM.first)
++            return;
++        info.cancelled = true;
++        g_seamPress    = true;
++        g_layoutManager->beginDragTarget(SEAM.first->layoutTarget(), MBIND_RESIZE,
++                                         SEAM.shape == "ew-resize" ? Layout::CORNER_RIGHT : Layout::CORNER_BOTTOM);
++    });
++    static auto P7 = Event::bus()->m_events.input.mouse.move.listen([](Vector2D, Event::SCallbackInfo&) {
++        const bool DRAGGING = !g_dragAddress.empty() && g_layoutManager->dragController()->target();
++        if (!DRAGGING) {
++            // The seam cursor: in the top group (above the bar's edge cursor and Hyprland's, which the gap is within reach
++            // of too), set again on every move over the seam (another's change can't leave it unset), let go of once off it.
++            // None while something is dragged and dropped or a press in an app is held (a text selection dragged across)
++            const auto SHAPE = PROTO::data->dndActive() || g_pInputManager->hasHeldButtons() ? std::string{} : seamAt(Pointer::mgr()->position()).shape;
++            if (!SHAPE.empty())
++                Pointer::Cursor::overrideController->setOverride(SHAPE, Pointer::Cursor::CURSOR_OVERRIDE_SPECIAL_ACTION);
++            else if (!g_seamCursor.empty())
++                Pointer::Cursor::overrideController->unsetOverride(Pointer::Cursor::CURSOR_OVERRIDE_SPECIAL_ACTION);
++            g_seamCursor = SHAPE;
++            return;
++        }
++        // (a resize begun on the seam keeps its cursor: Hyprland's for the drag is the dragged window's edge's; a move
++        // begun there doesn't)
++        if (!g_seamCursor.empty() && g_dragKind == "resize")
++            Pointer::Cursor::overrideController->setOverride(g_seamCursor, Pointer::Cursor::CURSOR_OVERRIDE_SPECIAL_ACTION);
++        if (g_dragKind != "move")
++            return;
++        const auto POS = Pointer::mgr()->position();
++        const auto MON = State::monitorState()->query().vec(POS).run();
++        if (!MON)
++            return;
++        const auto FULL   = MON->logicalBox();
++        const auto FREE   = MON->logicalBoxMinusReserved();
++        const auto BEYOND = [&MON](const Vector2D& p) {
++            return std::ranges::any_of(State::monitorState()->monitors(), [&](const auto& m) { return m != MON && m->logicalBox().containsPoint(p); });
++        };
++        Vector2D to = POS;
++        if (to.x < FREE.x && !BEYOND({FULL.x - 1, to.y}))
++            to.x = FREE.x;
++        else if (to.x > FREE.x + FREE.w - 1 && !BEYOND({FULL.x + FULL.w, to.y}))
++            to.x = FREE.x + FREE.w - 1;
++        if (to.y < FREE.y && !BEYOND({to.x, FULL.y - 1}))
++            to.y = FREE.y;
++        else if (to.y > FREE.y + FREE.h - 1 && !BEYOND({to.x, FULL.y + FULL.h}))
++            to.y = FREE.y + FREE.h - 1;
++        if (to != POS)
++            Pointer::mgr()->warpTo(to);
++    });
 +
 +    // (not found, e.g. renamed in a later Hyprland: edge drags resize from the nearest corner, and only this bar's drags
 +    // un-maximise, as handleMovement does)
@@ -578,16 +751,22 @@ index 3d88b57..92eed62 100644
 +            g_pBeginDragHook = nullptr;
 +        break;
 +    }
++    for (auto& fn : HyprlandAPI::findFunctionsByName(PHANDLE, "moveMouse")) {
++        if (!fn.demangled.contains("CLayoutManager::moveMouse"))
++            continue;
++        g_pMoveMouseHook = HyprlandAPI::createFunctionHook(PHANDLE, fn.address, (void*)::hkMoveMouse);
++        if (g_pMoveMouseHook && !g_pMoveMouseHook->hook())
++            g_pMoveMouseHook = nullptr;
++        break;
++    }
  
-     g_pGlobalState->config.barColor            = makeShared<Config::Values::CColorValue>("plugin:hyprbars:bar_color", "Change the bar color", 0x88333333);
-     g_pGlobalState->config.textColor           = makeShared<Config::Values::CColorValue>("plugin:hyprbars:col.text", "Change the text color", 0xffffffff);
-@@ -233,7 +338,8 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
- 
-     HyprlandAPI::reloadConfig();
+@@ -220,2 +566,3 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
+     HyprlandAPI::addLuaFunction(PHANDLE, "hyprbars", "add_button", ::newLuaButton);
++    HyprlandAPI::addLuaFunction(PHANDLE, "hyprbars", "min_size", ::luaMinSize);
+     HyprlandAPI::addLuaFunction(PHANDLE, "hyprbars", "set_title", ::setLuaTitle);
+@@ -235,3 +582,4 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
  
 -    return {"hyprbars", "A plugin to add title bars to windows.", "Vaxry", "1.0"};
 +    // "dotfiles" in the version: hyprbars-build tells this build from the AUR one by it
 +    return {"hyprbars", "A plugin to add title bars to windows.", "Vaxry", "1.0-dotfiles"};
  }
- 
- APICALL EXPORT void PLUGIN_EXIT() {

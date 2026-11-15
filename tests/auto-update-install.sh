@@ -20,7 +20,7 @@ au=$here/packages/agros-system
 # shellcheck disable=SC2016  # (expanded by the stand-in)
 printf '#!/bin/bash\ncalls=%s/calls\n%s\n' "$t" 'case $1 in
     --list) id -un; [ -z "${TWO_USERS:-}" ] || id -un ;;
-    --as) shift 2; echo "as $*" >>"$calls"
+    --as) shift 2; echo "as $*" >>"$calls"; while [ "$1" = --fd ]; do shift 2; done
         [ -z "${TWO_USERS:-}" ] || ! IFS= read -r -t 1 line || echo "stdin $line" >>"$calls"
         case "$*" in
             mktemp*) exec "$@" ;;
@@ -52,12 +52,15 @@ unit=$(cat "$au/auto-update.service")
     fail "auto-update.service doesn't start the download by itself: $(grep '^ExecStart=' <<<"$unit")"
 grep -q 'systemd-inhibit' <<<"$unit" && fail "the boot's download blocks shutdown and sleep (systemd-inhibit)"
 # Flatpaks from a file at boot: downloaded with nothing held, then reinstalled with sleep and power off held by root
-# (logind refuses the user that hold outside a session) around that step alone
+# (logind refuses the user that hold outside a session) around that step alone, under its own half hour; the
+# system-wide ones once as root, each user's as them, through the same steps
 # shellcheck disable=SC2016  # (the generated script's own text)
-{ grep -q -- "--as \"\$user\" $here/.local/bin/flatpak-bundle-update --fetch \"\$fetched\"$" "$t/auto-update" &&
+{ grep -q -- '"$@" '"$here"'/.local/bin/flatpak-bundle-update --fetch "$fetched"$' "$t/auto-update" &&
     ! grep -q systemd-inhibit <<<"$(grep -- '--fetch "$fetched"' "$t/auto-update")" &&
-    grep -q '^ *timeout 30m systemd-inhibit --what=sleep:shutdown --mode=block ' <<<"$(grep -B2 -- '--install-fetched "$fetched"' "$t/auto-update")"; } ||
-    fail "the boot's Flatpak reinstall not held by root around that step alone: $(grep -n -A6 'Those from a file' "$t/auto-update")"
+    grep -q '^ *timeout 30m systemd-inhibit --what=sleep:shutdown --mode=block ' <<<"$(grep -B2 -- '--install-fetched "$fetched"' "$t/auto-update")" &&
+    grep -qx 'bundles' "$t/auto-update" && grep -qx '    bundles "$each_user" --as "$user"' "$t/auto-update" &&
+    [[ $(grep -c 'flatpak-bundle-update' "$t/auto-update") == 3 ]]; } ||
+    fail "the boot's Flatpak reinstall not held by root around that step alone (root's and each user's): $(grep -n -A14 '^bundles() {' "$t/auto-update")"
 # Shutdown's own limit (the targets' JobTimeoutSec) longer than the install's (TimeoutStopSec), so it can't cut it off
 stop=$(sed -n 's/^TimeoutStopSec=\([0-9]*\)min$/\1/p' "$au/auto-update-install.service")
 job=$(grep -o 'JobTimeoutSec=[0-9]*min' "$au/auto-update-timeout.conf" | grep -o '[0-9]*')
@@ -73,7 +76,7 @@ unit=$(cat "$au/auto-update-install.service")
 { grep -qxE 'After=.*\budisks2\.service\b.*' <<<"$unit" && grep -qxE 'After=.*\bdbus\.service\b.*' <<<"$unit" &&
     grep -qx 'Wants=udisks2.service' <<<"$unit"; } || fail "the install's unit not ordered before udisks2 stops: $unit"
 # pacman: -Qu says what's waiting ($QU, exit $QU_RC; $QU_ERR on stderr); -Su installs (exit $PACMAN_RC; $PACMAN_HANG: hangs, to be cut off);
-# -Syuw the boot's download ($SYUW_RC)
+# -Sy the boot's lists, -Suw its download ($SYUW_RC); -Si the version a package would update to ($SI_NEW)
 cat >"$t/bin/pacman" <<EOF
 #!/bin/sh
 case \$1 in
@@ -85,7 +88,15 @@ case \$1 in
         [ -z "\$PACMAN_HANG" ] || { echo \$\$ >"$t/hung"; exec sleep 60; }
         case " \$* " in *" agros-aur/"*) [ -z "\$PACMAN_AUR_RC" ] || { echo "error: failed to commit transaction (conflicting files)"; exit 1; } ;; esac
         [ "\${PACMAN_RC:-0}" = 0 ] || echo "error: boom"; exit \${PACMAN_RC:-0} ;;
-    -Syuw) echo "download \$*" >>"$t/calls"; [ -e "$t/au/downloading" ] && echo "download marked" >>"$t/calls"; exit \${SYUW_RC:-0} ;;
+    -Sy) exit 0 ;;
+    -Si) [ -z "\$SI_NEW" ] || echo "Version         : \$SI_NEW"; exit 0 ;;
+    -Suw) echo "download \$*" >>"$t/calls"; [ -e "$t/au/downloading" ] && echo "download marked" >>"$t/calls"
+        exit \${SYUW_RC:-0} ;;
+    # (\$SUW_BREAKS: a library's update breaking the held hyprland, until it's held too: pacman's dry run says so)
+    -Sup) if [ -n "\$SUW_BREAKS" ] && ! grep -q "IgnorePkg = libfoo" "\$3"; then
+            echo "error: failed to prepare transaction (could not satisfy dependencies)"
+            echo ":: installing libfoo (2-1) breaks dependency 'libfoo.so=1-64' required by hyprland"; exit 1
+        fi ;;
 esac
 EOF
 # snapper at shutdown: over DBus it fails (snapperd can't start while the system goes down), and only what worked is noted
@@ -125,7 +136,7 @@ printf '#!/bin/sh\n[ -z "$BOOT_UNMOUNTED" ]\n' >"$t/bin/mountpoint"
 printf '#!/bin/sh\nsleep 300\n' >"$t/holder"; chmod +x "$t/holder"
 "$t/holder" --dbpath "$t/pac" 2>/dev/null & holder=$!
 disown "$holder"  # (killed at the end without a job notice after "ok")
-trap '{ pkill -P $holder; kill $holder; } 2>/dev/null; rm -rf "$t"; true' EXIT
+on_exit 'pkill -P $holder; kill $holder'
 # shellcheck disable=SC2016  # (expanded by the stand-ins)
 printf '#!/bin/sh\n[ "$1" = -x ] && [ -n "$HOLDER_RUNS" ] && { echo %s; exit 0; }\nexit 1\n' "$holder" >"$t/bin/pgrep"
 # shellcheck disable=SC2016
@@ -274,6 +285,52 @@ QU='' QU_RC=1 "$t/auto-update" --install || fail "nothing to install failed"
 # ...and the download marks itself finished only when it is
 SYUW_RC=1 "$t/auto-update" || true
 [[ ! -e $t/au/db/complete ]] || fail "a failed download marked as finished"
+# Through the upstream gate (update-gate, the real one): a new Hyprland not yet checked by AgrOS's CI held (its pacman.conf
+# kept with the gate's Include, used for the download and the shutdown's install), said; once approved, let through
+printf '%s\n' '[options]' "Include = $t/agros-gate.conf" '' '[agros]' 'Server = https://agros.invalid/x86_64' >"$t/base.conf"
+# (curl: the approved list, $APPROVED, when set, else as unreachable; anything else as before, online)
+# shellcheck disable=SC2016  # (expanded by the stand-in)
+printf '#!/bin/sh\ncase " $* " in *agros-approved*) ;; *) exit 0 ;; esac\n[ -n "$APPROVED" ] || exit 7\nwhile [ "$1" != -o ]; do shift; done\nprintf "%%s\\n" "$APPROVED" >"$2"\n' >"$t/bin/curl"
+echo 'IgnorePkg = hyprland' >"$t/agros-gate.conf"
+sed "s|update-gate /etc/pacman.conf|update-gate $t/base.conf|" "$t/auto-update" >"$t/auto-update-gate"; chmod +x "$t/auto-update-gate"
+grep -q "update-gate $t/base.conf" "$t/auto-update-gate" || fail "test setup: the gate's base pacman.conf not set"
+export AGROS_GATE=$t/agros-gate.conf AGROS_GATE_CACHE=$t/approved
+: >"$t/calls"; : >"$t/log"
+out=$(Q_HAVE=0.57.2-1 SI_NEW=0.58.0-1 "$t/auto-update-gate" 2>&1) || fail "the boot with Hyprland held failed: $out"
+out=$(cat "$t/log")
+{ [[ $out == *"waits for AgrOS's check: hyprland 0.57.2-1 -> 0.58.0-1"* ]] && grep -qF "Include = $t/agros-gate.conf" "$t/au/pacman.conf" &&
+    grep -qF "download -Suw --noconfirm --config $t/au/pacman.conf --dbpath" "$t/calls" && [[ -e $t/au/db/complete ]]; } ||
+    fail "a Hyprland not checked yet not held at the download, or not said: $out / $(cat "$t/calls")"
+# (the shutdown decides again, on the lists it installs from: its pending list and its install through that pacman.conf)
+lists
+QU="foo 1-1 -> 2-1" Q_HAVE=0.57.2-1 SI_NEW=0.58.0-1 "$t/auto-update-gate" --install >/dev/null || fail "the install after a held download failed"
+grep -qF -- "--config $t/au/prev/gated.conf" <<<"$(grep '^pacman -Su' "$t/calls")" &&
+    [[ $(sed -n '/--install =====/,$p' "$t/log") == *"waits for AgrOS's check: hyprland 0.57.2-1 -> 0.58.0-1"* ]] ||
+    fail "the shutdown's install not through the gate: $(cat "$t/calls") / $(tail -5 "$t/log")"
+# (approved meanwhile, after the boot's download held it: still held at shutdown, from the list kept then (offline), not
+# the whole set downloaded at shutdown)
+lists; : >"$t/log"
+APPROVED='hyprland 0.58.0' QU="foo 1-1 -> 2-1" Q_HAVE=0.57.2-1 SI_NEW=0.58.0-1 "$t/auto-update-gate" --install >/dev/null || fail "the install, approved since the boot, failed"
+[[ $(cat "$t/log") == *"waits for AgrOS's check: hyprland 0.57.2-1 -> 0.58.0-1"* ]] ||
+    fail "a Hyprland approved after the boot's download let through at shutdown: $(tail -5 "$t/log")"
+echo 'hyprland 0.58.0' >"$t/approved"
+: >"$t/log"
+out=$(Q_HAVE=0.57.2-1 SI_NEW=0.58.0-2 "$t/auto-update-gate" 2>&1) || fail "the boot with Hyprland approved failed: $out"
+out=$(cat "$t/log")
+[[ $out != *"waits for"* ]] && ! grep -q "agros-gate" "$t/au/pacman.conf" || fail "an approved Hyprland held: $out / $(cat "$t/au/pacman.conf")"
+# ...and a newer one, not checked yet, in lists synced since (the Updates app): held at shutdown, not let through by the
+# boot's decision
+lists
+QU="foo 1-1 -> 2-1" Q_HAVE=0.57.2-1 SI_NEW=0.58.1-1 "$t/auto-update-gate" --install >/dev/null || fail "the install with a newer Hyprland failed"
+[[ $(sed -n '/--install =====/,$p' "$t/log" | tail -4) == *"waits for AgrOS's check: hyprland 0.57.2-1 -> 0.58.1-1"* ]] ||
+    fail "a Hyprland newer than the boot's approved one let through at shutdown: $(tail -5 "$t/log")"
+# ...held, with a library's update breaking it (its new soname): that library held with it, the download done
+rm -f "$t/approved"
+out=$(Q_HAVE=0.57.2-1 SI_NEW=0.58.0-1 SUW_BREAKS=1 "$t/auto-update-gate" 2>&1) || fail "the boot with a held library failed: $out"
+out=$(cat "$t/log")
+[[ $out == *"libfoo (held with hyprland: its update would break it)"* && -e $t/au/db/complete ]] && grep -qx 'IgnorePkg = libfoo' "$t/au/pacman.conf" ||
+    fail "a library breaking the held Hyprland not held too: $out / $(cat "$t/au/pacman.conf")"
+export AGROS_GATE=$t/no-gate  # (the rest: no gate, as lib.sh leaves it)
 : >"$t/calls"
 "$t/auto-update" || fail "the boot's download failed"
 [[ -e $t/au/db/complete ]] || fail "a finished download not marked"
@@ -283,7 +340,8 @@ grep -qx "download marked" "$t/calls" && [[ ! -e $t/au/downloading ]] || fail "t
 grep -q '^touch "\$au/downloading"$' <<<"$(sed -n '/^# The last shutdown.s install cut off before it finished/,$p' "$t/auto-update" | head -1; grep -B4 '^# The last shutdown.s install cut off before it finished' "$t/auto-update")" ||
     fail "the mark not made first thing at boot"
 grep -q '^PAM' "$t/calls" && fail "a user's part run through PAM: $(grep '^PAM' "$t/calls")"
-grep -q '^as env XDG_RUNTIME_DIR=.*/update-kinds --boot ' "$t/calls" || fail "the users' kinds not run as them (agros-each-user --as): $(cat "$t/calls")"
+# (fd 3, its notes, handed on by name: agros-each-user gives a user's command no other descriptor of root's)
+grep -q '^as --fd 3 env XDG_RUNTIME_DIR=.*/update-kinds --boot ' "$t/calls" || fail "the users' kinds not run as them (agros-each-user --as --fd 3): $(cat "$t/calls")"
 # A new Proton (update-kinds' notice, on fd 3): said on that user's desktop once they're logged in, by its own unit
 : >"$t/calls"
 KINDS_NOTE=$'steam\tNew Proton: GE-Proton11-12\tRestart Steam' "$t/auto-update" || fail "the boot with a Proton notice failed"
@@ -304,6 +362,21 @@ grep -q '((1))' "$t/auto-update-late" || fail "test setup: the time left not mad
 FETCHED=1 "$t/auto-update-late" || true
 ! grep -q -- '--install-fetched' "$t/calls" && grep -q "too little of the run's time left" "$t/log" ||
     fail "the Flatpaks from a file reinstalled with too little time left: $(cat "$t/calls")"
+# Root's own pass (the system-wide Flatpaks): its helper run as root itself (not through --as), the reinstall under the
+# hold as the users' is (the helper and the hold noted, in a copy of the script)
+# shellcheck disable=SC2016  # (expanded by the stand-ins)
+printf '#!/bin/sh\necho "fbu $*" >>%s/calls\n[ "$1" != --fetch ] || [ -z "${FETCHED:-}" ] || echo app >"$2/fetched"\n' "$t" >"$t/bin/fbu"
+# shellcheck disable=SC2016
+printf '#!/bin/sh\necho held >>%s/calls\nwhile [ "${1#--}" != "$1" ]; do shift; done\nexec "$@"\n' "$t" >"$t/bin/hold-noted"
+chmod +x "$t/bin/fbu" "$t/bin/hold-noted"
+sed -e "s|$here/.local/bin/flatpak-bundle-update|$t/bin/fbu|g" -e "s|systemd-inhibit --what=sleep:shutdown|$t/bin/hold-noted --what=sleep:shutdown|" \
+    "$t/auto-update" >"$t/auto-update-root"
+chmod +x "$t/auto-update-root"
+: >"$t/calls"
+FETCHED=1 "$t/auto-update-root" || fail "the boot with system-wide Flatpaks from a file failed"
+root=$(grep -E '^(fbu|held)' "$t/calls" | sed -n '1,3{s/ [^ ]*$//;p}')
+[[ $root == $'fbu --fetch\nheld\nfbu --install-fetched' ]] ||
+    fail "the system-wide Flatpaks not fetched and reinstalled by root under the hold: $(cat "$t/calls")"
 
 # An install cut off at shutdown (pacman killed mid-way): the next boot puts pacman's lists back, and its lock
 lists

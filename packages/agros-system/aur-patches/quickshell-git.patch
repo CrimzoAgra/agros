@@ -1,0 +1,61 @@
+# AgrOS (aur-agros-patch): a window closed while Quickshell asked Hyprland for the window list came back from the late
+# answer and stayed listed for good (a game quit, its icon left in the dock). Dropped once Quickshell fixes it itself
+diff --git a/quickshell/src/wayland/hyprland/ipc/connection.cpp b/quickshell/src/wayland/hyprland/ipc/connection.cpp
+index c288426..49b20c6 100644
+--- a/quickshell/src/wayland/hyprland/ipc/connection.cpp
++++ b/quickshell/src/wayland/hyprland/ipc/connection.cpp
+@@ -492,6 +492,7 @@ void HyprlandIpc::onEvent(HyprlandIpcEvent* event) {
+ 		auto windowAddress = args.at(0).toULongLong(&ok, 16);
+ 
+ 		if (!ok) return;
++		this->closedDuringToplevelRequest.remove(windowAddress);
+ 
+ 		auto workspaceName = QString::fromUtf8(args.at(1));
+ 		auto windowClass = QString::fromUtf8(args.at(2));
+@@ -523,6 +524,7 @@ void HyprlandIpc::onEvent(HyprlandIpcEvent* event) {
+ 		auto windowAddress = args.at(0).toULongLong(&ok, 16);
+ 
+ 		if (!ok) return;
++		if (this->requestingToplevels) this->closedDuringToplevelRequest.insert(windowAddress);
+ 
+ 		const auto& mList = this->mToplevels.valueList();
+ 		auto toplevelIter = std::ranges::find_if(mList, [&](HyprlandToplevel* m) {
+@@ -752,6 +754,7 @@ void HyprlandIpc::refreshToplevels() {
+ 
+ 	this->makeRequest("j/clients", [this](bool success, const QByteArray& resp) {
+ 		this->requestingToplevels = false;
++		auto closed = std::exchange(this->closedDuringToplevelRequest, {});
+ 		if (!success) return;
+ 
+ 		qCDebug(logHyprlandIpc) << "Parsing j/clients response";
+@@ -770,6 +773,9 @@ void HyprlandIpc::refreshToplevels() {
+ 				continue;
+ 			}
+ 
++			// Closed since this reply was asked for: re-added, it would stay listed for good
++			if (closed.contains(address)) continue;
++
+ 			auto toplevelsIter =
+ 			    std::ranges::find_if(mList, [&](HyprlandToplevel* m) { return m->address() == address; });
+ 
+diff --git a/quickshell/src/wayland/hyprland/ipc/connection.hpp b/quickshell/src/wayland/hyprland/ipc/connection.hpp
+index 17959c1..7f68453 100644
+--- a/quickshell/src/wayland/hyprland/ipc/connection.hpp
++++ b/quickshell/src/wayland/hyprland/ipc/connection.hpp
+@@ -7,6 +7,7 @@
+ #include <qhash.h>
+ #include <qlocalsocket.h>
+ #include <qobject.h>
++#include <qset.h>
+ #include <qproperty.h>
+ #include <qqmlintegration.h>
+ #include <qtmetamacros.h>
+@@ -143,6 +144,8 @@ private:
+ 	bool requestingMonitors = false;
+ 	bool requestingWorkspaces = false;
+ 	bool requestingToplevels = false;
++	// Windows closed while a j/clients request was in flight: its reply may still list them
++	QSet<quint64> closedDuringToplevelRequest;
+ 	bool monitorsRequested = false;
+ 
+ 	ObjectModel<HyprlandMonitor> mMonitors {this};

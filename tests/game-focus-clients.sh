@@ -10,7 +10,7 @@ cleanup() {  # (also when a check failed)
     kill ${busy:-} ${writer:-} ${piper:-} ${l1:-} ${h1:-} ${l2:-} ${h2:-} ${reaper:-} 2>/dev/null || true
     rm -rf "$t" "${disk:-}"
 }
-trap cleanup EXIT
+on_exit cleanup
 mkdir -p "$t/pfx" "$t/bin"
 # (Steam installed natively, as AgrOS has it: its command closes it)
 printf '#!/bin/sh\n' >"$t/bin/steam" && chmod +x "$t/bin/steam" && export PATH=$t/bin:$PATH

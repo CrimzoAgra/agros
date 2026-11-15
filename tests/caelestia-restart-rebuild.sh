@@ -27,7 +27,7 @@ cp "$here/.local/bin/"{caelestia-restart,dots-warn,notify-when-up} "$t/home/.loc
 printf '#!/bin/sh\n[ -e "%s/game" ]\n' "$t" >"$t/home/.local/bin/game-focus"
 printf '#!/bin/sh\necho after-games >>"%s/log"; rm -f "%s/game"\n' "$t" "$t" >"$t/home/.local/bin/after-games"
 chmod +x "$t/bin/"* "$t/home/.local/bin/"*
-run() { echo 42 >"$t/running"; : >"$t/log"; : >"$t/hypr"; rc=0; HOME=$t/home HYPRLAND_INSTANCE_SIGNATURE=x WAYLAND_DISPLAY=w PATH=$t/bin:$PATH "$t/home/.local/bin/caelestia-restart" "$@" >/dev/null 2>&1 || rc=$?; }
+run() { echo 42 >"$t/running"; : >"$t/log"; : >"$t/hypr"; rc=0; HOME=$t/home HYPRLAND_INSTANCE_SIGNATURE=x WAYLAND_DISPLAY=w XDG_CURRENT_DESKTOP=Hyprland PATH=$t/bin:$PATH "$t/home/.local/bin/caelestia-restart" "$@" >/dev/null 2>&1 || rc=$?; }
 run --rebuild
 ((rc == 0)) || fail "exit $rc after a good rebuild"
 [[ $(cat "$t/log") == $'kill\nrebuilt\nstart' ]] || fail "not stopped, rebuilt, started: $(tr '\n' ' ' <"$t/log")"
@@ -44,7 +44,7 @@ printf '#!/bin/sh\ncase " $* " in *" --scope "*) exec "%s/systemd-run.fg" "$@" ;
 printf '#!/bin/sh\nwhile [ -e "%s/hold" ]; do sleep 0.1; done\necho after-games >>"%s/log"; rm -f "%s/game"\n' "$t" "$t" "$t" >"$t/home/.local/bin/after-games"
 echo 42 >"$t/running"; : >"$t/log"; touch "$t/game" "$t/hold"
 for arg in "" --rebuild ""; do
-    HOME=$t/home HYPRLAND_INSTANCE_SIGNATURE=x WAYLAND_DISPLAY=w PATH=$t/bin:$PATH "$t/home/.local/bin/caelestia-restart" $arg >/dev/null 2>&1 ||
+    HOME=$t/home HYPRLAND_INSTANCE_SIGNATURE=x WAYLAND_DISPLAY=w XDG_CURRENT_DESKTOP=Hyprland PATH=$t/bin:$PATH "$t/home/.local/bin/caelestia-restart" $arg >/dev/null 2>&1 ||
         fail "a request during a game ($arg) failed"
 done
 rm "$t/hold"

@@ -182,8 +182,16 @@ if [[ ${1:-} == --install ]]; then
     done
     # (exit 1 with nothing listed is "none". Its stderr apart: a warning there isn't an update (read as one, every
     # shutdown failed); an "error:" there, or a list with a failure, is pacman's error, not "none")
+    # Through the upstream gate, on the lists this installs from (the boot's, or newer ones the Updates app synced since):
+    # its decision made again here, on these lists, but offline, from the approved list kept at the last fetch: no more
+    # let through than was downloaded (one approved since stays held: a download of the whole set at shutdown, beside AUR
+    # builds made against the old one, is what the boot's download is for). What's pending and what's installed both
+    # through it
+    gated=$prev/gated.conf
+    waits=$(/usr/lib/agros/bin/update-gate /etc/pacman.conf "$gated" --offline) || cp /etc/pacman.conf "$gated"
+    [[ -z $waits ]] || printf "waits for AgrOS's check: %s\n" "$waits"
     qu=0
-    pending=$(LC_ALL='' LC_MESSAGES=C pacman -Qu 2>"$prev/qu-err") || qu=$?
+    pending=$(LC_ALL='' LC_MESSAGES=C pacman -Qu --config "$gated" 2>"$prev/qu-err") || qu=$?
     cat "$prev/qu-err"
     if grep -q '^error:' "$prev/qu-err" || { ((qu)) && [[ -n $pending ]]; }; then
         echo "$pending"
@@ -260,10 +268,10 @@ if [[ ${1:-} == --install ]]; then
     # (its messages in English: pacman's "error:" is what the reason below is found by; translated, "erro:" or
     # "Fehler:", it was lost. Messages only: the hooks it runs keep the system's locale)
     # (the AUR builds' repo for this one install: pacman's config with it last, its list in pacman's own)
-    conf=/etc/pacman.conf
+    conf=$gated
     if ((${#targets[@]})); then
+        { cat "$conf"; printf '\n[agros-aur]\nSigLevel = Optional TrustAll\nServer = file://%s\n' "$aur/repo"; } >"$prev/pacman.conf"
         conf=$prev/pacman.conf
-        { cat /etc/pacman.conf; printf '\n[agros-aur]\nSigLevel = Optional TrustAll\nServer = file://%s\n' "$aur/repo"; } >"$conf"
         cp "$aur/repo/agros-aur.db" "$pacdb/sync/agros-aur.db"
         echo "with the AUR's: ${targets[*]#agros-aur/}"
     fi
@@ -331,7 +339,17 @@ if [[ -e $db/db.lck ]] && ! /usr/lib/agros/bin/pacman-lock-holder "$db" >/dev/nu
 fi
 # (the AUR builds made for the last download's lists with it: made again for this one's, below)
 rm -rf "$db/complete" "$aur"
-pacman -Syuw --noconfirm --dbpath "$db" --logfile /dev/null && touch "$db/complete"
+# Through the upstream gate (update-gate): Hyprland and its libraries only to versions AgrOS's CI has checked, else
+# held (a library whose update would break one held, with it). The pacman.conf it gives for the download and the AUR
+# builds for it (the shutdown decides again, on the lists it installs from)
+gated=$au/pacman.conf
+if pacman -Sy --noconfirm --dbpath "$db" --logfile /dev/null; then
+    waits=$(/usr/lib/agros/bin/update-gate /etc/pacman.conf "$gated" --dbpath "$db")
+    [[ -z $waits ]] || printf "waits for AgrOS's check: %s\n" "$waits"
+    pacman -Suw --noconfirm --config "$gated" --dbpath "$db" --logfile /dev/null && touch "$db/complete"
+else
+    cp /etc/pacman.conf "$gated"
+fi
 rm -f "$au/downloading"
 
 # Firmware (fwupd): its list of updates refreshed (LVFS's metadata, signed and checked by fwupd) and looked at; any
@@ -356,41 +374,49 @@ fi
 # and developer tools (update-kinds, as Updates runs them)
 # (each given up on after half an hour: a stalled one held shutdown off for as long as it hung)
 command -v flatpak >/dev/null && timeout 30m flatpak update -y --noninteractive
+# Flatpaks installed from a file (bundles [runner...]: the system-wide ones as root, once; each user's own as them,
+# below): downloaded first (nothing held), then reinstalled (old one out first) with sleep and power off held for that
+# step alone: by root, here (logind refuses a user that hold outside a session). Usually seconds; a runtime the new
+# version needs is downloaded in it too, so given up on after half an hour. Not with less than 35 min of the run's 4 h
+# left (auto-update.service's RuntimeMaxSec): cut off between the old one's removal and the new one's install, the app
+# would be gone (the next boot does it)
+bundles() {
+    local fetched
+    command -v flatpak >/dev/null && [[ -x /usr/lib/agros/bin/flatpak-bundle-update ]] || return 0
+    fetched=$("$@" mktemp -d) || return 0
+    "$@" /usr/lib/agros/bin/flatpak-bundle-update --fetch "$fetched"
+    if [[ -s $fetched/fetched ]] && ((SECONDS > 4 * 3600 - 35 * 60)); then
+        echo "Flatpaks from a file: too little of the run's time left to reinstall them, at the next boot"
+    elif [[ -s $fetched/fetched ]]; then
+        timeout 30m systemd-inhibit --what=sleep:shutdown --mode=block --who="Flatpak update" \
+            --why="Reinstalling apps from their files" "$@" /usr/lib/agros/bin/flatpak-bundle-update --install-fetched "$fetched"
+    fi
+    rm -rf "$fetched"
+}
+bundles
 # The AgrOS users (agros-each-user's list): accounts with a home, each one's own apps, as that user (agros-each-user
 # --as: setpriv, no PAM, so no logind session: they'd count as logged in, and leave this unit's time limit)
-# (the list read on a descriptor of its own: a command in the loop reading its stdin took the next users with it)
-while IFS= read -r -u 4 user; do
+# (the list read whole first: a command in the loop, a user's own programs, can't read the next users away)
+mapfile -t users < <("$each_user" --list)
+for user in "${users[@]}"; do
     uid=$(id -u "$user")
     echo "-- $user"
     # (what it has to say (a new Proton: restart Steam, pick it in Lutris) handed back on fd 3, a file of root's, and
     # said on that user's desktop once they're logged in: agros-each-user --notify. A few lines at most)
     notes=$(mktemp)
-    "$each_user" --as "$user" env XDG_RUNTIME_DIR="/run/user/$uid" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" \
+    "$each_user" --as "$user" --fd 3 \
+        env XDG_RUNTIME_DIR="/run/user/$uid" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" \
         /usr/lib/agros/bin/update-kinds --boot flatpak appimage capri proton dev 3>"$notes"
     head -n 5 "$notes" | while IFS=$'\t' read -r icon title text; do
         [[ -n $title ]] && "$each_user" --notify --user "$user" -a Updates -i "$icon" "$title" "$text"
     done
     rm -f "$notes"
-    # Those from a file: downloaded first (as the user, nothing held), then reinstalled (old one out first) with sleep
-    # and power off held for that step alone: by root, here (logind refuses the user that hold outside a session).
-    # Usually seconds; a runtime the new version needs is downloaded in it too, so given up on after half an hour too.
-    # Not with less than 35 min of the run's 4 h left (auto-update.service's RuntimeMaxSec): cut off between the old
-    # one's removal and the new one's install, the app would be gone (the next boot does it)
-    if command -v flatpak >/dev/null && [[ -x /usr/lib/agros/bin/flatpak-bundle-update ]] && fetched=$("$each_user" --as "$user" mktemp -d); then
-        "$each_user" --as "$user" /usr/lib/agros/bin/flatpak-bundle-update --fetch "$fetched"
-        if [[ -s $fetched/fetched ]] && ((SECONDS > 4 * 3600 - 35 * 60)); then
-            echo "Flatpaks from a file: too little of the run's time left to reinstall them, at the next boot"
-        elif [[ -s $fetched/fetched ]]; then
-            timeout 30m systemd-inhibit --what=sleep:shutdown --mode=block --who="Flatpak update" \
-                --why="Reinstalling apps from their files" "$each_user" --as "$user" /usr/lib/agros/bin/flatpak-bundle-update --install-fetched "$fetched"
-        fi
-        rm -rf "$fetched"
-    fi
-done 4< <("$each_user" --list)
+    bundles "$each_user" --as "$user"
+done
 
 # The AUR's apps last (the longest: builds), for this download's lists, as their own account, agros-aur, no user's
 # (auto-update-aur); installed at shutdown with the rest
-[[ -e $db/complete ]] && /usr/lib/agros/auto-update-aur "$db"
+[[ -e $db/complete ]] && AGROS_PACMAN_CONF=$gated /usr/lib/agros/auto-update-aur "$db"
 rm -f "$au/downloading"
 
 echo "===== done $(date) ====="

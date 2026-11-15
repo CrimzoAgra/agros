@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # agros-system's and agros-camera-switch's install scripts (packages/*/*.install) in a throwaway root (AGROS_ROOT), a
-# systemctl stand-in: the services on at install, passwd's PAM given the keyring's line once and back at removal; at
-# upgrade the wired-link watch on only where it never ran (no /var/lib/agros/wired-link), and a running service marked
-# for systemd's restart, a stopped one not; the switch's saved position gone at removal, the camera put back
+# systemctl stand-in: the services on at install, passwd's PAM given the keyring's line once and back at removal,
+# pacman.conf the upstream gate's Include likewise; a
+# running camera switch marked for systemd's restart, a stopped one not; the switch's saved position gone at removal,
+# the camera put back
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
@@ -22,31 +23,40 @@ pam='-password   optional     pam_gnome_keyring.so'
 
 # agros-system
 echo 'password include system-auth' >"$r/etc/pam.d/passwd"
+# (a line of yours naming another file, and one commented out: neither the gate's Include)
+printf '%s\n' '[options]' 'Architecture = auto' '#Include = /etc/pacman.d/agros-gate.conf' 'Include = /etc/pacman.d/agros-gate.conf.old' '' \
+    '[core]' 'Include = /etc/pacman.d/mirrorlist' >"$r/etc/pacman.conf"
 pac agros-system post_install
 pac agros-system post_install
+# (the upstream gate's file, this package's, included by pacman.conf once, in [options]; gone again at removal)
+[[ $(cat "$r/etc/pacman.conf") == $'[options]\nInclude = /etc/pacman.d/agros-gate.conf\nArchitecture = auto\n#Include = /etc/pacman.d/agros-gate.conf\nInclude = /etc/pacman.d/agros-gate.conf.old\n\n[core]\nInclude = /etc/pacman.d/mirrorlist' ]] ||
+    fail "pacman.conf not given the gate's Include once, in [options]: $(cat "$r/etc/pacman.conf")"
 [[ $(grep -cxF -- "$pam" "$r/etc/pam.d/passwd") == 1 ]] || fail "passwd's PAM not given the keyring's line once: $(cat "$r/etc/pam.d/passwd")"
 c=$(calls)
-[[ $(grep -c '^systemctl enable .*agros-wired-link.service' <<<"$c") == 2 && $c == *"--global mask gnome-keyring-daemon"* ]] ||
+[[ $(grep -c '^systemctl enable .*auto-update-install.service' <<<"$c") == 2 && $c == *"--global mask gnome-keyring-daemon"* ]] ||
     fail "the services not enabled at install: $c"
 # (Passim, fwupd's LAN cache and listener, masked once: an unmask of yours stays)
 [[ $(grep -c '^systemctl mask passim.service$' <<<"$c") == 1 && -e $r/var/lib/agros/passim-masked ]] || fail "Passim not masked once: $c"
-# Upgrade: the watch on where it never ran, not where it has (one turned off since stays off); marked only if running
 pac agros-system post_upgrade
-c=$(calls)
-[[ $(grep -c 'enable --now agros-wired-link.service' <<<"$c") == 1 && $c != *Markers* ]] || fail "first upgrade: $c"
-mkdir -p "$r/var/lib/agros/wired-link"; touch "$t/active"
-pac agros-system post_upgrade
-c=$(calls)
-[[ $c != *enable* && $c == *"set-property agros-wired-link.service Markers=+needs-restart"* ]] || fail "later upgrade: $c"
+[[ $(calls) != *enable* ]] || fail "post_upgrade turned something on"
+# (a note after it, by hand: the line still found, as at install)
+sed -i 's|^Include = /etc/pacman.d/agros-gate.conf$|& # mine|' "$r/etc/pacman.conf"
+# (found as it is, by the next install too: not added again)
+pac agros-system post_install
+[[ $(grep -c '^Include = /etc/pacman.d/agros-gate.conf\( #.*\)\?$' "$r/etc/pacman.conf") == 1 ]] ||
+    fail "the gate's Include with a note after it added again: $(cat "$r/etc/pacman.conf")"
 pac agros-system post_remove
+grep -q '^Include = /etc/pacman.d/agros-gate.conf\( #.*\)\?$' "$r/etc/pacman.conf" && fail "the gate's Include left in pacman.conf at removal"
+grep -qx 'Include = /etc/pacman.d/agros-gate.conf.old' "$r/etc/pacman.conf" || fail "a line of yours naming another file taken out at removal"
 [[ $(calls) == *"systemctl unmask passim.service"* && ! -e $r/var/lib/agros/passim-masked ]] || fail "Passim not put back at removal"
 pac agros-system pre_remove
 [[ $(cat "$r/etc/pam.d/passwd") == 'password include system-auth' ]] || fail "the keyring's line left in passwd's PAM"
 c=$(calls)
-[[ $c == *"disable --now auto-update.service"* && $c == *"disable --now agros-wired-link.service"* &&
+[[ $c == *"disable --now auto-update.service"* &&
     $c != *"disable --now auto-update-install"* && $c == *"--global unmask"* ]] || fail "removal's services: $c"
 
-# agros-camera-switch
+# agros-camera-switch (running: is-active says so)
+touch "$t/active"
 pac agros-camera-switch post_install
 [[ $(calls) == *"systemctl enable camera-switch.service"* ]] || fail "the switch not enabled"
 pac agros-camera-switch post_upgrade

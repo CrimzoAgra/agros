@@ -12,7 +12,7 @@ stub() { printf '#!/bin/bash\n%s\n' "$2" >"$t/bin/$1"; chmod +x "$t/bin/$1"; }
 # for one the test has
 mkdir "$t/sys"
 for c in bash env jq awk sed grep cut sort tail head ls mktemp rm mv cp mkdir tar gzip sha512sum timeout cat dirname \
-    readlink tr paste seq sleep printf touch xz find id flock; do
+    readlink tr paste seq sleep printf touch xz find id flock vercmp; do
     p=$(command -v "$c") && ln -s "$p" "$t/sys/$c"
 done
 run() { HOME=$t/home PATH=$t/bin:$t/sys STEAM_ROOT=$t/steam "$here/.local/bin/update-kinds" "$@"; }
@@ -231,4 +231,25 @@ grep -q '^uv tool upgrade' "$t/dev" || fail "the run that waited didn't run afte
 stub uv 'echo "uv $*" >>'"$t"'/dev; sleep 5 >/dev/null 2>&1 & true'
 NPM_PREFIX=/usr run dev >/dev/null 2>&1
 flock -n "$t/home/.local/state/agros/update-kinds.lock" true || fail "a helper's background job kept the run's lock"
+# The repo's list through the upstream gate (update-gate, the real one), on checkupdates' own copy of the lists: a new
+# Hyprland not checked by AgrOS yet not listed as waiting; once approved, listed
+echo 'IgnorePkg = hyprland' >"$AGROS_GATE"
+: >"$t/qu"
+# shellcheck disable=SC2016  # (expanded by the stand-in)
+stub pacman 'args=" $* "; echo "pacman $*" >>'"$t"'/qu
+case $1 in
+    -Q) [ "${@: -1}" = hyprland ] && echo "hyprland 0.57.2-1" ;;
+    -Si) echo "Version         : 0.58.0-1" ;;
+    -Qu) conf=$(sed -n "s/.*--config \([^ ]*\) .*/\1/p" <<<"$args")
+         grep -q "Include = $AGROS_GATE" "$conf" || echo "hyprland 0.57.2-1 -> 0.58.0-1" ;;
+esac
+true'
+out=$(CHECKUPDATES_DB=$t/cdb run --list | grep '^system' || true)
+[[ -z $out ]] || fail "a Hyprland not checked yet listed as waiting: $out"
+echo 'hyprland 0.58.0' >"$AGROS_GATE_CACHE"
+out=$(CHECKUPDATES_DB=$t/cdb run --list | grep '^system' || true)
+[[ $out == $'system\thyprland\t0.57.2-1\t0.58.0-1' ]] || fail "an approved Hyprland not listed: $out"
+[[ -z $(grep -e '^pacman -Q[ u]' -e '^pacman -Si' "$t/qu" | grep -v -- "--dbpath $t/cdb") ]] ||
+    fail "not on checkupdates' copy of the lists: $(cat "$t/qu")"
+rm -f "$AGROS_GATE" "$AGROS_GATE_CACHE"
 echo "ok update-kinds"

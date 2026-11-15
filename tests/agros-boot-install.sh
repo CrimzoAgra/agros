@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 # agros-boot's install script (packages/agros-boot/agros-boot.install) in a throwaway root (AGROS_ROOT), with its own
 # splash-theme, boot-loader and boot-video-mode, boot-menu a stand-in, and the system's tools stand-ins (none of the
-# machine's real ones on PATH): boot-menu run at install and noted; an upgrade runs it only when it changed (an install
-# from before the note: noted, not run; one that failed: run again); grub.bak/limine.conf.bak kept as .agros-orig; GRUB
-# moved off CachyOS's theme with its menu made once; removal puts GRUB's and Limine's settings back from .agros-orig
+# machine's real ones on PATH): boot-menu run at install and noted; an upgrade runs it only when it changed (one that
+# failed, or with no note: run again); removal puts GRUB's and Limine's settings back from .agros-orig
 # (commented out where boot-menu added them), takes boot-video-mode's video= and the quiet boot's options out (only those
 # not there before AgrOS), and the motherboard's wait back.
 # splash-theme --update/--remove, boot-loader's one decision (Limine or GRUB), and boot-menu's own edits of GRUB's and
@@ -25,15 +24,14 @@ for x in bash sh env sed grep cat cp rm mkdir sha256sum python3 head tail readli
 done
 export PATH=$t/bin:$t/sys
 calls() { cat "$t/calls" 2>/dev/null; }
-# Stand-ins, each noting its call: boot-menu ($BOOT_MENU_RC; $1 its version; its note written as the real one writes it,
-# --note only that), the boot tools; plymouth's theme in a file
+# Stand-ins, each noting its call: boot-menu ($BOOT_MENU_RC; $1 its version; its note written as the real one writes it),
+# the boot tools; plymouth's theme in a file
 menu() {
     cat >"$r/usr/lib/agros/boot-menu" <<STANDIN
 #!/bin/sh
 # v$1
 s=$r/var/lib/agros/boot-menu.sum
 mkdir -p "\${s%/*}"
-[ "\$1" = --note ] && { sha256sum <"\$0" >"\$s"; exit 0; }
 echo boot-menu >>$t/calls
 rc=\${BOOT_MENU_RC:-0}
 if [ \$rc = 0 ]; then sha256sum <"\$0" >"\$s"; elif [ ! -f "\$s" ]; then : >"\$s"; fi
@@ -91,7 +89,7 @@ BOOT_MENU_RC=1 pac post_install >/dev/null
 [[ -f $stamp && ! -s $stamp ]] || fail "a failed boot-menu not noted as not done"
 rm -f "$t/calls"; pac post_upgrade >/dev/null
 [[ $(calls | grep -c boot-menu) == 1 && $(cat "$stamp") == "$(sum)" ]] || fail "a failed install's boot-menu not run again: $(calls)"
-# Upgrade: the same boot-menu not run; a changed one run; an install from before the note: noted, not run
+# Upgrade: the same boot-menu not run; a changed one run; one with no note run
 rm -f "$t/calls"; pac post_upgrade >/dev/null
 grep -q boot-menu <<<"$(calls)" && fail "an unchanged boot-menu run again"
 menu 2
@@ -99,32 +97,9 @@ pac post_upgrade >/dev/null
 [[ $(calls | grep -c boot-menu) == 1 && $(cat "$stamp") == "$(sum)" ]] || fail "a changed boot-menu not run: $(calls)"
 rm -f "$stamp" "$t/calls"; menu 3
 pac post_upgrade >/dev/null
-! grep -q boot-menu <<<"$(calls)" && [[ $(cat "$stamp") == "$(sum)" ]] || fail "the first upgrade with the note ran boot-menu: $(calls)"
+[[ $(calls | grep -c boot-menu) == 1 && $(cat "$stamp") == "$(sum)" ]] || fail "boot-menu with no note not run: $(calls)"
 
-# An earlier boot-menu's .bak kept as .agros-orig (an .agros-orig there kept as it is)
-echo 'GRUB_TIMEOUT=7' >"$r/etc/default/grub.bak"
-mkdir -p "$r/boot/limine" && echo 'timeout: 9' >"$r/boot/limine/limine.conf.bak"
-pac post_upgrade >/dev/null
-cmp -s "$r/etc/default/grub.bak" "$r/etc/default/grub.agros-orig" &&
-    cmp -s "$r/boot/limine/limine.conf.bak" "$r/boot/limine/limine.conf.agros-orig" || fail ".bak not kept as .agros-orig"
-echo 'GRUB_TIMEOUT=8' >"$r/etc/default/grub.bak"
-pac post_upgrade >/dev/null
-grep -qx 'GRUB_TIMEOUT=7' "$r/etc/default/grub.agros-orig" || fail "an .agros-orig there overwritten by a .bak"
-rm "$r/etc/default/grub."* "$r/boot/limine/limine.conf.bak"
-
-# GRUB on CachyOS's theme: AgrOS's, the menu made once. By the upgrade itself (boot-menu unchanged), or by boot-menu
-# (changed: it sets the theme itself)
-mkdir -p "$r/usr/share/grub/themes/agros" && touch "$r/usr/share/grub/themes/agros/theme.txt"
-cachy() { echo 'GRUB_THEME=/usr/share/grub/themes/cachyos/theme.txt' >"$r/etc/default/grub"; rm -f "$t/calls"; }
-cachy; pac post_upgrade >/dev/null
-grep -qx 'GRUB_THEME=/usr/share/grub/themes/agros/theme.txt' "$r/etc/default/grub" && [[ $(calls | grep -c grub-mkconfig) == 1 ]] ||
-    fail "GRUB not moved to AgrOS's theme, its menu made once: $(calls)"
-grep -qx "grub-mkconfig -o $r/boot/grub/grub.cfg" <<<"$(calls)" || fail "GRUB's menu not made in its root (AGROS_ROOT): $(calls)"
-printf '#!/bin/sh\n# v4\necho boot-menu >>%s/calls\nsed -i "s|^GRUB_THEME=.*|GRUB_THEME=/usr/share/grub/themes/agros/theme.txt|" %s\ngrub-mkconfig\n' \
-    "$t" "$r/etc/default/grub" >"$r/usr/lib/agros/boot-menu"
-cachy; pac post_upgrade >/dev/null
-[[ $(calls | grep -c grub-mkconfig) == 1 ]] || fail "GRUB's menu made twice (theme and boot-menu): $(calls)"
-menu 5; "$r/usr/lib/agros/boot-menu" --note
+menu 5; "$r/usr/lib/agros/boot-menu"
 
 # Removal, GRUB: boot-menu's settings back as .agros-orig had them (one it added: commented out), "quiet" out where it
 # added it, boot-video-mode's video= out, the menu made once, the motherboard's wait back, the note gone
@@ -143,6 +118,7 @@ want=$(printf '%s\n' 'GRUB_TIMEOUT_STYLE=menu' 'GRUB_TIMEOUT=5' "GRUB_CMDLINE_LI
 # Removal, Limine: limine.conf's settings back, the video= out of /etc/default/limine and its entries made again, no GRUB
 rm "$r/etc/default/grub"
 echo 'KERNEL_CMDLINE[default]+="video=DP-1:2560x1440@165 quiet video=efifb:off"' >"$r/etc/default/limine"
+mkdir -p "$r/boot/limine"
 printf '%s\n' 'timeout: 5' '/CachyOS' >"$r/boot/limine/limine.conf.agros-orig"
 printf '%s\n' 'remember_last_entry: no' 'quiet: yes' 'timeout: 1' '/CachyOS' >"$r/boot/limine/limine.conf"
 rm -f "$t/calls"; pac pre_remove >/dev/null
@@ -218,6 +194,11 @@ rm -r "$r/sys/class"
 # second GRUB_THEME=), the missing ones added, quiet added, GRUB's loading lines out, the menu made, the motherboard's
 # wait taken away; its .agros-orig made
 rm -f "$t/calls" "$r/etc/default/limine" "$r/etc/default/grub"*; rm -rf "$r/boot/limine" "$r/var/lib/agros"
+# (neither boot loader yet: nothing done, and not noted as done, an empty note, so the next update runs it again)
+rc=0; bash "$b/boot-menu" >/dev/null || rc=$?
+[[ $rc == 1 && -f $r/var/lib/agros/boot-menu.sum && ! -s $r/var/lib/agros/boot-menu.sum ]] ||
+    fail "boot-menu with no boot loader taken as done (rc $rc, note: $(cat "$r/var/lib/agros/boot-menu.sum" 2>/dev/null))"
+rm -rf "$r/var/lib/agros"
 printf '%s\n' 'GRUB_DEFAULT=saved' 'GRUB_TIMEOUT=5' "GRUB_CMDLINE_LINUX_DEFAULT='nowatchdog'" '#GRUB_THEME="/path/to/gfxtheme"' \
     'GRUB_THEME=/usr/share/grub/themes/cachyos/theme.txt' >"$r/etc/default/grub"
 mkdir -p "$r/etc/grub.d" "$r/sys/firmware/efi" "$r/boot/grub" && touch "$r/boot/grub/grub.cfg"

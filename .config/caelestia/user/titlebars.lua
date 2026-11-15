@@ -1,6 +1,7 @@
 -- Title bars with minimise / maximise / close buttons on floating windows only (tiled ones keep none), from the
 -- hyprbars plugin with my patch (~/.local/share/hyprbars/hyprbars.patch: hover pills, restore icon, un-maximise on
--- drag). Loaded last; an error here shows as a config error and the other files still load (Hyprland's require
+-- drag, edge resizing, every window drag told to windows.lua (snapping, its seam cursor and press, the pointer kept
+-- inside the screen's borders while moving)). Loaded last; an error here shows as a config error and the other files still load (Hyprland's require
 -- catches it).
 -- The plugin is loaded once Hyprland is up, by hyprbars-build --login, never from inside this config: loading it
 -- reloads the config, and a reload in the middle of the config's own load took the whole desktop down. On that reload
@@ -31,10 +32,15 @@ local alpha = string.format("%02x", math.floor((vars.windowOpacity or 1) * 255))
 -- second close button would be redundant), listed by class as Hyprland can't tell which those are: Steam, Proton VPN (its own minimise and close)
 local own_title_bar = { "steam", "proton.vpn.app.gtk" }
 local height = 32
--- dots.titlebar_height: windows.lua's maximise leaves room for the bar above a window that has one. None on fullscreen windows or
--- games (dots.is_game, apps.lua: often borderless over the whole screen, not fullscreen), as in the rules at the end
+-- dots.titlebar_height: windows.lua's maximise leaves room for the bar above a window that has one. None exactly where
+-- the rules at the end give none, by the same tags and classes: fullscreen windows, Caelestia's game tag (games, and
+-- store launchers under Proton or Lutris: steam_app_default), Proton's steam_app_<id>, X11 menus and pop-ups
+-- (Caelestia's xwl_popup tag), apps with their own
 function dots.titlebar_height(win)
-    if not win.floating or win.fullscreen ~= 0 or (dots.is_game and dots.is_game(win)) then return 0 end
+    if not win.floating or win.fullscreen ~= 0 or (win.class or ""):match("^steam_app_%d+$") then return 0 end
+    for _, t in ipairs(win.tags or {}) do
+        if t == "game" or t == "game*" or t == "xwl_popup" or t == "xwl_popup*" then return 0 end
+    end
     for _, c in ipairs(own_title_bar) do
         if win.class == c then return 0 end
     end

@@ -31,8 +31,10 @@ hl.window_rule({ match = { class = "^(updates|desktop-settings)$" }, float = tru
 -- (both tagged dots_opaque too: window peek, user/windows.lua, fades them back to whole, as they are)
 hl.window_rule({ match = { class = "^(librewolf)$" }, opaque = true, tag = "+dots_opaque" })
 -- The installer (the live USB's): sized to the screen, in the middle; at its own size its summary page ran past the
--- bottom of a small screen and hid the Install button
-hl.window_rule({ match = { class = "^(io\\.calamares\\.calamares)$" }, float = true,
+-- bottom of a small screen and hid the Install button. Its main window only, by the product name in the title it opens
+-- with ("AgrOS Installer", "Instalador AgrOS", "Instalador de AgrOS": its "%1 Installer" in the language it starts in):
+-- its dialogs (an error's details) have its class too, and were stretched behind it. (Hyprland matches the whole title)
+hl.window_rule({ match = { class = "^(io\\.calamares\\.calamares)$", initial_title = "^.*AgrOS.*$" }, float = true,
                  size = "(monitor_w*0.8) (monitor_h*0.9)", center = true })
 -- Games: Caelestia tags them "game" by class (Proton's steam_app_<id>, Lutris's steam_app_default, gamescope) and gives
 -- that tag its rules (tearing allowed, no idle, opaque). Native Linux Steam games keep their own class: tagged here by
@@ -107,7 +109,11 @@ end)
 -- beside it, or in a screen corner (its rounded corner: an RTS's camera scroll), as the start of a resize. On again
 -- once the last one closes. Counted at every load (it sets this back on), as windows open and close (the closing one
 -- still mapped then), and as one is tagged a game later (the tag above, a class rule matching after a class change)
+-- With lower input lag on (below), the pointer drawn into the picture too while a game is open: Hyprland allows no
+-- tearing while the graphics card's cursor layer shows a pointer (a game's menus, a strategy game's camera), so the
+-- lag came back there. The cursor layer again once the last game closes (no lag behind the mouse on the desktop)
 local edges = true
+local low_latency = dots.setting("games.low_latency") ~= false
 local function game_edges(closing)
     local game = false
     for _, w in ipairs(hl.get_windows({ mapped = true }) or {}) do
@@ -115,7 +121,7 @@ local function game_edges(closing)
     end
     if edges == not game then return end
     edges = not game
-    hl.config({ general = { resize_on_border = edges } })
+    hl.config({ general = { resize_on_border = edges }, cursor = { no_hardware_cursors = (game and low_latency) and 1 or 2 } })
 end
 game_edges()
 hl.on("window.open", function() game_edges() end)
@@ -141,10 +147,9 @@ hl.on("window.fullscreen", function(win)
     if win and win.fullscreen ~= 0 and ws and win.workspace and win.workspace.id == ws.id then focus_game(win) end
 end)
 -- Lower input lag in games (Settings app: games.low_latency): a game's frames go to the screen as soon as they're drawn
--- (Caelestia's "immediate" for the game tag, which needs tearing allowed; with the game's V-Sync off). Not direct
--- scanout: the pointer is drawn into the picture (hypr-user.lua), which a game's frames sent straight to the screen left
--- out
-if dots.setting("games.low_latency") ~= false then hl.config({ general = { allow_tearing = true } }) end
+-- (Caelestia's "immediate" for the game tag, which needs tearing allowed; with the game's V-Sync off), the pointer drawn
+-- into the picture meanwhile (game_edges, above)
+if low_latency then hl.config({ general = { allow_tearing = true } }) end
 -- Game audio only while the game is focused, a notification when a game wants attention (like Windows' orange
 -- flash), fullscreen games on a free workspace (~/.local/bin/game-focus)
 hl.on("hyprland.start", function() hl.exec_cmd("systemctl --user start game-focus") end)  -- a service: restarted if it crashes

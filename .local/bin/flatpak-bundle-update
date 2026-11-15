@@ -4,7 +4,8 @@
 #   flatpak-bundle-update           update them
 #   flatpak-bundle-update --check   only list the ones with a newer version ("<app id>: update available (<old> -> <new>)")
 #   flatpak-bundle-update --install <owner/repo>   install one for the user from its latest release (agros-welcome)
-#   flatpak-bundle-update --fetch <dir>              only download the updates' files into dir (listed in dir/fetched)
+#   flatpak-bundle-update --fetch <dir>              only download the updates' files into dir (listed in dir/fetched);
+#                                                    as a user, only their own: the system-wide ones are root's
 #   flatpak-bundle-update --install-fetched <dir>    reinstall from those (the boot's update: it holds sleep and power
 #                                                    off as root around this step alone, logind refusing it to a user
 #                                                    outside a session)
@@ -104,6 +105,9 @@ fi
 
 while IFS=$'\t' read -r app origin inst; do
     [[ $origin == *-origin ]] || continue # installed from a file: Flatpak names its remote "<name>-origin"
+    # (the boot's per-user downloads: a system-wide one is root's, reinstalled once by the boot's own run, as root;
+    # as each user it was downloaded per user and refused at the reinstall, every boot)
+    [[ -n $fetch && $inst == system && $EUID -ne 0 ]] && continue
     repo=$(repo_of "$app" "$inst") || continue
     old=$(LC_ALL=C flatpak info --"$inst" "$app" | sed -n 's/^ *Version: //p')
     # No version to compare: any release would look newer, reinstalled on every run

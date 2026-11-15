@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# aur-agros-patch <dir> <base>: AgrOS's fix for an AUR package, aur-patches/<base>.patch beside this, added to its build
+# files cloned in <dir> (one place for both builds of it: CI's into [agros], ci/build-repo.sh, and the boot's rebuild on
+# a new Qt, auto-update-aur): applied to its sources in a prepare() of AgrOS's (paths from the sources' folder: a/<its
+# folder>/...), its pkgrel a ".1" above the AUR's, so it's never taken for the AUR's own build of that version. No patch
+# for it: nothing done. Build files that no longer fit (a pkgrel with a dot, a prepare() of their own) fail here, and a
+# patch that no longer applies fails the build: never the AUR's build without the fix, unsaid
+set -euo pipefail
+dir=${1:?usage: aur-agros-patch <dir> <base>} base=${2:?usage: aur-agros-patch <dir> <base>}
+patch=$(dirname "$(readlink -f "$0")")/aur-patches/$base.patch
+[[ -f $patch ]] || exit 0
+cd "$dir"
+grep -q '^pkgrel=[0-9]*$' PKGBUILD && ! grep -q '^prepare()' PKGBUILD ||
+    { echo "$base: its PKGBUILD changed (a pkgrel with a dot, or a prepare() of its own): AgrOS's fix not added" >&2; exit 1; }
+cp "$patch" agros-fix.patch
+sed -i 's/^pkgrel=\([0-9]*\)$/pkgrel=\1.1/' PKGBUILD
+# shellcheck disable=SC2016  # (makepkg's variables, expanded there)
+printf '\n# AgrOS (aur-agros-patch)\nprepare() {\n    patch -Np1 -d "$srcdir" -i "$startdir/agros-fix.patch"\n}\n' >>PKGBUILD

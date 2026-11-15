@@ -17,6 +17,8 @@ me=$(id -un)
 sed -e "s|/var/lib/auto-update|$t/au|g" -e "s|/usr/lib/agros/auto-update-aur|$t/auto-update-aur|g" \
     -e "s|/usr/lib/agros/bin/|$here/.local/bin/|g" "$here/packages/agros-system/auto-update-aur" >"$t/auto-update-aur"
 chmod +x "$t/auto-update-aur"
+# (AgrOS's fixes for AUR packages beside it, as installed: aur-agros-patch, aur-patches/)
+cp -r "$here/packages/agros-system/aur-agros-patch" "$here/packages/agros-system/aur-patches" "$t/"
 stub() { printf '#!/bin/bash\n%s\n' "$2" >"$t/bin/$1"; chmod +x "$t/bin/$1"; }
 # agros-each-user: --as runs the command (noted); the build account: this user here (agros-aur on the system; the
 # users agros-each-user lists aren't asked for)
@@ -35,17 +37,28 @@ case "$1" in
     -Qmq) printf "%s\n" $foreign ;;
     -Slq) true ;;
     -Qi) echo "Name            : qt6-base"; echo "Required By     : quickshell-git  darkly-bin  kconfig"; echo "Optional For    : None" ;;
-    -Qoq) [ "${@: -1}" = /usr/lib/python3.13/ ] && printf "%s\n" python python-foo python-repo ;;
+    -Qoq) [ "${@: -1}" = /usr/lib/python3.13/ ] && printf "%s\n" python ${QOQ:-python-foo} python-repo ;;
     -Q) case " $foreign " in *" $2 "*) echo "$2 $( [ "$2" = quickshell-git ] && echo 0.3-1 || echo 1.0-1 )" ;; *) exit 1 ;; esac ;;
     -T) echo "pacman $*" >>'"$t"'/calls; [ -n "${NEED:-}" ] && echo "$NEED"; true ;;
     -Sw) echo "pacman $*" >>'"$t"'/calls; echo "download $( [ -e '"$t"'/au/downloading ] && echo marked || echo unmarked)" >>'"$t"'/calls ;;
-    -Sp) true ;;
+    -Sp) if [ -n "${SP_UNSAT:-}" ] && [ "${@: -1}" = "$SP_UNSAT" ]; then
+             [ -n "${SP_HELD:-}" ] || { echo "error: target not found: $SP_UNSAT" >&2; exit 1; }; echo "$SP_HELD"; exit 0; fi
+         if [ -n "${SP_UNSAT:-}" ]; then echo "error: failed to prepare transaction (could not satisfy dependencies)" >&2
+             echo ":: unable to satisfy dependency '"'"'$SP_UNSAT'"'"' required by ${@: -1}" >&2; exit 1; fi
+         # ($SP_NOTFOUND: no such target at that version; by its name alone, there when $SP_BARE. $SP_OTHER: another error)
+         if [ -n "${SP_OTHER:-}" ]; then echo "error: $SP_OTHER" >&2; exit 1; fi
+         if [ -n "${SP_NOTFOUND:-}" ]; then
+             case ${@: -1} in *[\<\>=]*) echo "error: target not found: ${@: -1}" >&2; exit 1 ;; esac
+             [ -n "${SP_BARE:-}" ] || { echo "error: target not found: ${@: -1}" >&2; exit 1; }; echo "${@: -1}"; exit 0
+         fi
+         [ -z "${SP_GOT:-}" ] || printf "%s\n" $SP_GOT ;;
     -Sup) printf "%s\n" "$PENDING" | while read -r n _ _ v; do [ -n "$v" ] && echo "$n-$v-x86_64.pkg.tar.zst"; done
         [ -z "${SUP_EXTRA:-}" ] || echo "$SUP_EXTRA" ;;
 esac'
 stub pacman-conf '[ "$1" = CacheDir ] && echo '"$t/cache/"'; true'
 # The AUR: its versions (equibop newer; darkly-bin and kconfig are no concern of it)
-aur_has() { stub curl "echo '{\"results\":[$(for x; do printf '{"Name":"%s","PackageBase":"%s","Version":"%s"},' "${x%=*}" "${x%=*}" "${x#*=}"; done | sed 's/,$//')]}'"; }
+# (name=version, or name/base=version for one of a split base)
+aur_has() { stub curl "echo '{\"results\":[$(for x; do n=${x%=*}; printf '{"Name":"%s","PackageBase":"%s","Version":"%s"},' "${n%/*}" "${n#*/}" "${x#*=}"; done | sed 's/,$//')]}'"; }
 aur_has equibop=1.1-1 quickshell-git=0.1-1 caelestia-shell=1.1-1 python-foo=1.0-1
 # The host's addresses and routes (ip -j): its LAN (eth0, the address pasta gives the sandbox), docker0 (IPv4 and IPv6),
 # a VPN's tunnel route, loopback and link-local ones; the routes the sandbox's network is closed off with noted (the
@@ -76,6 +89,7 @@ stub bwrap 'echo "bwrap $*" >>'"$t"'/calls; while [ "$1" != -- ]; do shift; done
 # shellcheck disable=SC2016
 stub git 'echo "git $* ${SANDBOXED:+(sandboxed)}" >>'"$t"'/calls; d=${@: -1}; mkdir -p "$d"
 printf "pkgbase = %s\n\tmakedepends = ${MAKEDEP:-cmake}\n" "${d##*/}" >"$d/.SRCINFO"
+printf "pkgname=%s\npkgrel=1\n" "${d##*/}" >"$d/PKGBUILD"
 case ${d##*/} in
     caelestia-shell) printf "\tdepends = quickshell>=0.2\npkgname = caelestia-shell\n" >>"$d/.SRCINFO" ;;
     quickshell-git) printf "pkgname = quickshell-git\n\tprovides = quickshell=0.3\n" >>"$d/.SRCINFO" ;;
@@ -86,7 +100,7 @@ stub gpg 'true'
 # package beside it too, and a link to a file of the user's
 # shellcheck disable=SC2016
 stub makepkg 'b=${PWD##*/}
-case " $* " in *" --verifysource "*) echo "verify $b $SRCDEST ${SANDBOXED:+(sandboxed)}" >>'"$t"'/calls
+case " $* " in *" --verifysource "*) echo "verify $b $SRCDEST $(grep "^pkgrel=" PKGBUILD) ${SANDBOXED:+(sandboxed)}" >>'"$t"'/calls
     [ -z "${FIFO:-}" ] || { rm .SRCINFO; mkfifo .SRCINFO; }; exit 0 ;; esac
 [ "$b" = "${FAIL_BASE:-}" ] && { echo "==> ERROR: build failed"; exit 1; }
 case $b in equibop | caelestia-shell) v=1.1-1 ;; python-foo) v=1.0-1 ;; *) v=0.4-1 ;; esac
@@ -138,6 +152,9 @@ grep -vF -- "--dns-forward 169.254.0.53 --dns-forward fd53:a6e4:2c3a::53 -- $t/a
 # (each base's sources in a folder of its own: same-named sources don't collide)
 grep -q "^verify equibop $build/src/equibop " "$t/calls" && grep -q "^verify quickshell-git $build/src/quickshell-git " "$t/calls" ||
     fail "the bases' sources share a folder: $(grep '^verify' "$t/calls")"
+# (AgrOS's fix added to Quickshell's build files as fetched, as [agros]'s build has it (aur-agros-patch); none to equibop)
+grep -q "^verify quickshell-git .* pkgrel=1.1 " "$t/calls" && grep -q "^verify equibop .* pkgrel=1 " "$t/calls" ||
+    fail "Quickshell's rebuild without AgrOS's fix: $(grep '^verify' "$t/calls")"
 builds=$(grep -- '--build ' "$t/calls" | grep '^bwrap')
 [[ $(wc -l <<<"$builds") == 2 ]] && grep -q -- "--overlay-src /usr --overlay-src $build/stage/usr --ro-overlay /usr" <<<"$builds" ||
     fail "the build doesn't see the download's packages over /usr: $builds"
@@ -215,6 +232,61 @@ FOREIGN=python-foo NEED=cmake PENDING="python 3.13.7-1 -> 3.14.0-1" "$t/auto-upd
     fail "the AUR's Python package not rebuilt for the new Python: $(cat "$aur/rebuild" 2>/dev/null) $(cat "$t/calls")"
 grep -qx "download marked" "$t/calls" && grep -q "^pacman -Sw .* -- cmake$" "$t/calls" && [[ ! -e $t/au/downloading ]] ||
     fail "the builds' download not under the boot's mark, or the mark left through the builds: $(cat "$t/calls")"
+# The same, with pacman.conf holding it back (IgnorePkg): not built, and why that runtime waits said (not an empty reason),
+# under its AUR base's name (one of a split base here), as every drop is
+aur_has python-foo/foo-split=1.0-1
+stub pacman-conf '[ "$1" = CacheDir ] && echo '"$t/cache/"'; case " $* " in *" IgnorePkg "*) echo "python-f*" ;; esac; true'
+: >"$t/calls"
+FOREIGN=python-foo PENDING="python 3.13.7-1 -> 3.14.0-1" "$t/auto-update-aur" "$t/db" >"$t/out" 2>&1 &&
+    fail "a rebuild pacman.conf holds back reported success"
+[[ $(cat "$aur/failed") == "foo-split: pacman.conf holds it back (IgnorePkg): it can't be rebuilt for the new python 3.14.0-1" ]] &&
+    ! grep -q "^built " "$t/calls" || fail "a held-back rebuild built, or its reason not said: $(cat "$aur/failed" 2>/dev/null)"
+# ...its base's other package, not held, not built either (the base is one build), and the base said once
+aur_has python-foo/foo-split=1.0-1 python-bar/foo-split=1.0-1
+: >"$t/calls"
+FOREIGN="python-foo python-bar" QOQ="python-foo python-bar" PENDING="python 3.13.7-1 -> 3.14.0-1" "$t/auto-update-aur" "$t/db" >"$t/out" 2>&1 &&
+    fail "a split base with one package held back reported success"
+[[ $(cat "$aur/failed") == "foo-split: pacman.conf holds it back (IgnorePkg): it can't be rebuilt for the new python 3.14.0-1" ]] &&
+    ! grep -q "^built " "$t/calls" || fail "a split base with one package held back built, or not said once: $(cat "$aur/failed" 2>/dev/null) / $(grep '^built' "$t/calls")"
+# ...and the one held not a rebuild itself (only its sibling is): the base not built either, said
+stub pacman-conf '[ "$1" = CacheDir ] && echo '"$t/cache/"'; case " $* " in *" IgnorePkg "*) echo "python-bar" ;; esac; true'
+: >"$t/calls"
+FOREIGN="python-foo python-bar" PENDING="python 3.13.7-1 -> 3.14.0-1" "$t/auto-update-aur" "$t/db" >"$t/out" 2>&1 &&
+    fail "a split base with a package held (not a rebuild) reported success"
+[[ $(cat "$aur/failed") == "foo-split: python-bar, of the same build, is held back by pacman.conf (IgnorePkg): not built" ]] &&
+    ! grep -q "^built " "$t/calls" || fail "a split base built beside its held package: $(cat "$aur/failed" 2>/dev/null) / $(grep '^built' "$t/calls")"
+aur_has python-foo=1.0-1
+# ...and one needing what pacman.conf holds back (the upstream gate's Hyprland libraries: pacman takes it when asked by
+# name): not built against it, said
+stub pacman-conf '[ "$1" = CacheDir ] && echo '"$t/cache/"'; case " $* " in *" IgnorePkg "*) echo "hyprutils" ;; esac; true'
+: >"$t/calls"
+FOREIGN=python-foo NEED="hyprutils>=0.15" SP_GOT="hyprutils" PENDING="python 3.13.7-1 -> 3.14.0-1" "$t/auto-update-aur" "$t/db" >"$t/out" 2>&1 &&
+    fail "a build needing a held-back package reported success"
+[[ $(cat "$aur/failed") == "python-foo: hyprutils, which it needs, is held back by pacman.conf (IgnorePkg: hyprutils)" ]] &&
+    ! grep -q "^built python-foo" "$t/calls" && ! grep -q "^pacman -Sw" "$t/calls" ||
+    fail "built against a held-back package, or why not said: $(cat "$aur/failed" 2>/dev/null) / $(cat "$t/calls")"
+# ...or what needs a held one's newer version (pacman can't satisfy it), not as missing from the repos; and the same
+# words for one the repos don't have at all, not blamed on the gate; and one the repos have only older
+reason() {
+    : >"$t/calls"
+    FOREIGN=python-foo NEED=$1 PENDING="python 3.13.7-1 -> 3.14.0-1" "$t/auto-update-aur" "$t/db" >"$t/out" 2>&1 &&
+        fail "a build whose dependency can't be had reported success ($1)"
+    grep -q "^built python-foo" "$t/calls" && fail "built with a dependency that can't be had ($1)"
+    cat "$aur/failed"
+}
+[[ $(SP_UNSAT="hyprutils>=0.15" SP_HELD=hyprutils reason "hyprtoolkit>=0.5") == "python-foo: hyprtoolkit, which it needs, needs a newer hyprutils, which pacman.conf holds back (IgnorePkg)" ]] ||
+    fail "a dependency needing a held package's newer version not said so: $(cat "$aur/failed")"
+[[ $(SP_UNSAT=aurpkg reason "needsaur") == "python-foo: needsaur, which it needs, needs aurpkg, which isn't in the repos (at that version)" ]] ||
+    fail "a dependency needing what no repo has blamed on the gate: $(cat "$aur/failed")"
+[[ $(SP_NOTFOUND=1 SP_BARE=1 reason "libfoo.so=2-64") == "python-foo: libfoo.so, which it needs, is in the repos only at an older version than it needs" ]] ||
+    fail "a library the repos have only at an older soname said as missing: $(cat "$aur/failed")"
+[[ $(SP_OTHER="failed to prepare transaction (conflicting dependencies)" reason "foo") == "python-foo: foo, which it needs, couldn't be worked out: error: failed to prepare transaction (conflicting dependencies)" ]] ||
+    fail "another failure of pacman's said as something else: $(cat "$aur/failed")"
+[[ $(SP_NOTFOUND=1 reason "aur-only-thing") == "python-foo: aur-only-thing, which it needs, isn't in the repos (only the AUR: Updates builds it)" ]] ||
+    fail "a dependency only the AUR has not said so: $(cat "$aur/failed")"
+[[ $(SP_NOTFOUND=1 SP_BARE=1 reason "hyprtoolkit>=9") == "python-foo: hyprtoolkit, which it needs, is in the repos only at an older version than it needs" ]] ||
+    fail "a dependency the repos have only older said as missing: $(cat "$aur/failed")"
+stub pacman-conf '[ "$1" = CacheDir ] && echo '"$t/cache/"'; true'
 # The AUR out of reach: said
 stub curl 'exit 7'
 PENDING="foo 1-1 -> 2-1" "$t/auto-update-aur" "$t/db" >/dev/null && fail "the AUR out of reach reported success"
@@ -240,7 +312,7 @@ if PATH=$sys_path unshare -rn true 2>/dev/null; then
     out=$(PATH=$sys_path unshare -rn "$t/auto-update-aur" --jail 10.0.0.5/8 -- echo ran 2>&1) && fail "a network not closed off ran its command: $out"
     [[ $out != *ran* ]] || fail "a network not closed off ran its command: $out"
 else
-    echo "(no user and network namespace here: the sandbox's network closing off not run for real)"
+    skipped "no user and network namespace here: the sandbox's network closing off not run for real"
 fi
 
 # The real sandbox, where this machine lets a user make one (an unprivileged bwrap)
@@ -251,7 +323,7 @@ if [[ -n $real ]] && "$real" --unshare-all --ro-bind / / true 2>/dev/null; then
     # the stand-in, its command run as it is, for what's hidden)
     pasta=$(command -v -p pasta || true)
     if [[ -n $pasta ]] && ! "$pasta" --config-net --quiet -t none -u none -T none -U none -- true 2>/dev/null; then
-        echo "(pasta can't make its namespace here, no /dev/net/tun or user namespaces: its stand-in used)"
+        skipped "pasta can't make its namespace here, no /dev/net/tun or user namespaces: its stand-in used"
         pasta=
     fi
     [[ -z $pasta ]] || rm "$t/bin/pasta" "$t/bin/ip"
@@ -319,7 +391,7 @@ time.sleep(60)' "@agros-test-$$" >"$t/port" &
         done
         kill "$listener" 2>/dev/null
     else
-        echo "(no pasta here: the sandbox's network, the host's loopback and other addresses out of its reach, not checked)"
+        skipped "no pasta here: the sandbox's network, the host's loopback and other addresses out of its reach, not checked"
     fi
     # The user's part refuses root (a user namespace's root: EUID 0)
     if unshare -r true 2>/dev/null; then
@@ -329,10 +401,10 @@ time.sleep(60)' "@agros-test-$$" >"$t/port" &
             [[ $out == "auto-update-aur: AUR packages are never built as root" ]] || fail "$m as root: $out"
         done
     else
-        echo "(no user namespace to be root in: the refusal of root not run)"
+        skipped "no user namespace to be root in: the refusal of root not run"
     fi
 else
-    echo "(no unprivileged bwrap here: the real sandbox not checked)"
+    skipped "no unprivileged bwrap here: the real sandbox not checked"
 fi
 if command -v shellcheck >/dev/null; then
     out=$(shellcheck -S warning "$t/auto-update-aur") || fail "shellcheck: $out"

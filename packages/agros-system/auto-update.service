@@ -12,7 +12,7 @@ Type=exec
 # slow download took. What it does install now: Flatpak updates (flatpak swaps an app's new version in whole),
 # AppImages, Proton builds (each moved in place once downloaded and checked) and the users' developer tools (npm, uv,
 # rustup, cargo, pipx: their own updaters); a Flatpak from a file is reinstalled, old one out first, so the script
-# holds sleep and power off (as root) around that step alone (30 min at most, skipped with less than that left of the
+# holds sleep and power off (as root) around that step alone (30 min at most, skipped with less than 35 min left of the
 # 4 h below), its file's download done before
 ExecStart=/usr/lib/agros/auto-update
 Nice=10

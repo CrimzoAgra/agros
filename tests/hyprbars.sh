@@ -43,7 +43,7 @@ printf '#!/bin/sh\necho "$(basename "$0") $*" >>"%s"\nexit 1\n' "$t/calls" >"$t/
 cp "$t/bin/curl" "$t/bin/git"; cp "$t/bin/curl" "$t/bin/sleep"; chmod +x "$t/bin/"*
 out=$(HOME=$t/home PATH=$t/bin:$PATH "$here/.local/bin/hyprbars-build" --prebuild 2>&1) && fail "--prebuild offline succeeded: $out"
 grep -q "^git .*clone" "$t/calls" || fail "--prebuild didn't build for a new Hyprland: $out"
-grep -q "^curl" "$t/calls" && fail "--prebuild waited for the network: $(cat "$t/calls")"
+grep -q "^curl\|^sleep" "$t/calls" && fail "--prebuild waited for the network, or between tries: $(cat "$t/calls")"
 [[ $(cat "$lib/built-for") == "0_aq_0.0 $sum" ]] || fail "--prebuild offline changed the build's stamp"
 rm "$t/bin/curl" "$t/bin/git" "$t/bin/sleep"
 
@@ -70,8 +70,10 @@ fi
 
 # The patch on this series' tag and on main
 ver=$(grep -oP 'GIT_TAG\s+"v\K[0-9.]+' /usr/include/hyprland/src/version.h)
-git clone -q --filter=blob:none https://github.com/hyprwm/hyprland-plugins.git "$t/src" 2>/dev/null ||
-    { skipped+=("patch: offline"); echo "ok hyprbars (SKIPPED: $(IFS=';'; echo "${skipped[*]}"))"; exit 0; }
+# (offline: skipped here, but not on CI, where a pass approves that Hyprland for AgrOS's machines: the upstream gate)
+git clone -q --filter=blob:none https://github.com/hyprwm/hyprland-plugins.git "$t/src" 2>/dev/null || {
+    [[ -z ${CI:-} ]] || fail "hyprland-plugins couldn't be fetched: the patch not checked"
+    skipped+=("patch: offline"); echo "ok hyprbars (SKIPPED: $(IFS=';'; echo "${skipped[*]}"))"; exit 0; }
 commit=$(grep -oP 'GIT_COMMIT_HASH\s+"\K[0-9a-f]+' /usr/include/hyprland/src/version.h)
 pin=$(grep -oP "\[\"$commit\", \"\K[0-9a-f]{40}" "$t/src/hyprpm.toml" || true)
 for ref in "${pin:-v${ver%.*}.0}" origin/HEAD; do

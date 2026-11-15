@@ -23,7 +23,7 @@ arch_pam() {
         'account    required                    pam_unix.so' 'password   required                    pam_unix.so          try_first_pass nullok shadow' \
         'session    required                    pam_unix.so' >"$1/system-auth"
     local m
-    for m in securetty nologin shells access loginuid systemd env faillock systemd_home unix permit gnome_keyring; do
+    for m in securetty nologin shells access loginuid systemd env faillock systemd_home unix permit gnome_keyring succeed_if; do
         : >"$2/pam_$m.so"
     done
 }

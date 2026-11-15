@@ -61,7 +61,7 @@ Server = https://crimzoagra.github.io/agros/$arch
 | `agros-desktop` | The meta package: every package the desktop is made of (Hyprland, Caelestia, the apps, PipeWire with its JACK, fonts, themes). Hardware apps are optional |
 | `agros-hyprland-settings` | The settings every new account gets (`/etc/skel`): Caelestia's own configs (its dots, pinned), AgrOS's over them (everything in `.config`), launcher entries, LibreWolf settings, the wallpaper, and every version each of these has had (`/usr/share/agros/skel-versions`, from the repo's and Caelestia's git history); fonts and icons system-wide |
 | `agros-scripts` | The programs in `.local/bin` and the data they use, in `/usr/lib/agros`, linked into each home (by links in `/etc/skel` for new accounts; `agros-links` adds new ones at every login, before the desktop starts, and copies in once each config file and launcher entry an update added to `/etc/skel`, and updates the settings you never edited) |
-| `agros-system` | The update at every boot (downloaded and AUR apps built at boot, installed at shutdown with firmware), pacman hooks that rebuild each user's Caelestia overlay and hyprbars and check the Hyprland config, Bluetooth and the screens back on after sleep, the ananicy rule, the keyring, the night light's and time zone's permissions (geoclue, polkit), folder icons that follow the colour scheme (a sudoers rule for `papirus-folders` alone), mDNS from Avahi alone (resolved's off: the two clashed over the computer's name), UFW's logging off (once), wired links that keep dropping stepped down |
+| `agros-system` | The update at every boot (downloaded and AUR apps built at boot, installed at shutdown with firmware), pacman hooks that rebuild each user's Caelestia overlay and hyprbars and check the Hyprland config, Bluetooth and the screens back on after sleep, the ananicy rule, the keyring, the night light's and time zone's permissions (geoclue, polkit), folder icons that follow the colour scheme (a sudoers rule for `papirus-folders` alone), mDNS from Avahi alone (resolved's off: the two clashed over the computer's name), UFW's logging off (once) |
 | `agros-greeter` | The Caelestia-style login screen for greetd, its PAM service following the system's, `login-reset` |
 | `agros-boot` | The hidden boot menu in AgrOS's GRUB theme (`grub-theme/`, its pictures and fonts made by `make.sh`), the faster splash with shutdown titles, no text at boot or shutdown (behind the splash), screens in their best mode from boot |
 | `agros-nvidia`, `agros-camera-switch` | NVIDIA driver loaded early; the Legion's camera switch |
@@ -70,8 +70,13 @@ Server = https://crimzoagra.github.io/agros/$arch
 | `agros-vmware` | In a VMware VM, the desktop on its virtual graphics card: a shim that lets Hyprland and the login screen use its buffers (only there, only with `vmwgfx`; Hyprland gets it from a drop-in for its uwsm unit, `wayland-wm@hyprland.desktop.service.d`, so no app started through uwsm loads it) |
 | `agros-thunar-usage` | A Thunar plugin: a bar beside the free space in its status bar, showing how full the folder's drive is (each window and tab its own drive; the theme's warning colour past 90%) |
 
-The AUR packages AgrOS uses (`aur/packages.txt`: Quickshell, Caelestia, equibop, Spicetify, darkly, ...) are built into
-the same repo, and so is CachyOS's installer, `cachyos-calamares-next` rebuilt with AgrOS's changes (the live ISO
+The AUR packages AgrOS uses (`aur/packages.txt`: Caelestia, equibop, Spicetify, darkly, ...) are built into
+the same repo. Quickshell is built first, on its own, with AgrOS's fix
+(`packages/agros-system/aur-patches/quickshell-git.patch`, added by `aur-agros-patch`, its pkgrel a `.1` above the
+AUR's). Without it, a window that closed while Quickshell was asking Hyprland for the window list came back from the
+late answer and stayed listed for good (a game quit, its icon left in the dock). The boot's rebuild on a new Qt
+(`auto-update-aur`) adds the same fix, and a patch that no longer applies fails the build rather than going out without
+it. CachyOS's installer is built there too: `cachyos-calamares-next` rebuilt with AgrOS's changes (the live ISO
 installs it from `[agros]`): its version is CachyOS's with a `.N` after the pkgrel (`calamares_rel` in
 `ci/build-repo.sh`), raised with any change to AgrOS's changes, beside their new checksum (`calamares_sum`), or CI
 fails. Most of AgrOS's own packages are versioned by the repo's commits (one built again from the same commit with
@@ -91,7 +96,9 @@ updated, only copied in when missing: Caelestia's `shell.json` (its settings, th
 screens). A file `package()` changes at build time only has its current version listed (Caelestia's `execs.lua` has
 every version, with the same change made).
 
-The CI needs two repository secrets: `AGROS_GPG_KEY`, the signing key, from `gpg --armor --export-secret-keys <id>`;
+The CI needs two repository secrets: `AGROS_GPG_KEY`, a signing subkey of AgrOS's key without a passphrase, never the
+key itself (made as in agros-iso's manual, *Building the ISO*, step 7: the same secret in both repos; a leaked one is
+revoked and the key every install trusts stays);
 and `AGROS_ISO_TOKEN`, a fine-grained token for `agros-iso` only with **Actions: Read and write**, which starts
 agros-iso's ISO build after each publish (the `iso` job fails without it). It also needs GitHub Pages turned on with
 "GitHub Actions" as its source. An optional repository variable, `AGROS_PUBLISHED`, points the build at another
@@ -151,7 +158,7 @@ The default wallpaper is Caelestia's own (`assets/wallpaper.webp` in its shell).
 |---|---|
 | `packages/` | The PKGBUILDs of AgrOS's packages (and their system files: units, hooks, the boot update) |
 | `aur/packages.txt`, `ci/` | The AUR packages built into `[agros]`, and the script that builds the repo |
-| `system/` | Files the system packages install (Bluetooth after sleep, the screens on after sleep, the wired-link watch, the boot video mode, the ananicy rule, the night light's location (geoclue), the time zone's permission (polkit), resolved's settings, the `papirus-folders` sudoers rule) |
+| `system/` | Files the system packages install (Bluetooth after sleep, the screens on after sleep, the boot video mode, the ananicy rule, the night light's location (geoclue), the time zone's permission (polkit), resolved's settings, the `papirus-folders` sudoers rule) |
 | `.config/caelestia/` | Hyprland settings (`hypr-user.lua`, `hypr-vars.lua`, `user/`) and Caelestia settings (`shell.json`) |
 | `.config/quickshell/` | The switcher, desktop widgets, Updates and Desktop Settings apps, their shared colours (`common/`), and the dock's pins |
 | `.local/share/caelestia-overlay/` | My changes to Caelestia's own code, patched in by `caelestia-overlay` |
@@ -209,7 +216,8 @@ Changes apply right away.
     **Launcher**, **Notifications** (and toasts), **Lock and session** (lock screen, idle, the session menu), **Region
     and services** (weather place and units, clock, data units, media player, volume step): the Caelestia options most
     often changed, with plain labels
-  - **Features**: low input lag in games (tearing allowed for games only), each of game-focus's four
+  - **Features**: low input lag in games (tearing allowed for games only; while one is open the pointer is drawn into the picture,
+    as Hyprland allows no tearing with the graphics card's cursor layer showing one: `user/apps.lua`), each of game-focus's four
     behaviours, store launchers starting minimised, each Lutris change, and
     each change to Caelestia (listed from `caelestia-overlay`'s and the Lutris overlay's `patch.py --list`, so new ones
     show up by themselves). A Caelestia change turned off is left out of the rebuild (`Off:`, not a warning)
@@ -233,8 +241,7 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
 
 - **`.config/caelestia/hypr-user.lua`**: my Hyprland settings, loaded after Caelestia's own: keyboard layout, no mouse
   acceleration (unless turned on in the Settings app), the Settings app's pointer speed, scrolling, tap to click and
-  key repeat, the mouse pointer drawn as part of the picture (so it doesn't stay on the shutdown screen), the `dots`
-  table ([Lua API](#lua-api-dots)), and the modules in `user/`
+  key repeat, the `dots` table ([Lua API](#lua-api-dots)), and the modules in `user/`
 - **`.config/caelestia/user/`**: the rest of my Hyprland settings, by topic (saving one reloads Hyprland):
   - `monitors.lua`: layout and refresh rates; `hosts/<hostname>.lua`: one machine's own screens
   - `workspaces.lua`: workspaces synced across screens
@@ -290,11 +297,15 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
       the result (also if the menu was closed meanwhile) and opens the Updates app
     - Opens over fullscreen games and videos too (`general.showOverFullscreen` in `shell.json`; notifications and
       toasts stay off fullscreen windows)
+  - Panels that open on hover (dashboard, Super menu, sidebar, volume, utilities) open only from the screen's last
+    pixel, not the border's whole width, and not while a mouse button is held or a window is dragged; once open, one
+    stays while the pointer is over it (`edge_triggers`)
   - Notifications:
     - The sidebar slides down from the top when you hover the top edge above it, with notifications only (no
       divider, ending above the bottom-right panel); Super+K opens it too, merged with the bottom-right panel
-      (a Caelestia with its own shortcut mode for the sidebar, as main has, keeps it: only its choice of which opening
-      counts as by the key is replaced, as its own counts the top edge's)
+      (a Caelestia with its own shortcut mode for the sidebar, as main has, keeps it: its choice of which opening counts
+      as by the key is replaced, as its own counts the top edge's, and as on v2.5.0 the pointer on the sidebar puts it
+      back under hover control and the launcher closing closes it unless hovered)
       It closes without bouncing back, and hovering the edge doesn't open it while a notification pop-up is on screen
       (nor afterwards for a pointer that stayed there: move away and back)
     - One neutral colour whatever their urgency
@@ -331,7 +342,8 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
   was there); the changes it skipped are said once the new shell is up (Caelestia is the notification server: said
   during the build, they went to nobody). A shell that won't close in 5 s is killed outright. With a game open, any
   restart (the Settings app's, a rebuild handed over, the shortcut) waits until it closes (`after-games`, in the
-  background), and a notification says so
+  background), and a notification says so. Run outside the desktop (SSH, a text console) or without the desktop's
+  environment (no `XDG_CURRENT_DESKTOP`: the shell would start with no Qt theme), it has Hyprland run it instead, once
 - **`.local/bin/caelestia-pin`**: pin apps to the launcher or dock from a picker
 - **Night light** (`.config/gammastep/config.ini`): gammastep, which Caelestia's `execs.lua` starts at login with
   geoclue's demo agent (both in `agros-desktop`), turns the screens warmer after sunset (6500 K by day, 4000 K at
@@ -380,8 +392,10 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
     Enter, closed by Esc or a click elsewhere
   - A wrong password said at once: its PAM service, `/etc/pam.d/greetd`, is made by `greetd-pam` from `greetd.pam` and
     the system's own stack as it is (its auth lines, with nodelay on pam_unix and pam_faillock, which still counts and locks
-    out; the keyring's lines kept), and made again after each `pambase` or `pam` update (a pacman hook), so it follows
-    the system's changes. A stack it can't follow leaves the file as it was, said. sudo and the text consoles keep theirs
+    out; the passwords keyring unlocked at login, from the template's lines, not for the login screen's own `greeter`
+    account), and made again after each `pambase` or `pam` update (a pacman hook), so it follows the system's changes.
+    A stack it can't follow leaves the file as it was, said (never one that can't log in; on a first install, greetd's
+    own, so the keyring isn't unlocked at login and apps ask for its password). sudo and the text consoles keep theirs
 - **`.config/spicetify/Themes/caelestia/user.css`**: Caelestia's Spotify theme (from its dots)
   with thin scrollbars; its colours (`color.ini`) are written by Caelestia
 - **`.config/hypr/xdph.conf`**: screen sharing without asking each time
@@ -437,6 +451,31 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
     title bar resizes upwards from the bar's top, its top corners there (where the bar meets the app is a side; the
     plugin's patch). Not while a game is open: the grab area of a borderless game reached the next screen and the
     screen's corners, so a click there started resizing it
+  - Snapping, as on Windows (floating mode; not games or fullscreen windows; needs the title bar plugin's hook): let
+    go with the pointer at a screen's top edge, a window is maximised; at its left or right edge, that half; in a corner
+    (the last sixth of an edge), that quarter; on the screen the pointer is on. The edges are inside Caelestia's border
+    and bar, where the pointer is held while a window is moved; a side with another screen beyond isn't one (the
+    pointer goes on across). A move takes effect after 5 px: a click on a maximised or snapped window's title bar (an
+    app's own too, or Super+click) leaves it as it is. A see-through
+    preview (the overlay's `SnapPreview.qml`) shows the zone and follows the pointer between zones. Dragged away, a
+    snapped window gets back the size it had; maximised or floated by the switch, it's no longer snapped. Snapped
+    windows next to each other (side by side or one above the other) share their seam: a two-way resize cursor over
+    the gap (not while a special workspace is open over them), where a press resizes that one edge (the plugin takes the press: not the app's, nor a title bar button's); resizing one
+    moves every edge on that seam's line (the whole line with four quarters) in the same frame, stopping at either
+    app's smallest size. Snapping, its seams and maximise follow Hyprland's gaps and border as they are now (Caelestia's
+    Game mode sets them while it runs), as the plugin's seams do
+  - Always within reach: after a move and after a screen change, a floating window's title bar is all below the top
+    border and at least 150 px of it inside the other borders (not on a side with another screen beyond). A screen's
+    size change (a VM window resized) re-fits windows once, from Hyprland's event: maximised ones fill it again, snapped
+    ones their zone, with seams that were dragged kept in proportion; a window minimised meanwhile is fitted the same
+    way as it comes back (`refit_window`). Maximised and snapped ones (no others) are fitted again a second after
+    whatever can change their box settles: the gaps or border (Game mode on or off, the Settings app), title bars on or
+    off, the space Caelestia's bar reserves (back after a shell restart); Hyprland's `config.props_refreshed`,
+    `layer.opened` and `layer.closed`, which come for much else too, so each only if its box changed. Each seam is kept
+    where it was, the new gap across it; edges rounded to the nearest pixel, so on-and-off doesn't creep. X11 menus and
+    tooltips are never moved into reach: their apps place them. A pop-up keeps its own size: one wider or taller
+    than the screen opens shrunk to fit, in the middle, and one opening off it is brought within reach (not X11 menus
+    and tooltips, which their apps place)
   - The window clicked, or picked in the dock or Alt+Tab, comes to the front; in floating mode the pointer stays
     where it is, and focus changes on a click, not on hover
   - Clicking a notification brings the app that sent it to the front (or opens it)
@@ -448,10 +487,15 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
     layout, set by `agros-welcome`), VSCodium's are hidden (`window.controlsStyle`); Steam, which can't turn its own off,
     gets no bar
   - None on fullscreen windows or games (the `game` tag: Proton's `steam_app_<id>`, Lutris's, gamescope's and native
-    Steam games; often borderless over the whole screen)
+    Steam games; often borderless over the whole screen), X11 menus and pop-ups (Caelestia's `xwl_popup` tag, Wine's
+    included), nor apps with their own buttons (Steam, Proton VPN)
   - The hyprbars plugin with my patch (`.local/share/hyprbars/hyprbars.patch`: hover highlight, restore icon,
     un-maximise on drag, square buttons; it also hooks Hyprland's drag start, for any window, bar or not: a drag of a
-    maximised window by the app's own title bar or edges, and edge resizes moving one edge only), built by `hyprbars-build` for the running Hyprland into `~/.local/lib/hyprbars/`. It runs
+    maximised window by the app's own title bar or edges, and edge resizes moving one edge only; and every drag for
+    the snapping: each one's start, after 5 px for a move, the new size then taken up by the drag (`updateDragWindow`),
+    each step and its end told to `user/windows.lua`, the pointer held inside the screen's free part while moving, the
+    seam cursor and press between snapped windows, and `hl.plugin.hyprbars.min_size` for Lua), built by
+    `hyprbars-build` for the running Hyprland into `~/.local/lib/hyprbars/`. It runs
     as Hyprland starts (`--login`): after a Hyprland update or a patch change it rebuilds in the background, with the
     AUR build (no highlight) meanwhile, and a notification if the build fails
 - **Keys** (`user/keys.lua`):
@@ -585,7 +629,9 @@ helper a package update just brought works before `agros-links` has linked it), 
   `hyprbars-build`, `timezone-auto`); any HTTP answer is online, an error too: only no connection waits
 - **`.local/bin/pacman-lock-holder`**: what running may hold pacman's lock, the one list of what takes it
   (`auto-update`, also before it takes out a stale lock of the boot's download, and `dotfiles-check`); one only reading
-  (a query, a search or info, the files database, `paru -G`, `-p`/`--print`) doesn't, nor one on another database
+  (a query, a search or info, the files database, `paru -G`, what it would do printed, `-p`/`--print`/`--print-format`,
+  an upgrade's too, `-Sup`, but not with `-y`/`--refresh` or `-c`/`--clean`, which take the lock) doesn't, nor one on
+  another database
   (`-b`/`--dbpath`, or another system's, `-r`/`--root`; a plain pacman is on `/var/lib/pacman`'s)
 - **`.local/bin/updates-pending`**: the updates waiting from a `pacman -Qu`/`paru -Qua` list, those `pacman.conf` holds
   back left out (`update-apps`, `auto-update`)
@@ -599,12 +645,16 @@ helper a package update just brought works before `agros-links` has linked it), 
 - **`.local/bin/agros-each-user`**: runs a command as each AgrOS user (pacman hooks, the boot's update); `--list`
   lists them; `--as <user>` runs one as that user (or the boot's AUR builds' `agros-aur`) from root with `setpriv` (never `runuser`, `su` or `sudo`: their PAM
   opens a logind session, whose processes leave the calling service's cgroup and time limit, and makes the user count
-  as logged in); `--sessions` the session bus of each one logged in to a desktop (a logind session of type Wayland or
+  as logged in). Either way the command runs in a session of its own, with nothing on its input and its output
+  through pipes this opens and waits for: a user's command (theirs to change) never reaches root's terminal nor root's
+  own files (auto-update's log); the caller's stop (a timeout, a signal) is passed on to that whole session and then
+  taken by `agros-each-user` itself (a run over the users stops, not on to the next one); the list of users is read
+  whole first, nothing of it left open for a command to read; `--sessions` the session bus of each one logged in to a desktop (a logind session of type Wayland or
   X11, class user: not the greeter's, a text or SSH login, nor a background one; its bus the user's own, not a link;
   camera switch); `--notify [--user
   <name>]` says something on their desktops, now or once someone logs in (up to 12 h), from a unit of its own
   (`systemd-run`), so the caller doesn't wait, as the user in their account's group (not the bus file's): the system's
-  one way (the firmware note, the wired-link watch, the boot's
+  one way (the firmware note, the boot's
   Proton notices)
 - **`.local/bin/screens-on`**: the screens Hyprland has switched off (DPMS) switched back on, in each of your Hyprland
   sessions (`hl.dsp.dpms({ action = "enable" })`, as Caelestia's idle sends it); only when one is off (screens on, a
@@ -636,7 +686,10 @@ helper a package update just brought works before `agros-links` has linked it), 
 - **`.config/systemd/user/service-failed@.service`**: when game-focus or tray-keeper keeps crashing (5 times in a
   minute) it's stopped instead of restarting forever, with a notification showing its last error
 - **At login** (`user/desktop.lua`): `widgets-start`, `greeter-theme-sync`, `console-clear` (no old
-  text under the desktop at shutdown), `keyring-default`, `bluetooth-on`, `vm-screen-follow` (in a VM), `timezone-auto` (when on), the update check timer, and `dotfiles-check`
+  text under the desktop at shutdown), `cursor-hide-at-shutdown` (the pointer is on the graphics card's cursor layer,
+  Hyprland's default, which follows the mouse with no lag; nothing clears that layer when the desktop closes, so this
+  hides it at logind's PrepareForShutdown, holding a delay lock until Hyprland has taken that up; a shutdown called off
+  after that brings it back), `keyring-default`, `bluetooth-on`, `vm-screen-follow` (in a VM), `timezone-auto` (when on), the update check timer, and `dotfiles-check`
   after 30 s
 - **`.config/autostart/`**: CachyOS's welcome app, Geoclue's demo agent (Caelestia starts it already) and Polychromatic's
   own autostart off (OpenRazer's service applies the
@@ -670,7 +723,8 @@ helper a package update just brought works before `agros-links` has linked it), 
   checksums
 - **`.local/bin/flatpak-bundle-update`**: updates Flatpaks installed from a downloaded `.flatpak` file (no Flatpak repo,
   e.g. ArtCraft Launcher) from their GitHub releases, checksum-verified; `--check` lists the ones with a newer version
-  (both use `.local/share/github-release/lib.sh`: the release's x86_64 file and its checksum)
+  (both use `.local/share/github-release/lib.sh`: the release's x86_64 file and its checksum). At boot, each user's
+  own are done as that user and the system-wide ones once, as root
 - **`.local/bin/capri-update`**: installs and updates Capri: my fork (`CrimzoAgra/capri-overlay`: CapriDesktop with
   her brain on Claude Code, on Hyprland, her intro and new text box) merged with the latest **release** (v* tag) of the
   original ([nunezValen/CapriDesktop](https://github.com/nunezValen/CapriDesktop)), not every commit to its main. Built
@@ -709,7 +763,38 @@ brings each change; nothing to run by hand).
   - "Update all" runs `update-apps`, showing its progress; shown only while something is waiting. Closed with the
     title bar; an update already running carries on (its log: `$XDG_RUNTIME_DIR/update-apps.log`), and opening it
     again and pressing "Update all" follows it
-- **`.local/bin/update-apps`**: updates everything (system and AUR apps with `paru -Syu`, then each kind
+- **The upstream gate** (`packages/agros-system/agros-gate.conf` at `/etc/pacman.d/agros-gate.conf`, which
+  `agros-system`'s install adds to `pacman.conf`'s Include lines, with the file; `.local/bin/update-gate`): Hyprland and its libraries (the packages AgrOS's config, title
+  bar plugin and shell patches are written against) are held back from every pacman run, a manual one too, and updated
+  by AgrOS's own updates (the boot's, the Updates app) only to versions AgrOS's CI has checked:
+  - CI's test job runs every test against the newest Hyprland from Arch (the real one loading the whole config,
+    `tests/hypr-api.sh`; against Hyprland's own Lua stubs, in handlers too: every Hyprland name and event AgrOS uses,
+    the settings it reads by name, and those it makes in one-line `hl.config` calls (a multi-line one only through the
+    load); the plugin built; the overlay applied); when all pass, those versions go on the approved list, published
+    beside the `[agros]` repo (`agros-approved`, "name version" without the pkgrel, earlier approvals kept). Each
+    package's version is approved on its own, not as the set it was tested in (decided: pacman's soname dependencies
+    already refuse a mix whose libraries don't fit, and a mirror a little behind isn't held for it)
+  - `update-gate <pacman.conf> <out>` gives the pacman.conf to update with: without the gate's Include when every gated
+    package goes to an approved version (or only a rebuild of the same one, as for a library's new soname), else as it
+    is (held together, and said: "waits for AgrOS's check"); a library whose update would break a held one held with it,
+    and a package whose update needs one held (one rebuilt for a held library's new version; pacman's
+    own dry run says which). Held, it's held by the gate's Include even when `pacman.conf` lost its own (a merged
+    `.pacnew`). Every place that works out what to update goes through it, on the lists it uses: the boot's download
+    and AUR builds (one needing a held package, or a newer version of one, isn't built: said; one `pacman.conf` itself
+    holds back, `IgnorePkg`, isn't built either, nor the others of its build, and isn't counted as waiting; one a new Qt
+    needs rebuilt holds that Qt back, said as any rebuild that can't be done), the shutdown's install
+    (deciding again, the Updates app may have synced newer lists since, but from the approved list kept at the boot,
+    `--offline`: nothing let through that the boot didn't download), the Updates app's list and its update. A held
+    update isn't listed in the Updates app; the update log says what waits ("waits for AgrOS's check"). A version older
+    in the repo than installed (a rollback) doesn't count: pacman keeps the newer one. The list is kept for when the
+    repo can't be reached; never fetched, nothing new
+  - The ISO build (agros-iso's `check_gate`) stops when its Hyprland isn't approved, keeping the published ISO; the
+    ISO keeps a copy of that approved set, and a new install gets it rather than the newest unchecked one (agros-iso's
+    `agros-gate-install`, an installer step)
+  - The Include comes and goes with the file (`agros-system`'s install adds it, its removal takes it out): pacman can't
+    read a config including a missing file, and the ISO's `pacman.conf` for the installed system is in place before
+    anything is installed
+- **`.local/bin/update-apps`**: updates everything (system and AUR apps with `paru` through the upstream gate, then each kind
   `update-kinds` runs: firmware with fwupd, Flatpaks, AppImages, Capri, Proton builds, developer tools), like at boot.
   `--list` is what the Updates app shows (`update-kinds --list`); every 6 hours (`update-check.timer`) it checks, and when
   updates are waiting a notification's "Update now" opens the Updates app and starts. VSCodium's own updater (which
@@ -900,25 +985,6 @@ brings each change; nothing to run by hand).
   systemd thaws the user sessions it froze (without NVIDIA's `SYSTEMD_SLEEP_FREEZE_USER_SESSIONS=0`, a VM's case), when
   Hyprland can't answer. Caelestia's idle still counts you idle until you touch something, so it doesn't switch them
   off again until then
-- **`agros-system`** also: a wired card whose link keeps dropping is stepped down (`system/wired-link-watch`, the
-  `agros-wired-link` service). It follows the kernel's link changes (`ip -o -ts monitor link`, nothing polled), of
-  physical wired cards only (a `device` in `/sys/class/net/<card>`, not Wi-Fi; bridges, VPNs, VMware's and other
-  virtual ones have none), and not in a VM (the unit's `ConditionVirtualization=!vm`: a VM's vmxnet3 or e1000 has a
-  `device`, and vmxnet3 says 10 Gbps). A drop is the carrier lost and back within 15 s (longer is a cable pulled out; a
-  link taken down on purpose isn't one, nor one within 15 s of a change the watch made: that renegotiates the link);
-  3 in 2 minutes on one card take one step, and the count starts again: Energy-Efficient
-  Ethernet off; then, above 1 Gbps (a 2.5 Gbps RTL8125 dropped every few seconds there and was steady at 1 Gbps), only
-  1 Gbps offered; then a note, once, to check the cable, router and port. Each step goes in the NetworkManager profile
-  active on the card (`ethtool.eee-enabled off`; `802-3-ethernet.auto-negotiate yes` with `speed 1000` and `duplex
-  full`, so NetworkManager offers only that speed: nm-settings-nmcli(5)), saved by `nmcli connection modify` and
-  applied with `nmcli device reapply` for the speed (else `connection up`), with `connection up` for EEE
-  (NetworkManager can't reapply `ethtool.*` settings on a live device); with no profile, through `ethtool`, made again whenever
-  the link comes back without it. What was done is noted per card, by its MAC, in `/var/lib/agros/wired-link`, so
-  nothing is done or said twice and a new card starts fresh. Each step is said to the logged-in users (`agros-each-user --notify`: on each desktop
-  session's bus, the AgrOS users', not the login screen's greeter nor a text login; nobody logged in, it's said when
-  someone is, up to 12 h, from a unit of its own) with the `nmcli` command that undoes it (also in the manual's Troubleshooting). An update restarts the running watch on the new version (marked
-  `needs-restart`, restarted by systemd's own pacman hook, as `agros-camera-switch` does). Removing `agros-system` leaves the profiles' changes and says
-  them, with that command
 - **`agros-system`** also: the night light's location without a prompt (`system/geoclue/agros.conf`) and the time zone
   changed without the password by admins at the machine (`system/polkit/agros-timezone.rules`), both described under
   Desktop and Caelestia
@@ -950,18 +1016,21 @@ Functions other programs call through `hyprctl eval 'dots.<name>(...)'`, kept in
 | `task_manager()` | `user/keys.lua` | bar menu |
 | `focus_app(entry, name, launch)` | `user/windows.lua` | notification clicks (overlay) |
 | `minimise_window()`, `maximise_window()`, `refit_maximised()` | `user/windows.lua` | title bar buttons; a screen change |
+| `refit_placed_soon()` | `user/windows.lua` | the overlay's `bar_space_refit` (Caelestia's bar's space changed); its own events |
+| `refit_window(win)` | `user/windows.lua` | `refit_maximised` (each window), a minimised window's restore |
 | `window_fades(on)` | `user/windows.lua` | `focus_window` (off while Alt+Tab leaves a fullscreen game, on again a moment later) |
 | `switcher_open(open)` | `user/keys.lua` | the switcher, as it opens and closes (Super+drag off while it's open) |
-| `toggle_window_mode()` | `user/windows.lua` | bar menu |
-| `window_drag_start(address, kind)`, `titlebar_drag_start(address, phase)` | `user/windows.lua` | the hyprbars patch |
+| `toggle_window_mode()` | `user/windows.lua` | bar menu, the Settings app (window mode) |
+| `window_drag_start(address, kind)`, `window_drag_step(address, kind)`, `window_drag_end(address, kind)`, `titlebar_drag_start(address, phase)` | `user/windows.lua` | the hyprbars patch (each drag's start, each step, its end) |
 | `titlebar_height(win)` | `user/titlebars.lua` | `user/windows.lua` |
 | `is_game(win)` | `user/apps.lua` | `user/windows.lua`, `user/titlebars.lua` |
 | `started_for_game(pid)` | `user/apps.lua` | `user/apps.lua` (store launchers a game started open minimised) |
 | `without_warps(fn)` | `user/windows.lua` | `user/workspaces.lua` (Super+N, `clean_workspace`) |
 | `setting(key)` | `hypr-user.lua` | everything the Settings app changes |
+| `hl.plugin.hyprbars.min_size(address)` (the other way round: the plugin's, for Lua) | the hyprbars patch | `user/windows.lua` (a snapped neighbour's smallest size) |
 | `settings(prefix)` | `hypr-user.lua` | the settings whose key starts with it, by key (`user/monitors.lua`: the Screens page's) |
 | `bind(name, action, opts)` | `hypr-user.lua` | my shortcuts (keys from the Settings app) |
-| `peek_screen(screen, address...)`, `peek(address)`, `peek_end()` | `user/windows.lua` | window peek (overlay `WindowPeek.qml`): only those windows on that screen, the others faded out; all back |
+| `peek_screen(screen, address...)`, `peek_end()` | `user/windows.lua` | window peek (overlay `WindowPeek.qml`): only those windows on that screen, the others faded out; all back |
 | `goto_workspace(n)` | `user/workspaces.lua` | switcher, the bar's workspaces and workspace previews (overlay), game-focus |
 | `clean_workspace(n)`, `merge_target(n, has)` | `user/workspaces.lua` | the Super+Tab switcher's ×: workspace n's windows to `merge_target`'s (the nearest other with windows, the previous on a tie; tests/workspace-merge.sh) |
 | `screens_changed()` | `user/workspaces.lua` | itself, after the reload a screen change makes (windows back to a returning screen) |
@@ -1004,8 +1073,8 @@ pipeline's status decides something; read the output whole (`grep -q x <<<"$(cmd
 `# pipefail-ok: <why>`.
 
 CI runs them on every push, with what the checks against Caelestia, Hyprland, Qt and the kernel need (Caelestia from
-the published `[agros]` repo, its dots at the pinned commit), so none is skipped there but `nvidia-early` where the
-installed kernel has the driver. The AUR packages and CachyOS's installer are built there without compiler warnings
+the published `[agros]` repo, its dots at the pinned commit), so none is skipped there: a skip there, whole or in
+part (`skipped` in `tests/lib.sh`; `tests/run.sh` for a whole one), fails CI, as its pass approves that Hyprland. The AUR packages and CachyOS's installer are built there without compiler warnings
 (theirs, not AgrOS's); AgrOS's own packages keep them.
 
 ## Troubleshooting

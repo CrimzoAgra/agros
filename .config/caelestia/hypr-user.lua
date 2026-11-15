@@ -13,9 +13,6 @@ if kb then
     end
     if input.kb_layout then hl.config({ input = input }) end
 end
--- The mouse pointer drawn as part of the picture, not on the graphics card's separate cursor layer: nothing clears
--- that layer when the desktop closes, so the pointer stayed on the shutdown screen
-hl.config({ cursor = { no_hardware_cursors = 1 } })
 -- No "Hyprland updated" news window after an update
 hl.config({ ecosystem = { no_update_news = true } })
 
@@ -26,6 +23,7 @@ dots = {}
 -- Only a check (hypr-config-check: Hyprland --verify-config): loaded, nothing done on the side. No "failed to load"
 -- notification (dotfiles-check gives its own) and no settings file written
 local verify = os.getenv("DOTS_VERIFY_CONFIG") == "1"
+dots.verifying = verify  -- (for the other files: user/keys.lua's keymap not made then)
 
 -- Settings from the Settings app (~/.local/bin/dots-settings writes them here, every value, defaults included):
 -- dots.setting("windows.cascade"). Written again first if missing or older than the list of settings (an update)

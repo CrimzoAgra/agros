@@ -108,7 +108,7 @@ rm -r "$t/pacman" "$t/au/aur" "$t/au/held"
 # (-Qu) isn't one, so the lock is still said to be left behind; pacman installing, PackageKit's or pamac's daemon is
 # (and the names it looks for are theirs)
 procs=()
-trap 'kill "${procs[@]}" 2>/dev/null; rm -rf "$t"' EXIT
+on_exit 'kill "${procs[@]}"'
 for cmd in "pacman -Syu" "packagekitd" "pamac-daemon" "pacman -Sy --dbpath /tmp/checkup-db --logfile /dev/null" "pacman -Qu"; do
     # shellcheck disable=SC2016  # (perl's own $0)
     perl -e '$0 = $ARGV[0]; sleep 300' "$cmd" >/dev/null 2>&1 &

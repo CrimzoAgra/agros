@@ -5,10 +5,10 @@
 # rest, pam_faillock's counting and lockout included, as the system has it). Run by agros-greeter's install and,
 # after each pambase or pam update, by its pacman hook, so it follows the system's changes (sudo and the text consoles
 # keep the system's files, untouched).
-#   greetd-pam           write /etc/pam.d/greetd (the keyring's lines there kept after it; greetd's own kept once as
-#                        greetd.orig). Anything it can't follow (a substack, an include too deep, a module not there):
-#                        the file left as it is, said, exit 1: never a PAM file that can't log in
-#   greetd-pam --print   only print it (dotfiles-check compares the installed one with it)
+#   greetd-pam           write /etc/pam.d/greetd (greetd's own kept once as greetd.orig). Anything it can't follow (a
+#                        substack, an include too deep, a module not there): the file left as it is, said, exit 1: never
+#                        a PAM file that can't log in
+#   greetd-pam --print   only print it
 # ($PAM_DIR, $PAM_MODULES, $GREETD_PAM_TEMPLATE: other folders and template, for the tests)
 set -euo pipefail
 pamd=${PAM_DIR:-/etc/pam.d}
@@ -73,7 +73,6 @@ if ! new=$(made); then
     exit 1
 fi
 [[ ! -f $target || -f $target.orig ]] || cp "$target" "$target.orig"
-keyring=$(grep pam_gnome_keyring "$target" 2>/dev/null || true)
-{ printf '%s\n' "$new"; [[ -z $keyring ]] || printf '%s\n' "$keyring"; } >"$target.new"
+printf '%s\n' "$new" >"$target.new"
 chmod 644 "$target.new"
 mv "$target.new" "$target"

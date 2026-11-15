@@ -10,7 +10,7 @@ h=$t/home; mkdir -p "$h/.local/share/keyrings" "$h/.config/Proton/VPN" "$t/drive
 echo KEYRING >"$h/.local/share/keyrings/login.keyring"; echo VPN >"$h/.config/Proton/VPN/x"
 echo OLD-GOOD-SAVE >"$t/drive/dotfiles-personal.tar.gpg"
 chmod 000 "$h/.local/share/keyrings/login.keyring"
-trap 'chmod -R u+rwX "$t"; rm -rf "$t"' EXIT
+on_exit 'chmod -R u+rwX "$t"'
 out=$(HOME=$h XDG_RUNTIME_DIR=$t R=$here D=$t/drive bash -c 'set -euo pipefail; source "$R/.local/bin/agros-personal"
     personal_dir=$D; personal_open() { :; }; personal_save' 2>&1) && rc=0 || rc=$?
 grep -qx OLD-GOOD-SAVE "$t/drive/dotfiles-personal.tar.gpg" ||

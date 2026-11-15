@@ -10,10 +10,15 @@ helpers=$(dirname "$(readlink -f "$0")")  # (the shared helpers, beside this)
 # Run from outside the desktop (an SSH login, a text console: dots-settings set there), Hyprland runs it instead (its
 # first one, -i 0), with the desktop's environment: from here the shell was killed and the new one couldn't start.
 # (so from there a failed --rebuild isn't reported back: Hyprland runs it. Changes it skipped are said in a notification
-# once Caelestia is up, and by dotfiles-check at the next login)
-if [[ -z ${HYPRLAND_INSTANCE_SIGNATURE:-} || -z ${WAYLAND_DISPLAY:-} ]]; then
-    exec hyprctl -i "${HYPRLAND_INSTANCE_SIGNATURE:-0}" dispatch "hl.dsp.exec_cmd(\"~/.local/bin/caelestia-restart${1:+ $1}\")"
+# once Caelestia is up, and by dotfiles-check at the next login). Also when Hyprland's and Wayland's names were set by
+# hand without the rest of the desktop's (no XDG_CURRENT_DESKTOP: the session's, from uwsm): the shell started from
+# there had no Qt theme (QT_QPA_PLATFORMTHEME), and drew Papirus-only icons as missing. Handed over once (marked): a
+# desktop whose XDG_CURRENT_DESKTOP was set to another name (Hyprland keeps one set before it) handed it back forever
+if [[ -z ${CAELESTIA_RESTART_HANDED:-} ]] &&
+    [[ -z ${HYPRLAND_INSTANCE_SIGNATURE:-} || -z ${WAYLAND_DISPLAY:-} || ${XDG_CURRENT_DESKTOP:-} != *Hyprland* ]]; then
+    exec hyprctl -i "${HYPRLAND_INSTANCE_SIGNATURE:-0}" dispatch "hl.dsp.exec_cmd(\"env CAELESTIA_RESTART_HANDED=1 ~/.local/bin/caelestia-restart${1:+ $1}\")"
 fi
+unset CAELESTIA_RESTART_HANDED
 unset $(env | grep -oE "^(CLAUDE[A-Z_]*|CLAUDECODE|ANTHROPIC[A-Z_]*|NODE_OPTIONS|VSCODE[A-Z_]*|ELECTRON[A-Z_]*|QS_APP_ID)=" | tr -d =)
 SHELL=$(getent passwd "$USER" | cut -d: -f7)  # your login shell, not the one this was started from
 export SHELL

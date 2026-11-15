@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+# The upstream gate: the packages AgrOS's desktop is written against (Hyprland and its libraries, listed in
+# /etc/pacman.d/agros-gate.conf, which pacman.conf includes: held back from every pacman run, a manual one too) are
+# updated only to versions AgrOS's CI has checked its config, its title bar plugin and its shell patches against (the
+# list it publishes beside the [agros] repo, agros-approved: "name version" lines, the version without its pkgrel, so a
+# rebuild of an approved version, as for a library's new soname, needs no new check). Run by AgrOS's own updates (the
+# boot's download and the shutdown's install, auto-update; the Updates app, update-apps, and its list, update-kinds)
+#   update-gate <pacman.conf> <out> [--dbpath <dir>] [--offline]
+# <out>: the pacman.conf to update with: <pacman.conf> without the gate's Include when every gated package it would
+# update goes to an approved version (or only to a rebuild), else <pacman.conf> as it is (all of them held together:
+# they're built against each other; and a library whose update would break one held, with it: held by the gate's
+# Include, added to <out> if <pacman.conf> lacks it). Says on stdout what waits ("name installed -> new" lines, "name
+# (held with ...)"). The list fetched each run, kept for when the repo can't be reached; never fetched, nothing new let
+# through. --offline: the kept list only (the shutdown's install: no more let through than the boot downloaded)
+set -uo pipefail
+usage="usage: update-gate <pacman.conf> <out> [--dbpath <dir>] [--offline]"
+base=${1:?$usage} out=${2:?$usage}
+shift 2
+db=() offline=0
+while (($#)); do
+    case $1 in
+        --dbpath) db=(--dbpath "${2:?$usage}"); shift 2 ;;
+        --offline) offline=1; shift ;;
+        *) echo "$usage" >&2; exit 2 ;;
+    esac
+done
+gate=${AGROS_GATE:-/etc/pacman.d/agros-gate.conf}
+if [[ $EUID -eq 0 ]]; then cache=${AGROS_GATE_CACHE:-/var/lib/agros/agros-approved}; else cache=${AGROS_GATE_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/agros-approved}; fi
+mkdir -p "${cache%/*}" 2>/dev/null
+cp -- "$base" "$out" || exit 1
+read -ra gated < <(sed -n 's/^[[:space:]]*IgnorePkg[[:space:]]*=[[:space:]]*//p' "$gate" 2>/dev/null | tr '\n' ' ')
+((${#gated[@]})) || exit 0
+# (the approved list from the [agros] repo's own server: fetched beside its database)
+server=$(pacman-conf --config "$base" --repo agros Server 2>/dev/null | head -1)
+# (fetched into a file of its own: two runs at once, the Updates app's and its list's, don't mix theirs)
+tmp=
+((offline)) || tmp=$(mktemp "$cache.XXXXXX" 2>/dev/null) || tmp=
+trap 'rm -f "$tmp"' EXIT
+if [[ -n $server && -n $tmp ]] && curl -fsS --connect-timeout 10 -m 30 -o "$tmp" "$server/agros-approved" 2>/dev/null &&
+    grep -qE '^[a-z0-9@._+-]+ [A-Za-z0-9.:_+~]+$' "$tmp"; then
+    chmod 644 "$tmp"
+    mv -f "$tmp" "$cache"
+else
+    rm -f "$tmp"
+fi
+waits=()
+for name in "${gated[@]}"; do
+    have=$(pacman -Q "${db[@]}" -- "$name" 2>/dev/null | cut -d' ' -f2) || continue
+    [[ -n $have ]] || continue
+    # (the version pacman would install: the first repo's, in pacman.conf's order)
+    new=$(LC_ALL=C pacman -Si --config "$base" "${db[@]}" -- "$name" 2>/dev/null | sed -n 's/^Version *: //p' | head -1)
+    [[ -n $new && $new != "$have" ]] || continue
+    [[ ${new%-*} == "${have%-*}" ]] && continue  # (a rebuild of the same version)
+    (($(vercmp "$new" "$have") > 0)) || continue  # (older in the repo, rolled back: pacman -Su keeps the newer one)
+    grep -qxF -- "$name ${new%-*}" "$cache" 2>/dev/null || waits+=("$name $have -> $new")
+done
+inc="Include = $gate"
+if ((${#waits[@]})); then
+    printf '%s\n' "${waits[@]}"
+    # (held by the gate itself, whatever pacman.conf has: a merged .pacnew may have lost its Include)
+    grep -qE "^[[:space:]]*Include[[:space:]]*=[[:space:]]*${gate//./\\.}[[:space:]]*(#.*)?\$" "$out" ||
+        sed -i "/^\\[options\\]/a $inc" "$out"
+else
+    sed -i "\\|^[[:space:]]*Include[[:space:]]*=[[:space:]]*${gate//./\\.}[[:space:]]*\\(#.*\\)\\?\$|d" "$out"
+fi
+# A held one a library's update would break (a new soname, its own rebuild waiting with it): that library held too, in
+# <out>, until the next lists (a few tries: one held can hold another). Found by pacman's own dry run, as the update
+# it's for would fail on it whole
+for try in 1 2 3 4 5 6; do
+    ((try < 6)) || { echo "update-gate: the update still can't be worked out (pacman says why as it runs)" >&2; break; }
+    dry=$(LC_ALL=C pacman -Sup --config "$out" "${db[@]}" --print-format '%n' 2>&1) && break
+    held=$(sed -nE "s/^:: installing ([^ ]+) .*breaks dependency '[^']*' required by ([^ ]+)\$/\\1 \\2/p" <<<"$dry" |
+        while read -r lib by; do grep -qxF -- "$by" <<<"$(pacman-conf --config "$out" IgnorePkg)" && echo "$lib $by"; done | sort -u)
+    # (and any other one rebuilt against a held library's new version: it waits too)
+    needs=$(sed -nE "s/^:: unable to satisfy dependency '[^']*' required by ([^ ]+)\$/\\1/p" <<<"$dry" | sort -u)
+    [[ -n $held || -n $needs ]] || { echo "update-gate: pacman's dry run failed (it says why as it runs): $(grep -m1 . <<<"$dry")" >&2; break; }
+    [[ -z $held ]] || while read -r lib by; do echo "$lib (held with $by: its update would break it)"; done <<<"$held"
+    [[ -z $needs ]] || while read -r pkg; do echo "$pkg (held: its update needs something not to be had yet)"; done <<<"$needs"
+    sed -i "/^\\[options\\]/a IgnorePkg = $({ cut -d' ' -f1 <<<"$held"; echo "$needs"; } | grep . | sort -u | paste -sd' ')" "$out"
+done
+exit 0

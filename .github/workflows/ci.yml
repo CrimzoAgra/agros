@@ -33,7 +33,7 @@ jobs:
           # that check against them
           pkgs=(git jq python python-gobject python-numpy python-xlib python-secretstorage gnupg shellcheck sudo libnotify
             procps-ng util-linux which diffutils pacman-contrib file gtk3 thunar lua lutris nodejs qt6-declarative hyprland
-            base-devel mkinitcpio bubblewrap passt)
+            base-devel mkinitcpio bubblewrap passt xdg-desktop-portal-hyprland)
           # (a machine id: without one systemd's install hooks warn that /etc isn't set up; and its hook that loads a
           # package's kernel modules off: no systemd running here, it fails)
           systemd-machine-id-setup >/dev/null
@@ -62,19 +62,15 @@ jobs:
           git -C /tmp/dots checkout -q FETCH_HEAD
       - name: Shellcheck (AgrOS's own scripts and package scripts, the tests)
         run: |
-          # Every shell script in .local/bin and the data folders (by its shebang; a sourced .sh has none), and the
-          # session's environment files (sh, sourced by uwsm)
+          # Every shell script in .local, the packages, system/ and ci/ (by its shebang, so a new one is never left out; a
+          # sourced .sh has none), and the session's environment files (sh, sourced by uwsm)
           scripts=()
-          for f in .local/bin/* .local/share/*/*; do
-            [[ -f $f ]] && { [[ $f == *.sh ]] || head -n1 "$f" | grep -qE '^#!.*(/|env )(ba|da)?sh( |$)'; } && scripts+=("$f")
-          done
-          shellcheck -S warning "${scripts[@]}" .config/uwsm/env.d/*.sh ci/build-repo.sh \
-            packages/agros-boot/{boot-menu,boot-loader} \
-            packages/agros-boot/splash-theme packages/agros-boot/grub-theme/make.sh packages/agros-system/auto-update \
-            packages/agros-system/auto-update-aur packages/agros-system/agros-branding \
-            system/bluetooth-resume system/screens-resume system/wired-link-watch packages/agros-greeter/{run,login-reset,hyprland-session}
+          while IFS= read -r -d '' f; do
+            { [[ $f == *.sh ]] || head -n1 "$f" | grep -qE '^#!.*(/|env )(ba|da)?sh( |$)'; } && scripts+=("$f")
+          done < <(find .local/bin .local/share packages system ci -type f -print0)
+          shellcheck -S warning "${scripts[@]}" .config/uwsm/env.d/*.sh
           # The tests (their own .shellcheckrc: what they source followed)
-          shellcheck -S warning tests/*.sh
+          shellcheck -S warning tests/*.sh tests/fixtures/*.sh
           # (pacman's install scriptlets, mkinitcpio's install hook and drop-in: bash, with no shebang to go by)
           shellcheck -S warning -s bash packages/*/*.install packages/agros-boot/{plymouth-title-font,mkinitcpio-plymouth.conf}
           # The PKGBUILDs (bash, sourced by makepkg: its variables set or read by it, its functions run in $srcdir)
@@ -86,6 +82,25 @@ jobs:
           chown -R ci: .
           runuser -u ci -- git config --global --add safe.directory '*'
           runuser -u ci -- env DOTS_BUILD_TESTS=1 tests/run.sh
+      # The upstream gate (agros-gate.conf, update-gate): the versions of Hyprland and its libraries every test above
+      # passed with, approved for AgrOS's machines (the repo job adds them to the list it publishes)
+      - name: Approved upstream versions
+        shell: bash
+        run: |
+          # (every IgnorePkg line, as update-gate reads them; one not installed (renamed, dropped by Arch) fails here,
+          # not left out of the list, which held the whole set on every machine)
+          read -ra gated < <(sed -n 's/^[[:space:]]*IgnorePkg[[:space:]]*=[[:space:]]*//p' packages/agros-system/agros-gate.conf | tr '\n' ' ')
+          : >/tmp/approved
+          for p in "${gated[@]}"; do
+            v=$(pacman -Q "$p") || { echo "::error::$p isn't installed: its version can't be approved"; exit 1; }
+            v=${v#* }
+            echo "$p ${v%-*}" >>/tmp/approved
+          done
+          cat /tmp/approved
+      - uses: actions/upload-artifact@v7
+        with:
+          name: approved
+          path: /tmp/approved
 
   repo:
     # The [agros] pacman repo: built on every push to main and daily, published on GitHub Pages
@@ -124,9 +139,13 @@ jobs:
         env:
           AGROS_GPG_KEY: ${{ secrets.AGROS_GPG_KEY }}
         run: |
-          [ -n "$AGROS_GPG_KEY" ] || { echo "::error::Add the AGROS_GPG_KEY secret (the repo's signing key, gpg --armor --export-secret-keys)"; exit 1; }
+          [ -n "$AGROS_GPG_KEY" ] || { echo "::error::Add the AGROS_GPG_KEY secret (a signing subkey of AgrOS's key, as agros-iso's manual, Building the ISO, step 7, makes it)"; exit 1; }
           echo "$AGROS_GPG_KEY" | gpg --batch --import
           echo "GPGKEY=$(gpg --list-secret-keys --with-colons | awk -F: '$1 == "fpr" {print $10; exit}')" >>"$GITHUB_ENV"
+      - uses: actions/download-artifact@v8
+        with:
+          name: approved
+          path: /tmp/approved-now
       - name: Build the repo
         env:
           # (a repo variable can point it elsewhere: the old repo's copy while this one's site is new)
@@ -134,6 +153,26 @@ jobs:
         run: |
           git config --global --add safe.directory '*'
           ci/build-repo.sh out/x86_64
+      # The upstream gate's list (update-gate reads it beside the repo's database): this run's approvals added to those
+      # published before (a machine on a CachyOS build a day behind Arch's still finds its version), the last 20 of each
+      - name: Approved upstream versions
+        env:
+          # (this repo's own site, where the list is published: not AGROS_PUBLISHED, which may name an older repo's)
+          OWNER: ${{ github.repository_owner }}
+        shell: bash
+        run: |
+          site=https://$OWNER.github.io/${GITHUB_REPOSITORY#*/}/x86_64
+          # (only "not published yet", a 404, starts it afresh: anything else (Pages down, a timeout) stops here rather
+          # than publishing a list without the earlier approvals, which held machines a build behind)
+          code=$(curl -sS --retry 3 -o /tmp/approved-before -w '%{http_code}' "$site/agros-approved") || code=000
+          case $code in
+            200) ;;
+            404) : >/tmp/approved-before ;;
+            *) echo "::error::The published approved list couldn't be read (HTTP $code)"; exit 1 ;;
+          esac
+          cat /tmp/approved-before /tmp/approved-now/approved | grep -E '^[a-z0-9@._+-]+ [A-Za-z0-9.:_+~]+$' |
+            awk '!seen[$0]++' | tac | awk '++n[$1] <= 20' | tac >out/x86_64/agros-approved
+          cat out/x86_64/agros-approved
       - name: Install check (agros-desktop resolves in one transaction, none of what AgrOS leaves out)
         run: |
           # (build-repo.sh added [agros] unchecked while building: now with signatures required, as users have it)

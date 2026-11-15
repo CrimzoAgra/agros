@@ -6,7 +6,10 @@ set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 mkdir -p "$t/bin" "$t/home"
 stub() { printf '#!/bin/sh\n%s\n' "$2" >"$t/bin/$1"; chmod +x "$t/bin/$1"; }
-stub checkupdates 'echo "linux 6.1-1 -> 6.2-1"'
+# (checkupdates syncs its copy of the lists; what's waiting is pacman's -Qu on it, through the upstream gate: $t/qu)
+stub checkupdates 'exit 0'
+stub pacman '[ "$1" = -Qu ] && cat '"$t"'/qu 2>/dev/null; true'
+echo "linux 6.1-1 -> 6.2-1" >"$t/qu"
 # (paru translates its "[ignored]": in Portuguese it's "[ignorado]")
 stub paru 'echo "equibop 1.0-1 -> 1.1-1"; [ "${LC_ALL:-}" = C ] && echo "held 1-1 -> 2-1 [ignored]" || echo "held 1-1 -> 2-1 [ignorado]"'
 stub flatpak '[ "$1" = remote-ls ] && printf "com.spotify.Client\t1.3\n"; [ "$1" = info ] && echo "  Version: 1.2"; true'
@@ -18,12 +21,12 @@ want=$(printf 'system\tlinux\t6.1-1\t6.2-1\naur\tequibop\t1.0-1\t1.1-1\nflatpak\
 [[ $out == "$want" ]] || fail "the list: $out"
 stub checkupdates 'exit 1'
 [[ $(run) == offline* ]] || fail "offline not said: $(run)"
-stub checkupdates 'exit 2'; stub paru 'true'; stub flatpak 'true'
+stub checkupdates 'exit 2'; stub paru 'true'; stub flatpak 'true'; : >"$t/qu"
 [[ -z $(run) ]] || fail "nothing waiting, still listed: $(run)"
 
 # --check: a notification left unclicked until the next check (its timeout) still counts as announced; one the
 # notification server dropped (Caelestia restarted under it) doesn't
-stub checkupdates 'echo "linux 6.1-1 -> 6.2-1"'
+stub checkupdates 'exit 0'; echo "linux 6.1-1 -> 6.2-1" >"$t/qu"
 stub timeout 'shift; exec /usr/bin/timeout 1 "$@"'  # (5h50m: a second here)
 mkdir -p "$t/home/.local/bin" "$t/home/.cache"
 seen=$t/home/.cache/update-apps-notified
@@ -120,13 +123,15 @@ HOME=$t/home XDG_STATE_HOME=$t/state XDG_CACHE_HOME=$t/home/.cache AUTO_UPDATE_D
 grep -q "Waiting for the update started at boot" "$t/wait-out" || fail "the wait not said: $(cat "$t/wait-out")"
 rm "$t/au/downloading"
 wait || true
-grep -q -- "-Syu" "$t/paru" || fail "paru not run once the boot's download was done: $(cat "$t/paru" 2>/dev/null)"
+# (its lists synced, then the update through the upstream gate's pacman.conf: update-gate's)
+{ grep -q -- " -Sy --noconfirm$" "$t/paru" && grep -qE -- " --config [^ ]+ -Su --noconfirm$" "$t/paru"; } ||
+    fail "paru not run once the boot's download was done, through the gate: $(cat "$t/paru" 2>/dev/null)"
 rm "$t/bin/sleep"
 
-# A new Python (3.13 to 3.14) from its paru -Syu: the AUR's packages in the old folder (python-foo) rebuilt, as the
+# A new Python (3.13 to 3.14) from its paru -Su: the AUR's packages in the old folder (python-foo) rebuilt, as the
 # boot's AUR builds do (update-kinds' one list), not the repo's; a Python bugfix release rebuilds nothing
 # shellcheck disable=SC2016  # (expanded by the stand-ins)
-stub paru 'echo "paru $*" >>"'"$t"'/paru"; case "$*" in *-Syu*) echo "$PY_NEW" >"'"$t"'/py" ;; esac'
+stub paru 'echo "paru $*" >>"'"$t"'/paru"; case "$*" in *" -Su "*) echo "$PY_NEW" >"'"$t"'/py" ;; esac'
 # shellcheck disable=SC2016
 stub pacman 'case "$1 $2" in "-Q python") echo "python $(cat "'"$t"'/py")" ;; "-Q qt6-base" | "-Q qt6-declarative") echo "$2 6.9.0-1" ;;
     "-Qoq /usr/lib/python3.13/") printf "%s\n" python-foo python-repo ;; "-Qm python-foo") true ;; *) exit 1 ;; esac'

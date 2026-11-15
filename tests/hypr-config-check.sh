@@ -15,6 +15,7 @@ if [ -n "\$REFUSE" ] || [ -z "\$XDG_RUNTIME_DIR" ] || [ ! -d "\$XDG_RUNTIME_DIR"
     printf '\033[1;31m[ ERROR ]\033[0m XDG_RUNTIME_DIR is not set. Make sure you are running on a real, properly set up user.\n'; exit 1
 fi
 echo "\$XDG_RUNTIME_DIR \${DOTS_VERIFY_CONFIG:-}" >"$t/env"
+[ -z "\$SLOW" ] || { echo \$\$ >"$t/slow.pid"; exec sleep 30; }
 if [ -n "\$BROKEN" ]; then printf 'DEBUG noise\n\n======== Config parsing result:\n\nrequire("user.apps"): nil value (field x)\n'; exit 1; fi
 printf '======== Config parsing result:\n\nconfig ok\n'
 H
@@ -40,4 +41,15 @@ out=$(REFUSE=1 run 2>&1); rc=$?
 ((rc == 2)) || fail "Hyprland refusing to run not said as couldn't check (exit $rc): $out"
 [[ ! -e $t/state/hypr-config-check ]] || fail "Hyprland's refusal written down as a config error: $(cat "$t/state/hypr-config-check")"
 [[ $out == *"couldn't be checked"*"XDG_RUNTIME_DIR is not set"* && $out != *$'\033'* ]] || fail "the refusal not said: $out"
+# Stopped as a group (a closed terminal stops a refresh and its check alike): Hyprland's check stops too, not left
+# running under timeout in a group of its own
+setsid env SLOW=1 HOME="$t/home" XDG_STATE_HOME="$t/state" PATH="$t/bin:$PATH" XDG_RUNTIME_DIR="$t/run" \
+    "$here/.local/bin/hypr-config-check" >/dev/null 2>&1 &
+group=$!
+for _ in {1..50}; do [[ -s $t/slow.pid ]] && break; sleep 0.1; done
+slow=$(cat "$t/slow.pid" 2>/dev/null) || fail "test setup: the slow check never started"
+on_exit "kill $slow"
+kill -TERM -- -"$group"; wait "$group" 2>/dev/null
+for _ in {1..20}; do kill -0 "$slow" 2>/dev/null || break; sleep 0.1; done
+kill -0 "$slow" 2>/dev/null && fail "Hyprland's check kept running after its group was stopped"
 echo "ok hypr-config-check"

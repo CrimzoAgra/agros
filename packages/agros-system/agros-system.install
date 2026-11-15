@@ -26,39 +26,43 @@ quiet_passim() {
 # The services on, and the keyring's password changed with yours (passwd's PAM)
 post_install() {
     systemctl enable bluetooth.service paccache.timer auto-update.service auto-update-install.service \
-        agros-wired-link.service >/dev/null 2>&1 || true
+        >/dev/null 2>&1 || true
     # (the keyring's own user services masked: the one started at login, unlocked by PAM, is the one used)
     systemctl --global mask gnome-keyring-daemon.service gnome-keyring-daemon.socket >/dev/null 2>&1 || true
     if [[ -f $_r/etc/pam.d/passwd ]] && ! grep -q pam_gnome_keyring "$_r/etc/pam.d/passwd"; then
         echo '-password   optional     pam_gnome_keyring.so' >>"$_r/etc/pam.d/passwd"
     fi
+    # The upstream gate's file (this package's) included by pacman.conf, added here with the file, not by the ISO's
+    # pacman.conf: that one is in place before anything is installed, and pacman can't read a config including a
+    # missing file (the installer's first pacman run failed, the disk already wiped). Its removal takes it out again
+    local conf=$_r/etc/pacman.conf
+    if [[ -f $conf ]] && ! grep -qE '^[[:space:]]*Include[[:space:]]*=[[:space:]]*/etc/pacman\.d/agros-gate\.conf[[:space:]]*(#.*)?$' "$conf"; then
+        sed -i '/^\[options\]/a Include = /etc/pacman.d/agros-gate.conf' "$conf"
+    fi
     quiet_ufw
     quiet_passim
+    true # (the quiet_ steps' status isn't the scriptlet's: a note not written is tried again at the next upgrade)
 }
 
 post_upgrade() {
     quiet_ufw
     quiet_passim
-    # The wired-link watch on, once, where an update brought it (its folder made at its first start: one turned off since
-    # stays off)
-    [[ -d $_r/var/lib/agros/wired-link ]] || systemctl enable --now agros-wired-link.service >/dev/null 2>&1 || true
-    # The running one restarted on the new version, as agros-camera-switch's is: marked here, restarted by systemd's
-    # own hooks once the transaction is over (its daemon-reload, then its enqueue-marked), on the new unit
-    systemctl -q is-active agros-wired-link.service 2>/dev/null &&
-        systemctl set-property agros-wired-link.service Markers=+needs-restart >/dev/null 2>&1
-    true
+    true # (the quiet_ steps' status isn't the scriptlet's: a note not written is tried again at the next upgrade)
 }
 
 pre_remove() {
     # (not stopped: stopping auto-update-install runs the shutdown install, inside this pacman transaction)
     systemctl disable --now auto-update.service >/dev/null 2>&1 || true
     systemctl disable auto-update-install.service >/dev/null 2>&1 || true
-    systemctl disable --now agros-wired-link.service >/dev/null 2>&1 || true
     systemctl --global unmask gnome-keyring-daemon.service gnome-keyring-daemon.socket >/dev/null 2>&1 || true
     sed -i '/^-password   optional     pam_gnome_keyring.so$/d' "$_r/etc/pam.d/passwd" 2>/dev/null || true
 }
 
 post_remove() {
+    # (the upstream gate's file went with this package: pacman.conf's Include of it with it, or pacman can't read its
+    # config at all; the approved list it kept, too)
+    sed -i '\|^[[:space:]]*Include[[:space:]]*=[[:space:]]*/etc/pacman\.d/agros-gate\.conf[[:space:]]*\(#.*\)\?$|d' "$_r/etc/pacman.conf" 2>/dev/null
+    rm -f "$_r/var/lib/agros/agros-approved"
     # The name from before AgrOS's back in os-release and lsb-release: the copy agros-branding kept of each (all of it,
     # PRIVACY_POLICY_URL too); made before that copy was kept, CachyOS's own script (cachyos-branding) writes CachyOS's
     local x b=$_r/usr/share/libalpm/scripts/cachyos-branding
@@ -77,20 +81,6 @@ post_remove() {
     # (and it's still off: a level set since is yours)
     rm -rf "$_r/var/lib/auto-update"
     rm -f "$_r/var/log/auto-update.log"
-    # The wired-link watch's changes in NetworkManager profiles are kept (the link was dropping without them): said, with
-    # the way back. Its ethtool ones go at the next restart
-    local f k how uuid
-    for f in "$_r"/var/lib/agros/wired-link/*; do
-        [[ -f $f ]] || continue
-        while read -r k how uuid; do
-            [[ $how == nm ]] || continue
-            case $k in
-                eee) echo "agros-system: EEE stays off in NetworkManager profile $uuid (back: nmcli connection modify uuid $uuid ethtool.eee-enabled \"\")" ;;
-                speed) echo "agros-system: NetworkManager profile $uuid still offers only 1 Gbps (back: nmcli connection modify uuid $uuid 802-3-ethernet.speed \"\" 802-3-ethernet.duplex \"\" && nmcli connection up uuid $uuid)" ;;
-            esac
-        done <"$f"
-    done
-    rm -rf "$_r/var/lib/agros/wired-link"
     if [[ -e $_passim_done ]]; then
         systemctl unmask passim.service >/dev/null 2>&1
         rm -f "$_passim_done"

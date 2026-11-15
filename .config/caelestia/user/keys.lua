@@ -27,7 +27,8 @@ hl.on("hyprland.start", function() hl.exec_cmd("qs -c switcher -d") end)
 
 -- Scroll Lock as a real lock with its keyboard light, like Caps and Num Lock (~/.local/bin/scroll-lock makes
 -- the keymap of the system layout with Scroll Lock working), and the bar's badge following the light
-local keymap = io.popen("~/.local/bin/scroll-lock keymap")
+-- (not for a check of the config, dots.verifying: nothing made on the side, and the keyboard's file nothing to it)
+local keymap = not dots.verifying and io.popen("~/.local/bin/scroll-lock keymap")
 local kb_file = keymap and keymap:read("l")
 if keymap then keymap:close() end
 if kb_file and kb_file ~= "" then hl.config({ input = { kb_file = kb_file } }) end

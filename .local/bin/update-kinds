@@ -303,9 +303,16 @@ update_firmware() {
 if [[ ${1:-} == --list ]]; then
     # Repo packages (checkupdates: a copy of the database, no root; it fails with 1, "none" is 2: offline, an "offline"
     # line instead of an empty list that reads as up to date)
+    # Its copy synced, then listed through the upstream gate (update-gate): a Hyprland AgrOS hasn't checked yet isn't
+    # waiting, one it has is (checkupdates' own list leaves every gated one out, as pacman.conf holds them back)
     rc=0
-    repo=$(checkupdates 2>/dev/null) || rc=$?
+    checkupdates >/dev/null 2>&1 || rc=$?
     if ((rc == 1)); then printf 'offline\t\t\t\n'; exit 0; fi
+    copy=${CHECKUPDATES_DB:-${TMPDIR:-/tmp}/checkup-db-${UID}/}
+    gated=$(mktemp --tmpdir agros-pacman.XXXXXX.conf)
+    "$helpers/update-gate" /etc/pacman.conf "$gated" --dbpath "$copy" >/dev/null 2>&1 || cp /etc/pacman.conf "$gated"
+    repo=$(LC_ALL=C pacman -Qu --config "$gated" --dbpath "$copy" 2>/dev/null | "$helpers/updates-pending")
+    rm -f "$gated"
     [[ -n $repo ]] && while read -r name old _ new; do printf 'system\t%s\t%s\t%s\n' "$name" "$old" "$new"; done <<<"$repo"
     # (in English: paru translates "[ignored]", and under another language the ignored ones were listed as waiting)
     LC_ALL=C paru -Qua 2>/dev/null | "$helpers/updates-pending" | while read -r name old _ new _; do

@@ -149,7 +149,17 @@ if systemd-inhibit --what=sleep:shutdown --mode=block --who=Updates --why="Insta
     inhibitor=$!
 fi
 runtimes=$("$helpers/update-kinds" --runtimes-now)
-"${paru[@]}" -Syu --noconfirm || status=1
+# Through the upstream gate (update-gate): the lists synced first, then Hyprland and its libraries updated only to
+# versions AgrOS's CI has checked (held, said, else)
+gated=$(mktemp --tmpdir agros-pacman.XXXXXX.conf)
+if "${paru[@]}" -Sy --noconfirm; then
+    waits=$("$helpers/update-gate" /etc/pacman.conf "$gated") || cp /etc/pacman.conf "$gated"
+    [[ -z $waits ]] || printf "Waits for AgrOS's check (comes with a later update): %s\n" "$waits"
+    "${paru[@]}" --config "$gated" -Su --noconfirm || status=1
+else
+    status=1
+fi
+rm -f "$gated"
 # (the runtimes it changed: "name old -> new")
 changes=$(awk 'NR == FNR { old[$1] = $2; next } ($1 in old) && old[$1] != $2 { print $1, old[$1], "->", $2 }' \
     <(printf '%s\n' "$runtimes") <("$helpers/update-kinds" --runtimes-now))

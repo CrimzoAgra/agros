@@ -8,6 +8,17 @@ Windows behave the way they do on Windows:
 - Floating windows have a title bar with **minimise**, **maximise** and **close**. Double-click the title bar to
   maximise; drag a maximised window to un-maximise it.
 - Resize by dragging any edge or corner.
+- Drag a window to the top edge of the screen to maximise it, to the left or right edge for that half, or into a
+  corner for a quarter. A see-through box shows where it will go. Drag it away and it gets its old size back.
+  Snapping works in floating mode (not tiling), and not for games or fullscreen windows. An edge with another screen
+  beyond it doesn't snap: the window goes on across to that screen.
+- Two snapped windows next to each other (side by side, or one above the other) share their edge: drag the gap
+  between them to resize both at once. When the gaps between windows change (Game mode, or the Settings app), snapped
+  and maximised windows move to fit the new gaps and stay side by side.
+- A window can always be dragged back: its title bar never ends up out of reach.
+- The panels on the screen's edges (dashboard, Super menu, notifications, volume, utilities) open when the pointer touches the
+  very edge (on a side with another screen beyond, near it: the pointer goes on across there), and not while you drag
+  something.
 - Minimised windows stay in the dock, dimmed. Click them, or press Alt+Tab, to bring them back.
 - In the Alt+Tab switcher, the **×** in a window's corner closes it (as its own close button would), and the switcher
   stays open.
@@ -22,7 +33,9 @@ Press **Super+Alt+Space** (or right-click an empty part of the bar) to switch be
 ## Workspaces
 
 Workspaces are like Windows' virtual desktops. You have ten: **Super+1** to **Super+0** jumps between them, and the dots
-at the top of the bar show which ones hold windows. Hover a dot for a live preview.
+at the top of the bar show which ones hold windows. Hover a dot for a live preview; rest the pointer on the preview for a
+moment and that workspace's windows show alone on the screen, the others faded out, until you move away. The dock's
+previews do the same for one window: rest on a window's preview and that window shows alone.
 
 On a laptop, swipe sideways on the touchpad to move between them.
 

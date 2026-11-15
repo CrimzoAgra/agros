@@ -181,6 +181,15 @@ if [[ -z ${AGROS_SKIP_AUR:-} ]]; then
         asb paru -S --noconfirm --needed --localrepo=agros "${aur[@]}" 2>&1 |
             sed -u -e '/^\[[0-9]*\/[0-9]*\] *$/d' -e '/WARNING: Using existing \$srcdir\/ tree/d'
     }
+    # Quickshell first, with AgrOS's fix (aur-agros-patch: the boot's rebuild on a new Qt adds it the same way), into
+    # the repo: caelestia-shell's quickshell-git taken from it, by its name (CachyOS's noctalia-qs only claims it), not
+    # built from the AUR without the fix. Its build files no longer fitting, or the patch, fails the build
+    asb git clone -q https://aur.archlinux.org/quickshell-git.git "$work/quickshell-git"
+    asb "$work/agros/packages/agros-system/aur-agros-patch" "$work/quickshell-git" quickshell-git
+    (cd "$work/quickshell-git" && asb env PKGDEST="$out" makepkg -s --noconfirm "${sign[@]}") ||
+        { echo "!! Quickshell with AgrOS's fix didn't build: if the patch no longer applies, see whether Quickshell fixed it"; exit 1; }
+    asb repo-add -q "$out/agros.db.tar.gz" "$out"/quickshell-git-*.pkg.tar.zst
+    pacman -Sy --noconfirm >/dev/null
     # (twice: a download that drops, GitHub's now and then, fails only its package; the second pass builds what's left)
     aur_build || aur_build
 fi
@@ -237,15 +246,20 @@ SH
 fi
 cp "$work/makepkg.conf" /etc/makepkg.conf
 
+# Every package here, whatever its compression or none (an AUR PKGBUILD may set its own PKGEXT: one left out of the database
+# was built for nothing), not their .sig files
+shopt -s extglob nullglob
+pkgs=(*.pkg.tar?(.zst|.xz|.gz|.bz2|.lz4|.lzo|.lrz|.Z))
+shopt -u extglob nullglob
 if [[ -n ${AGROS_PUBLISHED:-} && -n $key ]]; then
-    for f in *.pkg.tar.zst; do
+    for f in "${pkgs[@]}"; do
         [[ $f == agros-*-any.pkg.tar.zst ]] || keep_published "$f"  # (those checked after their build, above)
     done
 fi
 # The database made again from the packages here (paru's local repo already holds the AUR ones: added over it, each
 # warned that its entry already existed)
 rm -f agros.db agros.db.tar.gz agros.files agros.files.tar.gz agros.db*.sig agros.files*.sig
-asb repo-add "${rsign[@]}" agros.db.tar.gz ./*.pkg.tar.zst
+asb repo-add "${rsign[@]}" agros.db.tar.gz "${pkgs[@]/#/./}"
 # GitHub Pages serves no symlinks: the database's names as real files
 for f in agros.db agros.files; do
     [[ -L $f ]] && cp --remove-destination "$(readlink -f "$f")" "$f"

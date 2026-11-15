@@ -38,7 +38,7 @@ grep -q caelestia-greeter "$r/etc/greetd/config.toml" && grep -q agreety "$r/etc
 grep -qx 'CAELESTIA_GREETER_USER=alice' "$g/env" || fail "not the first AgrOS user shown: $(cat "$g/env")"
 grep -qx "as --as alice $g/make-theme.sh $g/theme alice" "$t/calls" || fail "the theme not made as alice through agros-each-user --as: $(cat "$t/calls")"
 grep -q '^runuser' "$t/calls" && fail "runuser used (its PAM opens a logind session)"
-grep -q pam_gnome_keyring "$r/etc/pam.d/greetd" || fail "the keyring's lines not in greetd's PAM service"
+# (the keyring's lines come from greetd-pam's template: tests/greeter-pam.sh)
 echo x >"$g/theme/theme.json"
 out=$(pac post_remove)
 grep -q agreety "$r/etc/greetd/config.toml" && [[ ! -e $r/etc/greetd/config.toml.agros-orig ]] || fail "greetd's config not put back"
@@ -67,4 +67,15 @@ printf '%s\n' '[default_session]' 'command = "agreety --cmd hyprland-session"' >
 pac post_remove >/dev/null
 grep -qx 'command = "agreety --cmd /bin/sh"' "$r/etc/greetd/config.toml" ||
     fail "greetd left starting the removed hyprland-session: $(cat "$r/etc/greetd/config.toml")"
+# greetd-pam unable to follow the system's stack: said at install and at each upgrade alike (the keyring not unlocked)
+printf '#!/bin/sh\nexit 1\n' >"$g/greetd-pam"
+for f in post_install post_upgrade; do
+    setup
+    [[ $(pac $f) == *"greetd-pam couldn't follow the system's: the passwords keyring isn't unlocked"* ]] ||
+        fail "$f didn't say greetd's PAM service was left as it was, without the keyring"
+done
+# ...the keyring not named when the file left there has its lines (an earlier run's, from the template)
+setup; echo '-auth optional pam_gnome_keyring.so' >>"$r/etc/pam.d/greetd"
+out=$(pac post_upgrade)
+[[ $out == *"couldn't follow the system's)"* && $out != *keyring* ]] || fail "the keyring said not unlocked where it is: $out"
 echo "ok agros-greeter-install"

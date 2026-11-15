@@ -7,7 +7,6 @@
 # shellprocess@greetd); again by hand: sudo /usr/lib/agros/boot-menu
 #   boot-menu --grub-quiet   only GRUB's "Loading Linux..." lines taken out of its script (agros-grub-quiet.hook, after
 #                            each GRUB update: its package puts them back)
-#   boot-menu --note         only noted as run (agros-boot's upgrade, on an install from before the note)
 # Each run noted in /var/lib/agros/boot-menu.sum (this script's checksum; failed: an empty note where there was none):
 # agros-boot's upgrades run it again only when it changed, as each run puts its settings back over yours.
 # A boot loader not set up yet (the installer's package step, before its bootloader and grubcfg steps): nothing done,
@@ -40,7 +39,6 @@ note() {
     mkdir -p "${stamp%/*}" || return
     if (($1 == 0)); then sha256sum <"${BASH_SOURCE[0]}" >"$stamp"; elif [[ ! -f $stamp ]]; then : >"$stamp"; fi
 }
-[[ ${1:-} != --note ]] || { note 0; exit; }
 trap 'note $?' EXIT
 
 # Limine (CachyOS's default on newer installs): boot CachyOS straight away with no menu;
@@ -77,7 +75,7 @@ boot_menu() {
     case $("$r/usr/lib/agros/boot-loader") in
         limine) limine_menu; return ;;
         grub) ;;
-        *) echo "No GRUB or Limine here, boot menu left as is."; return ;;
+        *) echo "No GRUB or Limine here (yet), boot menu left as is."; exit 1 ;;  # (not noted as done: the next update tries again)
     esac
     local conf=$r/etc/default/grub
     [[ -f $r/boot/grub/grub.cfg ]] || { echo "GRUB isn't set up yet (no /boot/grub/grub.cfg), boot menu left as is."; exit 1; }

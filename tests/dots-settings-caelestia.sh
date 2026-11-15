@@ -16,7 +16,8 @@ mkdir -p "$t/caelestia" "$t/skel"
 # Your file (an option by its number, as Caelestia also reads it) and AgrOS's copy (notifs.fullscreen: "Off")
 echo '{"services": {"clockFormat": 2}}' >"$t/caelestia/shell.json"
 echo '{"notifs": {"fullscreen": "Off"}}' >"$t/skel/shell.json"
-python3 -I - "$here" "$t" <<'P'
+# (77: no Caelestia option list to check against, said below: a part skipped, a failure on CI)
+python3 -I - "$here" "$t" <<'P' || { rc=$?; ((rc == 77)) || exit "$rc"; skipped "no Caelestia option list here (Caelestia or Qt's qml tool missing, or an older Caelestia): its options not checked"; }
 import contextlib, importlib.machinery, importlib.util, io, json, os, sys
 here, t = sys.argv[1:]
 loader = importlib.machinery.SourceFileLoader("ds", f"{here}/.local/bin/dots-settings")
@@ -65,8 +66,7 @@ ds.hyprctl = real_hyprctl
 
 options = ds.caelestia_options()
 if not os.path.exists(ds.QML) or not options:
-    print("skip: no Caelestia option list here (Caelestia or Qt's qml tool missing, or an older Caelestia)")
-    sys.exit(0)
+    sys.exit(77)
 settings = ds.all_settings(ds.schema())
 mine = [k for k in settings if k.startswith(tuple(ds.CAELESTIA_FILES))]
 assert len(options["caelestia-shell"]) > 100, f"only {len(options['caelestia-shell'])} Caelestia options read"

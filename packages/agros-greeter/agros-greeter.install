@@ -1,19 +1,23 @@
 # greetd pointed at the login screen (its own config kept as config.toml.agros-orig), its PAM service made from the
-# system's (greetd-pam) with the keyring's lines, the user it shows by default, and greetd on
+# system's (greetd-pam, the keyring's lines from its template), the user it shows by default, and greetd on
 # (AGROS_ROOT: another root, the tests' throwaway one; / when pacman runs this)
 _r=${AGROS_ROOT:-}
 _dm=$_r/var/lib/agros/display-manager
+# (at install and each upgrade: one it can't follow said both times; the keyring named only when the file left there
+# hasn't its lines, as one an earlier run made has)
+_pam() {
+    local why=
+    "$_r/etc/greetd/caelestia-greeter/greetd-pam" >/dev/null 2>&1 && return
+    grep -qs pam_gnome_keyring "$_r/etc/pam.d/greetd" || why=": the passwords keyring isn't unlocked at login"
+    echo "agros-greeter: greetd's PAM service left as it was (greetd-pam couldn't follow the system's$why)"
+}
 
 post_install() {
-    local g=$_r/etc/greetd/caelestia-greeter cfg=$_r/etc/greetd/config.toml pam=$_r/etc/pam.d/greetd u
+    local g=$_r/etc/greetd/caelestia-greeter cfg=$_r/etc/greetd/config.toml u
     systemd-tmpfiles --create /usr/lib/tmpfiles.d/agros-greeter.conf >/dev/null 2>&1 || true
     [[ -f $cfg && ! -f $cfg.agros-orig ]] && cp "$cfg" "$cfg.agros-orig"
     install -m644 "$g/greetd-config.toml" "$cfg"
-    "$g/greetd-pam" >/dev/null 2>&1 || echo "agros-greeter: greetd's PAM service left as it was (greetd-pam couldn't follow the system's)"
-    if [[ -f $pam ]] && ! grep -q pam_gnome_keyring "$pam"; then
-        printf '%s\n' '-auth       optional     pam_gnome_keyring.so' \
-            '-session    optional     pam_gnome_keyring.so auto_start' >>"$pam"
-    fi
+    _pam
     # Who it shows should its theme break: the first account (the one made in the installer; agros-each-user's list of
     # the AgrOS users), until someone logs in. Its theme made as them through agros-each-user --as (setpriv: runuser's
     # PAM opened a logind session for them)
@@ -32,7 +36,8 @@ post_install() {
 
 post_upgrade() {
     systemd-tmpfiles --create /usr/lib/tmpfiles.d/agros-greeter.conf >/dev/null 2>&1 || true
-    "$_r/etc/greetd/caelestia-greeter/greetd-pam" >/dev/null 2>&1 || true
+    _pam
+    true
 }
 
 post_remove() {

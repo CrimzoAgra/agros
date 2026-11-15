@@ -3,8 +3,7 @@
 # each user's Caelestia overlay, hyprbars and Hyprland config check in step with updates, Bluetooth and the screens back on after sleep,
 # the desktop shell at normal CPU priority, the keyring unlocked with the login password, a VMware VM's screen
 # following its window, the night light's location (geoclue), the automatic time zone without a password (polkit),
-# folder icons in the colour scheme's colour (papirus-folders, sudoers), mDNS from Avahi alone, UFW's logging off, wired
-# links that keep dropping stepped down (EEE off, then 1 Gbps)
+# Hyprland's updates held until AgrOS's CI has checked them (the upstream gate), folder icons in the colour scheme's colour (papirus-folders, sudoers), mDNS from Avahi alone, UFW's logging off
 pkgname=agros-system
 pkgver=0
 pkgrel=1
@@ -15,9 +14,8 @@ license=('GPL-3.0-or-later')
 # (fwupd: firmware updates; base-devel and bubblewrap: the boot's AUR builds, in a sandbox, as an account of their own
 # (agros-aur, sysusers.d); passt: that sandbox's own network, pasta; iproute2 and jq: the host's addresses closed off in it)
 depends=('agros-scripts' 'pacman-contrib' 'bluez' 'bluez-utils' 'gnome-keyring' 'libsecret' 'sudo' 'curl' 'flatpak'
-         'iproute2' 'ethtool' 'fwupd' 'base-devel' 'bubblewrap' 'passt' 'git' 'jq')
-optdepends=('snapper: a snapshot before each update' 'ananicy-cpp: the shell rule'
-            'networkmanager: the changes to a wired link that keeps dropping kept in its profile')
+         'iproute2' 'fwupd' 'base-devel' 'bubblewrap' 'passt' 'git' 'jq')
+optdepends=('snapper: a snapshot before each update' 'ananicy-cpp: the shell rule')
 install=agros-system.install
 backup=('etc/vmware-tools/tools.conf')
 _root=$(realpath "${startdir}/../..")
@@ -28,11 +26,10 @@ pkgver() {
 
 package() {
     cd "$startdir"
-    install -Dm755 -t "$pkgdir/usr/lib/agros" auto-update auto-update-aur
+    install -Dm755 -t "$pkgdir/usr/lib/agros" auto-update auto-update-aur aur-agros-patch
+    install -Dm644 -t "$pkgdir/usr/lib/agros/aur-patches" aur-patches/*.patch
     install -Dm644 agros-aur.sysusers "$pkgdir/usr/lib/sysusers.d/agros-aur.conf"
-    install -Dm644 -t "$pkgdir/usr/lib/systemd/system" auto-update.service auto-update-install.service \
-        agros-wired-link.service
-    install -Dm755 "$_root/system/wired-link-watch" "$pkgdir/usr/lib/agros/wired-link-watch"
+    install -Dm644 -t "$pkgdir/usr/lib/systemd/system" auto-update.service auto-update-install.service
     local t
     for t in poweroff reboot halt kexec; do
         install -Dm644 auto-update-timeout.conf "$pkgdir/usr/lib/systemd/system/$t.target.d/agros-auto-update.conf"
@@ -40,6 +37,8 @@ package() {
     install -Dm644 -t "$pkgdir/usr/share/libalpm/hooks" agros-*.hook zz-agros-os-release.hook
     install -Dm755 agros-branding "$pkgdir/usr/share/libalpm/scripts/agros-branding"
     install -Dm644 vmware-tools.conf "$pkgdir/etc/vmware-tools/tools.conf"
+    # (the upstream gate: pacman.conf includes it; not a backup file, so a changed list reaches every machine)
+    install -Dm644 agros-gate.conf "$pkgdir/etc/pacman.d/agros-gate.conf"
     install -Dm755 "$_root/system/bluetooth-resume" "$pkgdir/usr/lib/systemd/system-sleep/agros-bluetooth-resume"
     install -Dm755 "$_root/system/screens-resume" "$pkgdir/usr/lib/systemd/system-sleep/agros-screens-resume"
     install -Dm644 "$_root/system/ananicy/dotfiles.rules" "$pkgdir/etc/ananicy.d/99-agros/agros.rules"

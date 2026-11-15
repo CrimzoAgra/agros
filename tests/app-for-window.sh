@@ -19,15 +19,16 @@ run() { PATH=$t/bin:$PATH XDG_DATA_HOME=$t/share XDG_DATA_DIRS=$t/none "$here/.l
 [[ $(run org.cachyos.cachyos-pi 0) == cachyos-pi ]] || fail "reverse-DNS class against a short StartupWMClass"
 [[ $(run lutris 0) == net.lutris.Lutris ]] || fail "short class against a reverse-DNS id"
 cp /bin/sleep "$t/bin/mytool"
-"$t/bin/mytool" 30 & p1=$!
+"$t/bin/mytool" 30 >/dev/null 2>&1 & p1=$!
+# (the stand-ins' output off the runner's pipe: the Wine one's sleep, a child left by kill, held it open 30 s)
 # (LibreOffice: /usr/bin/libreoffice a link to soffice, which runs soffice.bin, its windows' class soffice)
 mkdir -p "$t/lo"; printf '#!/bin/sh\n' >"$t/lo/soffice"; chmod +x "$t/lo/soffice"; ln -s "$t/lo/soffice" "$t/bin/libreoffice"
-cp /bin/sleep "$t/lo/soffice.bin"; "$t/lo/soffice.bin" 30 & p3=$!
-(exec -a /usr/bin/wine64 bash -c 'sleep 30; :' x "/games/My Game/Game.exe") & p2=$!
+cp /bin/sleep "$t/lo/soffice.bin"; "$t/lo/soffice.bin" 30 >/dev/null 2>&1 & p3=$!
+(exec -a /usr/bin/wine64 bash -c 'sleep 30; :' x "/games/My Game/Game.exe") >/dev/null 2>&1 & p2=$!
 sleep 0.2
 [[ $(run sun-awt-X11-XFramePeer $p1) == tool ]] || fail "by program: the shown app over the hidden one ($(run x $p1))"
 [[ $(run game.exe-unknown $p2) == game ]] || fail "a Wine window by its .exe"
 [[ $(run soffice $p3) == libreoffice-startcenter ]] || fail "LibreOffice's soffice window: Start Center ($(run soffice $p3))"
 [[ -z $(run nothing-like-it $$) ]] || fail "printed an app for a window that has none"
-kill $p1 $p2 $p3
+pkill -P $p2; kill $p1 $p2 $p3
 echo "ok app-for-window"

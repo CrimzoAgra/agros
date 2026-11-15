@@ -30,6 +30,13 @@ You don't have to think about updates.
 - **A new Proton build** (GE-Proton, dwproton, in Steam or Lutris) shows up in Steam once you restart Steam, and in
   Lutris once you restart it and pick it in a game's **Configure**, **Runner options**, **Wine version** (a
   notification says so). The old one stays while a game uses it, and one you installed yourself is never removed.
+- **Hyprland waits for AgrOS's check.** A new Hyprland (the desktop's window manager) and the libraries it's built on
+  are installed by AgrOS's own updates (at shutdown, and the Updates app) only once AgrOS's automatic checks have passed
+  with that version, usually the same day, so an update upstream can't break your desktop. A few other packages wait
+  with it: a library whose update would break the Hyprland you have, and apps built for the newer one. Everything else
+  updates as usual, and what waits isn't listed in the Updates app until it can be installed. `sudo pacman -Syu` in a terminal never updates them, and can stop with a dependency error while one is held:
+  use the Updates app instead. A new install gets the Hyprland the ISO was checked with when a newer one is still
+  waiting.
 - **Every 6 hours** it checks again. When something's waiting, a notification offers **Update now**.
 - **At your next login** after an update, the desktop's settings files you never changed get AgrOS's new version. One
   you changed is left as you have it: AgrOS's new version goes beside it, named `<file>.agros-new`, and a notification
