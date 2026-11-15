@@ -53,6 +53,15 @@ jobs:
           for k in kernel/yama/ptrace_scope kernel/apparmor_restrict_unprivileged_unconfined; do
             [ ! -e /proc/sys/$k ] || echo 0 >/proc/sys/$k
           done
+          # (the runner's AppArmor profile for passt/pasta, Ubuntu's, attaches to the container's pasta by its path and
+          # refuses it here: unloaded on this throwaway runner, said which)
+          a=/sys/kernel/security/apparmor
+          [ -d $a ] || mount -t securityfs securityfs /sys/kernel/security 2>/dev/null || true
+          if [ -r $a/profiles ]; then
+            for n in $(awk '{ print $1 }' $a/profiles | grep -E 'pas(st|ta)' || true); do
+              echo "AppArmor profile $n unloaded (pasta)"; printf '%s' "$n" >$a/.remove || echo "  (couldn't be)"
+            done
+          fi
           [ -c /dev/net/tun ] || { mkdir -p /dev/net && mknod /dev/net/tun c 10 200; }
           chmod 666 /dev/net/tun
       - uses: actions/checkout@v7
