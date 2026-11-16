@@ -117,9 +117,9 @@ updated, only copied in when missing: Caelestia's `shell.json` (its settings, th
 screens). A file `package()` changes at build time only has its current version listed (Caelestia's `execs.lua` has
 every version, with the same change made).
 
-The CI needs two repository secrets: `AGROS_GPG_KEY`, a signing subkey of AgrOS's key without a passphrase, never the
-key itself (made as in agros-iso's manual, *Building the ISO*, step 7: the same secret in both repos; a leaked one is
-revoked and the key every install trusts stays; the primary key works too, with nothing to change);
+The CI needs two repository secrets: `AGROS_GPG_KEY`, AgrOS's key without a passphrase (today the key itself, kept
+only there: no other copy, and no revocation certificate; the same secret in both repos. A signing subkey works too,
+with nothing to change: agros-iso's manual, *Building the ISO*, step 7, makes one);
 and `AGROS_ISO_TOKEN`, a fine-grained token for `agros-iso` only with **Actions: Read and write**, which starts
 agros-iso's ISO build after each publish (the `iso` job fails without it). It also needs GitHub Pages turned on with
 "GitHub Actions" as its source. An optional repository variable, `AGROS_PUBLISHED`, points the build at another

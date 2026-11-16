@@ -298,7 +298,7 @@ jobs:
           AGROS_GPG_KEY: ${{ secrets.AGROS_GPG_KEY }}
         shell: bash
         run: |
-          [ -n "$AGROS_GPG_KEY" ] || { echo "::error::Add the AGROS_GPG_KEY secret (a signing subkey of AgrOS's key, as agros-iso's manual, Building the ISO, step 7, makes it)"; exit 1; }
+          [ -n "$AGROS_GPG_KEY" ] || { echo "::error::Add the AGROS_GPG_KEY secret (AgrOS's key, or a signing subkey of it, without a passphrase)"; exit 1; }
           # (the key gone when this step ends, signed or not, its agent stopped: nothing after it can read it)
           trap 'gpgconf --kill all; rm -rf "$(gpgconf --list-dirs homedir)"' EXIT
           echo "$AGROS_GPG_KEY" | gpg --batch --import
