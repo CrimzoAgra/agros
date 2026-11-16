@@ -4,7 +4,7 @@
 # (agros-welcome --system installs the ones for what's plugged in), as is VMware Workstation (its license forbids
 # passing it on: built from the AUR on your machine by agros-welcome --system).
 pkgname=agros-desktop
-pkgver=11
+pkgver=12
 pkgrel=1
 pkgdesc='AgrOS: Hyprland + Caelestia desktop with its apps (meta package)'
 arch=('any')
@@ -26,7 +26,8 @@ depends=(
     # Look: GTK and Qt themes, icons, fonts
     adw-gtk-theme papirus-icon-theme papirus-folders bibata-cursor-theme-bin qtengine frameworkintegration darkly-bin
     qt6-wayland
-    noto-fonts noto-fonts-emoji noto-fonts-cjk ttf-cascadia-code-nerd  # (the shell's and terminal's: CaskaydiaCove NF)
+    noto-fonts noto-fonts-emoji noto-fonts-cjk ttf-cascadia-code-nerd  # (the shell's: CaskaydiaCove NF)
+    ttf-jetbrains-mono-nerd             # the terminal's and the window groups' (Caelestia's dots: foot.ini, group.lua)
     ttf-material-symbols-variable ttf-rubik-vf
     # Shell and terminal tools
     fish foot starship eza zoxide direnv fastfetch fetch-git btop micro bat ripgrep lazygit trash-cli curl git jq
