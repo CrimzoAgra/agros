@@ -10,6 +10,7 @@
 #   <set>.error     pacman's error when it couldn't work out the set at all (no .si or .files then)
 #   <set>.fileserror  pacman -Fl's when it couldn't list every package's files
 #   iso.leftout     what agros-trim.sh leaves out of the ISO
+#   iso.trim        agros-trim.sh's fallbacks (its lines ending in "(agros-trim.sh)": what it couldn't leave out)
 #   live.pats, inst.pats, agros.pats   NoExtract patterns, one a line: agros-trim.sh's for the live ISO and for
 #                   installed systems, and agros-system's agros-noextract.conf (installed systems' too)
 # Writes <out>/report (a line for each thing that needs a look), <out>/table (rows for the issue's table) and
@@ -127,6 +128,10 @@ for key, label in SETS:
                           "most in " + ", ".join(f"{n} (+{mib(pkgs[n]['kib'] - old.get(n, 0))})" for n in grew))
     table.append(row + " |")
     baseline += [f"{key} {n} {p['kib']:.0f}" for n, p in sorted(pkgs.items())]
+
+# (each of agros-trim.sh's fallbacks: otherwise only in the ISO build's log, and the ISO bigger for good)
+for line in read("iso.trim"):
+    report.append(f"The ISO: {line[:1].lower()}{line[1:]}")
 
 for n in read("iso.leftout"):
     if n in sets["iso"]:

@@ -4,7 +4,9 @@
 # resolves each list as if into an empty disk), and the files of those packages; ci/sizes.py compares them with last
 # week's and checks the NoExtract patterns still match.
 #   ci/sizes.sh <out dir> [<last week's baseline>]
-# - the ISO: agros-iso's package list as agros-trim.sh leaves it (run on a copy, as the build does)
+# - the ISO: agros-iso's package list as agros-trim.sh leaves it (run on a copy, as the build does); each of its
+#   fallbacks (a name CachyOS's list no longer has, the LTS kernel kept, NoExtract not added: its lines that end in
+#   "(agros-trim.sh)", otherwise only in the ISO build's log) said in the issue
 # - a new install: the installer's list (netinstall.yaml's selected groups, not the handheld ones). CachyOS's own
 #   pacstrap base (in its installer's package) isn't in it: the same each week, so nothing to watch
 set -euo pipefail
@@ -43,7 +45,8 @@ p=$w/iso/archiso
 list() { sed 's/#.*//; s/[[:space:]]//g; /^$/d' "$1" | sort -u; }
 cp "$p/packages_desktop.x86_64" "$p/packages.x86_64"
 list "$p/packages.x86_64" >"$w/iso.before"
-bash "$w/iso/agros-trim.sh" "$p" >/dev/null
+bash "$w/iso/agros-trim.sh" "$p" >"$w/trim.log"
+sed -n 's/^ *-> \(.*(agros-trim\.sh)\)$/\1/p' "$w/trim.log" >"$d/iso.trim"
 list "$p/packages.x86_64" >"$w/iso.list"
 comm -23 "$w/iso.before" "$w/iso.list" >"$d/iso.leftout"
 python - "$p/airootfs/usr/share/agros/netinstall.yaml" >"$w/inst.list" <<'EOF'

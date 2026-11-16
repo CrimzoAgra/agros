@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # ci/sizes.py (the weekly size watch's comparison): the first week only records; then a package new this week and big
 # is said with what pulled it in, a small one not; a set grown much is said; a package agros-trim.sh leaves out coming
-# back, a name no repo has, a NoExtract pattern matching no file, and the two installed-system lists differing are
-# each said; nothing said when nothing changed. A set pacman couldn't work out, or list the files of, is said, its
-# patterns not checked, last week's baseline kept. Then ci/sizes.sh with a stand-in pacman and agros-iso: the lists as
-# the build and the installer take them, names no repo has set aside, other pacman failures and an empty list said
+# back, a name no repo has, a NoExtract pattern matching no file, the two installed-system lists differing, and each of
+# agros-trim.sh's fallbacks are each said; nothing said when nothing changed. A set pacman couldn't work out, or list
+# the files of, is said, its patterns not checked, last week's baseline kept. Then ci/sizes.sh with a stand-in pacman
+# and agros-iso: the lists as the build and the installer take them, names no repo has set aside, other pacman failures
+# and an empty list said
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
@@ -58,6 +59,8 @@ sed -i 's/^Installed Size  : 1,536.00 KiB$/Installed Size  : 0.02 GiB/' "$d/iso.
 echo nosuchpkg >"$d/inst.unknown"
 sed -i '/wall0.png/d' "$d/iso.files"
 echo 'usr/share/locale/*' >>"$d/inst.pats"
+printf '%s\n' "Not in CachyOS's list any more (renamed or dropped?): micro (agros-trim.sh)" \
+    'The LTS kernel kept in the live ISO: grub/loopback.cfg is gone (agros-trim.sh)' >"$d/iso.trim"
 run "$t/week1"
 r=$(cat "$t/out/report")
 for s in 'The ISO: libplasma (40 MiB) is new this week, pulled in by qtengine' \
@@ -66,7 +69,9 @@ for s in 'The ISO: libplasma (40 MiB) is new this week, pulled in by qtengine' \
     "A new install: its list asks for nosuchpkg, which no repo has (the build or the install fails on it)" \
     "agros-trim.sh, the live ISO's NoExtract pattern usr/share/hypr/wall*.png matches no file any more (renamed?): those files are unpacked again" \
     "agros-trim.sh, installed systems' NoExtract pattern usr/share/locale/* matches no file any more (renamed?): those files are unpacked again" \
-    "agros-iso's agros-trim.sh (installed systems' NoExtract) and agros's agros-noextract.conf differ: keep them the same"; do
+    "agros-iso's agros-trim.sh (installed systems' NoExtract) and agros's agros-noextract.conf differ: keep them the same" \
+    "The ISO: not in CachyOS's list any more (renamed or dropped?): micro (agros-trim.sh)" \
+    "The ISO: the LTS kernel kept in the live ISO: grub/loopback.cfg is gone (agros-trim.sh)"; do
     grep -qxF -- "$s" <<<"$r" || fail "not said: $s
 in: $r"
 done
