@@ -2,6 +2,7 @@
 # AgrOS's name in /etc/os-release (fastfetch, fetch, Caelestia, the login screen read it) and /etc/lsb-release, as
 # CachyOS's own cachyos-branding does for CachyOS's: after it (zz-agros-os-release.hook), so AgrOS's is the one left.
 # ID_LIKE keeps cachyos and arch, for the tools that look for them
+#   agros-branding [<os-release> [<lsb-release>]]   (/usr/share/libalpm/scripts/agros-branding; other files: the tests')
 f=${1:-/etc/os-release} lsb=${2:-/etc/lsb-release}
 [[ -e $f ]] || cp /usr/lib/os-release "$f"
 # (each as it was before AgrOS's name, kept once: agros-system's removal puts it back where CachyOS's script isn't there)

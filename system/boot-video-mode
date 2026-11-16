@@ -2,9 +2,9 @@
 """Keeps the kernel console in each screen's best mode, so there's no "no video" between the login screen and the
 desktop (the screen doesn't resync when Hyprland takes over). Runs at every boot (boot-video-mode.service, installed
 by agros-boot): reads the connected screens' modes from their EDID, picks the screen's own resolution (its preferred
-mode's) and then its highest refresh rate there (screenmode.py, shared with the login screen's best-mode), and sets video=<screen>:<W>x<H>@<Hz>
-in the kernel options (Limine or GRUB) when they changed. The kernel picks its mode before this can run, so a newly
-connected screen gets its mode from the boot after.
+mode's) and then its highest refresh rate there (screenmode.py, shared with the login screen's best-mode), and sets
+video=<screen>:<W>x<H>@<Hz> in the kernel options (Limine or GRUB) when they changed. The kernel picks its mode before
+this can run, so a newly connected screen gets its mode from the boot after.
   boot-video-mode           update the kernel options if the screens changed
   boot-video-mode --check   only print the options for the screens connected now (none: said, exit 3)
   boot-video-mode --current the video= options the boot config has now (what a boot with no screen found keeps; no
@@ -17,6 +17,8 @@ connected screen gets its mode from the boot after.
                             video=<screen>:<W>x<H>@<Hz> (others, like video=efifb:off, are yours: kept); and the QUIET
                             ones the line didn't have before AgrOS (its <file>.agros-orig, boot-menu's copy; none: kept);
                             the boot entries not made again (the caller does, with its other changes); none there: exit 3
+  boot-video-mode --test    its own checks of the option editing (tests/run.sh)
+  (AGROS_ROOT: another root, the tests' throwaway one)
 The kernel options line is the set in effect: the file is read as a shell script, so a KEY= line sets the options and each
 KEY+= after it adds to them (Limine's KERNEL_CMDLINE[default] can have several). Options go on its last line; ones of
 the same name on any of its lines count as there
