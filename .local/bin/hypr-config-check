@@ -7,7 +7,7 @@
 set -uo pipefail
 state="${XDG_STATE_HOME:-$HOME/.local/state}/hypr-config-check"
 mkdir -p "${state%/*}"
-cd ~ || exit 1  # (it writes a log in the folder it's run from: from pacman, that's /)
+cd ~ || exit 2  # (it writes a log in the folder it's run from: from pacman, that's /. None: couldn't check)
 # Hyprland won't run without a runtime folder, and from the pacman hook (agros-each-user: /run/user/<uid>, not there
 # when you're not logged in; sudo, at shutdown) there's none: its "XDG_RUNTIME_DIR is not set" was taken for the
 # config's error. One of its own then, gone after

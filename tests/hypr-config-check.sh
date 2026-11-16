@@ -41,6 +41,9 @@ out=$(REFUSE=1 run 2>&1); rc=$?
 ((rc == 2)) || fail "Hyprland refusing to run not said as couldn't check (exit $rc): $out"
 [[ ! -e $t/state/hypr-config-check ]] || fail "Hyprland's refusal written down as a config error: $(cat "$t/state/hypr-config-check")"
 [[ $out == *"couldn't be checked"*"XDG_RUNTIME_DIR is not set"* && $out != *$'\033'* ]] || fail "the refusal not said: $out"
+# A home it can't go into (Hyprland writes its log in the folder it's run from): couldn't check (2), not a config error (1)
+out=$(HOME=$t/no-home XDG_STATE_HOME=$t/state PATH=$t/bin:$PATH XDG_RUNTIME_DIR=$t/run "$here/.local/bin/hypr-config-check" 2>&1); rc=$?
+((rc == 2)) || fail "no home to run in not said as couldn't check (exit $rc): $out"
 # Stopped as a group (a closed terminal stops a refresh and its check alike): Hyprland's check stops too, not left
 # running under timeout in a group of its own
 setsid env SLOW=1 HOME="$t/home" XDG_STATE_HOME="$t/state" PATH="$t/bin:$PATH" XDG_RUNTIME_DIR="$t/run" \
