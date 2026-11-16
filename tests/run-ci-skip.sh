@@ -18,4 +18,15 @@ for x in whole marked part; do
     [[ $out == "FAIL $x: "* ]] || fail "$x skipped on CI not said as a failure: $out"
 done
 out=$(CI=1 bash "$t/tests/run.sh" plain) && [[ $out == "ok plain" ]] || fail "a plain pass on CI not one: $out"
+# Several at once: said in order; two that clash when run together (one marker file) pass, each run again alone; a real
+# failure still fails
+for n in a b; do
+    printf '#!/bin/sh\nif [ -e %q/busy ]; then echo "FAIL: clash"; exit 1; fi\ntouch %q/busy; sleep 1; rm -f %q/busy\necho "ok clash-%s"\n' \
+        "$t" "$t" "$t" "$n" >"$t/tests/clash-$n.sh"
+done
+chmod +x "$t/tests/"*.sh
+out=$(CI=1 AGROS_TEST_JOBS=3 bash "$t/tests/run.sh" clash-a plain clash-b) && [[ $out == $'ok clash-a\nok plain\nok clash-b' ]] ||
+    fail "tests run together: not each passed, in order: $out"
+out=$(CI=1 AGROS_TEST_JOBS=3 bash "$t/tests/run.sh" plain whole) && fail "a real failure among others passed: $out"
+[[ $out == $'ok plain\nFAIL whole: '* ]] || fail "a real failure among others not said in order: $out"
 echo "ok run-ci-skip"
