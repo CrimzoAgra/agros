@@ -23,8 +23,8 @@ _root=$(realpath "${startdir}/../..")
 # Caelestia's components AgrOS takes (its installer's defaults, plus uwsm and the Spotify theme), as "source|dest"
 _components=(hypr fish foot fastfetch btop micro "thunar|Thunar" starship.toml uwsm spicetify)
 # Its shell started by caelestia-start: on AgrOS's changes to it from the first login (checked at every login, rebuilt
-# when out of date or missing), else it came up on Caelestia's own config (no dock, the bar laid out otherwise) and jumped when agros-welcome
-# rebuilt it and restarted it; and each start logged
+# when out of date or missing), else it came up on Caelestia's own config (no dock, the bar laid out otherwise) and
+# jumped when agros-welcome rebuilt it and restarted it; and each start logged
 _execs_sed='s|^\( *\)hl.exec_cmd("caelestia shell -d")$|\1hl.exec_cmd("~/.local/bin/caelestia-start")|'
 # Settings that are yours to change, through the apps that write them (Caelestia's settings and weather location, the
 # dock's pins, default apps, Settings > Startup, VSCodium, Legion Control) or one machine's own (hosts/): copied into a
@@ -78,8 +78,8 @@ package() {
     ln -s /etc/xdg/quickshell/caelestia/assets/wallpaper.webp "$skel/Pictures/Wallpapers/caelestia.webp"
     rm -f "$skel/.config/autostart/cachyos-hello.desktop"  # (CachyOS Hello isn't installed)
     install -d "$skel/.local/share"
-    cp -r --no-preserve=ownership .local/share/applications .local/share/firefox .local/share/lutris "$skel/.local/share/"
     # (lutris: the Rockstar Games Launcher's cover and banner, which Lutris has none of)
+    cp -r --no-preserve=ownership .local/share/applications .local/share/firefox .local/share/lutris "$skel/.local/share/"
     # Fonts and icons: system-wide
     install -Dm644 .local/share/fonts/Bangers-Regular.ttf "$pkgdir/usr/share/fonts/agros/Bangers-Regular.ttf"
     install -Dm644 .local/share/fonts/OFL.txt "$pkgdir/usr/share/licenses/$pkgname/OFL-Bangers.txt"
