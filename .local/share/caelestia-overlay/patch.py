@@ -2,7 +2,10 @@
 # Applies the caelestia-overlay changes to a linked copy of Caelestia (made by caelestia-overlay).
 # Each feature is all-or-nothing: if any anchor is missing (new Caelestia version), that feature
 # is skipped and the original files stay linked.
-#   usage: patch.py <installed caelestia dir> <overlay dir>
+#   usage: patch.py <installed caelestia dir> <overlay dir>   "Patched:", "Off:" or "WARNING: ... skipped" per feature
+#                                                             (exit 1 when one was skipped: caelestia-overlay keeps the
+#                                                             WARNING lines for dotfiles-check)
+#          patch.py --list   the features as JSON (the Settings app's Features page, settings caelestia.<id>)
 import json
 import os
 import pwd
@@ -115,6 +118,8 @@ def write(files):
 
 
 def launcher():
+    # Super menu: hover an app for its heart (favourite) and thumbtack (dock pin) buttons (appitem-block.qml, beside
+    # this); its favouriteIcon is the anchor that says the item is still the one the block was written for
     rel = "modules/launcher/items/AppItem.qml"
     s = read(rel)
     if "id: favouriteIcon" not in s:
@@ -125,6 +130,8 @@ def launcher():
 
 
 def dock():
+    # The bar's "dock" entry (shell.json's bar entries): pinned apps and open windows (Dock.qml), each with a
+    # Caelestia-style hover popout (DockMenu.qml), shown through the bar's own popout machinery
     bar = read("modules/bar/Bar.qml")
     bar = insert(bar, '        } else if (id === "activeWindow"', '''        } else if (id === "dock") {
             const dock = ch.item;

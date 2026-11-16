@@ -1,10 +1,11 @@
-"""Rockstar Games among Lutris's sources (lutris-overlay's rockstar_source; Lutris has none), like the patched Battle.net
-one (bnet_login; the sign-in both share is signin.py): you sign in with Lutris's login window (Rockstar's own sign-in page) and it lists the games on your
-account. Rockstar has no public API: the games are read from inside the signed-in site, the way its own account pages
-read them (a bearer token from /auth/ping-bearer.json, then Social Club's account/googleTagManagerSetupData, whose
-gamesOwned the site sends to its analytics). Each reload signs in again unseen; if that fails the last list is kept.
-Installing a game adds it on the Rockstar Games Launcher's Wine prefix and opens the launcher, where you install and play
-it; without the launcher, Lutris's install of the launcher opens first (it's under Launchers too)"""
+"""Rockstar Games among Lutris's sources (lutris-overlay's rockstar_source; Lutris has none), like the patched
+Battle.net one (bnet_login; the sign-in both share is signin.py): you sign in with Lutris's login window (Rockstar's
+own sign-in page) and it lists the games on your account. Rockstar has no public API: the games are read from inside
+the signed-in site, the way its own account pages read them (a bearer token from /auth/ping-bearer.json, then Social
+Club's account/googleTagManagerSetupData, whose gamesOwned the site sends to its analytics). Each reload signs in again
+unseen; if that fails the last list is kept. Installing a game adds it on the Rockstar Games Launcher's Wine prefix and
+opens the launcher, where you install and play it; without the launcher, Lutris's install of the launcher opens first
+(it's under Launchers too)"""
 
 import json
 import os

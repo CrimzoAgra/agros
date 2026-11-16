@@ -1,5 +1,6 @@
 // caelestia-overlay: the bar's workspace preview (hovering a workspace): a miniature of its screen with live pictures of
-// its windows where they are, like the active window popout's. Shown by Bar.qml's checkPopout for workspaces with windows; a click switches to it
+// its windows where they are, like the active window popout's. Shown by Bar.qml's checkPopout for workspaces with
+// windows (the workspace_preview patch in patch.py); a click switches to it
 pragma ComponentBehavior: Bound
 
 import QtQuick
