@@ -23,21 +23,28 @@ pam='-password   optional     pam_gnome_keyring.so'
 
 # agros-system
 echo 'password include system-auth' >"$r/etc/pam.d/passwd"
-# (a line of yours naming another file, and one commented out: neither the gate's Include)
-printf '%s\n' '[options]' 'Architecture = auto' '#Include = /etc/pacman.d/agros-gate.conf' 'Include = /etc/pacman.d/agros-gate.conf.old' '' \
+# (a line of yours naming another file, and one commented out: neither the gate's Include; the ISO's NoExtract line,
+# and one of yours)
+printf '%s\n' '[options]' 'NoExtract = usr/share/doc/* usr/share/hypr/wall*.png # agros-iso' 'Architecture = auto' \
+    'NoExtract = usr/share/mine/*' '#Include = /etc/pacman.d/agros-gate.conf' 'Include = /etc/pacman.d/agros-gate.conf.old' '' \
     '[core]' 'Include = /etc/pacman.d/mirrorlist' >"$r/etc/pacman.conf"
 pac agros-system post_install
 pac agros-system post_install
-# (the upstream gate's file, this package's, included by pacman.conf once, in [options]; gone again at removal)
-[[ $(cat "$r/etc/pacman.conf") == $'[options]\nInclude = /etc/pacman.d/agros-gate.conf\nArchitecture = auto\n#Include = /etc/pacman.d/agros-gate.conf\nInclude = /etc/pacman.d/agros-gate.conf.old\n\n[core]\nInclude = /etc/pacman.d/mirrorlist' ]] ||
-    fail "pacman.conf not given the gate's Include once, in [options]: $(cat "$r/etc/pacman.conf")"
+# (the upstream gate's file and the files never unpacked, this package's, each included by pacman.conf once, in
+# [options], the ISO's copy of the list gone, yours kept; gone again at removal)
+[[ $(cat "$r/etc/pacman.conf") == $'[options]\nInclude = /etc/pacman.d/agros-noextract.conf\nInclude = /etc/pacman.d/agros-gate.conf\nArchitecture = auto\nNoExtract = usr/share/mine/*\n#Include = /etc/pacman.d/agros-gate.conf\nInclude = /etc/pacman.d/agros-gate.conf.old\n\n[core]\nInclude = /etc/pacman.d/mirrorlist' ]] ||
+    fail "pacman.conf not given the gate's and the NoExtract list's Includes once, in [options], the ISO's line out: $(cat "$r/etc/pacman.conf")"
 [[ $(grep -cxF -- "$pam" "$r/etc/pam.d/passwd") == 1 ]] || fail "passwd's PAM not given the keyring's line once: $(cat "$r/etc/pam.d/passwd")"
 c=$(calls)
 [[ $(grep -c '^systemctl enable .*auto-update-install.service' <<<"$c") == 2 && $c == *"--global mask gnome-keyring-daemon"* ]] ||
     fail "the services not enabled at install: $c"
 # (Passim, fwupd's LAN cache and listener, masked once: an unmask of yours stays)
 [[ $(grep -c '^systemctl mask passim.service$' <<<"$c") == 1 && -e $r/var/lib/agros/passim-masked ]] || fail "Passim not masked once: $c"
+# (a machine installed before the list: given its Include at the upgrade)
+sed -i '/agros-noextract/d' "$r/etc/pacman.conf"
 pac agros-system post_upgrade
+[[ $(grep -cx 'Include = /etc/pacman.d/agros-noextract.conf' "$r/etc/pacman.conf") == 1 ]] ||
+    fail "the NoExtract list's Include not added at upgrade: $(cat "$r/etc/pacman.conf")"
 [[ $(calls) != *enable* ]] || fail "post_upgrade turned something on"
 # (a note after it, by hand: the line still found, as at install)
 sed -i 's|^Include = /etc/pacman.d/agros-gate.conf$|& # mine|' "$r/etc/pacman.conf"
@@ -47,6 +54,8 @@ pac agros-system post_install
     fail "the gate's Include with a note after it added again: $(cat "$r/etc/pacman.conf")"
 pac agros-system post_remove
 grep -q '^Include = /etc/pacman.d/agros-gate.conf\( #.*\)\?$' "$r/etc/pacman.conf" && fail "the gate's Include left in pacman.conf at removal"
+grep -q 'agros-noextract' "$r/etc/pacman.conf" && fail "the NoExtract list's Include left in pacman.conf at removal"
+grep -qx 'NoExtract = usr/share/mine/\*' "$r/etc/pacman.conf" || fail "a NoExtract line of yours taken out at removal"
 grep -qx 'Include = /etc/pacman.d/agros-gate.conf.old' "$r/etc/pacman.conf" || fail "a line of yours naming another file taken out at removal"
 [[ $(calls) == *"systemctl unmask passim.service"* && ! -e $r/var/lib/agros/passim-masked ]] || fail "Passim not put back at removal"
 pac agros-system pre_remove

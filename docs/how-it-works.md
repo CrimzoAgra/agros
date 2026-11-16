@@ -763,6 +763,13 @@ brings each change; nothing to run by hand).
   - "Update all" runs `update-apps`, showing its progress; shown only while something is waiting. Closed with the
     title bar; an update already running carries on (its log: `$XDG_RUNTIME_DIR/update-apps.log`), and opening it
     again and pressing "Update all" follows it
+- **Files never unpacked** (`packages/agros-system/agros-noextract.conf` at `/etc/pacman.d/agros-noextract.conf`,
+  included by `pacman.conf` the same way, at install and at upgrade): pacman's `NoExtract` for what no one on AgrOS uses:
+  docs and help pages (fish's and HPLIP's kept), the Nerd font styles nothing names (JetBrains Mono's Mono, Propo and NL,
+  Cascadia's Mono and Propo), Material Symbols' Outlined and Sharp, Hyprland's own wallpapers. A new install has them
+  left out from its first package: agros-iso's `agros-trim.sh` puts the same list in the installed `pacman.conf`
+  (marked `# agros-iso`), which agros-system's install swaps for its Include; keep the two lists the same. On a machine
+  installed before, a package's go at its next update
 - **The upstream gate** (`packages/agros-system/agros-gate.conf` at `/etc/pacman.d/agros-gate.conf`, which
   `agros-system`'s install adds to `pacman.conf`'s Include lines, with the file; `.local/bin/update-gate`): Hyprland and its libraries (the packages AgrOS's config, title
   bar plugin and shell patches are written against) are held back from every pacman run, a manual one too, and updated

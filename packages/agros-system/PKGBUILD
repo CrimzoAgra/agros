@@ -39,6 +39,8 @@ package() {
     install -Dm644 vmware-tools.conf "$pkgdir/etc/vmware-tools/tools.conf"
     # (the upstream gate: pacman.conf includes it; not a backup file, so a changed list reaches every machine)
     install -Dm644 agros-gate.conf "$pkgdir/etc/pacman.d/agros-gate.conf"
+    # (the files no one uses, never unpacked: pacman.conf includes it, the same way)
+    install -Dm644 agros-noextract.conf "$pkgdir/etc/pacman.d/agros-noextract.conf"
     install -Dm755 "$_root/system/bluetooth-resume" "$pkgdir/usr/lib/systemd/system-sleep/agros-bluetooth-resume"
     install -Dm755 "$_root/system/screens-resume" "$pkgdir/usr/lib/systemd/system-sleep/agros-screens-resume"
     install -Dm644 "$_root/system/ananicy/dotfiles.rules" "$pkgdir/etc/ananicy.d/99-agros/agros.rules"

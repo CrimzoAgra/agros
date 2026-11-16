@@ -23,6 +23,19 @@ quiet_passim() {
     mkdir -p "${_passim_done%/*}" && : >"$_passim_done"
 }
 
+# The files no one uses, never unpacked (this package's agros-noextract.conf): pacman.conf includes it, added at install
+# and at upgrade too (machines installed before it), as the gate's. The ISO's copy of the list (agros-iso's
+# agros-trim.sh puts it in the installed pacman.conf, ending "# agros-iso", for the packages installed before this one)
+# taken out once the Include is in: one list after that, this package's
+include_noextract() {
+    local conf=$_r/etc/pacman.conf
+    [[ -f $conf ]] || return 0
+    if ! grep -qE '^[[:space:]]*Include[[:space:]]*=[[:space:]]*/etc/pacman\.d/agros-noextract\.conf[[:space:]]*(#.*)?$' "$conf"; then
+        sed -i '/^\[options\]/a Include = /etc/pacman.d/agros-noextract.conf' "$conf"
+    fi
+    sed -i '/^NoExtract = .* # agros-iso$/d' "$conf"
+}
+
 # The services on, and the keyring's password changed with yours (passwd's PAM)
 post_install() {
     systemctl enable bluetooth.service paccache.timer auto-update.service auto-update-install.service \
@@ -39,12 +52,14 @@ post_install() {
     if [[ -f $conf ]] && ! grep -qE '^[[:space:]]*Include[[:space:]]*=[[:space:]]*/etc/pacman\.d/agros-gate\.conf[[:space:]]*(#.*)?$' "$conf"; then
         sed -i '/^\[options\]/a Include = /etc/pacman.d/agros-gate.conf' "$conf"
     fi
+    include_noextract
     quiet_ufw
     quiet_passim
     true # (the quiet_ steps' status isn't the scriptlet's: a note not written is tried again at the next upgrade)
 }
 
 post_upgrade() {
+    include_noextract
     quiet_ufw
     quiet_passim
     true # (the quiet_ steps' status isn't the scriptlet's: a note not written is tried again at the next upgrade)
@@ -61,7 +76,9 @@ pre_remove() {
 post_remove() {
     # (the upstream gate's file went with this package: pacman.conf's Include of it with it, or pacman can't read its
     # config at all; the approved list it kept, too)
-    sed -i '\|^[[:space:]]*Include[[:space:]]*=[[:space:]]*/etc/pacman\.d/agros-gate\.conf[[:space:]]*\(#.*\)\?$|d' "$_r/etc/pacman.conf" 2>/dev/null
+    sed -i -e '\|^[[:space:]]*Include[[:space:]]*=[[:space:]]*/etc/pacman\.d/agros-gate\.conf[[:space:]]*\(#.*\)\?$|d' \
+        -e '\|^[[:space:]]*Include[[:space:]]*=[[:space:]]*/etc/pacman\.d/agros-noextract\.conf[[:space:]]*\(#.*\)\?$|d' \
+        "$_r/etc/pacman.conf" 2>/dev/null
     rm -f "$_r/var/lib/agros/agros-approved"
     # The name from before AgrOS's back in os-release and lsb-release: the copy agros-branding kept of each (all of it,
     # PRIVACY_POLICY_URL too); made before that copy was kept, CachyOS's own script (cachyos-branding) writes CachyOS's
