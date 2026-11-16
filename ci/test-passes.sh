@@ -17,11 +17,14 @@ agros_at() { sed -i "/^\[agros\]$/,/^Server/ s|^Server = .*|Server = $1|" "${PAC
 # tests [<name>...]: the tests (all, or those), as the ci user: the names that failed, in $failed (run here, not in
 # <(...): a background job starts with Ctrl+C ignored, no trap can undo that, and dotfiles-sync-edge tests one)
 tests() {
-    local log
-    log=$(runuser -u ci -- env DOTS_BUILD_TESTS=1 "$here/tests/run.sh" "$@")
+    local log rc=0
+    log=$(runuser -u ci -- env DOTS_BUILD_TESTS=1 "$here/tests/run.sh" "$@") || rc=$?
     printf '%s\n' "$log" >&2
     mapfile -t failed < <(sed -n 's/^FAIL \([^:]*\): .*/\1/p' <<<"$log")
     grep '^FAIL ' <<<"$log" | sed 's/^/    /' >>"$report"
+    # (run.sh failing with none named (runuser refused, run.sh cut off): the tests didn't run, not "all passed", which
+    # approves Hyprland)
+    ((rc == 0 || ${#failed[@]})) || { echo "    the tests didn't run (run.sh: exit $rc)" >>"$report"; result fail 1; }
 }
 result() { echo "result=$1" >>"$out"; echo "Tests: $1"; exit "${2:-0}"; }
 agros_at "$built"
