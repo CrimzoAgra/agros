@@ -1117,11 +1117,13 @@ breaks something holds back that one piece, never the rest (`.github/workflows/c
   install (`netinstall.yaml`'s selected groups), nothing built, and says: a package new this week of 20 MiB or more
   and what pulled it in, either set grown 50 MiB or more, a package `agros-trim.sh` leaves out coming back, a listed
   name no repo has, a NoExtract pattern (the live ISO's, installed systems', `agros-noextract.conf`) matching no file
-  any more, and the installed systems' two NoExtract lists differing. A set pacman can't work out (a dependency no
-  package provides, a conflict, an empty list) is said with pacman's error, and its last week's sizes kept for the
-  next; a set whose files pacman can't all list has its NoExtract patterns left unchecked, said. Last week's sizes are
-  kept in last week's issue (a comment in its body; left out, said, if it would take the body past GitHub's 65536
-  characters); the size watch not running at all is said with a link to its log.
+  any more, the installed systems' two NoExtract lists differing, and each fallback `agros-trim.sh` took (a name
+  CachyOS's list no longer has, the LTS kernel kept, NoExtract not added: its lines ending in "(agros-trim.sh)",
+  otherwise only in the ISO build's log, while the ISO stays bigger for good). A set pacman can't work out (a
+  dependency no package provides, a conflict, an empty list) is said with pacman's error, and its last week's sizes
+  kept for the next; a set whose files pacman can't all list has its NoExtract patterns left unchecked, said. Last
+  week's sizes are kept in last week's issue (a comment in its body; left out, said, if it would take the body past
+  GitHub's 65536 characters); the size watch not running at all is said with a link to its log.
   The AUR packages and CachyOS's installer are built there without compiler warnings
 (theirs, not AgrOS's); AgrOS's own packages keep them.
 
