@@ -45,7 +45,7 @@ jobs:
           # Thunar's headers with a compiler (hyprbars and the Thunar plugin built), mkinitcpio, bubblewrap and passt
           # (the boot's AUR sandbox and its network, checked for real: the host's loopback out of its reach): the tests
           # that check against them
-          pkgs=(git jq python python-gobject python-numpy python-xlib python-secretstorage gnupg shellcheck sudo libnotify
+          pkgs=(git jq python python-yaml python-gobject python-numpy python-xlib python-secretstorage gnupg shellcheck sudo libnotify
             procps-ng util-linux which diffutils pacman-contrib file gtk3 thunar lua lutris nodejs qt6-declarative hyprland
             base-devel mkinitcpio bubblewrap passt xdg-desktop-portal-hyprland)
           # (a machine id: without one systemd's install hooks warn that /etc isn't set up; and its hook that loads a

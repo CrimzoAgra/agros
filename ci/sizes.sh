@@ -17,7 +17,8 @@ trap 'rm -rf "$w"' EXIT
 d=$w/data
 mkdir -p "$d" "$w/db"
 # (its own pacman config and database: the container's own untouched. No signatures checked: only the databases are
-# read, nothing is installed)
+# read, nothing is installed. CachyOS's x86_64 repo, as the ISO's pacman.conf has it: a new install on a newer CPU gets
+# the same packages from its v3/v4 repo, a few percent apart in size, but every week measured the same way)
 cat >"$w/pacman.conf" <<'EOF'
 [options]
 Architecture = x86_64
@@ -52,7 +53,7 @@ def walk(g, on):
     if not on or g.get("platform") == "handheld":
         return
     for p in g.get("packages") or []:
-        print(p)
+        print(p["name"] if isinstance(p, dict) else p)  # (Calamares takes {name, description} too)
     for s in g.get("subgroups") or []:
         walk(s, on)
 for g in yaml.safe_load(open(sys.argv[1])):
@@ -65,20 +66,28 @@ pats "$p/pacman.conf" >"$d/live.pats"
 pats "$p/airootfs/etc/pacman-more.conf" >"$d/inst.pats"
 pats "$here/packages/agros-system/agros-noextract.conf" >"$d/agros.pats"
 
-# Each set: every package it installs (dependencies too), their details and files. A name no repo has stops pacman's
-# whole -Sp: each tried alone then, and the ones that fail set aside (said in the issue)
+# Each set: every package it installs (dependencies too), their details and files. Names no repo has stop pacman's
+# whole -Sp, each said ("target not found"): set aside (said in the issue) and the rest tried again. Anything else it
+# stops on (a dependency nothing provides, a conflict, an empty list) is said instead of the set's sizes (<set>.error).
+# A virtual dependency's provider: pacman's default, as the build's and the installer's --noconfirm take it
+err() { sed '/^$/d; /^warning:/d' "$w/err" | paste -sd' ' | grep . || echo "pacman failed, saying nothing"; }
 for set in iso inst; do
-    mapfile -t names <"$w/$set.list"
     : >"$d/$set.unknown"
-    if ! pac -Sp --noconfirm --print-format '%r/%n' "${names[@]}" >"$w/$set.pkgs" 2>/dev/null; then
-        ok=()
-        for n in "${names[@]}"; do
-            if pac -Sp --noconfirm --print-format x "$n" >/dev/null 2>&1; then ok+=("$n"); else echo "$n" >>"$d/$set.unknown"; fi
-        done
-        pac -Sp --noconfirm --print-format '%r/%n' "${ok[@]}" >"$w/$set.pkgs"
+    mapfile -t names <"$w/$set.list"
+    if ! pac -Sp --noconfirm --print-format '%r/%n' "${names[@]}" >"$w/$set.pkgs" 2>"$w/err"; then
+        sed -n 's/^error: target not found: //p' "$w/err" >"$d/$set.unknown"
+        mapfile -t names < <(grep -vxFf "$d/$set.unknown" "$w/$set.list")
+        if ! pac -Sp --noconfirm --print-format '%r/%n' "${names[@]}" >"$w/$set.pkgs" 2>"$w/err"; then
+            err >"$d/$set.error"
+            continue
+        fi
     fi
+    # (none listed: -Si and -Fl with no names would list every package in the repos)
     mapfile -t pkgs < <(grep / "$w/$set.pkgs")
+    ((${#pkgs[@]})) || { echo "no packages listed" >"$d/$set.error"; continue; }
     pac -Si "${pkgs[@]}" >"$d/$set.si"
-    pac -Fl "${pkgs[@]}" >"$d/$set.files"
+    # (a package the files database doesn't have yet, a moment behind: the rest still listed; the set's NoExtract
+    # patterns then not checked, said)
+    pac -Fl "${pkgs[@]}" >"$d/$set.files" 2>"$w/err" || err >"$d/$set.fileserror"
 done
 python "$here/ci/sizes.py" "$d" "$prev" "$out"
