@@ -4,21 +4,24 @@
 # (agros-welcome --system installs the ones for what's plugged in), as is VMware Workstation (its license forbids
 # passing it on: built from the AUR on your machine by agros-welcome --system).
 pkgname=agros-desktop
-pkgver=9
+pkgver=10
 pkgrel=1
 pkgdesc='AgrOS: Hyprland + Caelestia desktop with its apps (meta package)'
 arch=('any')
 url='https://github.com/CrimzoAgra/agros'
 license=('GPL-3.0-or-later')
 depends=(
+    # First: pacman resolves these in order, depth first, and the first "jack" it meets (ffmpeg's, under
+    # caelestia-cli's gpu-screen-recorder) would otherwise get jack2, its first provider
+    pipewire-jack
     # AgrOS
     agros-scripts agros-hyprland-settings agros-system agros-greeter agros-boot agros-welcome
     agros-vmware                        # in a VMware VM, the desktop on its virtual GPU (does nothing elsewhere)
     # Desktop: Hyprland, Caelestia (shell and CLI), the real Quickshell, the title bar plugin
     hyprland uwsm xdg-desktop-portal-hyprland xdg-desktop-portal-gtk quickshell-git caelestia-shell caelestia-cli
     hyprland-plugin-hyprbars hyprpicker
-    # Sound (PipeWire, its JACK too: never jack2), network, Bluetooth, keyring and polkit
-    pipewire pipewire-pulse pipewire-alsa pipewire-audio pipewire-jack wireplumber pwvucontrol
+    # Sound (PipeWire, its JACK too, listed first above: never jack2), network, Bluetooth, keyring and polkit
+    pipewire pipewire-pulse pipewire-alsa pipewire-audio wireplumber pwvucontrol
     networkmanager bluez bluez-utils gnome-keyring polkit-gnome libsecret python-secretstorage
     # Look: GTK and Qt themes, icons, fonts
     adw-gtk-theme papirus-icon-theme papirus-folders bibata-cursor-theme-bin qtengine frameworkintegration darkly-bin
