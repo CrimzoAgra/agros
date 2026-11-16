@@ -11,7 +11,10 @@
 # they're built against each other; and a library whose update would break one held, with it: held by the gate's
 # Include, added to <out> if <pacman.conf> lacks it). Says on stdout what waits ("name installed -> new" lines, "name
 # (held with ...)"). The list fetched each run, kept for when the repo can't be reached; never fetched, nothing new let
-# through. --offline: the kept list only (the shutdown's install: no more let through than the boot downloaded)
+# through. The list is taken only with a good signature by AgrOS's key beside it (agros-approved.sig, checked with gpgv
+# against agros-keyring's key alone): none, or a bad one (a mirror or a network in between that changed it), and it's
+# as if the repo couldn't be reached, said: the kept list, nothing new let through. --offline: the kept list only (the
+# shutdown's install: no more let through than the boot downloaded)
 set -uo pipefail
 usage="usage: update-gate <pacman.conf> <out> [--dbpath <dir>] [--offline]"
 base=${1:?$usage} out=${2:?$usage}
@@ -25,6 +28,7 @@ while (($#)); do
     esac
 done
 gate=${AGROS_GATE:-/etc/pacman.d/agros-gate.conf}
+keyring=${AGROS_GATE_KEYRING:-/usr/share/pacman/keyrings/agros.gpg}
 if [[ $EUID -eq 0 ]]; then cache=${AGROS_GATE_CACHE:-/var/lib/agros/agros-approved}; else cache=${AGROS_GATE_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/agros-approved}; fi
 mkdir -p "${cache%/*}" 2>/dev/null
 cp -- "$base" "$out" || exit 1
@@ -35,14 +39,18 @@ server=$(pacman-conf --config "$base" --repo agros Server 2>/dev/null | head -1)
 # (fetched into a file of its own: two runs at once, the Updates app's and its list's, don't mix theirs)
 tmp=
 ((offline)) || tmp=$(mktemp "$cache.XXXXXX" 2>/dev/null) || tmp=
-trap 'rm -f "$tmp"' EXIT
+trap 'rm -f "$tmp" "$tmp.sig"' EXIT
 if [[ -n $server && -n $tmp ]] && curl -fsS --connect-timeout 10 -m 30 -o "$tmp" "$server/agros-approved" 2>/dev/null &&
     grep -qE '^[a-z0-9@._+-]+ [A-Za-z0-9.:_+~]+$' "$tmp"; then
-    chmod 644 "$tmp"
-    mv -f "$tmp" "$cache"
-else
-    rm -f "$tmp"
+    if curl -fsS --connect-timeout 10 -m 30 -o "$tmp.sig" "$server/agros-approved.sig" 2>/dev/null &&
+        gpgv --keyring "$keyring" "$tmp.sig" "$tmp" >/dev/null 2>&1; then
+        chmod 644 "$tmp"
+        mv -f "$tmp" "$cache"
+    else
+        echo "update-gate: AgrOS's approved list has no good signature by AgrOS's key ($server/agros-approved.sig): not taken, as if unreachable (the list kept from before, nothing new let through)" >&2
+    fi
 fi
+rm -f "$tmp" "$tmp.sig"
 waits=()
 for name in "${gated[@]}"; do
     have=$(pacman -Q "${db[@]}" -- "$name" 2>/dev/null | cut -d' ' -f2) || continue

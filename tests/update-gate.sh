@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # update-gate (the upstream gate): the gated packages (agros-gate.conf) updated only to versions on AgrOS's approved
 # list (fetched beside the [agros] repo, kept for when it can't be reached), a rebuild of the same version always;
-# held, all of them together, and said otherwise; a library whose update would break one held, held with it
+# held, all of them together, and said otherwise; a library whose update would break one held, held with it. The list
+# taken only with a good signature by AgrOS's key (agros-approved.sig): none (not published yet, a client updated before
+# CI signed it), a bad one or another key's, and it's as an unreachable list: the kept one, said
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
@@ -9,8 +11,16 @@ mkdir -p "$t/bin"
 export AGROS_GATE=$t/agros-gate.conf AGROS_GATE_CACHE=$t/cache/approved
 echo 'IgnorePkg = hyprland hyprutils notinstalled' >"$AGROS_GATE"
 printf '%s\n' '[options]' 'Architecture = auto' "Include = $AGROS_GATE" '' '[agros]' 'Server = https://agros.invalid/x86_64' >"$t/pacman.conf"
+# AgrOS's key: a key of the test's own (its public key where update-gate reads AgrOS's, AGROS_GATE_KEYRING); another
+export GNUPGHOME=$t/gnupg
+mkdir -m700 "$GNUPGHOME"
+for k in agros other; do
+    gpg --batch --quiet --passphrase '' --quick-gen-key "$k <$k@agros.invalid>" ed25519 sign never >/dev/null 2>&1
+done
+gpg --batch --export agros@agros.invalid >"$AGROS_GATE_KEYRING" 2>/dev/null
 # pacman: installed ($HAVE_<name>), the version it would update to ($NEW_<name>), the dry run (-Sup) failing on a
-# library's update while hyprland is held ($BREAKS); curl: the approved list ($APPROVED; $OFFLINE: unreachable)
+# library's update while hyprland is held ($BREAKS); curl: the approved list ($APPROVED; $OFFLINE: unreachable) and its
+# signature, by AgrOS's key ($SIG: none, a 404; bad, of another list; other, by another key)
 # shellcheck disable=SC2016  # (expanded by the stand-ins)
 cat >"$t/bin/pacman" <<'P'
 #!/bin/bash
@@ -35,7 +45,20 @@ case $1 in
 esac
 P
 # shellcheck disable=SC2016
-printf '#!/bin/sh\necho "curl $*" >>"$CALLS"\n[ -z "$OFFLINE" ] || exit 7\nwhile [ "$1" != -o ]; do shift; done\nprintf "%%s\\n" "$APPROVED" >"$2"\n' >"$t/bin/curl"
+cat >"$t/bin/curl" <<'C'
+#!/bin/bash
+echo "curl $*" >>"$CALLS"
+[[ -z $OFFLINE ]] || exit 7
+url=${*: -1}
+while [[ $1 != -o ]]; do shift; done
+if [[ $url != *.sig ]]; then printf '%s\n' "$APPROVED" >"$2"; exit 0; fi
+case ${SIG:-} in
+    none) exit 22 ;;
+    bad) printf '%s\n' "$APPROVED" "hyprland 9.9.9" | gpg --batch --yes -u agros@agros.invalid --detach-sign -o "$2" 2>/dev/null ;;
+    other) printf '%s\n' "$APPROVED" | gpg --batch --yes -u other@agros.invalid --detach-sign -o "$2" 2>/dev/null ;;
+    *) printf '%s\n' "$APPROVED" | gpg --batch --yes -u agros@agros.invalid --detach-sign -o "$2" 2>/dev/null ;;
+esac
+C
 chmod +x "$t/bin/"*
 export CALLS=$t/calls
 gate() { PATH=$t/bin:$PATH "$here/.local/bin/update-gate" "$t/pacman.conf" "$t/out.conf" "$@"; }
@@ -59,6 +82,22 @@ out=$(HAVE_hyprland=0.57.2-1 NEW_hyprland=0.58.0-1 OFFLINE=1 gate)
 # A list that isn't one (an error page): not taken, the kept one stays
 out=$(HAVE_hyprland=0.57.2-1 NEW_hyprland=0.58.0-1 APPROVED='<html>404</html>' gate)
 [[ -z $out ]] && open && grep -qx 'hyprland 0.58.0' "$AGROS_GATE_CACHE" || fail "an error page taken as the approved list: $out"
+# The list without a good signature by AgrOS's key: not taken, said, the kept one stays (it doesn't approve 0.59.0)
+for sig in none bad other; do
+    out=$(HAVE_hyprland=0.57.2-1 NEW_hyprland=0.59.0-1 APPROVED=$'hyprland 0.58.0\nhyprland 0.59.0' SIG=$sig gate 2>"$t/err")
+    [[ $out == "hyprland 0.57.2-1 -> 0.59.0-1" ]] && ! open && [[ $(cat "$AGROS_GATE_CACHE") != *0.59.0* ]] ||
+        fail "a list with no good signature ($sig) taken: $out / $(cat "$AGROS_GATE_CACHE")"
+    grep -q "no good signature by AgrOS's key (https://agros.invalid/x86_64/agros-approved.sig)" "$t/err" ||
+        fail "a list with no good signature ($sig) not said: $(cat "$t/err")"
+done
+# ...nor with none kept (a client updated before CI signed the list): nothing new let through
+rm -f "$AGROS_GATE_CACHE"
+out=$(HAVE_hyprland=0.57.2-1 NEW_hyprland=0.58.0-1 APPROVED='hyprland 0.58.0' SIG=none gate 2>/dev/null)
+[[ -n $out ]] && ! open && [[ ! -e $AGROS_GATE_CACHE ]] || fail "an unsigned list taken with none kept: $out"
+# (its signature's file not left beside the kept list)
+[[ -z $(find "$t/cache" -name '*.sig') ]] || fail "a signature's file left: $(ls "$t/cache")"
+out=$(HAVE_hyprland=0.57.2-1 NEW_hyprland=0.58.0-1 APPROVED='hyprland 0.58.0' gate)
+[[ -z $out ]] && open || fail "the signed list not taken after: $out"
 # Never fetched: nothing new let through
 rm -f "$AGROS_GATE_CACHE"
 out=$(HAVE_hyprland=0.57.2-1 NEW_hyprland=0.58.0-1 OFFLINE=1 gate)
