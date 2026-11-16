@@ -18,7 +18,7 @@ TOOLS = re.compile(r"^(Proton\b|Steam Linux Runtime|Steamworks Common|SteamVR\b)
 
 def libraries() -> list[str]:
     try:
-        text = open(f"{STEAM}/steamapps/libraryfolders.vdf").read()
+        text = open(f"{STEAM}/steamapps/libraryfolders.vdf", encoding="utf-8", errors="replace").read()
     except OSError:
         return [STEAM]
     # Steam's own folder always: Flathub's lists it by the path its sandbox sees (~/.local/share/Steam), not there here

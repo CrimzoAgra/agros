@@ -28,4 +28,7 @@ want='["Half-Life", "The \"Quoted\" Game", "Updating"]'
 # (1030: an installed game downloading an update, still installed; 1 alone: not yet)
 manifest "$steam" 6 "Not Yet" 1
 [[ $(run) == "$want" ]] || fail "got $(run), want $want"
+# A library path that isn't UTF-8 (a byte no encoding has): the rest still read, not a traceback and no list
+printf '\t"2"\n\t{\n\t\t"path"\t\t"/run/media/dr\x81ve"\n\t}\n' >>"$steam/libraryfolders.vdf"
+[[ $(run 2>&1) == "$want" ]] || fail "an odd byte in the library list: got $(run 2>&1), want $want"
 echo "ok steam-installed-games"
