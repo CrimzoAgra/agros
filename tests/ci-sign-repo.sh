@@ -49,7 +49,7 @@ sign() { GNUPGHOME=$1 AGROS_PUBKEY=${ASC:-$t/agros.asc} PATH=$t/bin:$PATH "$here
 # The whole key, then a subkey-only secret (the primary's secret not there: gpg signs with the subkey)
 mkdir -m700 "$t/sub"
 GNUPGHOME=$t/agros gpg --batch --export-secret-subkeys "$fpr" 2>/dev/null | GNUPGHOME=$t/sub gpg --batch --quiet --import 2>/dev/null
-GNUPGHOME=$t/sub gpg --batch --with-colons --list-secret-keys 2>/dev/null | grep -q '^sec:.*:#:' ||
+grep -q '^sec:.*:#:' <<<"$(GNUPGHOME=$t/sub gpg --batch --with-colons --list-secret-keys 2>/dev/null)" ||
     fail "test setup: the subkey-only secret has its primary key's"
 for home in agros sub; do
     repo
