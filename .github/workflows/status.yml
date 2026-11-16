@@ -40,7 +40,7 @@ jobs:
         run: |
           ci/status.sh --last-sizes >last-sizes
           docker run --rm -v "$PWD:/w" -w /w archlinux:latest bash -c \
-            'pacman -Sy --noconfirm --needed git python python-yaml >/dev/null && ci/sizes.sh sizes last-sizes'
+            'pacman -Syu --noconfirm --needed git python python-yaml >/dev/null && ci/sizes.sh sizes last-sizes'
       - name: Status
         if: steps.when.outputs.go == 'true'
         env:

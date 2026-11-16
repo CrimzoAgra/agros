@@ -17,10 +17,11 @@ if [[ ${1:-} == --last-sizes ]]; then
     exit 0
 fi
 problems=()
-# last <repo> <workflow file>: its last run on main ("<conclusion> <date>"), and its last good one's date
+# last <repo> <workflow file>: its last run on main ("<conclusion> <date>"), and its last good one's date. (Not the
+# cancelled ones: a newer run waiting its turn cancels the one waiting before it, every busy day)
 last() {
-    gh run list -R "$1" -w "$2" -b main -L 20 --json conclusion,status,createdAt \
-        -q '[.[] | select(.status == "completed")] | (.[0] | "\(.conclusion) \(.createdAt[:10])"), ([.[] | select(.conclusion == "success")][0].createdAt[:10] // "none")' 2>/dev/null |
+    gh run list -R "$1" -w "$2" -b main -L 50 --json conclusion,status,createdAt \
+        -q '[.[] | select(.status == "completed" and .conclusion != "cancelled")] |(.[0] | "\(.conclusion) \(.createdAt[:10])"), ([.[] | select(.conclusion == "success")][0].createdAt[:10] // "none")' 2>/dev/null |
         paste -sd' '
 }
 read -r ci_last ci_day ci_good < <(last "$GITHUB_REPOSITORY" ci.yml) || true
