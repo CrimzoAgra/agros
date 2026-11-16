@@ -3,8 +3,8 @@
 # an AUR build script, a built package or a test; AgrOS's secret key imported for this step alone, gone after it):
 #   ci/sign-repo.sh <dir>
 # Each package without a signature gets one; one with a good signature by AgrOS's key keeps it (a published file kept
-# as it was); one with any other .sig stops it (none should have one: never signed over). The database made again with
-# every package's signature in it (repo-add: it reads the packages' .PKGINFO, runs nothing of theirs), and signed; the
+# as it was); one with any other .sig stops it (none should have one: never signed over). The database made again once
+# they are (repo-add: it reads the packages' .PKGINFO, runs nothing of theirs), and signed; the
 # upstream gate's list (agros-approved) and the day Arch last passed (agros-arch-ok) signed beside it.
 # The key: the secret one in gpg's keyring, AgrOS's (ci/agros.asc's primary key, or a signing subkey of it: gpg picks
 # the one it has the secret of); every signature made checked against ci/agros.asc alone after, so a secret that isn't

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ci/sign-repo.sh (CI's release job, the only place AgrOS's secret key is): each package without a signature signed,
-# one kept as published keeping its own, the database made again after (every package's signature in it) and signed
+# one kept as published keeping its own, the database made again after, from every package, and signed
 # under both its names, the upstream gate's list and Arch's last good day signed; a package with a .sig that isn't
 # AgrOS's, a link, a secret key that isn't AgrOS's, or a subkey ci/agros.asc lacks: stopped, nothing signed over. With
 # the primary key and with a subkey-only secret (as AGROS_GPG_KEY will be). Keys of the test's own; repo-add a stand-in
@@ -60,7 +60,7 @@ for home in agros sub; do
     done
     cmp -s "$t/kept.sig" "$t/repo/kept-1-1-x86_64.pkg.tar.zst.sig" || fail "$home: a package kept as published signed over"
     [[ $out == *"2 packages signed, 1 kept"* ]] || fail "$home: not said what was signed: $out"
-    # (made again after the signing, every package's signature in it; under its plain names as files, not links)
+    # (made again after the signing, every package signed by then; under its plain names as files, not links)
     [[ $(sort "$t/repo/agros.db") == $'./kept-1-1-x86_64.pkg.tar.zst signed\n./new-1-1-x86_64.pkg.tar.zst signed\n./other-2-1-any.pkg.tar.xz signed' ]] ||
         fail "$home: the database not made again from every package, signed first: $(cat "$t/repo/agros.db")"
     [[ ! -L $t/repo/agros.db && ! -L $t/repo/agros.files ]] || fail "$home: the database's names left as links"
