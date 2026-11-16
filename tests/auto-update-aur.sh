@@ -181,6 +181,13 @@ FAIL_BASE=quickshell-git "$t/auto-update-aur" "$t/db" >"$t/out" 2>&1 && fail "a 
 grep -q "build failed" "$t/out" || fail "the build's own error not in the log: $(cat "$t/out")"
 [[ $(cat "$aur/built") == "equibop 1.1-1" && -e $aur/repo/agros-aur.db && -z $(find "$aur/repo" -name 'quickshell-git-*') ]] ||
     fail "the others not built beside a failed one: $(cat "$aur/built" 2>/dev/null) $(ls "$aur/repo")"
+# ...and their repo that can't be made after it (none goes out): why said beside the build that failed, not over it
+stub repo-add 'exit 1'
+FAIL_BASE=quickshell-git "$t/auto-update-aur" "$t/db" >"$t/out" 2>&1 && fail "a repo that couldn't be made reported success"
+[[ $(cat "$aur/failed") == "quickshell-git: its build failed"*$'\n'"their repo couldn't be made" ]] ||
+    fail "a late failure wiped the builds' reasons: $(cat "$aur/failed" 2>/dev/null)"
+# shellcheck disable=SC2016
+stub repo-add 'shift; : >"$1"; ln -sf "${1##*/}" "${1%.tar.gz}"'
 
 # A .SRCINFO's dependency that would be an option to root's pacman: refused, never passed on
 : >"$t/calls"

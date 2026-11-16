@@ -165,7 +165,7 @@ db=${1:?usage: auto-update-aur <dbpath>}
 rm -rf "$aur"
 mkdir -p "$aur/log"
 # fail <why>: none built; drop <base> <why>: that one not built, the others go on
-fail() { echo "AUR: $1"; echo "$1" >"$aur/failed"; touch "$aur/planned"; exit 1; }
+fail() { echo "AUR: $1"; echo "$1" >>"$aur/failed"; touch "$aur/planned"; exit 1; }
 drop() { echo "AUR: $1: $2"; echo "$1: $2" >>"$aur/failed"; }
 
 # What the download brings ("name old -> new"), those pacman.conf holds back left out
