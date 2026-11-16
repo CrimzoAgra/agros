@@ -2,7 +2,8 @@
 # aur-agros-patch <dir> <base>: AgrOS's fix for an AUR package, aur-patches/<base>.patch beside this, added to its build
 # files cloned in <dir> (one place for both builds of it: CI's into [agros], ci/build-repo.sh, and the boot's rebuild on
 # a new Qt, auto-update-aur): applied to its sources in a prepare() of AgrOS's (paths from the sources' folder: a/<its
-# folder>/...), its pkgrel a ".1" above the AUR's, so it's never taken for the AUR's own build of that version. No patch
+# folder>/...), its pkgrel a ".<rel>" above the AUR's, so it's never taken for the AUR's own build of that version, and
+# stripped as Arch's own packages are (Quickshell's AUR build keeps its debug data: 193 MiB installed, Arch's 6). No patch
 # for it: nothing done. Build files that no longer fit (a pkgrel with a dot, a prepare() of their own) fail here, and a
 # patch that no longer applies fails the build: never the AUR's build without the fix, unsaid
 set -euo pipefail
@@ -13,7 +14,10 @@ cd "$dir"
 grep -q '^pkgrel=[0-9]*$' PKGBUILD && ! grep -q '^prepare()' PKGBUILD ||
     { echo "$base: its PKGBUILD changed (a pkgrel with a dot, or a prepare() of its own): AgrOS's fix not added" >&2; exit 1; }
 cp "$patch" agros-fix.patch
-# (the ".1" on a line of its own: makepkg sets pkgrel=1 again when pkgver() finds a new version, and the patched build
-# was published under the unpatched one's name, the published file then kept)
+# (the ".<rel>" on a line of its own: makepkg sets pkgrel=1 again when pkgver() finds a new version, and the patched
+# build was published under the unpatched one's name, the published file then kept. Raised when what this adds changes:
+# the same version would keep the published file, built the old way. 2: stripped)
+rel=2
+# (strip last: makepkg reads options from the end, the AUR's !strip before it)
 # shellcheck disable=SC2016  # (makepkg's variables, expanded there)
-printf '\n# AgrOS (aur-agros-patch)\npkgrel+=.1\nprepare() {\n    patch -Np1 -d "$srcdir" -i "$startdir/agros-fix.patch"\n}\n' >>PKGBUILD
+printf '\n# AgrOS (aur-agros-patch)\npkgrel+=.%s\noptions+=(strip)\nprepare() {\n    patch -Np1 -d "$srcdir" -i "$startdir/agros-fix.patch"\n}\n' "$rel" >>PKGBUILD

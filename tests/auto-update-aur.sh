@@ -153,7 +153,7 @@ grep -vF -- "--dns-forward 169.254.0.53 --dns-forward fd53:a6e4:2c3a::53 -- $t/a
 grep -q "^verify equibop $build/src/equibop " "$t/calls" && grep -q "^verify quickshell-git $build/src/quickshell-git " "$t/calls" ||
     fail "the bases' sources share a folder: $(grep '^verify' "$t/calls")"
 # (AgrOS's fix added to Quickshell's build files as fetched, as [agros]'s build has it (aur-agros-patch); none to equibop)
-grep -q "^verify quickshell-git .* pkgrel=1.1 " "$t/calls" && grep -q "^verify equibop .* pkgrel=1 " "$t/calls" ||
+grep -q "^verify quickshell-git .* pkgrel=1.2 " "$t/calls" && grep -q "^verify equibop .* pkgrel=1 " "$t/calls" ||
     fail "Quickshell's rebuild without AgrOS's fix: $(grep '^verify' "$t/calls")"
 builds=$(grep -- '--build ' "$t/calls" | grep '^bwrap')
 [[ $(wc -l <<<"$builds") == 2 ]] && grep -q -- "--overlay-src /usr --overlay-src $build/stage/usr --ro-overlay /usr" <<<"$builds" ||
