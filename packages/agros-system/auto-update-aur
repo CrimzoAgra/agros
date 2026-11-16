@@ -150,8 +150,9 @@ if [[ ${1:-} == --unpack ]]; then
     exit 0
 fi
 # In the sandbox (build, the network through pasta: dependencies a Go, Rust or Node app fetches itself): one package,
-# its sources fetched before (--holdver: VCS ones not updated; their signatures checked when fetched). --nodeps: makepkg would check them against what's installed now, not what the
-# download brings; pacman checks them at the install. --nocheck: their tests can need what isn't there
+# its sources fetched before (--holdver: VCS ones not updated; their signatures checked when fetched). --nodeps:
+# makepkg would check them against what's installed now, not what the download brings; pacman checks them at the
+# install. --nocheck: their tests can need what isn't there
 if [[ ${1:-} == --build ]]; then
     dir=$2 base=$3
     mkdir -p "$dir/pkg/$base" && cd "$dir/$base" || exit 1
@@ -364,7 +365,7 @@ if ((${#need[@]})); then
     ((rc == 0)) || fail "what they need couldn't be downloaded"
 fi
 # The files to unpack: every package the shutdown's transaction installs (pacman -Su's: upgrades, new dependencies,
-# replacements; IgnorePkg's left out), and those
+# replacements; IgnorePkg's left out), and what the builds need from the repos (need, downloaded above)
 mapfile -t files < <(
     { pacman -Sup --config "$conf" --dbpath "$db" --print-format '%f' 2>/dev/null
       ((${#need[@]})) && pacman -Sp --config "$conf" --dbpath "$db" --print-format '%f' -- "${need[@]}" 2>/dev/null; } |

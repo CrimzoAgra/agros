@@ -74,8 +74,8 @@ pre_remove() {
 }
 
 post_remove() {
-    # (the upstream gate's file went with this package: pacman.conf's Include of it with it, or pacman can't read its
-    # config at all; the approved list it kept, too)
+    # (the upstream gate's file and the NoExtract list went with this package: pacman.conf's Include of each with them,
+    # or pacman can't read its config at all; the approved list the gate kept, too)
     sed -i -e '\|^[[:space:]]*Include[[:space:]]*=[[:space:]]*/etc/pacman\.d/agros-gate\.conf[[:space:]]*\(#.*\)\?$|d' \
         -e '\|^[[:space:]]*Include[[:space:]]*=[[:space:]]*/etc/pacman\.d/agros-noextract\.conf[[:space:]]*\(#.*\)\?$|d' \
         "$_r/etc/pacman.conf" 2>/dev/null
@@ -94,10 +94,11 @@ post_remove() {
         fi
     done
     rm -f "$_r/etc/os-release.agros-orig" "$_r/etc/lsb-release.agros-orig"
-    # What it made itself: the update's package lists, notes, AUR builds and log, and UFW's logging back as it was where it turned it off
-    # (and it's still off: a level set since is yours)
+    # What it made itself: the update's package lists, notes, AUR builds and log
     rm -rf "$_r/var/lib/auto-update"
     rm -f "$_r/var/log/auto-update.log"
+    # Passim unmasked, and UFW's logging back as it was where it turned it off (and it's still off: a level set since is
+    # yours)
     if [[ -e $_passim_done ]]; then
         systemctl unmask passim.service >/dev/null 2>&1
         rm -f "$_passim_done"
