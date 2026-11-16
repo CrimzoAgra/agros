@@ -317,22 +317,27 @@ P
     grep -q "broken QML" "$skipped" || fail "broken QML wasn't reported: $(cat "$skipped")"
 fi
 # Caelestia's main (its next release: a change there that a patch no longer fits shows here first), its QML as it installs
-# it (the folders its CMakeLists.txt installs): every patch fits, and adds nothing to qmllint's findings. Needs the network
-if timeout 120 git clone -q --depth 1 https://github.com/caelestia-dots/shell "$t/head-git" 2>/dev/null; then
+# it (the folders its CMakeLists.txt installs): every patch fits, and adds nothing to qmllint's findings. Needs the network.
+# What doesn't is said (ahead, lib.sh), not a failure: the installed Caelestia's checks above are the ones that count
+on_main() {
+    local dirs d out new
     dirs=$(sed -n 's/^ *foreach(dir \(.*\))$/\1/p' "$t/head-git/CMakeLists.txt")
-    [[ -n $dirs ]] || fail "Caelestia's main: the folders it installs not found in its CMakeLists.txt"
+    [[ -n $dirs ]] || { ahead "Caelestia's main: the folders it installs not found in its CMakeLists.txt"; return 0; }
     mkdir "$t/head-src"
     for d in $dirs shell.qml; do cp -r "$t/head-git/$d" "$t/head-src/"; done
     cp -as "$t/head-src" "$t/head-dst"
     out=$(DOTS_SETTINGS=$t/bin/dots-settings python3 "$here/.local/share/caelestia-overlay/patch.py" "$t/head-src" "$t/head-dst" 2>&1) ||
-        fail "patches no longer fit Caelestia's main: $(grep '^WARNING\|Traceback' <<<"$out")"
+        { ahead "patches no longer fit Caelestia's main: $(grep '^WARNING\|Traceback' <<<"$out" | paste -sd' ')"; return 0; }
     # ...and where it has a feature of its own the overlay steps aside: the sidebar's shortcut mode is its, not added twice
     grep -q 'property bool sidebarShortcutActive' "$t/head-src/modules/drawers/Interactions.qml" &&
         [[ $(grep -c 'property bool sidebarShortcutActive' "$t/head-dst/modules/drawers/Interactions.qml") == 1 ]] ||
-        fail "on Caelestia's main, the sidebar's shortcut mode not Caelestia's own"
+        ahead "on Caelestia's main, the sidebar's shortcut mode not Caelestia's own"
     new=$(lint_new "$t/head-src" "$t/head-dst")
-    [[ -z $new ]] || fail "on Caelestia's main, the patched QML uses what it doesn't have (qmllint): $new"
-    echo "ok caelestia-overlay"
+    [[ -z $new ]] || ahead "on Caelestia's main, the patched QML uses what it doesn't have (qmllint): $(paste -sd' ' <<<"$new")"
+}
+if timeout 120 git clone -q --depth 1 https://github.com/caelestia-dots/shell "$t/head-git" 2>/dev/null; then
+    on_main
 else
-    echo "ok caelestia-overlay (SKIPPED: Caelestia's main: no network)"
+    ahead "Caelestia's main couldn't be fetched: not checked"
 fi
+ok_line caelestia-overlay

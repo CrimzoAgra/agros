@@ -242,16 +242,20 @@ touch -d '+1 min' "$t/xdg/lutris/pga.db"; covers 0; XDG_DATA_HOME=$t/xdg run >/d
 waitfor "$t/covers-ran" || fail "a library under XDG_DATA_HOME wasn't looked at"
 
 # ...and on Lutris's main (the next release: a change there that breaks one shows here first, as Caelestia's main does in
-# caelestia-overlay); an optional one left out only warns, any other one failing fails here, the store pages' fix too
+# caelestia-overlay); an optional one left out only warns, any other one failing is said, the store pages' fix too. Said
+# (ahead, lib.sh), not a failure: the installed Lutris's checks above are the ones that count
+note=
 if timeout 120 git clone -q --depth 1 https://github.com/lutris/lutris "$t/lutris-main" 2>/dev/null; then
     mkdir -p "$t/main-root" && cp -as "$t/lutris-main/lutris" "$t/main-root/lutris"
-    out=$(DOTS_SETTINGS=/bin/false python3 -I "$here/.local/share/lutris-overlay/patch.py" "$t/lutris-main/lutris" "$t/main-root" 2>&1) ||
-        fail "the overlay doesn't build on Lutris's main: $out"
-    # (source_page_ids is plumbing: left out, a store's page loses games at random; it must keep fitting, not warn)
-    ! grep -q "^WARNING: A store's own page shows all its games" <<<"$out" ||
-        fail "the store pages' fix (source_page_ids) no longer fits Lutris's main: $(grep "^WARNING: A store's own page" <<<"$out")"
-    n=$(grep -c WARNING <<<"$out" || true)
-    echo "ok lutris-overlay (on Lutris main: $n optional changes left out)"
+    if ! out=$(DOTS_SETTINGS=/bin/false python3 -I "$here/.local/share/lutris-overlay/patch.py" "$t/lutris-main/lutris" "$t/main-root" 2>&1); then
+        ahead "the overlay doesn't build on Lutris's main: $(tail -n3 <<<"$out" | paste -sd' ')"
+    else
+        # (source_page_ids is plumbing: left out, a store's page loses games at random; it must keep fitting, not warn)
+        ! grep -q "^WARNING: A store's own page shows all its games" <<<"$out" ||
+            ahead "the store pages' fix (source_page_ids) no longer fits Lutris's main: $(grep "^WARNING: A store's own page" <<<"$out" | paste -sd' ')"
+        note="on Lutris main: $(grep -c WARNING <<<"$out" || true) optional changes left out"
+    fi
 else
-    echo "ok lutris-overlay (SKIPPED: Lutris's main: offline)"
+    ahead "Lutris's main couldn't be fetched: not checked"
 fi
+ok_line lutris-overlay "$note"

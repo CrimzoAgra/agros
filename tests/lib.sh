@@ -37,3 +37,16 @@ fail() { echo "FAIL: $*"; exit 1; }
 # A part of a test this machine can't run, said; on CI a failure (CI has all a test needs, and its pass approves that
 # Hyprland for AgrOS's machines: the upstream gate)
 skipped() { [[ -z ${CI:-} ]] || fail "skipped on CI: $*"; echo "($*)"; }
+# Upstream's next release (its main branch: Caelestia's, Lutris's, Hyprland's): a check against it that doesn't fit, or
+# couldn't be fetched, said with ahead, never a failure. Neither the published [agros] nor an older Arch undoes a change
+# on main, so ci/test-passes.sh read one as AgrOS's own code and nothing went out; the release itself is checked as
+# installed, and held back alone. Said on the test's last line by ok_line, "ok <test> (AHEAD: ...)", which CI's held
+# issue lists (ci/report.sh: nothing held, AgrOS's change to adapt before that release)
+ahead=()
+ahead() { ahead+=("$*"); }
+# ok_line <test> [<note>]: the test's last line, with what doesn't fit upstream's next release
+ok_line() {
+    local l="ok $1${2:+ ($2)}"
+    ((${#ahead[@]} == 0)) || l+=" (AHEAD: $(printf '%s; ' "${ahead[@]}" | sed 's/; $//'))"
+    echo "$l"
+}

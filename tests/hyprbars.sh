@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # hyprbars-build: refuses to build after an update the session hasn't restarted for; the patch still applies to the
 # hyprland-plugins tag hyprbars-build takes for the installed Hyprland's series, and to their main (the next release:
-# a change there that breaks it shows here first). Needs the network. A part it can't check (offline, no Hyprland to
-# ask) said on its last line, "ok hyprbars (SKIPPED: ...)", not a plain ok.
+# a change there that breaks it shows here first, said with ahead, lib.sh: not a failure). Needs the network. A part it
+# can't check (offline, no Hyprland to ask) said on its last line, "ok hyprbars (SKIPPED: ...)", not a plain ok.
 # DOTS_BUILD_TESTS=1: also builds the patched hyprbars against the installed Hyprland's headers (a minute or two)
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
@@ -48,7 +48,7 @@ grep -q "^curl\|^sleep" "$t/calls" && fail "--prebuild waited for the network, o
 rm "$t/bin/curl" "$t/bin/git" "$t/bin/sleep"
 
 # Hyprland's main (the next release): --prebuild's hash still made the way its PluginAPI.hpp makes it, from the defines
-# its version.h.in has (main dropped hyprlang from both: the hook failed, set -e, on a define gone)
+# its version.h.in has (main dropped hyprlang from both: the hook failed, set -e, on a define gone). Said, not a failure
 hm=https://raw.githubusercontent.com/hyprwm/Hyprland/main/src
 if curl -fsS -m 30 "$hm/version.h.in" -o "$t/version.h.in" && curl -fsS -m 30 "$hm/plugins/PluginAPI.hpp" -o "$t/PluginAPI.hpp"; then
     sed -E 's/"@GIT_TAG@"/"v9.8.7"/; s/"@GIT_COMMIT_HASH@"/"abc123"/; s/"@[A-Z_]+@"/"1.2.3"/; s/@[A-Z_]+@/0/' "$t/version.h.in" >"$t/version.h"
@@ -61,11 +61,13 @@ print(m[1].replace("{}", "{}").format(*vals) if m and m[1].count("{}") == len(va
 EOF
 )
     echo "$want $sum" >"$lib/built-for"
-    out=$(HOME=$t/home HYPRBARS_VERSION_H=$t/version.h "$here/.local/bin/hyprbars-build" --prebuild 2>&1) ||
-        fail "--prebuild on Hyprland main's version.h: $out"
-    grep -q "Already built" <<<"$out" || fail "--prebuild's hash isn't Hyprland main's ($want): $out"
+    if ! out=$(HOME=$t/home HYPRBARS_VERSION_H=$t/version.h "$here/.local/bin/hyprbars-build" --prebuild 2>&1); then
+        ahead "--prebuild fails on Hyprland main's version.h: $(tail -n3 <<<"$out" | paste -sd' ')"
+    elif ! grep -q "Already built" <<<"$out"; then
+        ahead "--prebuild's hash isn't Hyprland main's ($want): $(tail -n3 <<<"$out" | paste -sd' ')"
+    fi
 else
-    skipped+=("Hyprland main: offline")
+    ahead "Hyprland's main couldn't be fetched: not checked"
 fi
 
 # The patch on this series' tag and on main
@@ -73,14 +75,17 @@ ver=$(grep -oP 'GIT_TAG\s+"v\K[0-9.]+' /usr/include/hyprland/src/version.h)
 # (offline: skipped here, but not on CI, where a pass approves that Hyprland for AgrOS's machines: the upstream gate)
 git clone -q --filter=blob:none https://github.com/hyprwm/hyprland-plugins.git "$t/src" 2>/dev/null || {
     [[ -z ${CI:-} ]] || fail "hyprland-plugins couldn't be fetched: the patch not checked"
-    skipped+=("patch: offline"); echo "ok hyprbars (SKIPPED: $(IFS=';'; echo "${skipped[*]}"))"; exit 0; }
+    skipped+=("patch: offline"); ok_line hyprbars "SKIPPED: $(IFS=';'; echo "${skipped[*]}")"; exit 0; }
 commit=$(grep -oP 'GIT_COMMIT_HASH\s+"\K[0-9a-f]+' /usr/include/hyprland/src/version.h)
 pin=$(grep -oP "\[\"$commit\", \"\K[0-9a-f]{40}" "$t/src/hyprpm.toml" || true)
-for ref in "${pin:-v${ver%.*}.0}" origin/HEAD; do
-    git -C "$t/src" rev-parse -q --verify "$ref^{commit}" >/dev/null || fail "hyprland-plugins has no $ref (hyprbars-build looks for it)"
-    git -C "$t/src" checkout -q "$ref"
-    git -C "$t/src" apply --check "$here/.local/share/hyprbars/hyprbars.patch" || fail "the patch no longer applies to hyprland-plugins $ref"
-done
+ref=${pin:-v${ver%.*}.0}
+git -C "$t/src" rev-parse -q --verify "$ref^{commit}" >/dev/null || fail "hyprland-plugins has no $ref (hyprbars-build looks for it)"
+git -C "$t/src" checkout -q "$ref"
+git -C "$t/src" apply --check "$here/.local/share/hyprbars/hyprbars.patch" || fail "the patch no longer applies to hyprland-plugins $ref"
+# (their main: said, not a failure)
+git -C "$t/src" checkout -q origin/HEAD && git -C "$t/src" apply --check "$here/.local/share/hyprbars/hyprbars.patch" 2>/dev/null ||
+    ahead "the patch no longer applies to hyprland-plugins' main"
+
 # Built, as hyprbars-build builds it (this series' version, patched; g++ by name), against the installed headers
 if [[ -n ${DOTS_BUILD_TESTS:-} ]]; then
     git -C "$t/src" checkout -q "${pin:-v${ver%.*}.0}"
@@ -90,4 +95,6 @@ if [[ -n ${DOTS_BUILD_TESTS:-} ]]; then
 else
     skipped+=("build: DOTS_BUILD_TESTS=1 to build the patched hyprbars")
 fi
-if ((${#skipped[@]})); then echo "ok hyprbars (SKIPPED: $(IFS=';'; echo "${skipped[*]}"))"; else echo "ok hyprbars"; fi
+note=
+((${#skipped[@]} == 0)) || note="SKIPPED: $(IFS=';'; echo "${skipped[*]}")"
+ok_line hyprbars "$note"
