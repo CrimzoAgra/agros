@@ -185,7 +185,7 @@ ours() { grep -qxF -- "$1" <<<"$(printf '%s\n' "${foreign[@]}")"$'\n'"$agros"; }
 rebuild=()
 if [[ -n $target ]]; then
     for p in $("$kinds" --built-on "$db" <<<"$pending"); do
-        [[ $p != *-bin ]] && ours "$p" && ! grep -q "^$p " <<<"$pending" && rebuild+=("$p")
+        [[ $p != *-bin ]] && ours "$p" && ! grep -q "^${p//./[.]} " <<<"$pending" && rebuild+=("$p")
     done
     printf '%s\n' "${rebuild[@]}" | sed '/^$/d' >"$aur/rebuild"
     echo "$target" >"$aur/runtime-target"
@@ -231,7 +231,7 @@ for b in "${!held_bases[@]}"; do
     unset "bases[$b]"
 done
 # (one a new runtime needs rebuilt that isn't there: that runtime waits, auto-update holds it; the others go on)
-for p in "${rebuild[@]}"; do grep -q "^$p	" <<<"$info" || drop "$p" "it isn't on the AUR: it can't be rebuilt for the new $said_target"; done
+for p in "${rebuild[@]}"; do grep -q "^${p//./[.]}	" <<<"$info" || drop "$p" "it isn't on the AUR: it can't be rebuilt for the new $said_target"; done
 ((${#bases[@]})) || { touch "$aur/planned"; [[ ! -s $aur/failed ]]; exit; }
 for b in "${!bases[@]}"; do echo "$b${bases[$b]}"; done | sort >"$aur/plan"
 echo "AUR: building $(cut -d' ' -f1 "$aur/plan" | paste -sd' ')"

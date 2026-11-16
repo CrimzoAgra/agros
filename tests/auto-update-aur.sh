@@ -239,6 +239,13 @@ FOREIGN=python-foo NEED=cmake PENDING="python 3.13.7-1 -> 3.14.0-1" "$t/auto-upd
     fail "the AUR's Python package not rebuilt for the new Python: $(cat "$aur/rebuild" 2>/dev/null) $(cat "$t/calls")"
 grep -qx "download marked" "$t/calls" && grep -q "^pacman -Sw .* -- cmake$" "$t/calls" && [[ ! -e $t/au/downloading ]] ||
     fail "the builds' download not under the boot's mark, or the mark left through the builds: $(cat "$t/calls")"
+# A name with a dot read as itself, not a pattern: python-f.o neither taken for python-foo rebuilt by its repo in the
+# same download, nor found on the AUR as python-foo (that runtime waits, said)
+: >"$t/calls"
+FOREIGN=python-f.o QOQ=python-f.o PENDING=$'python 3.13.7-1 -> 3.14.0-1\npython-foo 1.0-1 -> 1.0-2' "$t/auto-update-aur" "$t/db" >"$t/out" 2>&1 &&
+    fail "a rebuild not on the AUR reported success"
+[[ $(cat "$aur/rebuild") == python-f.o && $(cat "$aur/failed") == "python-f.o: it isn't on the AUR"* ]] ||
+    fail "a dotted name matched another: $(cat "$aur/rebuild" 2>/dev/null) / $(cat "$aur/failed" 2>/dev/null)"
 # The same, with pacman.conf holding it back (IgnorePkg): not built, and why that runtime waits said (not an empty reason),
 # under its AUR base's name (one of a split base here), as every drop is
 aur_has python-foo/foo-split=1.0-1
