@@ -65,7 +65,8 @@ The manual lives in [`manual/`](manual/).
 
 AgrOS is built on others' work: Arch and CachyOS (the system), the AUR (Caelestia, Quickshell and the other apps AgrOS
 builds for you) and CachyOS's ISO (what the live USB is made from). Every change from them is checked before it reaches
-you. When one breaks something, only that piece waits; the rest keeps updating.
+you. When one breaks something, only that piece waits; the rest keeps updating. (Also in the manual:
+[How updates stay safe](manual/12-updates.md#how-updates-stay-safe).)
 
 | When upstream... | AgrOS... | Your machine... |
 |---|---|---|
