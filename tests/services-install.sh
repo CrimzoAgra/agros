@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # agros-system's and agros-camera-switch's install scripts (packages/*/*.install) in a throwaway root (AGROS_ROOT), a
 # systemctl stand-in: the services on at install, passwd's PAM given the keyring's line once and back at removal,
-# pacman.conf the upstream gate's Include likewise; a
+# pacman.conf the upstream gate's Include likewise, and [agros]'s SigLevel (its database's signature required); a
 # running camera switch marked for systemd's restart, a stopped one not; the switch's saved position gone at removal,
 # the camera put back
 set -euo pipefail
@@ -27,24 +27,28 @@ echo 'password include system-auth' >"$r/etc/pam.d/passwd"
 # and one of yours)
 printf '%s\n' '[options]' 'NoExtract = usr/share/doc/* usr/share/hypr/wall*.png # agros-iso' 'Architecture = auto' \
     'NoExtract = usr/share/mine/*' '#Include = /etc/pacman.d/agros-gate.conf' 'Include = /etc/pacman.d/agros-gate.conf.old' '' \
-    '[core]' 'Include = /etc/pacman.d/mirrorlist' >"$r/etc/pacman.conf"
+    '[core]' 'SigLevel = Optional' 'Include = /etc/pacman.d/mirrorlist' '' '[agros]' 'Server = https://crimzoagra.github.io/agros/$arch' \
+    '' '[later]' 'SigLevel = Required DatabaseRequired' 'Server = file:///srv/later' >"$r/etc/pacman.conf"
 pac agros-system post_install
 pac agros-system post_install
 # (the upstream gate's file and the files never unpacked, this package's, each included by pacman.conf once, in
-# [options], the ISO's copy of the list gone, yours kept; gone again at removal)
-[[ $(cat "$r/etc/pacman.conf") == $'[options]\nInclude = /etc/pacman.d/agros-noextract.conf\nInclude = /etc/pacman.d/agros-gate.conf\nArchitecture = auto\nNoExtract = usr/share/mine/*\n#Include = /etc/pacman.d/agros-gate.conf\nInclude = /etc/pacman.d/agros-gate.conf.old\n\n[core]\nInclude = /etc/pacman.d/mirrorlist' ]] ||
-    fail "pacman.conf not given the gate's and the NoExtract list's Includes once, in [options], the ISO's line out: $(cat "$r/etc/pacman.conf")"
+# [options], the ISO's copy of the list gone, yours kept; gone again at removal. [agros]'s database signature required,
+# once, under [agros]: another section's SigLevel isn't its, before it or after)
+[[ $(cat "$r/etc/pacman.conf") == $'[options]\nInclude = /etc/pacman.d/agros-noextract.conf\nInclude = /etc/pacman.d/agros-gate.conf\nArchitecture = auto\nNoExtract = usr/share/mine/*\n#Include = /etc/pacman.d/agros-gate.conf\nInclude = /etc/pacman.d/agros-gate.conf.old\n\n[core]\nSigLevel = Optional\nInclude = /etc/pacman.d/mirrorlist\n\n[agros]\nSigLevel = Required DatabaseRequired\nServer = https://crimzoagra.github.io/agros/$arch\n\n[later]\nSigLevel = Required DatabaseRequired\nServer = file:///srv/later' ]] ||
+    fail "pacman.conf not given the gate's and the NoExtract list's Includes once, in [options], the ISO's line out, [agros]'s SigLevel once: $(cat "$r/etc/pacman.conf")"
 [[ $(grep -cxF -- "$pam" "$r/etc/pam.d/passwd") == 1 ]] || fail "passwd's PAM not given the keyring's line once: $(cat "$r/etc/pam.d/passwd")"
 c=$(calls)
 [[ $(grep -c '^systemctl enable .*auto-update-install.service' <<<"$c") == 2 && $c == *"--global mask gnome-keyring-daemon"* ]] ||
     fail "the services not enabled at install: $c"
 # (Passim, fwupd's LAN cache and listener, masked once: an unmask of yours stays)
 [[ $(grep -c '^systemctl mask passim.service$' <<<"$c") == 1 && -e $r/var/lib/agros/passim-masked ]] || fail "Passim not masked once: $c"
-# (a machine installed before the list: given its Include at the upgrade)
-sed -i '/agros-noextract/d' "$r/etc/pacman.conf"
+# (a machine installed before the list and [agros]'s SigLevel: given both at the upgrade)
+sed -i -e '/agros-noextract/d' -e '/^\[agros\]$/,/^$/{/^SigLevel = Required DatabaseRequired$/d}' "$r/etc/pacman.conf"
 pac agros-system post_upgrade
 [[ $(grep -cx 'Include = /etc/pacman.d/agros-noextract.conf' "$r/etc/pacman.conf") == 1 ]] ||
     fail "the NoExtract list's Include not added at upgrade: $(cat "$r/etc/pacman.conf")"
+[[ $(sed -n '/^\[agros\]$/{n;p}' "$r/etc/pacman.conf") == 'SigLevel = Required DatabaseRequired' ]] ||
+    fail "[agros]'s SigLevel not added at upgrade: $(cat "$r/etc/pacman.conf")"
 [[ $(calls) != *enable* ]] || fail "post_upgrade turned something on"
 # (a note after it, by hand: the line still found, as at install)
 sed -i 's|^Include = /etc/pacman.d/agros-gate.conf$|& # mine|' "$r/etc/pacman.conf"
@@ -57,12 +61,21 @@ grep -q '^Include = /etc/pacman.d/agros-gate.conf\( #.*\)\?$' "$r/etc/pacman.con
 grep -q 'agros-noextract' "$r/etc/pacman.conf" && fail "the NoExtract list's Include left in pacman.conf at removal"
 grep -qx 'NoExtract = usr/share/mine/\*' "$r/etc/pacman.conf" || fail "a NoExtract line of yours taken out at removal"
 grep -qx 'Include = /etc/pacman.d/agros-gate.conf.old' "$r/etc/pacman.conf" || fail "a line of yours naming another file taken out at removal"
+[[ $(grep -c 'DatabaseRequired' "$r/etc/pacman.conf") == 1 ]] || fail "[agros]'s SigLevel left in pacman.conf at removal, or another section's taken out: $(cat "$r/etc/pacman.conf")"
+grep -qx 'SigLevel = Optional' "$r/etc/pacman.conf" || fail "another section's SigLevel taken out at removal"
+grep -qx 'Server = https://crimzoagra.github.io/agros/$arch' "$r/etc/pacman.conf" || fail "[agros]'s server taken out at removal"
 [[ $(calls) == *"systemctl unmask passim.service"* && ! -e $r/var/lib/agros/passim-masked ]] || fail "Passim not put back at removal"
 pac agros-system pre_remove
 [[ $(cat "$r/etc/pam.d/passwd") == 'password include system-auth' ]] || fail "the keyring's line left in passwd's PAM"
 c=$(calls)
 [[ $c == *"disable --now auto-update.service"* &&
     $c != *"disable --now auto-update-install"* && $c == *"--global unmask"* ]] || fail "removal's services: $c"
+# (a SigLevel of yours under [agros] stays as it is, none added)
+sed -i 's|^\[agros\]$|&\nSigLevel = Optional TrustAll|' "$r/etc/pacman.conf"
+pac agros-system post_upgrade
+[[ $(sed -n '/^\[agros\]$/,/^$/p' "$r/etc/pacman.conf") == $'[agros]\nSigLevel = Optional TrustAll\nServer = https://crimzoagra.github.io/agros/$arch' ]] ||
+    fail "a SigLevel of yours under [agros] not kept as it is: $(cat "$r/etc/pacman.conf")"
+calls >/dev/null
 
 # agros-camera-switch (running: is-active says so)
 touch "$t/active"

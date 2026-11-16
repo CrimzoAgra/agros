@@ -53,8 +53,14 @@ this repo (`ci/build-repo.sh`, `.github/workflows/ci.yml`) and published on GitH
 
 ```ini
 [agros]
+SigLevel = Required DatabaseRequired
 Server = https://crimzoagra.github.io/agros/$arch
 ```
+
+Its database is signed too, and required to be (`DatabaseRequired`: pacman's default takes an unsigned one, so a
+server could list packages CI never put together). agros-iso's `pacman.conf` files have the line, and `agros-system`'s
+install adds it under `[agros]` where it's missing (a machine installed before; a `SigLevel` of yours there stays),
+its removal taking it out.
 
 | Package | What it is |
 |---|---|

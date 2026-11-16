@@ -23,6 +23,32 @@ quiet_passim() {
     mkdir -p "${_passim_done%/*}" && : >"$_passim_done"
 }
 
+# [agros] in pacman.conf as agros-iso's pacman.conf files have it: its database's signature required too (pacman's
+# default, DatabaseOptional, took an unsigned one: a server could list packages AgrOS's CI never put together). Added under
+# [agros] where missing, at install and at upgrade (machines installed before); a SigLevel of yours there stays. Taken
+# out at removal (agros_repo remove), only as added
+_agros_sig='SigLevel = Required DatabaseRequired'
+agros_repo() {
+    local conf=$_r/etc/pacman.conf new
+    [[ -f $conf ]] && grep -q '^\[agros\][[:space:]]*$' "$conf" || return 0
+    new=$(awk -v mode="${1:-add}" -v sig="$_agros_sig" '
+        { line[NR] = $0 }
+        END {
+            for (i = 1; i <= NR; i++) if (line[i] ~ /^\[agros\][ \t]*$/) { s = i; break }
+            e = NR
+            for (i = s + 1; i <= NR; i++) if (line[i] ~ /^[ \t]*\[/) { e = i - 1; break }
+            for (i = s + 1; i <= e; i++) if (line[i] ~ /^[ \t]*SigLevel[ \t]*=/) hassig = 1
+            for (i = 1; i <= NR; i++) {
+                t = line[i]; sub(/[ \t]+$/, "", t)
+                if (mode == "remove" && i > s && i <= e && t == sig) continue
+                print line[i]
+                if (mode == "add" && i == s && !hassig) print sig
+            }
+        }' "$conf") || return 0
+    # (written over in place: pacman.conf keeps its owner and mode)
+    [[ $new == "$(cat "$conf")" ]] || printf '%s\n' "$new" >"$conf"
+}
+
 # The files no one uses, never unpacked (this package's agros-noextract.conf): pacman.conf includes it, added at install
 # and at upgrade too (machines installed before it), as the gate's. The ISO's copy of the list (agros-iso's
 # agros-trim.sh puts it in the installed pacman.conf, ending "# agros-iso", for the packages installed before this one)
@@ -53,6 +79,7 @@ post_install() {
         sed -i '/^\[options\]/a Include = /etc/pacman.d/agros-gate.conf' "$conf"
     fi
     include_noextract
+    agros_repo
     quiet_ufw
     quiet_passim
     true # (the quiet_ steps' status isn't the scriptlet's: a note not written is tried again at the next upgrade)
@@ -60,6 +87,7 @@ post_install() {
 
 post_upgrade() {
     include_noextract
+    agros_repo
     quiet_ufw
     quiet_passim
     true # (the quiet_ steps' status isn't the scriptlet's: a note not written is tried again at the next upgrade)
@@ -79,7 +107,8 @@ post_remove() {
     sed -i -e '\|^[[:space:]]*Include[[:space:]]*=[[:space:]]*/etc/pacman\.d/agros-gate\.conf[[:space:]]*\(#.*\)\?$|d' \
         -e '\|^[[:space:]]*Include[[:space:]]*=[[:space:]]*/etc/pacman\.d/agros-noextract\.conf[[:space:]]*\(#.*\)\?$|d' \
         "$_r/etc/pacman.conf" 2>/dev/null
-    rm -f "$_r/var/lib/agros/agros-approved"
+    agros_repo remove
+    rm -f "$_r/var/lib/agros/agros-approved" "$_r/var/lib/agros/agros-arch-ok"
     # The name from before AgrOS's back in os-release and lsb-release: the copy agros-branding kept of each (all of it,
     # PRIVACY_POLICY_URL too); made before that copy was kept, CachyOS's own script (cachyos-branding) writes CachyOS's
     local x b=$_r/usr/share/libalpm/scripts/cachyos-branding
