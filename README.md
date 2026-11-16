@@ -18,14 +18,16 @@ Alt+Tab works the way you expect, and every app is listed next to the Windows ap
 ## Download
 
 <p align="center">
-  <a href="https://sourceforge.net/projects/agros-iso/files/latest/download"><img alt="Download the AgrOS ISO" src="https://img.shields.io/badge/Download-AgrOS%20ISO-4c6ef5?style=for-the-badge"></a>
+  <a href="https://pub-f1a3a482900748e8b69cd81361ab96e1.r2.dev/agros-latest.iso"><img alt="Download the AgrOS ISO" src="https://img.shields.io/badge/Download-AgrOS%20ISO-4c6ef5?style=for-the-badge"></a>
   <br>
   <img alt="Latest ISO" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fsourceforge.net%2Fprojects%2Fagros-iso%2Fbest_release.json&query=%24.release.date&label=latest%20ISO&color=4c6ef5">
 </p>
 
 The ISO is about 3.6 GB and always the newest: a new one is built and published by itself after each change. Put it
-on a USB stick and install: [Installing](manual/02-installing.md). Earlier ISOs, with their checksums and signatures:
-[all downloads](https://sourceforge.net/projects/agros-iso/files/iso/).
+on a USB stick and install: [Installing](manual/02-installing.md). Its checksum and
+signature: [.sha256](https://pub-f1a3a482900748e8b69cd81361ab96e1.r2.dev/agros-latest.iso.sha256),
+[.sig](https://pub-f1a3a482900748e8b69cd81361ab96e1.r2.dev/agros-latest.iso.sig). Every ISO, earlier ones too, with
+their checksums and signatures: [all downloads](https://sourceforge.net/projects/agros-iso/files/iso/) on SourceForge.
 
 ## The AgrOS Manual
 

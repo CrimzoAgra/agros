@@ -4,8 +4,8 @@ AgrOS installs from an ISO, using CachyOS's installer.
 
 ## 1. Get the ISO
 
-**[Download the latest AgrOS ISO](https://sourceforge.net/projects/agros-iso/files/latest/download)** (about
-3.6 GB, from SourceForge; always the newest). To check the download, or build the ISO yourself, see
+**[Download the latest AgrOS ISO](https://pub-f1a3a482900748e8b69cd81361ab96e1.r2.dev/agros-latest.iso)** (about
+3.6 GB; always the newest. Slow? The same ISO on [SourceForge](https://sourceforge.net/projects/agros-iso/files/latest/download)). To check the download, or build the ISO yourself, see
 [agros-iso](https://github.com/CrimzoAgra/agros-iso).
 
 ## 2. Put it on a USB stick
