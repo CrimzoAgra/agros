@@ -9,6 +9,7 @@
 set -uo pipefail
 iso=${AGROS_ISO_REPO:-CrimzoAgra/agros-iso}
 site=${AGROS_SITE:-https://crimzoagra.github.io/agros/x86_64}
+here=$(cd "$(dirname "$0")/.." && pwd)
 last_sizes() {
     gh issue list --label status --state all -L 1 --json body -q '.[0].body' 2>/dev/null |
         sed -n 's|.*<!-- agros-sizes:\([A-Za-z0-9+/=]*\) -->.*|\1|p' | base64 -d 2>/dev/null | gunzip 2>/dev/null
@@ -84,6 +85,17 @@ arch=$(curl -fsS --retry 3 https://archlinux.org/packages/extra/x86_64/hyprland/
 if [[ -n $approved && -n $arch && $approved != "$arch" ]]; then
     problems+=("Hyprland $arch (Arch's) not approved yet: AgrOS's machines stay on $approved")
 fi
+# Caelestia's dots: pinned by commit (agros-hyprland-settings' _dots), a new one taken on purpose; how far upstream has
+# gone since, in the table (nothing else says it; a pin fails nothing, so not a problem)
+dots=$(sed -n 's/^_dots=//p' "$here/packages/agros-hyprland-settings/PKGBUILD")
+dots_cell="pinned ${dots:0:7}"
+if [[ -n $dots ]] && d=$(gh api "repos/caelestia-dots/caelestia/compare/$dots...HEAD" \
+    -q '"\(.ahead_by) \(.base_commit.commit.committer.date[:10])"' 2>/dev/null); then
+    read -r n since <<<"$d"
+    dots_cell+=" ($since), $n newer commit(s) upstream"
+else
+    dots_cell+=", upstream couldn't be read"
+fi
 # The size watch: each thing it found needs a look; it not having run, too, with its log (or the next week's finds
 # nothing to compare with: last week's baseline kept then). (Its table says it ran, not its baseline: a first week
 # whose sets pacman couldn't work out has none, and what pacman said goes in the issue)
@@ -115,6 +127,7 @@ write_body() {
         echo "| The ISO | last build ${iso_last:-none} ${iso_day:-}, last good ${iso_good:-none} |"
         echo "| The CachyOS sync | last run ${sync_last:-none} ${sync_day:-}, last good ${sync_good:-none} |"
         echo "| Hyprland | approved ${approved:-?}, Arch's ${arch:-?} |"
+        echo "| Caelestia's dots | $dots_cell |"
         held_cell=nothing sync_cell="up to date"
         [[ -z $held ]] || held_cell="see above"
         [[ -z $sync ]] || sync_cell="waiting for a merge"

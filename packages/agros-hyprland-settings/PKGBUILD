@@ -15,7 +15,8 @@ depends=('agros-scripts' 'caelestia-shell')  # (caelestia-shell: the wallpaper f
 conflicts=('cachyos-fish-config' 'cachyos-micro-settings')
 replaces=('cachyos-fish-config' 'cachyos-micro-settings')
 makedepends=('git')
-# Caelestia's dots (caelestia-dots/caelestia), pinned: a new commit is taken on purpose, after checking it
+# Caelestia's dots (caelestia-dots/caelestia), pinned: a new commit is taken on purpose, after checking it (the Friday
+# status, ci/status.sh, says how far upstream has gone since)
 _dots=01d2df329240be60148d25804690779a078c6378
 source=("caelestia-dots::git+https://github.com/caelestia-dots/caelestia.git#commit=${_dots}")
 sha256sums=('SKIP')

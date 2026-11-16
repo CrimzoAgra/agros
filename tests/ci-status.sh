@@ -46,6 +46,9 @@ case "$*" in
   "pr list"*)
     [[ $STATE == *gh-down* ]] && exit 1
     [[ $STATE == *sync* ]] && json '[{"title": "CachyOS: 2 new commit(s)", "url": "https://p", "createdAt": "2026-11-12T03:00:00Z"}]' || json '[]' ;;
+  "api repos/caelestia-dots/caelestia/compare/"*)
+    [[ $STATE == *gh-down* ]] && exit 1
+    json '{"ahead_by": 12, "base_commit": {"commit": {"committer": {"date": "2026-11-03T10:00:00Z"}}}}' ;;
   "issue list --label status --state all"*) cat @T@/lastbody 2>/dev/null; true ;;
   "issue list --label status"*) echo 7 ;;
   "issue create"*) for a; do [[ $p == --body-file ]] && cp "$a" @T@/body; p=$a; done ;;
@@ -69,6 +72,11 @@ go ""
 grep -q '^@someone \*\*Nothing broke this week' "$t/body" || fail "all well not said: $(cat "$t/body")"
 grep -qx 'gh issue close 7' "$t/gh.log" || fail "last week's status not closed"
 grep -qxF '| The ISO: its packages | 3, 68 MiB installed |' "$t/body" || fail "the size watch's row not in the table: $(cat "$t/body")"
+# (how far Caelestia's dots have gone since the pinned commit: in the table, not a problem)
+dots=$(sed -n 's/^_dots=//p' "$here/packages/agros-hyprland-settings/PKGBUILD")
+grep -qxF "| Caelestia's dots | pinned ${dots:0:7} (2026-11-03), 12 newer commit(s) upstream |" "$t/body" ||
+    fail "the dots' pin not in the table: $(cat "$t/body")"
+grep -qF "compare/$dots...HEAD" "$t/gh.log" || fail "not compared from the pinned commit: $(cat "$t/gh.log")"
 # (the baseline in the body, unseen, and read back by --last-sizes as it was)
 cp "$t/body" "$t/lastbody"
 [[ $(last_sizes) == $'iso hyprland 66560\ninst cairo 1536' ]] || fail "the baseline not read back: $(last_sizes)"
@@ -98,6 +106,7 @@ for s in "CI's held issue couldn't be read: whether anything is held not checked
     "Arch's Hyprland version couldn't be read: whether it's approved not checked"; do
     grep -qxF -- "- $s" "$t/body" || fail "a failed lookup not said: $s: $(cat "$t/body")"
 done
+grep -qF "| Caelestia's dots | pinned ${dots:0:7}, upstream couldn't be read |" "$t/body" || fail "the dots' upstream not read said: $(cat "$t/body")"
 go "arch-down"
 grep -q "approved list" "$t/body" && fail "a readable approved list said unreadable: $(cat "$t/body")"
 # (the ISO held by the upstream gate: GitHub's success, said; one already published isn't)

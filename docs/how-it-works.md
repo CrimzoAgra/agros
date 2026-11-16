@@ -1112,7 +1112,9 @@ breaks something holds back that one piece, never the rest (`.github/workflows/c
   for a merge (agros-iso's CachyOS sync, since when) and the sync's own failures (its ISO check's are the pull request's
   to say), a daily run (CI's, the sync's) not seen for 3 days (GitHub turns a public repo's schedules off after 60 days
   without a commit), and whether Arch's newest Hyprland is approved yet; a lookup that fails is said too, never read as
-  nothing to say. The owner is mentioned, so GitHub notifies them. Its size watch (`ci/sizes.sh` in an Arch container, `ci/sizes.py`) works out
+  nothing to say. Its table also says how far Caelestia's dots have gone since the commit `agros-hyprland-settings`
+  pins (a new one is taken on purpose; nothing else says when there is one). The owner is mentioned, so GitHub notifies
+  them. Its size watch (`ci/sizes.sh` in an Arch container, `ci/sizes.py`) works out
   from the package databases what goes on the live ISO (agros-iso's list as `agros-trim.sh` leaves it) and on a new
   install (`netinstall.yaml`'s selected groups), nothing built, and says: a package new this week of 20 MiB or more
   and what pulled it in, either set grown 50 MiB or more, a package `agros-trim.sh` leaves out coming back, a listed
