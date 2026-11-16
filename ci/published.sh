@@ -57,14 +57,19 @@ carry_over() {
 # it was built with (a new Boost or Qt: built). Anything else or unclear: 1, built as before (built_against then checks
 # that build). Skips the long builds of a run that changes none of them
 reused() {
-    local info name ver desc f bi d dep='' cur
-    info=$(cd "$1" && asb makepkg -od --noconfirm >/dev/null 2>&1 && asb makepkg --printsrcinfo) || return 1
+    local info name ver desc f bi d dep='' cur log
+    # (each way it gives up said, with why: one that never said built every time, unseen)
+    log=$(cd "$1" && asb makepkg -od --noconfirm 2>&1) ||
+        { echo "-- ${1##*/}: built (its sources not fetched to compare: $(tail -n3 <<<"$log" | paste -sd' '))"; return 1; }
+    info=$(cd "$1" && asb makepkg --printsrcinfo 2>&1) ||
+        { echo "-- ${1##*/}: built (no .SRCINFO to compare: $(tail -n3 <<<"$info" | paste -sd' '))"; return 1; }
     name=$(sed -n 's/^pkgname = //p' <<<"$info" | head -n1)
     ver=$(awk -F' = ' '/^\tepoch = /{e=$2":"} /^\tpkgver = /{v=$2} /^\tpkgrel = /{r=$2} END{print e v "-" r}' <<<"$info")
     out_has "$name" && return 0  # (built here already, as another's dependency)
-    pub_db >/dev/null 2>&1 && desc=$(pub_desc "$name") || return 1
-    [[ $(field "$desc" NAME) == "$name" && $(field "$desc" VERSION) == "$ver" ]] || return 1
-    carry_over "$name" >/dev/null || return 1
+    pub_db >/dev/null 2>&1 && desc=$(pub_desc "$name") || { echo "-- $name $ver: built (none published)"; return 1; }
+    [[ $(field "$desc" NAME) == "$name" && $(field "$desc" VERSION) == "$ver" ]] ||
+        { echo "-- $name $ver: built (published: $(field "$desc" NAME) $(field "$desc" VERSION))"; return 1; }
+    log=$(carry_over "$name" 2>&1) || { echo "-- $name $ver: built (the published one not fetched: $log)"; return 1; }
     f=$out/$(field "$desc" FILENAME)
     bi=$(bsdtar -xOf "$f" .BUILDINFO 2>/dev/null | sed -n -e 's/^installed = \(.*\)-[^-]*$/\1/p' -e 's/^pkgbuild_sha256sum = /sha /p')
     grep -qxF "sha $(sha256sum <"$1/PKGBUILD" | cut -d' ' -f1)" <<<"$bi" || dep=PKGBUILD
