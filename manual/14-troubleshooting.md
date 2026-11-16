@@ -36,6 +36,18 @@ AgrOS Welcome tries again at your next login. You can also run `agros-welcome` y
 AgrOS works in VMware. The desktop and apps draw on VMware's virtual graphics card (`agros-vmware`), which is still
 slower than real hardware: turn on **Accelerate 3D graphics** in the VM's display settings.
 
+If the VM's window freezes for about a second while you drag a window against the screen's edge (the snap preview
+showing), that's VMware's mouse: AgrOS holds the pointer inside Caelestia's border while you drag, and with VMware's
+usual mouse that makes VMware move your own computer's pointer too, which stalls it. Give the VM an ordinary mouse
+instead: with it shut down, add these lines to its `.vmx` file. You then click into the VM to use it, and press
+Ctrl+Alt to get your pointer back.
+
+```
+vmmouse.present = "FALSE"
+mouse.vusb.enable = "TRUE"
+mouse.vusb.useBasicMouse = "TRUE"
+```
+
 ## Still stuck?
 
 [Open an issue](https://github.com/CrimzoAgra/agros/issues).
