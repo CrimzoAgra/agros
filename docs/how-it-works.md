@@ -98,7 +98,7 @@ every version, with the same change made).
 
 The CI needs two repository secrets: `AGROS_GPG_KEY`, a signing subkey of AgrOS's key without a passphrase, never the
 key itself (made as in agros-iso's manual, *Building the ISO*, step 7: the same secret in both repos; a leaked one is
-revoked and the key every install trusts stays);
+revoked and the key every install trusts stays; the primary key works too, with nothing to change);
 and `AGROS_ISO_TOKEN`, a fine-grained token for `agros-iso` only with **Actions: Read and write**, which starts
 agros-iso's ISO build after each publish (the `iso` job fails without it). It also needs GitHub Pages turned on with
 "GitHub Actions" as its source. An optional repository variable, `AGROS_PUBLISHED`, points the build at another
@@ -794,7 +794,11 @@ brings each change; nothing to run by hand).
     `--offline`: nothing let through that the boot didn't download), the Updates app's list and its update. A held
     update isn't listed in the Updates app; the update log says what waits ("waits for AgrOS's check"). A version older
     in the repo than installed (a rollback) doesn't count: pacman keeps the newer one. The list is kept for when the
-    repo can't be reached; never fetched, nothing new
+    repo can't be reached; never fetched, nothing new. It's taken only with a good signature by AgrOS's key beside it
+    (`agros-approved.sig`, CI's release job signs it; checked with `gpgv` against `agros-keyring`'s key file alone,
+    `/usr/share/pacman/keyrings/agros.gpg`): with none, or a bad one (a mirror or a network in between that changed it),
+    it's as if the repo couldn't be reached, said ("no good signature by AgrOS's key"): the kept list, nothing new let
+    through. agros-iso's build and installer check it the same way
   - The ISO build (agros-iso's `check_gate`) stops when its Hyprland isn't approved, keeping the published ISO; the
     ISO keeps a copy of that approved set, and a new install gets it rather than the newest unchecked one (agros-iso's
     `agros-gate-install`, an installer step)
@@ -1093,6 +1097,18 @@ once it comes, is checked as installed like any other.
 On `main` CI builds the repo first, then tests what it built, then puts out what passed, so an upstream change that
 breaks something holds back that one piece, never the rest (`.github/workflows/ci.yml`):
 
+- **Signed apart from the build.** The `repo` job runs AUR build scripts (as its builder user, with passwordless
+  sudo) and `test` runs what was built and the tests, so neither has a secret: the repo goes between them unsigned
+  (`ci/build-repo.sh` refuses to start with a secret key at hand), with only AgrOS's public key (`ci/agros.asc`), which
+  the published files it keeps are checked against and `agros-keyring` is made from. The `release` job, a container of
+  its own that runs none of that, puts the release together, then signs it in one step, the only one with
+  `AGROS_GPG_KEY` (`ci/sign-repo.sh`): each new package (one kept as published keeps its signature; one with any other
+  `.sig` stops it), the database made again and signed, `agros-approved` and `agros-arch-ok`; each signature checked
+  against `ci/agros.asc`, then gpg's agent stopped and the key removed before anything else runs (CachyOS's keyring,
+  the install check with signatures required, the upload to Pages). `tests/ci-signing.sh` checks the workflow keeps it
+  so. Moving to a new signing subkey: add it to `ci/agros.asc` (and agros-iso's `agros.asc`) and raise
+  `agros-keyring`'s `pkgver`, let machines update, then replace the secret; signing with a subkey `ci/agros.asc` lacks
+  fails the release, before anything goes out.
 - **A package that doesn't build** (an AUR change, AgrOS's Quickshell patch or Calamares changes no longer fitting, a
   download that failed): the published one is kept, its signature checked, with the packages of the repo it needs
   (`ci/published.sh`); the rest goes out. None published yet: the build fails.
