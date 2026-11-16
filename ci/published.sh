@@ -51,6 +51,36 @@ carry_over() {
     done
 }
 
+# reused <dir>: the PKGBUILD in <dir> not built, the published package kept instead, when nothing it's built from
+# changed: the same name and version (its sources fetched, pkgver() run), the same PKGBUILD (the checksum makepkg keeps
+# in .BUILDINFO: AgrOS's patches and swaps edit it) and every package it depends on or builds with still at the version
+# it was built with (a new Boost or Qt: built). Anything else or unclear: 1, built as before (built_against then checks
+# that build). Skips the long builds of a run that changes none of them
+reused() {
+    local info name ver desc f bi d dep='' cur
+    info=$(cd "$1" && asb makepkg -od --noconfirm >/dev/null 2>&1 && asb makepkg --printsrcinfo) || return 1
+    name=$(sed -n 's/^pkgname = //p' <<<"$info" | head -n1)
+    ver=$(awk -F' = ' '/^\tepoch = /{e=$2":"} /^\tpkgver = /{v=$2} /^\tpkgrel = /{r=$2} END{print e v "-" r}' <<<"$info")
+    out_has "$name" && return 0  # (built here already, as another's dependency)
+    pub_db >/dev/null 2>&1 && desc=$(pub_desc "$name") || return 1
+    [[ $(field "$desc" NAME) == "$name" && $(field "$desc" VERSION) == "$ver" ]] || return 1
+    carry_over "$name" >/dev/null || return 1
+    f=$out/$(field "$desc" FILENAME)
+    bi=$(bsdtar -xOf "$f" .BUILDINFO 2>/dev/null | sed -n -e 's/^installed = \(.*\)-[^-]*$/\1/p' -e 's/^pkgbuild_sha256sum = /sha /p')
+    grep -qxF "sha $(sha256sum <"$1/PKGBUILD" | cut -d' ' -f1)" <<<"$bi" || dep=PKGBUILD
+    for d in $(bsdtar -xOf "$f" .PKGINFO 2>/dev/null | sed -n 's/^\(depend\|makedepend\) = \([^<>=]*\).*/\2/p'); do
+        [[ -z $dep ]] || break
+        cur=$(pacman -Sp --print-format '%n-%v' "$d" 2>/dev/null | tail -n1)
+        [[ -n $cur ]] && grep -qxF "$cur" <<<"$bi" || dep="$d (now ${cur:-gone})"
+    done
+    if [[ -n $dep ]]; then
+        echo "-- $name $ver: built ($dep changed since the published one)"
+        rm -f "$f" "$f.sig"
+        return 1
+    fi
+    echo "-- ${f##*/}: unchanged, the published one kept (not built)"
+}
+
 # hold_new <why>: each package here neither AgrOS's own nor the published file swapped for the published one (one never
 # published: left out), said in held
 hold_new() {

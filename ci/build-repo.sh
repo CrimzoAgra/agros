@@ -228,16 +228,30 @@ if [[ -z ${AGROS_SKIP_AUR:-} ]]; then
     }
     # Quickshell first, with AgrOS's fix (aur-agros-patch: the boot's rebuild on a new Qt adds it the same way), into
     # the repo: caelestia-shell's quickshell-git taken from it, by its name (CachyOS's noctalia-qs only claims it), not
-    # built from the AUR without the fix. Its build files or the patch no longer fitting: the published one held
+    # built from the AUR without the fix. Its build files or the patch no longer fitting: the published one held. Nothing
+    # it's built from changed: the published one kept, not built (reused, published.sh: 7 minutes)
     { asb git clone -q https://aur.archlinux.org/quickshell-git.git "$work/quickshell-git" &&
         asb "$work/agros/packages/agros-system/aur-agros-patch" "$work/quickshell-git" quickshell-git &&
-        (cd "$work/quickshell-git" && asb env PKGDEST="$out" makepkg -s --noconfirm "${sign[@]}"); } ||
+        { reused "$work/quickshell-git" ||
+            (cd "$work/quickshell-git" && asb env PKGDEST="$out" makepkg -s --noconfirm "${sign[@]}"); }; } ||
         hold quickshell-git "AgrOS's fix (packages/agros-system/aur-patches) didn't build: has Quickshell fixed it itself?"
     asb repo-add -q "$out/agros.db.tar.gz" "$out"/quickshell-git-*.pkg.tar.zst
     pacman -Sy --noconfirm >/dev/null
+    # caelestia-shell apart from the others, after them (4 minutes: kept when unchanged, as Quickshell), its AUR
+    # dependencies (those no repo has) built with the others
+    mapfile -t aur < <(printf '%s\n' "${aur[@]}" | grep -vx caelestia-shell)
+    if asb git clone -q https://aur.archlinux.org/caelestia-shell.git "$work/caelestia-shell"; then
+        for d in $(cd "$work/caelestia-shell" && asb makepkg --printsrcinfo | sed -n 's/^\t\(depends\|makedepends\) = \([^<>=]*\).*/\2/p'); do
+            pacman -Sp "$d" >/dev/null 2>&1 || [[ " ${aur[*]} " == *" $d "* ]] || aur+=("$d")
+        done
+    fi
     # (twice: a download that drops, GitHub's now and then, fails only its package; the second pass builds what's left)
     # One that still didn't build: the published one held, with what it needs
     aur_build || aur_build || true
+    pacman -Sy --noconfirm >/dev/null
+    { [[ -d $work/caelestia-shell ]] && { reused "$work/caelestia-shell" ||
+        (cd "$work/caelestia-shell" && asb env PKGDEST="$out" makepkg -s --noconfirm "${sign[@]}"); }; } ||
+        hold caelestia-shell "it didn't build from the AUR (the build's log above)"
     for p in "${aur[@]}"; do
         out_has "${p#*/}" || hold "${p#*/}" "it didn't build from the AUR (the build's log above)"
     done
@@ -294,7 +308,7 @@ SH
         { grep -q '^pkgrel=[0-9]*$' PKGBUILD || { echo "!! cachyos-calamares: its pkgrel isn't a plain number"; false; }; } &&
         asb sed -i "s/^pkgrel=\([0-9]*\)$/pkgrel=\1.$calamares_rel/" PKGBUILD &&
         asb sed -i -e "/^prepare() {/{n;r $work/calamares-labels" -e '}' PKGBUILD &&
-        asb env PKGDEST="$out" makepkg -s --noconfirm "${sign[@]}") ||
+        { reused "$PWD" || asb env PKGDEST="$out" makepkg -s --noconfirm "${sign[@]}"; }) ||
         hold cachyos-calamares-next "CachyOS's installer didn't build with AgrOS's changes (the build's log above)"
 fi
 cp "$work/makepkg.conf" /etc/makepkg.conf
