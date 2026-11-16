@@ -18,20 +18,49 @@ if [[ ${1:-} == --last-sizes ]]; then
     exit 0
 fi
 problems=()
-# last <repo> <workflow file>: its last run on main ("<conclusion> <date>"), and its last good one's date. (Not the
-# cancelled ones: a newer run waiting its turn cancels the one waiting before it, every busy day. None finished:
+# last <repo> <workflow file>: its last run on main ("<conclusion> <date>"), its last good one's date, and its id. (Not
+# the cancelled ones: a newer run waiting its turn cancels the one waiting before it, every busy day. None finished:
 # "none -", not jq's "null null")
 last() {
-    gh run list -R "$1" -w "$2" -b main -L 50 --json conclusion,status,createdAt \
+    gh run list -R "$1" -w "$2" -b main -L 50 --json conclusion,status,createdAt,databaseId \
         -q '[.[] | select(.status == "completed" and .conclusion != "cancelled")] |
             ((.[0] // {conclusion: "none", createdAt: "-"}) | "\(.conclusion) \(.createdAt[:10])"),
-            (map(select(.conclusion == "success"))[0].createdAt[:10] // "none")' 2>/dev/null |
+            (map(select(.conclusion == "success"))[0].createdAt[:10] // "none"), (.[0].databaseId // "")' 2>/dev/null |
         paste -sd' '
 }
-read -r ci_last ci_day ci_good < <(last "$GITHUB_REPOSITORY" ci.yml) || true
-read -r iso_last iso_day iso_good < <(last "$iso" iso.yml) || true
+# quiet <date> <days>: its last run that many days ago or more. A daily one that stopped: GitHub turns a public repo's
+# schedules off after 60 days without a commit, and nothing else says so
+now=$(date -u -d "${AGROS_NOW:-now}" +%s)
+quiet() { [[ $1 =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] && (((now - $(date -u -d "$1" +%s)) / 86400 >= $2)); }
+read -r ci_last ci_day ci_good _ < <(last "$GITHUB_REPOSITORY" ci.yml) || true
+read -r iso_last iso_day iso_good iso_id < <(last "$iso" iso.yml) || true
+read -r sync_last sync_day sync_good sync_id < <(last "$iso" cachyos-sync.yml) || true
 [[ ${ci_last:-} == success ]] || problems+=("AgrOS's CI: its last run ${ci_last:-none} (${ci_day:-}); last good ${ci_good:-none}")
-[[ ${iso_last:-} == success ]] || problems+=("The ISO: its last build ${iso_last:-none} (${iso_day:-}); last good ${iso_good:-none}")
+! quiet "${ci_day:-}" 3 || problems+=("AgrOS's CI hasn't run since ${ci_day}: its daily run turned off?")
+# The ISO: a run the upstream gate held built nothing (its Upstream gate step ran, its publish job skipped), and GitHub
+# shows that wait as a success. Usually gone with CI's next approval; one that stays (the ISO's Hyprland or a library, from
+# CachyOS's repos, at a version AgrOS's CI never tested) leaves the published ISO the download for good
+if [[ ${iso_last:-} == success && -n ${iso_id:-} ]]; then
+    if ! w=$(gh api "repos/$iso/actions/runs/$iso_id/jobs" \
+        -q '([.jobs[] | select(.name == "iso") | .steps[] | select(.name == "Upstream gate") | .conclusion][0] == "success") and ([.jobs[] | select(.name == "publish") | .conclusion][0] == "skipped")' 2>/dev/null); then
+        problems+=("The ISO: whether its last build waits for AgrOS's check couldn't be read")
+    elif [[ $w == true ]]; then
+        iso_last=waiting
+        problems+=("The ISO: its last build ($iso_day) waits for AgrOS's check of its Hyprland or a library: nothing built, the ISO published before stays the download")
+    fi
+fi
+[[ ${iso_last:-} == success || ${iso_last:-} == waiting ]] || problems+=("The ISO: its last build ${iso_last:-none} (${iso_day:-}); last good ${iso_good:-none}")
+# The CachyOS sync: its own steps failing (fetching CachyOS's commits, the merge, the pull request) said here; its ISO
+# check failing is the pull request's to say (below)
+if [[ ${sync_last:-} != success ]]; then
+    f=
+    [[ -z ${sync_id:-} ]] || f=$(gh api "repos/$iso/actions/runs/$sync_id/jobs" \
+        -q '[.jobs[] | select((.name == "prepare" or .name == "merge") and .conclusion != "success" and .conclusion != "skipped") | .name] | join(", ")' 2>/dev/null) ||
+        f="its jobs couldn't be read"
+    [[ -z $f && -n ${sync_id:-} ]] ||
+        problems+=("The CachyOS sync: its last run ${sync_last:-none} (${sync_day:-}; ${f:-no run}); last good ${sync_good:-none}: CachyOS's changes not followed")
+fi
+! quiet "${sync_day:-}" 3 || problems+=("The CachyOS sync hasn't run since ${sync_day}: its daily run turned off?")
 # (each lookup that fails is said too, never read as nothing to say: the held issue, the CachyOS pull request, the
 # approved list, Arch's Hyprland. Since when: what's waited longer than a few days needs a person)
 if ! held=$(gh issue list --label held --state open --json title,url,createdAt -q '.[] | "\(.title) (\(.url), open since \(.createdAt[:10]))"' 2>/dev/null); then
@@ -84,6 +113,7 @@ write_body() {
         echo "|---|---|"
         echo "| AgrOS's CI (packages) | last run ${ci_last:-none} ${ci_day:-}, last good ${ci_good:-none} |"
         echo "| The ISO | last build ${iso_last:-none} ${iso_day:-}, last good ${iso_good:-none} |"
+        echo "| The CachyOS sync | last run ${sync_last:-none} ${sync_day:-}, last good ${sync_good:-none} |"
         echo "| Hyprland | approved ${approved:-?}, Arch's ${arch:-?} |"
         held_cell=nothing sync_cell="up to date"
         [[ -z $held ]] || held_cell="see above"

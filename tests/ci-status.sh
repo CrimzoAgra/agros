@@ -18,8 +18,28 @@ run() { echo "{\"status\": \"completed\", \"conclusion\": \"$1\", \"createdAt\":
 case "$*" in
   "run list -R x/agros "*)
     if [[ $STATE == *ci-failed* ]]; then json "[$(run cancelled 2026-11-20 13), $(run failure 2026-11-19 12), $(run success 2026-11-18 11)]"
+    elif [[ $STATE == *ci-quiet* ]]; then json "[$(run success 2026-11-14 12)]"
     else json "[$(run cancelled 2026-11-20 13), $(run success 2026-11-20 12)]"; fi ;;
-  "run list -R "*) json "[$(run success 2026-11-20 21)]" ;;
+  "run list -R x/iso -w iso.yml "*) json "[$(run success 2026-11-20 21)]" ;;
+  "run list -R x/iso -w cachyos-sync.yml "*)
+    if [[ $STATE == *cachy-broken* || $STATE == *cachy-checkfail* ]]; then json "[$(run failure 2026-11-20 31), $(run success 2026-11-18 30)]"
+    elif [[ $STATE == *cachy-quiet* ]]; then json "[$(run success 2026-11-01 31)]"
+    else json "[$(run success 2026-11-20 31)]"; fi ;;
+  # (the ISO's jobs: held by the upstream gate, its Upstream gate step run and its publish skipped; already published,
+  # neither run; else published)
+  "api repos/x/iso/actions/runs/21/jobs "*)
+    gate=success publish=success
+    [[ $STATE != *iso-gate* ]] || publish=skipped
+    [[ $STATE != *iso-cached* ]] || gate=skipped publish=skipped
+    json "{\"jobs\": [{\"name\": \"iso\", \"conclusion\": \"success\", \"steps\": [{\"name\": \"Upstream gate\", \"conclusion\": \"$gate\"}]},
+      {\"name\": \"publish\", \"conclusion\": \"$publish\", \"steps\": []}]}" ;;
+  # (the sync's jobs: its own step failing, or only its ISO check, whose pull request says so)
+  "api repos/x/iso/actions/runs/31/jobs "*)
+    prepare=success check=skipped merge=skipped
+    [[ $STATE != *cachy-broken* ]] || prepare=failure
+    [[ $STATE != *cachy-checkfail* ]] || check=failure merge=success
+    json "{\"jobs\": [{\"name\": \"prepare\", \"conclusion\": \"$prepare\"}, {\"name\": \"check / iso\", \"conclusion\": \"$check\"},
+      {\"name\": \"merge\", \"conclusion\": \"$merge\"}]}" ;;
   "issue list --label held"*)
     [[ $STATE == *gh-down* ]] && exit 1
     [[ $STATE == *held* ]] && json '[{"title": "Held back: x", "url": "https://h", "createdAt": "2026-11-10T03:00:00Z"}]' || json '[]' ;;
@@ -39,7 +59,11 @@ mkdir -p "$t/sizes"
 echo '| The ISO: its packages | 3, 68 MiB installed |' >"$t/sizes/table"
 printf '%s\n' 'iso hyprland 66560' 'inst cairo 1536' >"$t/sizes/baseline"
 : >"$t/sizes/report"
-go() { rm -f "$t/gh.log" "$t/body"; STATE=$1 PATH=$t/bin:$PATH GITHUB_REPOSITORY=x/agros OWNER=someone SIZES=${SIZES-$t/sizes} "$here/ci/status.sh" >/dev/null; }
+go() {
+    rm -f "$t/gh.log" "$t/body"
+    STATE=$1 PATH=$t/bin:$PATH GITHUB_REPOSITORY=x/agros AGROS_ISO_REPO=x/iso AGROS_NOW=2026-11-20 OWNER=someone \
+        SIZES=${SIZES-$t/sizes} "$here/ci/status.sh" >/dev/null
+}
 last_sizes() { PATH=$t/bin:$PATH "$here/ci/status.sh" --last-sizes; }
 go ""
 grep -q '^@someone \*\*Nothing broke this week' "$t/body" || fail "all well not said: $(cat "$t/body")"
@@ -76,4 +100,23 @@ for s in "CI's held issue couldn't be read: whether anything is held not checked
 done
 go "arch-down"
 grep -q "approved list" "$t/body" && fail "a readable approved list said unreadable: $(cat "$t/body")"
+# (the ISO held by the upstream gate: GitHub's success, said; one already published isn't)
+go "iso-gate"
+grep -qxF -- "- The ISO: its last build (2026-11-20) waits for AgrOS's check of its Hyprland or a library: nothing built, the ISO published before stays the download" "$t/body" ||
+    fail "the ISO held by the upstream gate not said: $(cat "$t/body")"
+grep -qF '| The ISO | last build waiting 2026-11-20' "$t/body" || fail "the ISO's row doesn't say it waits: $(cat "$t/body")"
+go "iso-cached"
+grep -q '^@someone \*\*Nothing broke this week' "$t/body" || fail "an ISO already published said to need a look: $(cat "$t/body")"
+# (the CachyOS sync failing itself: said; only its ISO check failing is its pull request's to say)
+go "cachy-broken"
+grep -qxF -- "- The CachyOS sync: its last run failure (2026-11-20; prepare); last good 2026-11-18: CachyOS's changes not followed" "$t/body" ||
+    fail "the CachyOS sync failing not said: $(cat "$t/body")"
+go "cachy-checkfail"
+grep -q '^@someone \*\*Nothing broke this week' "$t/body" || fail "the sync's ISO check said apart from its pull request: $(cat "$t/body")"
+# (a daily run not seen for days: GitHub turned its schedule off)
+go "ci-quiet cachy-quiet"
+for s in "AgrOS's CI hasn't run since 2026-11-14: its daily run turned off?" \
+    "The CachyOS sync hasn't run since 2026-11-01: its daily run turned off?"; do
+    grep -qxF -- "- $s" "$t/body" || fail "not said: $s: $(cat "$t/body")"
+done
 echo "ok ci-status"
