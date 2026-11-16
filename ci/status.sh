@@ -32,13 +32,26 @@ read -r ci_last ci_day ci_good < <(last "$GITHUB_REPOSITORY" ci.yml) || true
 read -r iso_last iso_day iso_good < <(last "$iso" iso.yml) || true
 [[ ${ci_last:-} == success ]] || problems+=("AgrOS's CI: its last run ${ci_last:-none} (${ci_day:-}); last good ${ci_good:-none}")
 [[ ${iso_last:-} == success ]] || problems+=("The ISO: its last build ${iso_last:-none} (${iso_day:-}); last good ${iso_good:-none}")
-held=$(gh issue list --label held --state open --json number,title,url -q '.[] | "\(.title) (\(.url))"' 2>/dev/null)
+# (each lookup that fails is said too, never read as nothing to say: the held issue, the CachyOS pull request, the
+# approved list, Arch's Hyprland. Since when: what's waited longer than a few days needs a person)
+if ! held=$(gh issue list --label held --state open --json title,url,createdAt -q '.[] | "\(.title) (\(.url), open since \(.createdAt[:10]))"' 2>/dev/null); then
+    held="CI's held issue couldn't be read: whether anything is held not checked"
+fi
 [[ -z $held ]] || problems+=("$held")
-sync=$(gh pr list -R "$iso" --head cachyos --state open --json title,url -q '.[] | "\(.title) (\(.url))"' 2>/dev/null)
+if ! sync=$(gh pr list -R "$iso" --head cachyos --state open --json title,url,createdAt -q '.[] | "\(.title) (\(.url), open since \(.createdAt[:10]))"' 2>/dev/null); then
+    sync="its pull request couldn't be read: not checked"
+fi
 [[ -z $sync ]] || problems+=("CachyOS ISO changes waiting for a merge: $sync")
 # Hyprland: the newest AgrOS approved, and Arch's
-approved=$(curl -fsS --retry 3 "$site/agros-approved" 2>/dev/null | awk '$1 == "hyprland" { v = $2 } END { print v }')
+if approved=$(curl -fsS --retry 3 "$site/agros-approved" 2>/dev/null); then
+    approved=$(awk '$1 == "hyprland" { v = $2 } END { print v }' <<<"$approved")
+    [[ -n $approved ]] || problems+=("AgrOS's approved list ($site/agros-approved) has no Hyprland: AgrOS's machines get none")
+else
+    approved=
+    problems+=("AgrOS's approved list couldn't be read ($site/agros-approved): AgrOS's machines can't fetch it either")
+fi
 arch=$(curl -fsS --retry 3 https://archlinux.org/packages/extra/x86_64/hyprland/json/ 2>/dev/null | jq -r .pkgver 2>/dev/null)
+[[ -n $arch && $arch != null ]] || { arch=; problems+=("Arch's Hyprland version couldn't be read: whether it's approved not checked"); }
 if [[ -n $approved && -n $arch && $approved != "$arch" ]]; then
     problems+=("Hyprland $arch (Arch's) not approved yet: AgrOS's machines stay on $approved")
 fi
