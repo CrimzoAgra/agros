@@ -123,4 +123,15 @@ for cmd in "pacman -Syu" "packagekitd" "pamac-daemon" "pacman -Sy --dbpath /tmp/
         *) grep -q "pacman's lock" <<<"$out" && fail "pacman's lock reported while '$cmd' runs: $out" ;;
     esac
 done
+# The day AgrOS's checks last passed (the boot's copy of agros-arch-ok): said past 10 days, counted to when it was
+# fetched (the file's time); not when it's recent, nor from a copy fetched long ago that was recent then, nor garbage
+arch_ok() { echo "$1" >"$t/arch-ok"; touch -d "$2" "$t/arch-ok"; HOME=$h AGROS_ARCH_OK=$t/arch-ok PATH=$t:$PATH "$here/.local/bin/dotfiles-check" 2>&1; }
+out=$(arch_ok "$(date -ud '12 days ago' +%Y/%m/%d)" now)
+grep -qF "AgrOS's checks haven't passed for 12 days: Hyprland updates wait until they do" <<<"$out" || fail "checks not passed for 12 days not said: $out"
+out=$(arch_ok "$(date -ud '3 days ago' +%Y/%m/%d)" now)
+grep -q "checks haven't passed" <<<"$out" && fail "checks that passed 3 days ago said: $out"
+out=$(arch_ok "$(date -ud '40 days ago' +%Y/%m/%d)" "$(date -ud '39 days ago')")
+grep -q "checks haven't passed" <<<"$out" && fail "a copy not refreshed since counted to today: $out"
+out=$(arch_ok "not a date" "now")
+grep -q "checks haven't passed" <<<"$out" && fail "a copy that isn't a date said: $out"
 echo "ok dotfiles-check"

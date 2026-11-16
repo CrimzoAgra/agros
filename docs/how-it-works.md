@@ -799,6 +799,11 @@ brings each change; nothing to run by hand).
     `/usr/share/pacman/keyrings/agros.gpg`): with none, or a bad one (a mirror or a network in between that changed it),
     it's as if the repo couldn't be reached, said ("no good signature by AgrOS's key"): the kept list, nothing new let
     through. agros-iso's build and installer check it the same way
+  - Checks that stop passing are said on the machine too: the boot's update keeps the day they last passed on Arch
+    (`agros-arch-ok`, beside the repo; `/var/lib/agros/agros-arch-ok`, from the first of `[agros]`'s servers that
+    answers), and `dotfiles-check` says after login, once it was over 10 days old when fetched: "AgrOS's checks haven't
+    passed for N days: Hyprland updates wait until they do" (a broken check, or CI no longer running). No network at
+    login: a copy the boot hasn't refreshed yet is counted to when it was fetched, not to today
   - The ISO build (agros-iso's `check_gate`) stops when its Hyprland isn't approved, keeping the published ISO; the
     ISO keeps a copy of that approved set, and a new install gets it rather than the newest unchecked one (agros-iso's
     `agros-gate-install`, an installer step)

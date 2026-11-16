@@ -127,6 +127,17 @@ read -r skips since skipwhy 2>/dev/null <"$au/skipped"
 [[ -e $pacdb/db.lck ]] && ! "$helpers/pacman-lock-holder" "$pacdb" >/dev/null &&
     problems+=("pacman's lock was left behind ($pacdb/db.lck): nothing installs until it's removed (sudo rm $pacdb/db.lck, with no update running)")
 
+# AgrOS's checks (its CI's tests on Arch) not passed for over 10 days: Hyprland's updates wait meanwhile (the upstream
+# gate), and AgrOS may have stopped looking after itself. The day they last passed is the boot's copy (auto-update:
+# agros-arch-ok, from beside the [agros] repo; no network here), counted to when it was fetched (the file's time), not
+# to today: a copy the boot hasn't refreshed yet (the first login after weeks off) says no more than it knew then
+archok=${AGROS_ARCH_OK:-/var/lib/agros/agros-arch-ok}
+if read -r okday 2>/dev/null <"$archok" && [[ $okday =~ ^[0-9]{4}/[0-9]{2}/[0-9]{2}$ ]] &&
+    okday=$(date -ud "${okday//\//-}" +%s 2>/dev/null) && fetched=$(stat -c %Y "$archok" 2>/dev/null); then
+    days=$(((fetched - okday) / 86400))
+    ((days > 10)) && problems+=("AgrOS's checks haven't passed for $days days: Hyprland updates wait until they do")
+fi
+
 # Caelestia's own Hyprland config (~/.config/hypr, what `caelestia install` put there): nothing refreshes it, so an
 # upstream fix (a setting Hyprland deprecated) never got here. A newer version upstream (Caelestia's clone fetched, 10 s
 # at most): a note, not a problem (it changes about weekly), pointing to caelestia-hypr-refresh, which refreshes those

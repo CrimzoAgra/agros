@@ -37,6 +37,9 @@ You don't have to think about updates.
   updates as usual, and what waits isn't listed in the Updates app until it can be installed. `sudo pacman -Syu` in a terminal never updates them, and can stop with a dependency error while one is held:
   use the Updates app instead. A new install gets the Hyprland the ISO was checked with when a newer one is still
   waiting.
+  If AgrOS's checks stop passing for more than about 10 days (something upstream broke them, or AgrOS's automatic
+  checks stopped running), a warning after you log in says "AgrOS's checks haven't passed for N days: Hyprland
+  updates wait until they do". Nothing's wrong with your computer: everything else still updates.
 - **Every 6 hours** it checks again. When something's waiting, a notification offers **Update now**.
 - **At your next login** after an update, the desktop's settings files you never changed get AgrOS's new version. One
   you changed is left as you have it: AgrOS's new version goes beside it, named `<file>.agros-new`, and a notification

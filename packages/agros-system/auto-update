@@ -335,6 +335,17 @@ fi
 # wait for the network (at most ~2 min; what fails without it is said below)
 /usr/lib/agros/bin/wait-online https://archlinux.org
 
+# The day AgrOS's checks last passed on Arch (agros-arch-ok, which its CI publishes beside the [agros] repo; Hyprland's
+# updates wait while they fail), kept for dotfiles-check, which says so after login when it's over 10 days old. Each of
+# [agros]'s servers in turn; none answering, the copy kept as it is (its file's time: when it was fetched)
+archok=/var/lib/agros/agros-arch-ok
+while read -r server; do
+    day=$(curl -fsS --connect-timeout 10 -m 30 "$server/agros-arch-ok" 2>/dev/null) || continue
+    [[ $day =~ ^[0-9]{4}/[0-9]{2}/[0-9]{2}$ ]] || continue
+    mkdir -p "${archok%/*}" && echo "$day" >"$archok.new" && chmod 644 "$archok.new" && mv -f "$archok.new" "$archok"
+    break
+done < <(pacman-conf --repo agros Server 2>/dev/null)
+
 # system and CachyOS gaming packages, the NVIDIA driver too: downloaded now, installed at shutdown (only once this
 # finished: its mark, complete).
 # A lock a download cut off left (shutdown stopped it mid-way) taken out first, only with nothing on these lists that
