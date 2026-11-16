@@ -18,10 +18,13 @@ if [[ ${1:-} == --last-sizes ]]; then
 fi
 problems=()
 # last <repo> <workflow file>: its last run on main ("<conclusion> <date>"), and its last good one's date. (Not the
-# cancelled ones: a newer run waiting its turn cancels the one waiting before it, every busy day)
+# cancelled ones: a newer run waiting its turn cancels the one waiting before it, every busy day. None finished:
+# "none -", not jq's "null null")
 last() {
     gh run list -R "$1" -w "$2" -b main -L 50 --json conclusion,status,createdAt \
-        -q '[.[] | select(.status == "completed" and .conclusion != "cancelled")] |(.[0] | "\(.conclusion) \(.createdAt[:10])"), ([.[] | select(.conclusion == "success")][0].createdAt[:10] // "none")' 2>/dev/null |
+        -q '[.[] | select(.status == "completed" and .conclusion != "cancelled")] |
+            ((.[0] // {conclusion: "none", createdAt: "-"}) | "\(.conclusion) \(.createdAt[:10])"),
+            (map(select(.conclusion == "success"))[0].createdAt[:10] // "none")' 2>/dev/null |
         paste -sd' '
 }
 read -r ci_last ci_day ci_good < <(last "$GITHUB_REPOSITORY" ci.yml) || true
@@ -38,39 +41,50 @@ arch=$(curl -fsS --retry 3 https://archlinux.org/packages/extra/x86_64/hyprland/
 if [[ -n $approved && -n $arch && $approved != "$arch" ]]; then
     problems+=("Hyprland $arch (Arch's) not approved yet: AgrOS's machines stay on $approved")
 fi
-# The size watch: each thing it found needs a look; it not having run, too (or the next week's finds nothing to
-# compare with: last week's baseline kept then)
+# The size watch: each thing it found needs a look; it not having run, too, with its log (or the next week's finds
+# nothing to compare with: last week's baseline kept then). (Its table says it ran, not its baseline: a first week
+# whose sets pacman couldn't work out has none, and what pacman said goes in the issue)
 baseline=$(mktemp)
-if [[ -n ${SIZES:-} && -s $SIZES/baseline ]]; then
+if [[ -n ${SIZES:-} && -s $SIZES/table ]]; then
     while IFS= read -r line; do problems+=("$line"); done <"$SIZES/report"
     cp "$SIZES/baseline" "$baseline"
 else
-    problems+=("The size watch didn't run (status.yml's Sizes step): sizes not compared this week")
+    log=${GITHUB_RUN_ID:+, its log: ${GITHUB_SERVER_URL:-https://github.com}/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID}
+    problems+=("The size watch didn't run (status.yml's Sizes step$log): sizes not compared this week")
     last_sizes >"$baseline"
 fi
 body=$(mktemp)
-{
-    if ((${#problems[@]})); then
-        echo "@${OWNER:?} **Needs a look:**"
+# The issue's body: write_body with (the baseline in it) or write_body "". (GitHub takes 65536 characters at most: a
+# longer one fails, and no status goes out)
+write_body() {
+    {
+        if ((${#problems[@]})); then
+            echo "@${OWNER:?} **Needs a look:**"
+            echo
+            printf -- '- %s\n' "${problems[@]}"
+        else
+            echo "@${OWNER:?} **Nothing broke this week.** Everything built, passed its tests and went out."
+        fi
         echo
-        printf -- '- %s\n' "${problems[@]}"
-    else
-        echo "@${OWNER:?} **Nothing broke this week.** Everything built, passed its tests and went out."
-    fi
-    echo
-    echo "| | |"
-    echo "|---|---|"
-    echo "| AgrOS's CI (packages) | last run ${ci_last:-none} ${ci_day:-}, last good ${ci_good:-none} |"
-    echo "| The ISO | last build ${iso_last:-none} ${iso_day:-}, last good ${iso_good:-none} |"
-    echo "| Hyprland | approved ${approved:-?}, Arch's ${arch:-?} |"
-    held_cell=nothing sync_cell="up to date"
-    [[ -z $held ]] || held_cell="see above"
-    [[ -z $sync ]] || sync_cell="waiting for a merge"
-    echo "| Held back | $held_cell |"
-    echo "| CachyOS ISO changes | $sync_cell |"
-    [[ -z ${SIZES:-} || ! -s $SIZES/table ]] || cat "$SIZES/table"
-    [[ ! -s $baseline ]] || printf '\n<!-- agros-sizes:%s -->\n' "$(gzip -9c "$baseline" | base64 -w0)"
-} >"$body"
+        echo "| | |"
+        echo "|---|---|"
+        echo "| AgrOS's CI (packages) | last run ${ci_last:-none} ${ci_day:-}, last good ${ci_good:-none} |"
+        echo "| The ISO | last build ${iso_last:-none} ${iso_day:-}, last good ${iso_good:-none} |"
+        echo "| Hyprland | approved ${approved:-?}, Arch's ${arch:-?} |"
+        held_cell=nothing sync_cell="up to date"
+        [[ -z $held ]] || held_cell="see above"
+        [[ -z $sync ]] || sync_cell="waiting for a merge"
+        echo "| Held back | $held_cell |"
+        echo "| CachyOS ISO changes | $sync_cell |"
+        [[ -z ${SIZES:-} || ! -s $SIZES/table ]] || cat "$SIZES/table"
+        [[ -z $1 || ! -s $baseline ]] || printf '\n<!-- agros-sizes:%s -->\n' "$(gzip -9c "$baseline" | base64 -w0)"
+    } >"$body"
+}
+write_body with
+if (($(wc -c <"$body") > 65536)); then
+    problems+=("The size watch's baseline is too big for the issue: left out, so next week's sizes aren't compared")
+    write_body ""
+fi
 gh label create status --color 0E8A16 --description "Weekly status" --force >/dev/null 2>&1 || true
 for n in $(gh issue list --label status --state open --json number -q '.[].number' 2>/dev/null); do
     gh issue close "$n" >/dev/null
