@@ -21,7 +21,7 @@ S
 chmod +x "$t/bin/repo-add"
 # key <home> <name>: a key of its own in <home>; its fingerprint
 key() {
-    mkdir -m700 -p "$1"
+    mkdir -m700 "$1"
     GNUPGHOME=$1 gpg --batch --quiet --passphrase '' --quick-gen-key "$2 <test@agros.invalid>" ed25519 cert never >/dev/null 2>&1
     local f; f=$(GNUPGHOME=$1 gpg --batch --with-colons --list-secret-keys 2>/dev/null | awk -F: '$1 == "fpr" { print $10; exit }')
     GNUPGHOME=$1 gpg --batch --quiet --passphrase '' --quick-add-key "$f" ed25519 sign never >/dev/null 2>&1
@@ -30,13 +30,15 @@ key() {
 fpr=$(key "$t/agros" AgrOS)
 GNUPGHOME=$t/agros gpg --batch --armor --export "$fpr" >"$t/agros.asc" 2>/dev/null
 GNUPGHOME=$t/agros gpg --batch --export "$fpr" >"$t/agros.gpg" 2>/dev/null
+# (its first signing subkey: the published files' signer, whichever subkey is newer later)
+sub1=$(GNUPGHOME=$t/agros gpg --batch --with-colons --list-secret-keys "$fpr" 2>/dev/null | awk -F: '$1 == "fpr" { f = $10 } END { print f }')
 good() { gpgv --keyring "$t/agros.gpg" "$1.sig" "$1" >/dev/null 2>&1; }
 # repo: new builds, one kept as published (its signature AgrOS's), the gate's files, an old database
 repo() {
     rm -rf "$t/repo" && mkdir "$t/repo"
     local p
     for p in new-1-1-x86_64.pkg.tar.zst other-2-1-any.pkg.tar.xz kept-1-1-x86_64.pkg.tar.zst; do echo "$p" >"$t/repo/$p"; done
-    GNUPGHOME=$t/agros gpg --batch --quiet --detach-sign "$t/repo/kept-1-1-x86_64.pkg.tar.zst" 2>/dev/null
+    GNUPGHOME=${KEPT_HOME:-$t/agros} gpg --batch --quiet --local-user "${KEPT_KEY:-$sub1!}" --detach-sign "$t/repo/kept-1-1-x86_64.pkg.tar.zst" 2>/dev/null
     cp "$t/repo/kept-1-1-x86_64.pkg.tar.zst.sig" "$t/kept.sig"
     echo 'hyprland 0.58.0' >"$t/repo/agros-approved"
     echo 2026/11/16 >"$t/repo/agros-arch-ok"
@@ -44,7 +46,7 @@ repo() {
 }
 sign() { GNUPGHOME=$1 AGROS_PUBKEY=${ASC:-$t/agros.asc} PATH=$t/bin:$PATH "$here/ci/sign-repo.sh" "$t/repo" 2>&1; }
 
-# The primary key, then a subkey-only secret (the primary's secret not there: gpg signs with the subkey)
+# The whole key, then a subkey-only secret (the primary's secret not there: gpg signs with the subkey)
 mkdir -m700 "$t/sub"
 GNUPGHOME=$t/agros gpg --batch --export-secret-subkeys "$fpr" 2>/dev/null | GNUPGHOME=$t/sub gpg --batch --quiet --import 2>/dev/null
 GNUPGHOME=$t/sub gpg --batch --with-colons --list-secret-keys 2>/dev/null | grep -q '^sec:.*:#:' ||
@@ -63,9 +65,21 @@ for home in agros sub; do
         fail "$home: the database not made again from every package, signed first: $(cat "$t/repo/agros.db")"
     [[ ! -L $t/repo/agros.db && ! -L $t/repo/agros.files ]] || fail "$home: the database's names left as links"
 done
+# A key whose primary key signs, with no signing subkey (AgrOS's key as it is now)
+mkdir -m700 "$t/prim"
+GNUPGHOME=$t/prim gpg --batch --quiet --passphrase '' --quick-gen-key 'Primary <test@agros.invalid>' ed25519 sign never >/dev/null 2>&1
+pfpr=$(GNUPGHOME=$t/prim gpg --batch --with-colons --list-secret-keys 2>/dev/null | awk -F: '$1 == "fpr" { print $10; exit }')
+GNUPGHOME=$t/prim gpg --batch --armor --export "$pfpr" >"$t/prim.asc" 2>/dev/null
+GNUPGHOME=$t/prim gpg --batch --export "$pfpr" >"$t/prim.gpg" 2>/dev/null
+KEPT_HOME=$t/prim KEPT_KEY=$pfpr repo
+out=$(ASC=$t/prim.asc sign "$t/prim") || fail "not signed with a primary key: $out"
+for f in new-1-1-x86_64.pkg.tar.zst agros.db agros-approved; do
+    st=$(gpgv --keyring "$t/prim.gpg" --status-fd 1 "$t/repo/$f.sig" "$t/repo/$f" 2>/dev/null) &&
+        grep -q "VALIDSIG $pfpr .* $pfpr\$" <<<"$st" || fail "$f not signed by the primary key: $st"
+done
 
 # Refused, nothing signed over: a package with another key's .sig, or a bad one; a link
-other=$(key "$t/other" Other)
+key "$t/other" Other >/dev/null
 for bad in other garbage link; do
     repo
     case $bad in
@@ -85,11 +99,20 @@ repo
 out=$(sign "$t/other") && fail "signed with another key: $out"
 [[ -e $t/repo/new-1-1-x86_64.pkg.tar.zst.sig ]] && fail "another key's signature left"
 [[ $out == *"no secret key of $fpr"* ]] || fail "another key not said: $out"
-# A new signing subkey ci/agros.asc doesn't have yet (clients couldn't check its signatures): stopped, said
+# The key rotated: a new signing subkey, AGROS_GPG_KEY its subkey-only export. ci/agros.asc without it yet (clients
+# couldn't check its signatures): stopped, said; with it: signed
 newsub=$(GNUPGHOME=$t/agros gpg --batch --quiet --passphrase '' --quick-add-key "$fpr" ed25519 sign never 2>&1) ||
     fail "test setup: no new subkey: $newsub"
-# (agros.asc as it was, before the new subkey)
+newsub=$(GNUPGHOME=$t/agros gpg --batch --with-colons --list-secret-keys "$fpr" 2>/dev/null | awk -F: '$1 == "fpr" { f = $10 } END { print f }')
+mkdir -m700 "$t/new"
+GNUPGHOME=$t/agros gpg --batch --export-secret-subkeys "$newsub!" 2>/dev/null | GNUPGHOME=$t/new gpg --batch --quiet --import 2>/dev/null
 repo
-out=$(sign "$t/agros") && fail "signed with a subkey ci/agros.asc lacks: $out"
+out=$(sign "$t/new") && fail "signed with a subkey ci/agros.asc lacks: $out"
 [[ $out == *"doesn't check against ci/agros.asc"* ]] || fail "a subkey agros.asc lacks not said: $out"
+GNUPGHOME=$t/agros gpg --batch --armor --export "$fpr" >"$t/agros-new.asc" 2>/dev/null
+repo
+out=$(ASC=$t/agros-new.asc sign "$t/new") || fail "not signed with the new subkey, agros.asc having it: $out"
+GNUPGHOME=$t/agros gpg --batch --export "$fpr" >"$t/agros-new.gpg" 2>/dev/null
+st=$(gpgv --keyring "$t/agros-new.gpg" --status-fd 1 "$t/repo/agros.db.sig" "$t/repo/agros.db" 2>/dev/null) &&
+    grep -q "VALIDSIG $newsub .* $fpr\$" <<<"$st" || fail "not signed by the new subkey: $st"
 echo "ok ci-sign-repo"
