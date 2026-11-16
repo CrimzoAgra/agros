@@ -30,7 +30,9 @@ jobs:
       - uses: actions/checkout@v7
         if: steps.when.outputs.go == 'true'
       # The size watch (ci/sizes.sh): what goes on the ISO and on a new install, against last week's (its baseline kept
-      # in last week's issue), in an Arch container (its pacman). Failing, the issue says so; the status still goes out
+      # in last week's issue), in an Arch container (its pacman). Failing, the issue says so; the status still goes out.
+      # (The image can be days old: its keyring updated first, packages signed by a newer key refused otherwise, then
+      # the whole system with the tools)
       - name: Sizes
         if: steps.when.outputs.go == 'true'
         continue-on-error: true
@@ -40,7 +42,8 @@ jobs:
         run: |
           ci/status.sh --last-sizes >last-sizes
           docker run --rm -v "$PWD:/w" -w /w archlinux:latest bash -c \
-            'pacman -Syu --noconfirm --needed git python python-yaml >/dev/null && ci/sizes.sh sizes last-sizes'
+            'pacman -Sy --noconfirm --needed archlinux-keyring >/dev/null &&
+              pacman -Su --noconfirm --needed git python python-yaml >/dev/null && ci/sizes.sh sizes last-sizes'
       - name: Status
         if: steps.when.outputs.go == 'true'
         env:
