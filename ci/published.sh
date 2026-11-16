@@ -19,7 +19,9 @@ pub_db() {
 pub_desc() {
     local d
     for d in "$pubdb"/*/desc; do
-        { field "$d" NAME; field "$d" PROVIDES | sed 's/[<>=].*//'; } | grep -qxF -- "$1" && { echo "$d"; return 0; }
+        # (grep reads it all, not -q: -q stopped at the name, what it provides then hit a closed pipe, and pipefail
+        # (build-repo.sh's) took the found package for none: one that provides anything was never found)
+        { field "$d" NAME; field "$d" PROVIDES | sed 's/[<>=].*//'; } | grep -xF -- "$1" >/dev/null && { echo "$d"; return 0; }
     done
     return 1
 }
@@ -28,7 +30,7 @@ out_has() {
     local f
     for f in "$out"/*.pkg.tar*; do
         [[ $f == *.sig ]] && continue
-        bsdtar -xOf "$f" .PKGINFO 2>/dev/null | sed -n 's/^\(pkgname\|provides\) = \([^<>=]*\).*/\2/p' | grep -qxF -- "$1" &&
+        bsdtar -xOf "$f" .PKGINFO 2>/dev/null | sed -n 's/^\(pkgname\|provides\) = \([^<>=]*\).*/\2/p' | grep -xF -- "$1" >/dev/null &&
             return 0
     done
     return 1

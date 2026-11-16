@@ -34,6 +34,10 @@ pkg "$pub" lonely 1-1
 mkdir -p "$t/heavy" && echo 'pkgname=heavy' >"$t/heavy/PKGBUILD"
 pkg "$pub" heavy 2-1 'depend = libq>=5' 'makedepend = cmake' 'installed = libq-5-1-x86_64' 'installed = cmake-3-1-x86_64' \
     "pkgbuild_sha256sum = $(sha256sum <"$t/heavy/PKGBUILD" | cut -d' ' -f1)"
+# (one that provides more than a pipe holds: found by its name all the same, published or here. Under pipefail a
+# grep -q stopping at the name failed the search, its provides cut off: quickshell-git and Calamares never found)
+mapfile -t many < <(seq -f 'provides = p%g' 1 20000)
+pkg "$pub" bigprov 1-1 "${many[@]}"
 repo-add -q "$pub/agros.db.tar.gz" "$pub"/*.pkg.tar.zst 2>/dev/null
 cp --remove-destination "$pub/agros.db.tar.gz" "$pub/agros.db"
 gpg --batch --quiet --detach-sign "$pub/agros.db"
@@ -45,6 +49,9 @@ chown() { :; }  # (the builder account, CI's)
 held=()
 # shellcheck source=../ci/published.sh
 . "$here/ci/published.sh"
+pub_db >/dev/null && pub_desc bigprov >/dev/null || fail "a published package that provides much not found by its name"
+mkdir -p "$t/o2" && cp "$pub"/bigprov-1-1-x86_64.pkg.tar.zst "$t/o2/"
+(out=$t/o2; out_has bigprov) || fail "a package here that provides much not found by its name"
 carry_over app >/dev/null || fail "a held package not kept from the published repo"
 got=$(cd "$out" && ls ./*.pkg.tar.zst | sed 's|^\./||' | paste -sd' ')
 [[ $got == "app-1-1-x86_64.pkg.tar.zst built-dep-2-1-x86_64.pkg.tar.zst libdeep-1-1-x86_64.pkg.tar.zst libx-2-1-x86_64.pkg.tar.zst" ]] ||
