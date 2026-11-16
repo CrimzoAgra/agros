@@ -29,7 +29,8 @@ lost_at = 0.0
 
 
 def running() -> bool:
-    return subprocess.run(["pgrep", "-f", "com.spotify.Client"], capture_output=True).returncode == 0
+    # (yours: with several users logged in, another's Spotify isn't this session's)
+    return subprocess.run(["pgrep", "-u", str(os.getuid()), "-f", "com.spotify.Client"], capture_output=True).returncode == 0
 
 
 def silent(on: bool) -> None:
