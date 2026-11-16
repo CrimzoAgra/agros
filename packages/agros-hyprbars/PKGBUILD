@@ -1,0 +1,41 @@
+# Maintainer: Filipe Agra
+# hyprbars (the title bars on floating windows) with AgrOS's patch (.local/share/hyprbars/hyprbars.patch: the buttons'
+# hover pills, the restore icon, resizing from the bar's top...), in place of the AUR's plain build: the one the live
+# USB loads (it has no compiler for an account's own build), and an installed system's until its account's own is made
+# (hyprbars-build --login). Built by hyprbars-build itself, one recipe for both, for the Hyprland in the build container
+pkgname=agros-hyprbars
+# (its version: the Hyprland it's built for, then the commits that touch it, as agros-boot's: a build for another
+# Hyprland is a new version, the plugin only starts on its own)
+pkgver=0
+pkgrel=1
+pkgdesc="AgrOS: Hyprland's title bars (hyprbars) with AgrOS's patch"
+arch=('x86_64')
+url='https://github.com/CrimzoAgra/agros'
+license=('BSD-3-Clause')
+_root=$(realpath "${startdir}/../..")
+_inputs=(packages/agros-hyprbars .local/share/hyprbars .local/bin/hyprbars-build)
+# (the Hyprland release series it's built for, as the AUR's: a point release keeps the plugin ABI, the next series not)
+_hypr=$(pacman -Q hyprland 2>/dev/null | awk '{ print $2 }')
+_series=$(cut -d. -f1,2 <<<"${_hypr:-0.0}")
+depends=("hyprland>=${_series}.0" "hyprland<${_series%.*}.$((${_series#*.} + 1)).0")
+makedepends=('hyprland' 'git')
+provides=('hyprland-plugin-hyprbars')
+conflicts=('hyprland-plugin-hyprbars')
+replaces=('hyprland-plugin-hyprbars')
+
+pkgver() {
+    cd "$_root" && printf '%s.r%s.%s' "${_hypr//-/_}" "$(git rev-list --count HEAD -- "${_inputs[@]}")" \
+        "$(git log -1 --format=%h -- "${_inputs[@]}")"
+}
+
+build() {
+    # (an account's build, into a home of the build's own: the plugins' version for this Hyprland, the patch applied)
+    mkdir -p "$srcdir/home/.local/share/hyprbars"
+    cp "$_root/.local/share/hyprbars/hyprbars.patch" "$srcdir/home/.local/share/hyprbars/"
+    HOME="$srcdir/home" "$_root/.local/bin/hyprbars-build" --prebuild
+}
+
+package() {
+    install -Dm755 "$srcdir/home/.local/lib/hyprbars/libhyprbars.so" "$pkgdir/usr/lib/libhyprbars.so"
+    install -Dm644 "$srcdir/home/.local/lib/hyprbars/LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

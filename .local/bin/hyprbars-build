@@ -9,9 +9,9 @@
 # to this series' tag and to main, whose hyprbars changed around it; tests/hyprbars.sh checks both)
 #   hyprbars-build          build it now
 #   hyprbars-build --login  what titlebars.lua runs as Hyprland starts: load my build if it was made for this
-#                           Hyprland and this patch; after a Hyprland update or a patch change, load the AUR one (no
-#                           highlight) at once and rebuild mine in the background, swapping it in when done (a
-#                           notification if that fails)
+#                           Hyprland and this patch; after a Hyprland update or a patch change, load the packaged one
+#                           (agros-hyprbars: this patch, built in CI for its Hyprland) at once and rebuild mine in the
+#                           background, swapping it in when done (a notification if that fails)
 #   hyprbars-build --prebuild  build it for the Hyprland just installed, without loading it, so the next login has it
 #                           at once (the pacman hook packages/agros-system/agros-hyprbars-prebuild.hook runs it on a
 #                           Hyprland update; Hyprland needn't be running)
@@ -20,12 +20,12 @@ helpers=$(dirname "$(readlink -f "$0")")  # (the shared helpers, beside this)
 patch="$HOME/.local/share/hyprbars/hyprbars.patch"
 out="$HOME/.local/lib/hyprbars/libhyprbars.so"
 stamp="${out%/*}/built-for"  # the Hyprland build (its ABI) and the patch it was built from
-aur=/usr/lib/libhyprbars.so
+aur=/usr/lib/libhyprbars.so  # (the packaged one, agros-hyprbars; the AUR's own build before it, the name kept)
 # Hyprland named (its first one when run from an SSH login or a text console: there hyprctl didn't know it, and this
 # stopped on jq's parse error)
 hyprctl() { command hyprctl -i "${HYPRLAND_INSTANCE_SIGNATURE:-0}" "$@"; }
-# On the live USB: never built (no compiler, nothing to keep it for); at login the AUR one the ISO ships is loaded, so
-# the installer's window has its title bar too
+# On the live USB: never built (no compiler, nothing to keep it for); at login the packaged one the ISO ships is loaded,
+# patched as here, so the installer's window has the same title bar
 if [[ -d ${HYPRBARS_LIVE:-/run/archiso} ]]; then
     [[ ${1:-} == --login ]] && { hyprctl plugin load "$aur" >/dev/null 2>&1 || true; }
     exit 0
@@ -125,6 +125,8 @@ mkdir -p "${out%/*}"
 # A new file renamed over the old: Hyprland may have the old one loaded, and rewriting that in place can crash it
 # (its own name: the update-time and login builds can overlap)
 install -m755 "$tmp/src/hyprbars/hyprbars.so" "$out.new.$$" && mv -f "$out.new.$$" "$out" || { rm -f "$out.new.$$"; exit 1; }
+# (hyprland-plugins' license beside it: BSD-3-Clause, which the agros-hyprbars package ships with the build)
+install -m644 "$tmp/src/LICENSE" "${out%/*}/LICENSE"
 echo "$build_id" >"$stamp"
 if $prebuild; then
     echo "hyprbars with the hover highlight is built for Hyprland $ver: it's loaded at the next login."

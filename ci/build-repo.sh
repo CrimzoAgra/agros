@@ -105,8 +105,9 @@ pacman -Sy --noconfirm >/dev/null
 sed -i 's/^\(OPTIONS=(.*\) debug/\1 !debug/' /etc/makepkg.conf
 # 1. AgrOS's own packages, first: one changed with its version not raised fails the build (below) before the long
 # builds of the AUR's and Calamares. No dependencies installed to build them: they're files and settings, but for
-# agros-vmware's shim, built against libdrm, and agros-thunar-usage, a Thunar plugin. Keyring first
-pacman -T libdrm thunar >/dev/null || pacman -S --needed --noconfirm libdrm thunar >/dev/null
+# agros-vmware's shim, built against libdrm, agros-thunar-usage, a Thunar plugin, and agros-hyprbars, a Hyprland plugin
+# (Hyprland's headers). Keyring first
+pacman -T libdrm thunar hyprland >/dev/null || pacman -S --needed --noconfirm libdrm thunar hyprland >/dev/null
 for d in "$work/agros/packages/agros-keyring" "$work"/agros/packages/*/; do
     d=${d%/}; p=${d##*/}
     [[ $p == agros-keyring && -n ${keyring_done:-} ]] && continue

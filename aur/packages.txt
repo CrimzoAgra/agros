@@ -2,10 +2,10 @@
 # on: VMware Workstation isn't here (its license forbids it; agros-welcome --system builds it on your machine).
 # (no quickshell-git: ci/build-repo.sh builds it first, with AgrOS's fix (packages/agros-system/aur-patches), and
 # caelestia-shell takes it from [agros])
+# (no hyprland-plugin-hyprbars: AgrOS's own agros-hyprbars, with its patch, takes its place)
 caelestia-cli
 caelestia-shell
 ttf-rubik-vf
-hyprland-plugin-hyprbars
 qtengine
 darkly-bin
 papirus-folders
