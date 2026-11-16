@@ -128,10 +128,9 @@ list_proton() {
 }
 
 # The names games use, each without a trailing -x86_64 (Lutris newer than 0.5.22 (its development version) names a GE
-# build without it): Steam's (each
-# game's, and the default, "0"), config.vdf's CompatToolMapping, by the name in a tool's compatibilitytool.vdf; and
-# Lutris's, the Wine version (a folder's name) in a game's config or the Wine runner's default (runners/wine.yml), under
-# "wine:", for both places (Lutris lists Steam's compatibilitytools.d too)
+# build without it): Steam's (each game's, and the default, "0"), config.vdf's CompatToolMapping, by the name in a
+# tool's compatibilitytool.vdf; and Lutris's, the Wine version (a folder's name) in a game's config or the Wine
+# runner's default (runners/wine.yml), under "wine:", for both places (Lutris lists Steam's compatibilitytools.d too)
 proton_used() {
     local f files=()
     {
@@ -274,8 +273,8 @@ update_dev() {
     return $rc
 }
 
-# Firmware, through fwupd (its metadata, from LVFS, signed: refreshed at boot by auto-update): "<device id>\t<name>\t
-# <version>\t<new version>" each with one
+# Firmware, through fwupd (its metadata, from LVFS, signed: refreshed at boot by auto-update): each device with one,
+# "<device id>\t<name>\t<version>\t<new version>" (auto-update's boot check reads fwupd the same way, as root)
 fw_waiting() {
     timeout 1m fwupdmgr get-updates --json --no-unreported-check --no-metadata-check 2>/dev/null |
         jq -r '.Devices[]? | select(.Releases[0]) | [.DeviceId, .Name, .Version, .Releases[0].Version] | @tsv' 2>/dev/null

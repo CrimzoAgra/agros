@@ -62,7 +62,7 @@ if [[ -r $versions ]]; then
         elif [[ ! ${told[$s $n]-} ]]; then
             cp "$f" "$to.agros-new" && new+=("$n") && offer+=("$s $n")
         fi
-    done < <(awk '!x[substr($0, 67)]++' "$versions")
+    done < <(awk '!x[substr($0, 67)]++' "$versions")  # (each file once: by its name, after the sum and two spaces)
 fi
 # (in the background: Caelestia, the notification server, isn't up yet; agros-links.service keeps it alive). Marked as
 # said only once it was: one that never got through is said at the next login

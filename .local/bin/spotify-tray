@@ -50,8 +50,8 @@ if [[ ${1:-} == --show ]]; then
     exit 0
 fi
 
-# Login: start it with its window kept off screen (the silent rules in user/apps.lua), then minimise
-# it to the tray as soon as its icon shows up
+# No argument (tray-keeper, Spotify's window back after Caelestia restarted): start it, if it isn't running, with its
+# window kept off screen (the silent rules in user/apps.lua), then minimise it to the tray as soon as its icon shows up
 silent() { hyprctl eval "dots.spotify_silent_set($1)" >/dev/null; }
 silent true
 # However it ends: the rules off, and if it didn't get to its tray, its window back where you can see it (the rules
