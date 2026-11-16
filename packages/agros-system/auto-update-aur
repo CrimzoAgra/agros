@@ -306,7 +306,9 @@ held_by() {
 # sandbox alone; pacman brings what they need to run at the install); one needing what's only on the AUR isn't built
 # here. Each one a dependency's name (a build's .SRCINFO can say anything: never an option to root's pacman)
 cache=$(pacman-conf CacheDir 2>/dev/null | head -1)
-cache=${cache:-/var/cache/pacman/pkg/}
+# (as pacman-conf prints it: without its trailing slash when pacman.conf names it so)
+cache=${cache:-/var/cache/pacman/pkg}
+cache=${cache%/}/
 need=() ok=()
 for b in "${order[@]}"; do
     mapfile -t deps < <(sed -n 's/^[[:space:]]*\(make\)\{0,1\}depends\(_x86_64\)\{0,1\} = //p' "$aur/info/$b" | sort -u)

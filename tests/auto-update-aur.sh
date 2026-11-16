@@ -173,6 +173,16 @@ grep -qxF "$t/cache/libnew-1.0-1-x86_64.pkg.tar.zst" <<<"$(tr ' ' '\n' <"$t/call
 grep -q "made sudo-9.9-1-x86_64.pkg.tar.zst, which isn't one planned" "$t/out" || fail "the package left out not said: $(cat "$t/out")"
 # (the build folder made anew and gone after; its logs root's own, not in it)
 [[ ! -e $build && -e $aur/log/equibop.log && -s $aur/log/fetch.log ]] || fail "the build folder left, or the logs not root's: $(ls "$build" 2>&1) $(wc -c "$aur"/log/*)"
+# pacman's cache named without its trailing slash (CacheDir = /var/cache/pacman/pkg, as pacman-conf prints it): the
+# download's packages still found there and unpacked, not the builds made against the Qt installed now
+# shellcheck disable=SC2016
+stub pacman-conf '[ "$1" = CacheDir ] && echo '"$t/cache"'; true'
+: >"$t/calls"
+"$t/auto-update-aur" "$t/db" >"$t/out" 2>&1 || fail "the builds with a CacheDir without its slash failed: $(cat "$t/out")"
+grep -qxF "$t/cache/qt6-base-6.10.0-1-x86_64.pkg.tar.zst" <<<"$(tr ' ' '\n' <"$t/calls")" ||
+    fail "a CacheDir without its slash: the download's Qt not unpacked for the build: $(grep unpack "$t/calls")"
+# shellcheck disable=SC2016
+stub pacman-conf '[ "$1" = CacheDir ] && echo '"$t/cache/"'; true'
 
 # One fails: said (by its base), the others still built and collected (each one on its own)
 : >"$t/calls"
