@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # Automatic system update: downloaded at boot, installed at shutdown with --install
 # (agros-system: /usr/lib/agros/auto-update, run by auto-update.service and auto-update-install.service)
+#   auto-update                   the boot's run: pacman's download, firmware's check, Flatpaks, each user's
+#                                 update-kinds, then the AUR builds (auto-update-aur)
+#   auto-update --install         the shutdown's: firmware the users were told of, then the packages the download got
+#   auto-update --firmware-note   the firmware waiting said to the users (its own unit, started by the boot's run)
+# Everything it says goes to /var/log/auto-update.log; its notes for dotfiles-check and Updates in /var/lib/auto-update
 log=/var/log/auto-update.log
 # (the last 20 runs kept: every boot's download and every shutdown's pacman output are added to it. Not by the firmware
 # note, which runs beside the boot's run)
@@ -191,6 +196,7 @@ if [[ ${1:-} == --install ]]; then
     waits=$(/usr/lib/agros/bin/update-gate /etc/pacman.conf "$gated" --offline) || cp /etc/pacman.conf "$gated"
     [[ -z $waits ]] || printf "waits for AgrOS's check: %s\n" "$waits"
     qu=0
+    # (in English, as the install's below: its "error:" is looked for)
     pending=$(LC_ALL='' LC_MESSAGES=C pacman -Qu --config "$gated" 2>"$prev/qu-err") || qu=$?
     cat "$prev/qu-err"
     if grep -q '^error:' "$prev/qu-err" || { ((qu)) && [[ -n $pending ]]; }; then
@@ -264,9 +270,6 @@ if [[ ${1:-} == --install ]]; then
     # hooks may use it (hyprbars' fetches its source). Its output into the log as it goes (cut off: what it got to)
     say "Installing updates, don't turn the computer off..."
     result failed "cut off before it finished"  # (until it says otherwise: shutdown's time limit, a power cut)
-    # (SNAP_PAC_SKIP: snap-pac's own snapshots, over DBus, fail at shutdown like snapper's did; the one above covers it)
-    # (its messages in English: pacman's "error:" is what the reason below is found by; translated, "erro:" or
-    # "Fehler:", it was lost. Messages only: the hooks it runs keep the system's locale)
     # (the AUR builds' repo for this one install: pacman's config with it last, its list in pacman's own)
     conf=$gated
     if ((${#targets[@]})); then
@@ -275,6 +278,9 @@ if [[ ${1:-} == --install ]]; then
         cp "$aur/repo/agros-aur.db" "$pacdb/sync/agros-aur.db"
         echo "with the AUR's: ${targets[*]#agros-aur/}"
     fi
+    # (SNAP_PAC_SKIP: snap-pac's own snapshots, over DBus, fail at shutdown like snapper's did; the one above covers it)
+    # (its messages in English: pacman's "error:" is what the reason below is found by; translated, "erro:" or
+    # "Fehler:", it was lost. Messages only: the hooks it runs keep the system's locale)
     pacman_su() { SNAP_PAC_SKIP=y LC_ALL='' LC_MESSAGES=C pacman -Su --noconfirm --config "$conf" "$@" 2>&1 | tee "$prev/out"; return "${PIPESTATUS[0]}"; }
     pacman_su "${targets[@]}"
     rc=$?
