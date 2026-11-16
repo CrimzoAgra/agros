@@ -4,12 +4,15 @@
 # signed when a key is given.
 # Run in an Arch container, as root (it makes a "builder" user for makepkg):
 #   ci/build-repo.sh <out dir>           the repo in <out dir> (agros.db, agros.files, the packages)
-# Environment: GPGKEY (a key id in root's keyring: packages and the database signed with it, its public key in
+#   ci/build-repo.sh <out dir> --hold-new   this run's new AUR builds there swapped for the published ones (below)
+# Environment: AGROS_HELD (a file: the packages that didn't build, their published ones kept, "<name>: <why>" each),
+# GPGKEY (a key id in root's keyring: packages and the database signed with it, its public key in
 # agros-keyring), AGROS_SKIP_AUR=1 (only AgrOS's own packages: no AUR ones, no Calamares), AGROS_PUBLISHED (the
 # published repo's URL: a package already there under the same version is kept as published, but for a compiled one
 # built against other libraries (rebuilt and published); the build fails when the published copy can't be read or
 # verified, or when one of AgrOS's own packages changed with its version not raised)
 set -euo pipefail
+shopt -s extglob  # (make_db's pattern, read as the function is)
 root=$(cd "$(dirname "$0")/.." && pwd)
 out=$(mkdir -p "${1:?usage: build-repo.sh <out dir>}" && cd "$1" && pwd)
 key=${GPGKEY:-}
@@ -40,6 +43,44 @@ if [[ -n $key ]]; then
     # (pacman here trusts it too: the repo's signed database and packages are read below)
     pacman-key --add "$work/agros/packages/agros-keyring/agros.gpg" >/dev/null 2>&1
     pacman-key --lsign-key "$fpr" >/dev/null 2>&1
+fi
+
+# make_db [--held]: the database of the packages here (after a hold: each one as it is, none checked against the
+# published ones again)
+make_db() {
+    local pkgs f
+    # Every package here, whatever its compression or none (an AUR PKGBUILD may set its own PKGEXT: one left out of the database
+    # was built for nothing), not their .sig files
+    shopt -s nullglob
+    pkgs=(*.pkg.tar?(.zst|.xz|.gz|.bz2|.lz4|.lzo|.lrz|.Z))
+    shopt -u nullglob
+    if [[ -n ${AGROS_PUBLISHED:-} && -n $key && ${1:-} != --held ]]; then
+        for f in "${pkgs[@]}"; do
+            [[ $f == agros-*-any.pkg.tar.zst ]] || keep_published "$f"  # (those checked after their build, above)
+        done
+    fi
+    # The database made again from the packages here (paru's local repo already holds the AUR ones: added over it, each
+    # warned that its entry already existed)
+    rm -f agros.db agros.db.tar.gz agros.files agros.files.tar.gz agros.db*.sig agros.files*.sig
+    asb repo-add "${rsign[@]}" agros.db.tar.gz "${pkgs[@]/#/./}"
+    # GitHub Pages serves no symlinks: the database's names as real files
+    for f in agros.db agros.files; do
+        [[ -L $f ]] && cp --remove-destination "$(readlink -f "$f")" "$f"
+        if [[ -L $f.sig ]]; then cp --remove-destination "$(readlink -f "$f.sig")" "$f.sig"; fi
+    done
+}
+held=()
+# shellcheck source=published.sh
+. "$root/ci/published.sh"
+# --hold-new (CI, when the tests found this run's new AUR builds broke them): each package here that is neither AgrOS's
+# own nor the published file swapped for the published one (one never published: left out), the database made again;
+# nothing built. AGROS_HOLD_WHY: why, said for each one in $AGROS_HELD
+if [[ ${2:-} == --hold-new ]]; then
+    cd "$out"
+    hold_new "${AGROS_HOLD_WHY:-its new build held back}"
+    make_db --held
+    if ((${#held[@]})); then printf '%s\n' "${held[@]}"; fi >>"${AGROS_HELD:-/dev/null}"
+    exit 0
 fi
 
 # The repo, empty to start with, known to pacman (the AUR packages' own AUR dependencies are installed from it)
@@ -151,6 +192,10 @@ if [[ -n ${AGROS_PUBLISHED:-} && -n $key ]]; then
     for f in agros-*-any.pkg.tar.zst; do keep_published "$f"; done
 fi
 
+# A package that doesn't build (an AUR change, AgrOS's patch or Calamares changes no longer fitting, a download that
+# failed) holds back: the published one is kept (its signature checked), with the packages of this repo it needs, and
+# the rest goes out as usual, not the whole repo held up. Said in $AGROS_HELD ("<name>: <why>" each, for CI's issue).
+# None published to keep (its first build): the build fails
 # The AUR packages and CachyOS's installer built without compiler warnings: theirs (quickshell's hundreds), not
 # AgrOS's to fix, and they buried the log. AgrOS's own packages (1.) built before, with them
 cp /etc/makepkg.conf "$work/makepkg.conf"
@@ -183,15 +228,19 @@ if [[ -z ${AGROS_SKIP_AUR:-} ]]; then
     }
     # Quickshell first, with AgrOS's fix (aur-agros-patch: the boot's rebuild on a new Qt adds it the same way), into
     # the repo: caelestia-shell's quickshell-git taken from it, by its name (CachyOS's noctalia-qs only claims it), not
-    # built from the AUR without the fix. Its build files no longer fitting, or the patch, fails the build
-    asb git clone -q https://aur.archlinux.org/quickshell-git.git "$work/quickshell-git"
-    asb "$work/agros/packages/agros-system/aur-agros-patch" "$work/quickshell-git" quickshell-git
-    (cd "$work/quickshell-git" && asb env PKGDEST="$out" makepkg -s --noconfirm "${sign[@]}") ||
-        { echo "!! Quickshell with AgrOS's fix didn't build: if the patch no longer applies, see whether Quickshell fixed it"; exit 1; }
+    # built from the AUR without the fix. Its build files or the patch no longer fitting: the published one held
+    { asb git clone -q https://aur.archlinux.org/quickshell-git.git "$work/quickshell-git" &&
+        asb "$work/agros/packages/agros-system/aur-agros-patch" "$work/quickshell-git" quickshell-git &&
+        (cd "$work/quickshell-git" && asb env PKGDEST="$out" makepkg -s --noconfirm "${sign[@]}"); } ||
+        hold quickshell-git "AgrOS's fix (packages/agros-system/aur-patches) didn't build: has Quickshell fixed it itself?"
     asb repo-add -q "$out/agros.db.tar.gz" "$out"/quickshell-git-*.pkg.tar.zst
     pacman -Sy --noconfirm >/dev/null
     # (twice: a download that drops, GitHub's now and then, fails only its package; the second pass builds what's left)
-    aur_build || aur_build
+    # One that still didn't build: the published one held, with what it needs
+    aur_build || aur_build || true
+    for p in "${aur[@]}"; do
+        out_has "${p#*/}" || hold "${p#*/}" "it didn't build from the AUR (the build's log above)"
+    done
 fi
 
 # 3. CachyOS's installer, rebuilt against the libraries of today (CachyOS's own copy can lag behind an Arch update:
@@ -210,8 +259,10 @@ if [[ -z ${AGROS_SKIP_AUR:-} ]]; then
     case $calamares_rel in
         5) calamares_sum=2db12fafcbd8 ;;
     esac
-    asb git clone -q --depth 1 --filter=blob:none --sparse https://github.com/CachyOS/CachyOS-PKGBUILDS.git "$work/cachyos-pkgbuilds"
-    (cd "$work/cachyos-pkgbuilds" && asb git sparse-checkout set cachyos-calamares)
+    # (not fetched: its build below finds no folder, and the published one is held)
+    { asb git clone -q --depth 1 --filter=blob:none --sparse https://github.com/CachyOS/CachyOS-PKGBUILDS.git "$work/cachyos-pkgbuilds" &&
+        (cd "$work/cachyos-pkgbuilds" && asb git sparse-checkout set cachyos-calamares); } ||
+        echo "!! CachyOS's PKGBUILDs couldn't be fetched"
     cat >"$work/calamares-labels" <<'SH'
     sed -i -e 's/painter->setPen( Qt::black );/painter->setPen( palette().windowText().color() );/' -e 's/painter->setPen( Qt::gray );/painter->setPen( palette().placeholderText().color() );/' src/modules/partition/gui/PartitionLabelsView.cpp
     sed -i 's/^\( *\)ui->groupswidget->setModel( c->model() );$/&\n\1ui->groupswidget->setSelectionMode( QAbstractItemView::ExtendedSelection );/' src/modules/netinstall/NetInstallPage.cpp
@@ -238,32 +289,18 @@ SH
         exit 1
     }
     # (CachyOS's own pkgrel with a dot already: not raised, and AgrOS's build would have CachyOS's version)
+    # (it not building, AgrOS's changes no longer fitting: the published one held)
     (cd "$work/cachyos-pkgbuilds/cachyos-calamares" &&
         { grep -q '^pkgrel=[0-9]*$' PKGBUILD || { echo "!! cachyos-calamares: its pkgrel isn't a plain number"; false; }; } &&
         asb sed -i "s/^pkgrel=\([0-9]*\)$/pkgrel=\1.$calamares_rel/" PKGBUILD &&
         asb sed -i -e "/^prepare() {/{n;r $work/calamares-labels" -e '}' PKGBUILD &&
-        asb env PKGDEST="$out" makepkg -s --noconfirm "${sign[@]}")
+        asb env PKGDEST="$out" makepkg -s --noconfirm "${sign[@]}") ||
+        hold cachyos-calamares-next "CachyOS's installer didn't build with AgrOS's changes (the build's log above)"
 fi
 cp "$work/makepkg.conf" /etc/makepkg.conf
 
-# Every package here, whatever its compression or none (an AUR PKGBUILD may set its own PKGEXT: one left out of the database
-# was built for nothing), not their .sig files
-shopt -s extglob nullglob
-pkgs=(*.pkg.tar?(.zst|.xz|.gz|.bz2|.lz4|.lzo|.lrz|.Z))
-shopt -u extglob nullglob
-if [[ -n ${AGROS_PUBLISHED:-} && -n $key ]]; then
-    for f in "${pkgs[@]}"; do
-        [[ $f == agros-*-any.pkg.tar.zst ]] || keep_published "$f"  # (those checked after their build, above)
-    done
-fi
-# The database made again from the packages here (paru's local repo already holds the AUR ones: added over it, each
-# warned that its entry already existed)
-rm -f agros.db agros.db.tar.gz agros.files agros.files.tar.gz agros.db*.sig agros.files*.sig
-asb repo-add "${rsign[@]}" agros.db.tar.gz "${pkgs[@]/#/./}"
-# GitHub Pages serves no symlinks: the database's names as real files
-for f in agros.db agros.files; do
-    [[ -L $f ]] && cp --remove-destination "$(readlink -f "$f")" "$f"
-    [[ -L $f.sig ]] && cp --remove-destination "$(readlink -f "$f.sig")" "$f.sig"
-done
+make_db
+# (what was held, for CI's issue)
+if ((${#held[@]})); then printf '%s\n' "${held[@]}"; fi >"${AGROS_HELD:-/dev/null}"
 rm -rf "$work"
 ls -la "$out"

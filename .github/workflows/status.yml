@@ -1,0 +1,37 @@
+name: Weekly status
+
+# Fridays at 17:00 Lisbon time: one issue saying whether anything in AgrOS's upkeep needs a look (ci/status.sh), the
+# owner mentioned so GitHub notifies them. GitHub's schedule is in UTC: 17:00 in winter (UTC+0), 16:00 in summer (UTC+1);
+# each run checks which one Lisbon is on that day (a run GitHub starts late still counts)
+on:
+  schedule:
+    - cron: '0 17 * * 5'
+    - cron: '0 16 * * 5'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  status:
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Lisbon's 17:00
+        id: when
+        env:
+          SCHEDULE: ${{ github.event.schedule }}
+        run: |
+          offset=$(TZ=Europe/Lisbon date +%z)
+          case "$offset/$SCHEDULE" in
+            "+0000/0 17 * * 5" | "+0100/0 16 * * 5" | */) echo "go=true" >>"$GITHUB_OUTPUT" ;;
+            *) echo "Not Lisbon's 17:00 today ($offset)" ;;
+          esac
+      - uses: actions/checkout@v7
+        if: steps.when.outputs.go == 'true'
+      - name: Status
+        if: steps.when.outputs.go == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OWNER: ${{ github.repository_owner }}
+        run: ci/status.sh

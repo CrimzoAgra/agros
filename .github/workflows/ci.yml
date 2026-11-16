@@ -17,8 +17,16 @@ concurrency:
 permissions:
   contents: read
 
+# On main: the repo built first (repo), then tested (test: on what it built; when some fail, which side broke them, and
+# that held back alone, ci/test-passes.sh), then what passed put out (release), and said (report: one issue). A pull
+# request or another branch: only the tests, on the published repo
 jobs:
   test:
+    needs: repo
+    # (the build skipped, a pull request: on the published repo)
+    if: ${{ always() && (needs.repo.result == 'success' || needs.repo.result == 'skipped') }}
+    outputs:
+      result: ${{ steps.tests.outputs.result }}
     runs-on: ubuntu-26.04
     # (privileged: game-focus-audio's user namespaces)
     container:
@@ -91,22 +99,48 @@ jobs:
           shellcheck -S warning -s bash packages/*/*.install packages/agros-boot/{plymouth-title-font,mkinitcpio-plymouth.conf}
           # The PKGBUILDs (bash, sourced by makepkg: its variables set or read by it, its functions run in $srcdir)
           shellcheck -S warning -s bash -e SC2034,SC2154,SC2164 packages/*/PKGBUILD
+      - uses: actions/download-artifact@v8
+        if: needs.repo.result == 'success'
+        with:
+          name: built
+          path: /tmp/built
       - name: Tests, as a normal user
+        id: tests
+        shell: bash
+        env:
+          AGROS_TEST_REPORT: /tmp/report/report
         run: |
           useradd -m ci
           install -Dm644 -o ci -g ci /tmp/dots/hypr/variables.lua /home/ci/.config/hypr/variables.lua
           chown -R ci: .
           runuser -u ci -- git config --global --add safe.directory '*'
-          runuser -u ci -- env DOTS_BUILD_TESTS=1 tests/run.sh
+          mkdir -p /tmp/report
+          if [ -d /tmp/built/x86_64 ]; then
+            # (what this run built; the day Arch last passed the tests, published beside the repo)
+            site=https://crimzoagra.github.io/agros/x86_64
+            day=$(curl -fsS --retry 3 "$site/agros-arch-ok" 2>/dev/null) || day=
+            ci/test-passes.sh file:///tmp/built/x86_64 "$site" "$day"
+          else
+            runuser -u ci -- env DOTS_BUILD_TESTS=1 tests/run.sh
+          fi
+      - uses: actions/upload-artifact@v7
+        if: always() && steps.tests.outcome != 'skipped'
+        with:
+          name: report
+          path: /tmp/report
       # The upstream gate (agros-gate.conf, update-gate): the versions of Hyprland and its libraries every test above
-      # passed with, approved for AgrOS's machines (the repo job adds them to the list it publishes)
+      # passed with, approved for AgrOS's machines (the release job adds them to the list it publishes). Not when an
+      # Arch update broke the tests (hold-upstream): none approved, the list as it was
       - name: Approved upstream versions
         shell: bash
+        env:
+          RESULT: ${{ steps.tests.outputs.result }}
         run: |
+          : >/tmp/approved
+          [ "$RESULT" != hold-upstream ] || { echo "An Arch update broke the tests: no version approved"; exit 0; }
           # (every IgnorePkg line, as update-gate reads them; one not installed (renamed, dropped by Arch) fails here,
           # not left out of the list, which held the whole set on every machine)
           read -ra gated < <(sed -n 's/^[[:space:]]*IgnorePkg[[:space:]]*=[[:space:]]*//p' packages/agros-system/agros-gate.conf | paste -sd' ')
-          : >/tmp/approved
           for p in "${gated[@]}"; do
             v=$(pacman -Q "$p") || { echo "::error::$p isn't installed: its version can't be approved"; exit 1; }
             v=${v#* }
@@ -119,9 +153,9 @@ jobs:
           path: /tmp/approved
 
   repo:
-    # The [agros] pacman repo: built on every push to main and daily, published on GitHub Pages
+    # The [agros] pacman repo: built on every push to main and daily (what doesn't build: the published one kept,
+    # build-repo.sh), then tested and published by the jobs below
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    needs: test
     runs-on: ubuntu-26.04
     container:
       image: archlinux:latest
@@ -158,17 +192,93 @@ jobs:
           [ -n "$AGROS_GPG_KEY" ] || { echo "::error::Add the AGROS_GPG_KEY secret (a signing subkey of AgrOS's key, as agros-iso's manual, Building the ISO, step 7, makes it)"; exit 1; }
           echo "$AGROS_GPG_KEY" | gpg --batch --import
           echo "GPGKEY=$(gpg --list-secret-keys --with-colons | awk -F: '$1 == "fpr" {print $10; exit}')" >>"$GITHUB_ENV"
-      - uses: actions/download-artifact@v8
-        with:
-          name: approved
-          path: /tmp/approved-now
       - name: Build the repo
         env:
           # (a repo variable can point it elsewhere: the old repo's copy while this one's site is new)
           AGROS_PUBLISHED: ${{ vars.AGROS_PUBLISHED || 'https://crimzoagra.github.io/agros/x86_64' }}
+          AGROS_HELD: /tmp/held/held
         run: |
           git config --global --add safe.directory '*'
+          mkdir -p /tmp/held && : >/tmp/held/held
           ci/build-repo.sh out/x86_64
+      - uses: actions/upload-artifact@v7
+        with:
+          name: built
+          path: out
+      - uses: actions/upload-artifact@v7
+        with:
+          name: held-build
+          path: /tmp/held
+
+  release:
+    # What passed the tests put out: this run's new AUR builds swapped for the published ones when they, or an Arch
+    # update, broke the tests (build-repo.sh --hold-new); the approved Hyprland list; the day Arch last passed
+    needs: [repo, test]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-26.04
+    container:
+      image: archlinux:latest
+    steps:
+      - name: Tools, and CachyOS's repo (the install check resolves AgrOS as installed)
+        run: |
+          grep -q '^\[multilib\]' /etc/pacman.conf || printf '\n[multilib]\nInclude = /etc/pacman.d/mirrorlist\n' >>/etc/pacman.conf
+          sed -i 's/^#*DownloadUser.*/#DownloadUser = alpm/' /etc/pacman.conf
+          pacman-key --init
+          pacman -Sy
+          pacman -Su --noconfirm --needed $(pacman -T git sudo)
+          m=https://mirror.cachyos.org/repo/x86_64/cachyos
+          curl -fsSL -o /tmp/keyring.pkg "$m/$(curl -fsSL "$m/" | grep -o 'cachyos-keyring-[^"]*\.pkg\.tar\.zst' | sort -V | tail -1)"
+          curl -fsSL -o /tmp/mirrorlist.pkg "$m/$(curl -fsSL "$m/" | grep -o 'cachyos-mirrorlist-[^"]*\.pkg\.tar\.zst' | sort -V | tail -1)"
+          mkdir /tmp/k && bsdtar -xf /tmp/keyring.pkg -C /tmp/k
+          pacman-key --add /tmp/k/usr/share/pacman/keyrings/cachyos.gpg
+          pacman-key --lsign-key 882DCFE48E2051D48E2562ABF3B607488DB35A47
+          pacman -U --noconfirm /tmp/keyring.pkg /tmp/mirrorlist.pkg
+          sed -i '/^\[core\]/i [cachyos]\nInclude = /etc/pacman.d/cachyos-mirrorlist\n' /etc/pacman.conf
+          pacman -Sy --noconfirm
+      - uses: actions/checkout@v7
+      - name: Signing key
+        env:
+          AGROS_GPG_KEY: ${{ secrets.AGROS_GPG_KEY }}
+        run: |
+          [ -n "$AGROS_GPG_KEY" ] || { echo "::error::Add the AGROS_GPG_KEY secret"; exit 1; }
+          echo "$AGROS_GPG_KEY" | gpg --batch --import
+          echo "GPGKEY=$(gpg --list-secret-keys --with-colons | awk -F: '$1 == "fpr" {print $10; exit}')" >>"$GITHUB_ENV"
+      - uses: actions/download-artifact@v8
+        with:
+          name: built
+          path: out
+      - uses: actions/download-artifact@v8
+        with:
+          name: held-build
+          path: /tmp/held
+      - uses: actions/download-artifact@v8
+        with:
+          name: approved
+          path: /tmp/approved-now
+      - name: Held back (what broke the tests)
+        if: needs.test.outputs.result != 'ok'
+        env:
+          AGROS_PUBLISHED: ${{ vars.AGROS_PUBLISHED || 'https://crimzoagra.github.io/agros/x86_64' }}
+          AGROS_HELD: /tmp/held/held
+          AGROS_HOLD_WHY: ${{ needs.test.outputs.result == 'hold-agros' && 'its new build broke AgrOS''s tests (they pass with the published one)' || 'held while an Arch update breaks AgrOS''s tests' }}
+        run: |
+          git config --global --add safe.directory '*'
+          ci/build-repo.sh out/x86_64 --hold-new
+      - uses: actions/upload-artifact@v7
+        with:
+          name: held
+          path: /tmp/held
+      # The day Arch last passed the tests (ci/test-passes.sh tries an older Arch from it): today's when it did,
+      # else the one published before
+      - name: The day Arch last passed
+        env:
+          RESULT: ${{ needs.test.outputs.result }}
+        run: |
+          if [ "$RESULT" = ok ] || [ "$RESULT" = hold-agros ]; then
+            date -u +%Y/%m/%d >out/x86_64/agros-arch-ok
+          else
+            curl -fsS --retry 3 -o out/x86_64/agros-arch-ok https://crimzoagra.github.io/agros/x86_64/agros-arch-ok || true
+          fi
       # The upstream gate's list (update-gate reads it beside the repo's database): this run's approvals added to those
       # published before (a machine on a CachyOS build a day behind Arch's still finds its version), the last 20 of each
       - name: Approved upstream versions
@@ -191,8 +301,10 @@ jobs:
           cat out/x86_64/agros-approved
       - name: Install check (agros-desktop resolves in one transaction, none of what AgrOS leaves out)
         run: |
-          # (build-repo.sh added [agros] unchecked while building: now with signatures required, as users have it)
-          sed -i '/^\[agros\]$/,/^Server/{/^SigLevel/d}' /etc/pacman.conf
+          # (with signatures required, as users have it)
+          pacman-key --add ci/agros.asc
+          pacman-key --lsign-key BFE9289F7759E521AE60CFCD23B6096B42D05E1E
+          printf '\n[agros]\nServer = file://%s/out/x86_64\n' "$PWD" >>/etc/pacman.conf
           pacman -Sy
           pacman -S --noconfirm --print agros-desktop >/tmp/plan 2>&1 || { cat /tmp/plan; exit 1; }
           ! grep -E '/(noctalia[^/]*|jack2|firefox|dolphin|kitty|alacritty|cachyos-hello)-[0-9]' /tmp/plan
@@ -200,8 +312,38 @@ jobs:
         with:
           path: out
 
+  report:
+    # One issue for what this run held back or didn't put out (ci/report.sh), closed once a run puts all out
+    needs: [repo, test, release]
+    if: ${{ always() && github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
+    runs-on: ubuntu-26.04
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          name: held
+          path: /tmp/held
+      - uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          name: report
+          path: /tmp/report
+      - name: Said
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RESULT: ${{ needs.test.outputs.result }}
+          BUILD: ${{ needs.repo.result }}
+          RELEASE: ${{ needs.release.result }}
+          HELD: /tmp/held/held
+          REPORT: /tmp/report/report
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: ci/report.sh
+
   publish:
-    needs: repo
+    needs: release
     runs-on: ubuntu-26.04
     permissions:
       pages: write

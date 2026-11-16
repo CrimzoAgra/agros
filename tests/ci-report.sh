@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# ci/report.sh: one issue for what CI held back; opened, then edited, never a second one; closed once a run puts
+# everything out again; nothing done when all went out and none was open. gh is a stand-in
+set -euo pipefail
+# shellcheck source=lib.sh source-path=SCRIPTDIR
+. "$(dirname "$0")/lib.sh"
+mkdir -p "$t/bin"
+# shellcheck disable=SC2016
+printf '#!/bin/bash\necho "gh $*" >>%s/gh.log\ncase "$1 $2" in "issue list") cat %s/open 2>/dev/null; true ;; "issue create"|"issue edit") for a; do [[ $p == --body-file ]] && cp "$a" %s/body; p=$a; done ;; esac\n' \
+    "$t" "$t" "$t" >"$t/bin/gh"
+chmod +x "$t/bin/gh"
+go() { rm -f "$t/gh.log"; PATH=$t/bin:$PATH RUN_URL=https://run "$@" "$here/ci/report.sh" >/dev/null; grep -v '^gh issue list\|^gh label' "$t/gh.log" || true; }
+echo "quickshell-git: AgrOS's fix didn't build" >"$t/held"
+[[ $(go env BUILD=success RELEASE=success RESULT=ok HELD="$t/held") == "gh issue create --label held --title Held back: built and tested, but some packages didn't build --body-file "* ]] ||
+    fail "a held package didn't open an issue: $(go env BUILD=success RELEASE=success RESULT=ok HELD="$t/held")"
+grep -q '^- quickshell-git: ' "$t/body" || fail "the issue doesn't say what was held: $(cat "$t/body")"
+echo 12 >"$t/open"
+printf -- '- With this run'"'"'s [agros]:\n    FAIL lutris: x\n' >"$t/report"
+[[ $(go env BUILD=success RELEASE=success RESULT=hold-upstream REPORT="$t/report") == "gh issue edit 12 --title Held back: an Arch update broke AgrOS's tests --body-file "* ]] ||
+    fail "the open issue not brought up to date: $(go env BUILD=success RELEASE=success RESULT=hold-upstream REPORT="$t/report")"
+grep -q 'FAIL lutris' "$t/body" || fail "the issue doesn't say which tests failed"
+[[ $(go env BUILD=success RELEASE=failure RESULT=ok) == "gh issue edit 12 --title Held back: the release didn't go through (failure) --body-file "* ]] ||
+    fail "a failed release not said: $(go env BUILD=success RELEASE=failure RESULT=ok)"
+[[ $(go env BUILD=success RESULT=) == "gh issue edit 12 --title Held back: the tests didn't run to the end (a step before them failed) --body-file "* ]] ||
+    fail "tests that didn't run not said: $(go env BUILD=success RESULT=)"
+[[ $(go env BUILD=failure) == "gh issue edit 12 --title Held back: the repo didn't build (failure) --body-file "* ]] ||
+    fail "a failed build not said: $(go env BUILD=failure)"
+[[ $(go env BUILD=success RELEASE=success RESULT=ok) == "gh issue close 12 --comment Everything built and passed again: https://run" ]] ||
+    fail "the issue not closed once all went out: $(go env BUILD=success RELEASE=success RESULT=ok)"
+rm "$t/open"
+[[ -z $(go env BUILD=success RELEASE=success RESULT=ok) ]] || fail "an issue touched with all out and none open"
+echo "ok ci-report"

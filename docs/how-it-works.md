@@ -1072,9 +1072,29 @@ pipeline reads as "not found": a running Proton was removed under a game), nor i
 pipeline's status decides something; read the output whole (`grep -q x <<<"$(cmd)"`), or mark a line
 `# pipefail-ok: <why>`.
 
-CI runs them on every push, with what the checks against Caelestia, Hyprland, Qt and the kernel need (Caelestia from
-the published `[agros]` repo, its dots at the pinned commit), so none is skipped there: a skip there, whole or in
-part (`skipped` in `tests/lib.sh`; `tests/run.sh` for a whole one), fails CI, as its pass approves that Hyprland. The AUR packages and CachyOS's installer are built there without compiler warnings
+CI runs them on every push and every night, with what the checks against Caelestia, Hyprland, Qt and the kernel need
+(its dots at the pinned commit), so none is skipped there: a skip there, whole or in part (`skipped` in
+`tests/lib.sh`; `tests/run.sh` for a whole one), fails CI, as its pass approves that Hyprland.
+
+### Keeping itself up
+
+On `main` CI builds the repo first, then tests what it built, then puts out what passed, so an upstream change that
+breaks something holds back that one piece, never the rest (`.github/workflows/ci.yml`):
+
+- **A package that doesn't build** (an AUR change, AgrOS's Quickshell patch or Calamares changes no longer fitting, a
+  download that failed): the published one is kept, its signature checked, with the packages of the repo it needs
+  (`ci/published.sh`); the rest goes out. None published yet: the build fails.
+- **Tests that fail** (`ci/test-passes.sh`) are run again to see which side broke them: with the published `[agros]`
+  (they pass: this run's new AUR builds broke them, swapped for the published ones by `build-repo.sh --hold-new`; the
+  new Hyprland still approved), then on Arch as of the last day the tests passed on it (its archive's snapshot; the day
+  published as `agros-arch-ok`): they pass, an Arch update broke them (its Hyprland not approved, the new AUR builds
+  held, AgrOS's own packages still out). Failing even then: AgrOS's own code, and nothing goes out.
+- **One issue** (`ci/report.sh`, label `held`) says what was held back or why nothing went out, brought up to date by
+  each run and closed by itself once one puts everything out again. GitHub notifies of it.
+- **Every Friday at 17:00 Lisbon time** an issue (`ci/status.sh`, `.github/workflows/status.yml`, label `status`,
+  last week's closed) says whether anything needs a look: the last CI and ISO runs, what's held, CachyOS changes
+  waiting for a merge (agros-iso's CachyOS sync), and whether Arch's newest Hyprland is approved yet; the owner is
+  mentioned, so GitHub notifies them. The AUR packages and CachyOS's installer are built there without compiler warnings
 (theirs, not AgrOS's); AgrOS's own packages keep them.
 
 ## Troubleshooting
