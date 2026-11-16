@@ -7,6 +7,15 @@
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
+# On the live USB: at login the AUR build is loaded (the installer's title bar), nothing built; otherwise nothing at all
+mkdir -p "$t/live" "$t/livebin"
+printf '#!/bin/sh\necho "$*" >>%s/live-calls\n' "$t" >"$t/livebin/hyprctl" && chmod +x "$t/livebin/hyprctl"
+HOME=$t/livehome HYPRBARS_LIVE=$t/live PATH=$t/livebin:$PATH "$here/.local/bin/hyprbars-build" --login ||
+    fail "live USB, --login: failed"
+grep -qx -- '-i 0 plugin load /usr/lib/libhyprbars.so' "$t/live-calls" || fail "live USB: the AUR one not loaded: $(cat "$t/live-calls" 2>/dev/null)"
+rm -f "$t/live-calls"
+HOME=$t/livehome HYPRBARS_LIVE=$t/live PATH=$t/livebin:$PATH "$here/.local/bin/hyprbars-build" || fail "live USB, a build: failed"
+[[ ! -e $t/live-calls && ! -e $t/livehome ]] || fail "live USB: a build tried: $(cat "$t/live-calls" 2>/dev/null)"
 [[ -f /usr/include/hyprland/src/version.h ]] || { echo "skip hyprbars (no Hyprland headers)"; exit 0; }
 
 # A running Hyprland older than the headers on disk
