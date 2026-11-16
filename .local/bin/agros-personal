@@ -15,7 +15,7 @@ esac
 [[ ${1:-} ]] && personal_dir=$1
 [[ $EUID -ne 0 || ${BASH_SOURCE[0]} != "$0" ]] || { echo "Run this as your normal user, not with sudo."; exit 1; }
 # The default LibreWolf profile's folder (nothing if LibreWolf hasn't made one yet)
-firefox_profile() { "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/firefox-bookmarks-export" --profile 2>/dev/null || true; }
+firefox_profile() { "$helpers/firefox-bookmarks-export" --profile 2>/dev/null || true; }
 
 
 # Your logins live on your pen drive only, never in the repo (git keeps every version, and saved logins get past your
@@ -48,8 +48,9 @@ PERSONAL_LIBREWOLF=(signedInUser.json places.sqlite favicons.sqlite logins.json 
     # (the new tab's background picture: yours, so not in the repo)
     wallpaper)
 # ...Lutris's store logins (Battle.net, Steam, GOG, Epic, EA, Ubisoft, Rockstar): .cache/lutris/.<store>.auth/.token,
-# and its lutris.net login (auth-token); the weather widget's place (Caelestia's services.weatherLocation)
-# (and each Steam account's own settings: controllers, launch options)
+# and its lutris.net login (auth-token); the weather widget's place (Caelestia's services.weatherLocation): both
+# gathered by personal_save itself
+# ...each Steam account's own settings (controllers, launch options): folders, by pattern
 PERSONAL_DIRS=(".local/share/Steam/userdata/*/config")
 # ...Claude Code, all of it (its account, settings, sessions, memories, skills, plugins: ~/.claude and ~/.claude.json)
 # but these, remade as it runs: copied first, as Claude Code (likely running) keeps writing them
@@ -196,7 +197,7 @@ personal_main() {
 }
 
 # Your logins back from the file on the drive, decrypted straight into place (three times: the file's list, its
-# files, the weather's place; gpg's agent asks the passphrase once)
+# files, the weather's place and the launchers' Lutris entries; gpg's agent asks the passphrase once)
 personal_restore() {
     local file=$1 open prof loc name dest backup meta to=() shell="$HOME/.config/caelestia/shell.json"
     open=$(personal_open; personal_claude_open)
