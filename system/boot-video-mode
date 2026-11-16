@@ -176,7 +176,9 @@ def boot_config():
     if loader == "limine" and os.path.isfile(f"{ROOT}/etc/default/limine"):
         return f"{ROOT}/etc/default/limine", r"KERNEL_CMDLINE\[default\]\+?=", ["limine-update"]
     if loader == "grub":
-        return f"{ROOT}/etc/default/grub", r"GRUB_CMDLINE_LINUX_DEFAULT\+?=", ["grub-mkconfig", "-o", "/boot/grub/grub.cfg"]
+        # (its menu in that root's /boot too: a test's AGROS_ROOT never makes the machine's own)
+        return (f"{ROOT}/etc/default/grub", r"GRUB_CMDLINE_LINUX_DEFAULT\+?=",
+                ["grub-mkconfig", "-o", f"{ROOT}/boot/grub/grub.cfg"])
     return None
 
 

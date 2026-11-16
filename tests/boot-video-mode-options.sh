@@ -91,4 +91,12 @@ PATH=$t/edid:$PATH bvm >/dev/null || fail "boot-video-mode with two += lines fai
 [[ $(bvm --current) == "video=DP-1:2560x1440@165" ]] || fail "--current: $(bvm --current)"
 rm -f "$t/edid/calls"; PATH=$t/edid:$PATH bvm >/dev/null
 [[ ! -e $t/edid/calls ]] || fail "the same screens rewrote the boot entries"
+# GRUB's: the menu made in that root's /boot (AGROS_ROOT), never the machine's own
+gr=$t/grub-root; mkdir -p "$gr/etc/default" "$gr/sys/class/drm/card1-DP-1"
+echo connected >"$gr/sys/class/drm/card1-DP-1/status"
+echo 'GRUB_CMDLINE_LINUX_DEFAULT="quiet"' >"$gr/etc/default/grub"
+printf '#!/bin/sh\necho "grub-mkconfig $*" >>%s/edid/calls\n' "$t" >"$t/edid/grub-mkconfig"
+chmod +x "$t/edid/grub-mkconfig"
+AGROS_ROOT=$gr PATH=$t/edid:$PATH "$here/system/boot-video-mode" >/dev/null || fail "boot-video-mode on GRUB failed"
+grep -qx "grub-mkconfig -o $gr/boot/grub/grub.cfg" "$t/edid/calls" || fail "GRUB's menu not made in AGROS_ROOT: $(cat "$t/edid/calls")"
 echo "ok boot-video-mode-options"
