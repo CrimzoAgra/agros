@@ -53,13 +53,14 @@ carry_over() {
     done
 }
 
-# reused <dir>: the PKGBUILD in <dir> not built, the published package kept instead, when nothing it's built from
-# changed: the same name and version (its sources fetched, pkgver() run), the same PKGBUILD (the checksum makepkg keeps
-# in .BUILDINFO: AgrOS's patches and swaps edit it) and every package it depends on or builds with still at the version
-# it was built with (a new Boost or Qt: built). Anything else or unclear: 1, built as before (built_against then checks
-# that build). Skips the long builds of a run that changes none of them
+# reused <dir>: the PKGBUILD in <dir> not built, the published package kept instead, when its rebuild would only be
+# thrown away: the same name and version (its sources fetched, pkgver() run), the same PKGBUILD (the checksum makepkg
+# keeps in .BUILDINFO: AgrOS's patches and swaps edit it), and what built_against (build-repo.sh) publishes a rebuild
+# for unchanged: every library its programs need still in the repos (a new Boost's soname: built), the same Qt, the same
+# Python. Anything else or unclear: 1, built as before (built_against then checks that build). Skips the long builds of
+# a run that changes none of them
 reused() {
-    local info name ver desc f bi d dep='' cur log
+    local info name ver desc f bi dep='' log x s cur pub
     # (each way it gives up said, with why: one that never said built every time, unseen)
     log=$(cd "$1" && asb makepkg -od --noconfirm 2>&1) ||
         { echo "-- ${1##*/}: built (its sources not fetched to compare: $(tail -n3 <<<"$log" | paste -sd' '))"; return 1; }
@@ -73,13 +74,30 @@ reused() {
         { echo "-- $name $ver: built (published: $(field "$desc" NAME) $(field "$desc" VERSION))"; return 1; }
     log=$(carry_over "$name" 2>&1) || { echo "-- $name $ver: built (the published one not fetched: $log)"; return 1; }
     f=$out/$(field "$desc" FILENAME)
-    bi=$(bsdtar -xOf "$f" .BUILDINFO 2>/dev/null | sed -n -e 's/^installed = \(.*\)-[^-]*$/\1/p' -e 's/^pkgbuild_sha256sum = /sha /p')
-    grep -qxF "sha $(sha256sum <"$1/PKGBUILD" | cut -d' ' -f1)" <<<"$bi" || dep=PKGBUILD
-    for d in $(bsdtar -xOf "$f" .PKGINFO 2>/dev/null | sed -n 's/^\(depend\|makedepend\) = \([^<>=]*\).*/\2/p'); do
+    bi=$(bsdtar -xOf "$f" .BUILDINFO 2>/dev/null)
+    grep -qxF "pkgbuild_sha256sum = $(sha256sum <"$1/PKGBUILD" | cut -d' ' -f1)" <<<"$bi" || dep=PKGBUILD
+    # (the libraries: each one it needs, but its own, found in the repos' file lists, this repo's too: synced each time,
+    # it grows as the build goes)
+    x=$(mktemp -d) && bsdtar -xf "$f" -C "$x" 2>/dev/null
+    pacman -Fy >/dev/null 2>&1
+    for s in $(find "$x" -type f \( -name '*.so*' -o -perm -u+x \) -print0 2>/dev/null | xargs -0r readelf -d 2>/dev/null |
+        sed -n 's/.*(NEEDED).*\[\(.*\)\]/\1/p' | sort -u); do
         [[ -z $dep ]] || break
-        cur=$(pacman -Sp --print-format '%n-%v' "$d" 2>/dev/null | tail -n1)
-        [[ -n $cur ]] && grep -qxF "$cur" <<<"$bi" || dep="$d (now ${cur:-gone})"
+        [[ -n $(find "$x" -name "$s" -print -quit) ]] && continue
+        [[ -n $(pacman -Fq "$s" 2>/dev/null) ]] || dep="the library $s (gone)"
     done
+    # (Qt's and Python's versions without Arch's rebuild number, as built_against: x.y for Python)
+    if [[ -z $dep ]] && find "$x" -type f -print0 | xargs -0r readelf -d 2>/dev/null | grep 'NEEDED.*\[libQt6' >/dev/null; then
+        pub=$(sed -n 's/^installed = qt6-base-\(.*\)-[^-]*-[^-]*$/\1/p' <<<"$bi")
+        cur=$(pacman -Sp --print-format '%v' qt6-base 2>/dev/null | tail -n1); cur=${cur%-*}
+        [[ $pub == "$cur" ]] || dep="Qt ($pub, now ${cur:-gone})"
+    fi
+    pub=$(find "$x/usr/lib" -maxdepth 1 -name 'python3.*' -printf '%f\n' 2>/dev/null | head -n1)
+    if [[ -z $dep && -n $pub ]]; then
+        cur=$(pacman -Sp --print-format '%v' python 2>/dev/null | tail -n1 | cut -d. -f1,2)
+        [[ $pub == "python$cur" ]] || dep="Python ($pub, now python${cur:-gone})"
+    fi
+    rm -rf "$x"
     if [[ -n $dep ]]; then
         echo "-- $name $ver: built ($dep changed since the published one)"
         rm -f "$f" "$f.sig"

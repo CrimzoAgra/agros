@@ -13,14 +13,20 @@ export key; key=$(gpg --list-secret-keys --with-colons | awk -F: '$1 == "fpr" { 
 pub=$t/pub out=$t/out work=$t/work
 mkdir -p "$pub" "$out" "$work"
 # pkg <dir> <name> <version> [<line>...]: a package (its .PKGINFO; "installed = " and "pkgbuild_sha256sum = " lines: its
-# .BUILDINFO), signed
+# .BUILDINFO; "file = <path>": a file in it, a program (true's copy) under usr/bin), signed
 pkg() {
-    local d=$1 n=$2 v=$3 s; s=$(mktemp -d); shift 3
+    local d=$1 n=$2 v=$3 s p; s=$(mktemp -d); shift 3
     printf 'pkgname = %s\npkgver = %s\narch = x86_64\n' "$n" "$v" >"$s/.PKGINFO"
-    printf '%s\n' "$@" | grep -Ev '^(installed|pkgbuild_sha256sum) = |^$' >>"$s/.PKGINFO" || true
+    printf '%s\n' "$@" | grep -Ev '^(installed|pkgbuild_sha256sum|file) = |^$' >>"$s/.PKGINFO" || true
     printf '%s\n' "$@" | grep -E '^(installed|pkgbuild_sha256sum) = ' >"$s/.BUILDINFO" || true
-    # shellcheck disable=SC2046  # (no .BUILDINFO: not in the package)
-    bsdtar -cf "$d/$n-$v-x86_64.pkg.tar.zst" --zstd -C "$s" .PKGINFO $([[ -s $s/.BUILDINFO ]] && echo .BUILDINFO)
+    for p in "$@"; do
+        [[ $p == 'file = '* ]] || continue
+        p=$s/${p#file = } && mkdir -p "${p%/*}"
+        if [[ $p == */usr/bin/* ]]; then cp "$(command -v true)" "$p"; else : >"$p"; fi
+    done
+    # shellcheck disable=SC2046  # (no .BUILDINFO, no files: not in the package)
+    bsdtar -cf "$d/$n-$v-x86_64.pkg.tar.zst" --zstd -C "$s" .PKGINFO $([[ -s $s/.BUILDINFO ]] && echo .BUILDINFO) \
+        $([[ -d $s/usr ]] && echo usr)
     gpg --batch --quiet --detach-sign "$d/$n-$v-x86_64.pkg.tar.zst" 2>/dev/null
     rm -rf "$s"
 }
@@ -30,10 +36,10 @@ pkg "$pub" libdeep 1-1
 pkg "$pub" built-dep 1-1
 pkg "$pub" quickshell-git 0.3-1.1 'provides = quickshell=0.3'
 pkg "$pub" lonely 1-1
-# (for reused: heavy, built from $t/heavy/PKGBUILD against libq 5-1, with cmake 3-1)
+# (for reused: heavy, built from $t/heavy/PKGBUILD with libq 5-1: a program that needs libc.so.6, a Python 3.11 module)
 mkdir -p "$t/heavy" && echo 'pkgname=heavy' >"$t/heavy/PKGBUILD"
-pkg "$pub" heavy 2-1 'depend = libq>=5' 'makedepend = cmake' 'installed = libq-5-1-x86_64' 'installed = cmake-3-1-x86_64' \
-    "pkgbuild_sha256sum = $(sha256sum <"$t/heavy/PKGBUILD" | cut -d' ' -f1)"
+pkg "$pub" heavy 2-1 'depend = libq>=5' 'installed = libq-5-1-x86_64' 'file = usr/bin/heavy' \
+    'file = usr/lib/python3.11/heavy.py' "pkgbuild_sha256sum = $(sha256sum <"$t/heavy/PKGBUILD" | cut -d' ' -f1)"
 # (one that provides more than a pipe holds: found by its name all the same, published or here. Under pipefail a
 # grep -q stopping at the name failed the search, its provides cut off: quickshell-git and Calamares never found)
 mapfile -t many < <(seq -f 'provides = p%g' 1 20000)
@@ -81,18 +87,24 @@ got=$(cd "$out" && ls ./*.pkg.tar.zst | sed 's|^\./||' | paste -sd' ')
     fail "this run's new builds not swapped for the published ones: $got"
 [[ $(printf '%s\n' "${held[@]}" | sort | paste -sd,) == "brand-new: broke the tests,libx: broke the tests" ]] ||
     fail "the held ones not said: ${held[*]}"
-# reused: the published package kept, not built, only when its version, PKGBUILD and what it's built with are unchanged
-# (makepkg and pacman stand-ins: the version $REL gives, the repos' libq at $LIBQ)
+# reused: the published package kept, not built, unless its rebuild would go out: its version or PKGBUILD changed, a
+# library it needs gone from the repos, another Python (makepkg and pacman stand-ins: the version $REL gives, the
+# library $GONE not in any repo's file list, the repos' Python at $PY)
 mkdir -p "$t/bin"
 # shellcheck disable=SC2016
 printf '#!/bin/sh\n[ "$1" = --printsrcinfo ] && printf "pkgbase = heavy\\n\\tpkgver = 2\\n\\tpkgrel = %%s\\n\\npkgname = heavy\\n" "${REL:-1}"\nexit 0\n' >"$t/bin/makepkg"
 # shellcheck disable=SC2016
-printf '#!/bin/sh\ncase "$4" in libq) echo "libq-${LIBQ:-5-1}" ;; cmake) echo cmake-3-1 ;; *) exit 1 ;; esac\n' >"$t/bin/pacman"
+printf '#!/bin/sh\ncase "$1" in\n-Fy) exit 0 ;;\n-Fq) [ "$2" = "${GONE:-}" ] && exit 1; echo core/some ;;\n-Sp) [ "$4" = python ] && echo "${PY:-3.11.9-1}" ;;\nesac\n' >"$t/bin/pacman"
 chmod +x "$t/bin/"*
 heavy() { rm -f "$out"/heavy-*; (PATH=$t/bin:$PATH; reused "$t/heavy") >/dev/null; }
 heavy && [[ -e $out/heavy-2-1-x86_64.pkg.tar.zst && -e $out/heavy-2-1-x86_64.pkg.tar.zst.sig ]] ||
     fail "an unchanged package not kept as published"
-LIBQ=6-1 heavy && fail "kept though a library it's built with changed"
+# (a newer libq alone: its rebuild would be thrown away, built_against the same, so not built: caelestia-shell and
+# Calamares were, every run)
+LIBQ=6-1 heavy || fail "built though only a dependency's version changed"
+readelf -d "$(command -v true)" | grep 'NEEDED.*libc.so.6' >/dev/null || fail "test setup: true doesn't need libc.so.6"
+GONE=libc.so.6 heavy && fail "kept though a library it needs is gone"
+PY=3.12.1-1 heavy && fail "kept though Python changed"
 REL=2 heavy && fail "kept though its version changed"
 echo 'pkgname=heavy # new' >"$t/heavy/PKGBUILD"
 heavy && fail "kept though its PKGBUILD changed"
