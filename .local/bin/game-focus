@@ -11,17 +11,18 @@
   and you with it. In floating mode it stays: Alt+Tab minimises it (user/windows.lua).
 - Attention: when a game flags itself urgent (what flashes its taskbar button orange on Windows:
   a match found, a turn, a download done...), a notification shows. Proton games ask the window manager for
-  "demands attention", which Hyprland ignores (no "urgent" event), so those requests are caught on X too. It stays until you clear it or
-  go to the game (switching to it yourself clears it too); clicking it goes to the game, bringing it back if minimised.
-A game is any window started by Steam (Proton games are "steam_app_<id>"; native ones carry SteamGameId and run from
-Steam's games folder). Runs as a
-systemd user service (game-focus.service), started from ~/.config/caelestia/user/apps.lua.
+  "demands attention", which Hyprland ignores (no "urgent" event), so those requests are caught on X too. It stays
+  until you clear it or go to the game (switching to it yourself clears it too); clicking it goes to the game,
+  bringing it back if minimised.
 - Clients: closing a game closes its store launcher (EA app, Ubisoft Connect...) a minute later, and Steam if it was
-  only in its tray 15 s later; one with its window open stays. What still runs of a Proton game two minutes after its last
-  window closed (a game that doesn't exit, its crash reporter) is closed too, once it's idle (not while it reads or
-  writes the disk; CPU alone for 10 minutes: hung, closed).
-Each of these can be turned off in the Settings app (games.* settings: read at start and again on every Hyprland
-config reload, which a change makes).
+  only in its tray 15 s later; one with its window open stays. What still runs of a Proton game two minutes after its
+  last window closed (a game that doesn't exit, its crash reporter) is closed too, once it's idle (not while it reads
+  or writes the disk; CPU alone for 10 minutes: hung, closed).
+A game is any window started by Steam (Proton games are "steam_app_<id>"; native ones carry SteamGameId and run from
+Steam's games folder), or one tagged "game" (is_game). Runs as a systemd user service (game-focus.service), started
+from ~/.config/caelestia/user/apps.lua.
+Each of these can be turned off in the Settings app (games.* settings: read at start, again on every Hyprland config
+reload and whenever settings.json changes: setting()).
 game-focus --game-open: exit 0 while a game is open, by the same is_game (after-games: the one definition of a game).
 """
 import json
@@ -659,7 +660,7 @@ def alert(address: str, just_left: bool = False) -> None:
     print(f"attention {address}: notified", flush=True)
     alerts[address] = 0
     name = client.get("title") or client.get("class") or "Your game"
-    # Steam installs an icon per game with a desktop shortcut; others get Steam's
+    # The game's own icon (Steam's, with its desktop shortcut; else game_icon's, from Steam's cache); none: Steam's
     icon = f"steam_icon_{gid}"
     if not any(os.path.exists(f"{d}/icons/hicolor/32x32/apps/{icon}.png")
                for d in (os.path.expanduser("~/.local/share"), "/usr/share")):
