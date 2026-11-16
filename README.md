@@ -7,13 +7,13 @@
 
 # AgrOS
 
-AgrOS is a ready-to-use Linux desktop built on [CachyOS](https://cachyos.org). Install it from the ISO and everything is
-already set up: the [Hyprland](https://hyprland.org) desktop with the [Caelestia](https://github.com/caelestia-dots/shell)
-shell, a dock, desktop widgets, your apps, gaming, and the settings that tie them together. There's no setup script to
-run afterwards.
+AgrOS is a ready-to-use Linux desktop for gaming and everyday use, built on [CachyOS](https://cachyos.org). Install it
+from the ISO and everything is already set up: the [Hyprland](https://hyprland.org) desktop with the
+[Caelestia](https://github.com/caelestia-dots/shell) shell, a dock, desktop widgets, your apps and gaming. There's no
+setup script to run afterwards. Coming from Windows? Windows float, Alt+Tab works as you expect, and every app is listed
+next to the Windows app it replaces.
 
-It's made for gaming and everyday use, and to feel familiar if you're coming from Windows: windows float by default,
-Alt+Tab works the way you expect, and every app is listed next to the Windows app it replaces.
+Read more in [Welcome to AgrOS](manual/01-welcome.md).
 
 ## Download
 
@@ -23,38 +23,15 @@ Alt+Tab works the way you expect, and every app is listed next to the Windows ap
   <img alt="Latest ISO" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fsourceforge.net%2Fprojects%2Fagros-iso%2Fbest_release.json&query=%24.release.date&label=latest%20ISO&color=4c6ef5">
 </p>
 
-The ISO is about 3.6 GB and always the newest: a new one is built and published by itself after each change. Put it
-on a USB stick and install: [Installing](manual/02-installing.md). Its checksum and
-signature: [.sha256](https://pub-f1a3a482900748e8b69cd81361ab96e1.r2.dev/agros-latest.iso.sha256),
-[.sig](https://pub-f1a3a482900748e8b69cd81361ab96e1.r2.dev/agros-latest.iso.sig). Every ISO, earlier ones too, with
-their checksums and signatures: [all downloads](https://sourceforge.net/projects/agros-iso/files/iso/) on SourceForge.
-
-## How updates stay safe
-
-AgrOS is built on others' work: Arch and CachyOS (the system), the AUR (Caelestia, Quickshell and the other apps AgrOS
-builds for you) and CachyOS's ISO (what the live USB is made from). Every change from them is checked before it reaches
-you. When one breaks something, only that piece waits; everything else keeps updating.
-
-| When upstream... | AgrOS... | Your machine... |
-|---|---|---|
-| updates Hyprland or its libraries | tests its config, title bar plugin and shell against the new version every day; a version that passes is approved | updates Hyprland only to approved versions; until then it waits, everything else updates |
-| ships an Arch update that breaks AgrOS's tests | finds it by running the tests again on Arch as it was on the last good day | keeps the Hyprland that works |
-| changes an AUR app so it no longer builds (or AgrOS's fix to it no longer fits) | keeps the published package | keeps the version that works |
-| changes an AUR app so it breaks the tests | swaps the new build back for the published one | keeps the version that works |
-| (AgrOS's own change fails its tests) | publishes nothing | doesn't change |
-| changes its ISO | merges it into AgrOS's ISO by itself, every day, when it merges cleanly, brings back nothing AgrOS removed, adds no KDE, keeps AgrOS's installer, and the ISO still builds | isn't affected: installed machines update from the repos above |
-| changes its ISO in a way that can't be merged by itself | opens a pull request saying what changed and why | isn't affected; the ISO stays as it is until it's merged |
-
-**You're told by email** (GitHub issues that mention you): one issue, labelled `held`, says what's held back and why,
-and closes by itself once everything goes out again. Every Friday at 17:00 Lisbon time a status issue says either
-"Nothing broke this week" or what needs a look: a build failing, something held, a CachyOS pull request waiting, or
-Arch's newest Hyprland not approved yet.
-
-**What needs you:** only a CachyOS pull request (resolve its conflict and merge it), or something held for more than a
-few days (an upstream change AgrOS's own code has to be adapted to). Everything else sorts itself out. The details:
-[Keeping itself up](docs/how-it-works.md#keeping-itself-up) and [the upstream gate](docs/how-it-works.md#updates-and-system).
+About 3.6 GB, and always the newest: a new ISO is built and published by itself after each change. Check it with its
+[.sha256](https://pub-f1a3a482900748e8b69cd81361ab96e1.r2.dev/agros-latest.iso.sha256) and
+[.sig](https://pub-f1a3a482900748e8b69cd81361ab96e1.r2.dev/agros-latest.iso.sig), put it on a USB stick and see
+[Installing](manual/02-installing.md). Slow, or want an earlier one? Every ISO, with its checksum and signature, is on
+[SourceForge](https://sourceforge.net/projects/agros-iso/files/iso/).
 
 ## The AgrOS Manual
+
+The manual lives in [`manual/`](manual/).
 
 - [Welcome to AgrOS](manual/01-welcome.md)
 
@@ -83,6 +60,31 @@ few days (an upstream change AgrOS's own code has to be adapted to). Everything 
 **For developers**
 
 - [How AgrOS works](docs/how-it-works.md): the packages, the repo's layout, every script and the tests
+
+## How updates stay safe
+
+AgrOS is built on others' work: Arch and CachyOS (the system), the AUR (Caelestia, Quickshell and the other apps AgrOS
+builds for you) and CachyOS's ISO (what the live USB is made from). Every change from them is checked before it reaches
+you. When one breaks something, only that piece waits; the rest keeps updating.
+
+| When upstream... | AgrOS... | Your machine... |
+|---|---|---|
+| updates Hyprland or its libraries | tests its config, title bar plugin and shell against it every day, and approves a version that passes | takes only approved Hyprland versions; meanwhile everything else updates |
+| ships an Arch update that breaks AgrOS's tests | finds it by running the tests again on Arch as of the last good day | keeps the Hyprland that works |
+| changes an AUR app so it no longer builds (or AgrOS's fix to it no longer fits) | keeps the published package | keeps the version that works |
+| changes an AUR app so the tests fail | swaps the new build back for the published one | keeps the version that works |
+| (AgrOS's own change fails its tests) | publishes nothing | doesn't change |
+| changes its ISO | merges it into AgrOS's ISO by itself each day, if it merges cleanly, brings back nothing AgrOS removed, adds no KDE, keeps AgrOS's installer, and the ISO still builds | isn't affected: installed machines update from the repos above |
+| changes its ISO in a way that can't be merged by itself | opens a pull request saying what changed and why | isn't affected; the ISO stays as it is until it's merged |
+
+**When you're told:** by email, through GitHub issues that mention you. One issue, labelled `held`, says what's held
+back and why, and closes by itself once everything goes out again. Every Friday at 17:00 Lisbon time a status issue
+says "Nothing broke this week" or what needs a look: a build failing, something held, a CachyOS pull request waiting, or
+Arch's newest Hyprland not approved yet.
+
+**What needs you:** only a CachyOS pull request (resolve its conflict and merge it), or something held for more than a
+few days (an upstream change AgrOS's own code has to be adapted to). Everything else sorts itself out. The details:
+[Keeping itself up](docs/how-it-works.md#keeping-itself-up) and [the upstream gate](docs/how-it-works.md#updates-and-system).
 
 ## License
 
