@@ -29,4 +29,18 @@ grep -q 'FAIL lutris' "$t/body" || fail "the issue doesn't say which tests faile
     fail "the issue not closed once all went out: $(go env BUILD=success RELEASE=success RESULT=ok)"
 rm "$t/open"
 [[ -z $(go env BUILD=success RELEASE=success RESULT=ok) ]] || fail "an issue touched with all out and none open"
+# Upstream's next release no longer fitting (the report's AHEAD lines): all went out, but the issue opened, said as a
+# heads-up, kept open while it lasts, closed once it's gone
+printf -- '- With this run'"'"'s [agros], on today'"'"'s Arch:\n    all passed\n- Upstream'"'"'s next release...:\n    AHEAD lutris-overlay: x\n' >"$t/report"
+[[ $(go env BUILD=success RELEASE=success RESULT=ok REPORT="$t/report") == "gh issue create --label held --title Heads-up: upstream's next release no longer fits AgrOS's changes --body-file "* ]] ||
+    fail "upstream's next release not fitting didn't open an issue: $(go env BUILD=success RELEASE=success RESULT=ok REPORT="$t/report")"
+grep -q 'AHEAD lutris-overlay: x' "$t/body" || fail "the issue doesn't say what doesn't fit: $(cat "$t/body")"
+echo 13 >"$t/open"
+[[ $(go env BUILD=success RELEASE=success RESULT=ok REPORT="$t/report") == "gh issue edit 13 --title Heads-up: "* ]] ||
+    fail "the heads-up closed while it lasts: $(go env BUILD=success RELEASE=success RESULT=ok REPORT="$t/report")"
+[[ $(go env BUILD=success RELEASE=success RESULT=ok HELD="$t/held" REPORT="$t/report") == "gh issue edit 13 --title Held back: built and tested, but some packages didn't build --body-file "* ]] ||
+    fail "a hold not said over the heads-up: $(go env BUILD=success RELEASE=success RESULT=ok HELD="$t/held" REPORT="$t/report")"
+sed -i '/AHEAD/d' "$t/report"
+[[ $(go env BUILD=success RELEASE=success RESULT=ok REPORT="$t/report") == "gh issue close 13 "* ]] ||
+    fail "the heads-up not closed once it's gone: $(go env BUILD=success RELEASE=success RESULT=ok REPORT="$t/report")"
 echo "ok ci-report"

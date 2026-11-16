@@ -1081,7 +1081,12 @@ pipeline's status decides something; read the output whole (`grep -q x <<<"$(cmd
 
 CI runs them on every push and every night, with what the checks against Caelestia, Hyprland, Qt and the kernel need
 (its dots at the pinned commit), so none is skipped there: a skip there, whole or in part (`skipped` in
-`tests/lib.sh`; `tests/run.sh` for a whole one), fails CI, as its pass approves that Hyprland.
+`tests/lib.sh`; `tests/run.sh` for a whole one), fails CI, as its pass approves that Hyprland. The checks against
+upstream's next release (Caelestia's, Lutris's and Hyprland's main branches, hyprland-plugins' main: a change there
+that breaks one of AgrOS's shows first) are the exception: one that doesn't fit, or couldn't be fetched, is said on the
+test's last line (`ahead` in `tests/lib.sh`: "ok caelestia-overlay (AHEAD: ...)"), never a failure. Neither the published
+`[agros]` nor an older Arch undoes a change on main, so it read as AgrOS's own code and nothing went out; the release,
+once it comes, is checked as installed like any other.
 
 ### Keeping itself up
 
@@ -1096,8 +1101,11 @@ breaks something holds back that one piece, never the rest (`.github/workflows/c
   new Hyprland still approved), then on Arch as of the last day the tests passed on it (its archive's snapshot; the day
   published as `agros-arch-ok`): they pass, an Arch update broke them (its Hyprland not approved, the new AUR builds
   held, AgrOS's own packages still out). Failing even then: AgrOS's own code, and nothing goes out.
-- **One issue** (`ci/report.sh`, label `held`) says what was held back or why nothing went out, brought up to date by
-  each run and closed by itself once one puts everything out again. GitHub notifies of it.
+- **Upstream's next release** no longer fitting AgrOS's changes (a check against a main branch, above): nothing held,
+  everything goes out, and the issue below says which change to adapt before that release.
+- **One issue** (`ci/report.sh`, label `held`) says what was held back or why nothing went out (or, as "Heads-up", what
+  of upstream's next release doesn't fit), brought up to date by each run and closed by itself once one puts everything
+  out again with none of these. GitHub notifies of it.
 - **Every Friday at 17:00 Lisbon time** an issue (`ci/status.sh`, `.github/workflows/status.yml`, label `status`,
   last week's closed) says whether anything needs a look: the last CI and ISO runs, what's held, CachyOS changes
   waiting for a merge (agros-iso's CachyOS sync), and whether Arch's newest Hyprland is approved yet; the owner is

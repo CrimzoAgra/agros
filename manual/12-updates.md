@@ -63,6 +63,7 @@ you. When one breaks something, only that piece waits; the rest keeps updating.
 | ships an Arch update that breaks AgrOS's tests | finds it by running the tests again on Arch as of the last good day | keeps the Hyprland that works |
 | changes an AUR app so it no longer builds (or AgrOS's fix to it no longer fits) | keeps the published package | keeps the version that works |
 | changes an AUR app so the tests fail | swaps the new build back for the published one | keeps the version that works |
+| changes its next release (Caelestia's, Lutris's or Hyprland's main branch) so AgrOS's changes won't fit | says so in the `held` issue, as a heads-up, and publishes as usual | isn't affected: the release is checked once it comes |
 | (AgrOS's own change fails its tests) | publishes nothing | doesn't change |
 | changes its ISO | merges it into AgrOS's ISO by itself each day, if it merges cleanly, brings back nothing AgrOS removed, adds no KDE, keeps AgrOS's installer, and the ISO still builds | isn't affected: it updates from the repos above |
 | changes its ISO in a way that can't be merged by itself | opens a pull request saying what changed and why | isn't affected; the ISO stays as it is until it's merged |
@@ -70,7 +71,8 @@ you. When one breaks something, only that piece waits; the rest keeps updating.
 A held Hyprland update isn't listed in the Updates app; the update log says it "waits for AgrOS's check".
 
 **AgrOS's maintainer is told** by email, through GitHub issues that mention them. One issue, labelled `held`, says
-what's held back and why, and closes by itself once everything goes out again. Every Friday at 17:00 Lisbon time a
+what's held back and why (or, as a heads-up, what of an upstream's next release AgrOS's changes don't fit yet), and
+closes by itself once everything goes out again. Every Friday at 17:00 Lisbon time a
 status issue says "Nothing broke this week" or what needs a look: a build failing, something held, a CachyOS pull
 request waiting, or Arch's newest Hyprland not approved yet. It also checks how big the ISO and a new install are
 against the week before, and says when either grew a lot, when something AgrOS took out came back, or when a trim
