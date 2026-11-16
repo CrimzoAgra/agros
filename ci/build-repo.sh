@@ -258,8 +258,8 @@ if [[ -z ${AGROS_SKIP_AUR:-} ]]; then
 fi
 
 # 3. CachyOS's installer, rebuilt against the libraries of today (CachyOS's own copy can lag behind an Arch update:
-# built for Boost 1.91, it didn't start once Arch moved to 1.92). Its version a ".5" above CachyOS's (calamares_rel
-# below); the live ISO has it from [agros] (packages_desktop.x86_64). The partition names drawn in the theme's text
+# built for Boost 1.91, it didn't start once Arch moved to 1.92). Its version a ".<calamares_rel>" above CachyOS's
+# (below); the live ISO has it from [agros] (packages_desktop.x86_64). The partition names drawn in the theme's text
 # colours, not black and grey (unreadable on AgrOS's dark installer); the package list's highlight gone on a click on
 # no row (Qt's single selection keeps it, its extended one clears it); the language list's English names in the
 # highlight's text colour on the highlighted row (drawn in the list's own, they were lost in the highlight); GRUB only,

@@ -5,6 +5,7 @@
 #   SIZES   the size watch's out dir (ci/sizes.sh, the step before): what it found goes in the issue, and its baseline
 #           in the issue's body (a comment, unseen), next week's to compare with
 #   ci/status.sh --last-sizes   prints the last issue's baseline (for ci/sizes.sh), nothing if none
+#   (AGROS_ISO_REPO, AGROS_SITE: another ISO repo and published [agros] to look at)
 set -uo pipefail
 iso=${AGROS_ISO_REPO:-CrimzoAgra/agros-iso}
 site=${AGROS_SITE:-https://crimzoagra.github.io/agros/x86_64}

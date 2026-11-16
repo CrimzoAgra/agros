@@ -1,6 +1,8 @@
 # shellcheck shell=bash
-# Sourced by build-repo.sh: a package that didn't build held back, the published one kept. Uses its $out, $work, $key,
-# $AGROS_PUBLISHED, asb and the held array (each "<name>: <why>")
+# Sourced by build-repo.sh: the published repo's packages kept in place of this run's. A package that didn't build held
+# back, the published one kept (hold); one whose rebuild would only be thrown away not built (reused); this run's new
+# AUR builds swapped for the published ones (hold_new, --hold-new). Uses its $out, $work, $key, $AGROS_PUBLISHED, asb
+# and the held array (each "<name>: <why>")
 # shellcheck disable=SC2154  # ($out, $work, $key, asb: build-repo.sh's)
 hold() { held+=("$1: $2"); echo "!! $1: $2: the published one kept"; carry_over "$1" || exit 1; }
 # The published database, read once; field <desc> <NAME>: a field of a package's entry in it
