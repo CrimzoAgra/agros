@@ -13,8 +13,8 @@ printf '#!/bin/sh\nexit 0\n' >"$t/bin/pacman"
 printf '#!/bin/sh\nshift 2\nexec "$@"\n' >"$t/bin/runuser"
 # (the stand-in tests: hypr-api and lutris; they fail where $BROKEN names the [agros] or the Arch they run on)
 # shellcheck disable=SC2016
-printf '#!/bin/bash\necho "$*" >>%s/ran\nagros=$(sed -n "s/^Server = //p" %s/pacman.conf); arch=$(cat %s/mirrorlist)\nfor n in ${*:-hypr-api lutris}; do\n  case " $BROKEN " in *" $n@${agros##*/} "*|*" $n@today "*) [[ -n $arch && " $BROKEN " != *" $n@always "* ]] && echo "ok $n" || echo "FAIL $n: broken" ;; *) echo "ok $n" ;; esac\ndone\n' \
-    "$t" "$t" "$t" >"$t/repo/tests/run.sh"
+printf '#!/bin/bash\necho "$*" >>%s/ran\ntrap -p INT >>%s/int\nagros=$(sed -n "s/^Server = //p" %s/pacman.conf); arch=$(cat %s/mirrorlist)\nfor n in ${*:-hypr-api lutris}; do\n  case " $BROKEN " in *" $n@${agros##*/} "*|*" $n@today "*) [[ -n $arch && " $BROKEN " != *" $n@always "* ]] && echo "ok $n" || echo "FAIL $n: broken" ;; *) echo "ok $n" ;; esac\ndone\n' \
+    "$t" "$t" "$t" "$t" >"$t/repo/tests/run.sh"
 chmod +x "$t/bin/"* "$t/repo/tests/run.sh"
 # go <BROKEN> [<day>]: the result line, what ran (a line per pass)
 go() {
@@ -34,4 +34,6 @@ grep -q 'FAIL lutris' "$t/report" || fail "the report doesn't say what failed: $
 grep -qx 'Server = https://archive.archlinux.org/repos/2026/11/14/$repo/os/$arch' "$t/mirrorlist" || fail "not on Arch's snapshot of that day: $(cat "$t/mirrorlist")"
 [[ $(go "hypr-api@today hypr-api@always" 2026/11/14) == "result=fail | |hypr-api|hypr-api" ]] || fail "AgrOS's own break not a failure"
 [[ $(go "hypr-api@today") == "result=fail | |hypr-api" ]] || fail "no last good day: not a failure"
+# (not in a background job, which starts with Ctrl+C ignored: dotfiles-sync-edge's Ctrl+C then never reached the sync)
+[[ ! -s $t/int ]] || fail "the tests ran with Ctrl+C ignored: $(sort -u "$t/int")"
 echo "ok ci-test-passes"

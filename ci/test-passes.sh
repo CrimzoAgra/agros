@@ -14,32 +14,33 @@ report=${AGROS_TEST_REPORT:-/dev/null} out=${GITHUB_OUTPUT:-/dev/stdout}
 here=$(cd "$(dirname "$0")/.." && pwd)
 : >"$report"
 agros_at() { sed -i "/^\[agros\]$/,/^Server/ s|^Server = .*|Server = $1|" "${PACMAN_CONF:-/etc/pacman.conf}"; }
-# tests [<name>...]: the tests (all, or those), as the ci user: the names that failed
+# tests [<name>...]: the tests (all, or those), as the ci user: the names that failed, in $failed (run here, not in
+# <(...): a background job starts with Ctrl+C ignored, no trap can undo that, and dotfiles-sync-edge tests one)
 tests() {
     local log
     log=$(runuser -u ci -- env DOTS_BUILD_TESTS=1 "$here/tests/run.sh" "$@")
     printf '%s\n' "$log" >&2
-    sed -n 's/^FAIL \([^:]*\): .*/\1/p' <<<"$log"
+    mapfile -t failed < <(sed -n 's/^FAIL \([^:]*\): .*/\1/p' <<<"$log")
     grep '^FAIL ' <<<"$log" | sed 's/^/    /' >>"$report"
 }
 result() { echo "result=$1" >>"$out"; echo "Tests: $1"; exit "${2:-0}"; }
 agros_at "$built"
 pacman -Syuu --noconfirm --needed caelestia-shell >/dev/null || { echo "!! the built [agros] didn't install"; result fail 1; }
 echo "- With this run's [agros], on today's Arch:" >>"$report"
-mapfile -t failed < <(tests)
+tests
 ((${#failed[@]})) || { echo "    all passed" >>"$report"; result ok; }
 agros_at "$published"
 # (-yy: the sync db is the built one, newer than the published; -y kept it, checked against the published .sig)
 pacman -Syyuu --noconfirm >/dev/null || { echo "!! the published [agros] didn't install"; result fail 1; }
 echo "- The same with the published [agros]:" >>"$report"
-mapfile -t failed < <(tests "${failed[@]}")
+tests "${failed[@]}"
 ((${#failed[@]})) || { echo "    passed: this run's new AUR builds broke them" >>"$report"; result hold-agros; }
 [[ $day =~ ^[0-9]{4}/[0-9]{2}/[0-9]{2}$ ]] || { echo "    (no day Arch last passed on: not tried on an older Arch)" >>"$report"; result fail 1; }
 # shellcheck disable=SC2016  # (pacman's own variables)
 printf 'Server = https://archive.archlinux.org/repos/%s/$repo/os/$arch\n' "$day" >"${MIRRORLIST:-/etc/pacman.d/mirrorlist}"
 pacman -Syyuu --noconfirm >/dev/null || { echo "!! Arch as of $day didn't install"; result fail 1; }
 echo "- The same on Arch as of $day (the last day they passed on it):" >>"$report"
-mapfile -t failed < <(tests "${failed[@]}")
+tests "${failed[@]}"
 ((${#failed[@]})) || { echo "    passed: an Arch update since broke them" >>"$report"; result hold-upstream; }
 echo "    still failing: AgrOS's own code" >>"$report"
 result fail 1
