@@ -24,12 +24,18 @@ chmod +x "$t/bin/"* "$t/repo/tests/run.sh"
 go() {
     rm -f "$t/ran" "$t/out"; : >"$t/mirrorlist"
     sed -i 's|^Server = .*|Server = https://example.invalid/old|' "$t/pacman.conf"
-    BROKEN=$1 PATH=$t/bin:$PATH PACMAN_CONF=$t/pacman.conf MIRRORLIST=$t/mirrorlist GITHUB_OUTPUT=$t/out \
+    # (the published repo's database signatures, as an earlier sync leaves them)
+    mkdir -p "$t/sync"; touch "$t/sync/agros.db.sig" "$t/sync/agros.files.sig" "$t/sync/core.db"
+    BROKEN=$1 PATH=$t/bin:$PATH PACMAN_CONF=$t/pacman.conf PACMAN_SYNC=$t/sync MIRRORLIST=$t/mirrorlist GITHUB_OUTPUT=$t/out \
         AGROS_TEST_REPORT=$t/report "$t/repo/ci/test-passes.sh" file:///built https://example.invalid/published "${2:-}" \
         >/dev/null 2>&1 || true
     echo "$(cat "$t/out") | $(paste -sd'|' "$t/ran")"
 }
 [[ $(go "") == "result=ok | " ]] || fail "all passing: not ok: $(go "")"
+# (no stale database signature left for the unsigned built repo: pacman refused its new database with the old .sig)
+go "" >/dev/null
+[[ ! -e $t/sync/agros.db.sig && ! -e $t/sync/agros.files.sig && -e $t/sync/core.db ]] ||
+    fail "[agros]'s old database signatures left, or another repo's file taken: $(ls "$t/sync")"
 # (the published [agros] fixes lutris: this run's AUR builds broke it; rerun alone)
 [[ $(go "lutris@built") == "result=hold-agros | |lutris" ]] || fail "broken by this run's [agros]: $(go "lutris@built")"
 grep -q 'FAIL lutris' "$t/report" || fail "the report doesn't say what failed: $(cat "$t/report")"

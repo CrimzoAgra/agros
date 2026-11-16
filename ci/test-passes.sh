@@ -16,7 +16,12 @@ built=${1:?usage: test-passes.sh <built repo URL> <published repo URL> [<last go
 report=${AGROS_TEST_REPORT:-/dev/null} out=${GITHUB_OUTPUT:-/dev/stdout}
 here=$(cd "$(dirname "$0")/.." && pwd)
 : >"$report"
-agros_at() { sed -i "/^\[agros\]$/,/^Server/ s|^Server = .*|Server = $1|" "${PACMAN_CONF:-/etc/pacman.conf}"; }
+# agros_at <url>: [agros] read from there. (The last one's database signatures go: the built repo is unsigned until the
+# release job signs it, and the published one's .sig, left in pacman's sync folder, failed its new database)
+agros_at() {
+    sed -i "/^\[agros\]$/,/^Server/ s|^Server = .*|Server = $1|" "${PACMAN_CONF:-/etc/pacman.conf}"
+    rm -f "${PACMAN_SYNC:-/var/lib/pacman/sync}"/agros.{db,files}.sig
+}
 # tests [<name>...]: the tests (all, or those), as the ci user: the names that failed, in $failed, their lines in $log (run here, not in
 # <(...): a background job starts with Ctrl+C ignored, no trap can undo that, and dotfiles-sync-edge tests one)
 tests() {
