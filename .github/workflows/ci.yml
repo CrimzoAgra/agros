@@ -275,7 +275,7 @@ jobs:
           name: held
           path: /tmp/held
       # The day Arch last passed the tests (ci/test-passes.sh tries an older Arch from it): today's when it did,
-      # else the one published before
+      # else the one published before (ci/kept.sh: one that can't be read stops here, as the approved list below)
       - name: The day Arch last passed
         env:
           RESULT: ${{ needs.test.outputs.result }}
@@ -283,7 +283,7 @@ jobs:
           if [ "$RESULT" = ok ] || [ "$RESULT" = hold-agros ]; then
             date -u +%Y/%m/%d >out/x86_64/agros-arch-ok
           else
-            curl -fsS --retry 3 -o out/x86_64/agros-arch-ok https://crimzoagra.github.io/agros/x86_64/agros-arch-ok || true
+            ci/kept.sh https://crimzoagra.github.io/agros/x86_64/agros-arch-ok out/x86_64/agros-arch-ok
           fi
       # The upstream gate's list (update-gate reads it beside the repo's database): this run's approvals added to those
       # published before (a machine on a CachyOS build a day behind Arch's still finds its version), the last 20 of each
@@ -295,13 +295,8 @@ jobs:
         run: |
           site=https://$OWNER.github.io/${GITHUB_REPOSITORY#*/}/x86_64
           # (only "not published yet", a 404, starts it afresh: anything else (Pages down, a timeout) stops here rather
-          # than publishing a list without the earlier approvals, which held machines a build behind)
-          code=$(curl -sS --retry 3 -o /tmp/approved-before -w '%{http_code}' "$site/agros-approved") || code=000
-          case $code in
-            200) ;;
-            404) : >/tmp/approved-before ;;
-            *) echo "::error::The published approved list couldn't be read (HTTP $code)"; exit 1 ;;
-          esac
+          # than publishing a list without the earlier approvals, which held machines a build behind: ci/kept.sh)
+          ci/kept.sh "$site/agros-approved" /tmp/approved-before
           cat /tmp/approved-before /tmp/approved-now/approved | grep -E '^[a-z0-9@._+-]+ [A-Za-z0-9.:_+~]+$' |
             awk '!seen[$0]++' | tac | awk '++n[$1] <= 20' | tac >out/x86_64/agros-approved
           cat out/x86_64/agros-approved
