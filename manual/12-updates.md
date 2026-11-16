@@ -72,7 +72,9 @@ A held Hyprland update isn't listed in the Updates app; the update log says it "
 **AgrOS's maintainer is told** by email, through GitHub issues that mention them. One issue, labelled `held`, says
 what's held back and why, and closes by itself once everything goes out again. Every Friday at 17:00 Lisbon time a
 status issue says "Nothing broke this week" or what needs a look: a build failing, something held, a CachyOS pull
-request waiting, or Arch's newest Hyprland not approved yet.
+request waiting, or Arch's newest Hyprland not approved yet. It also checks how big the ISO and a new install are
+against the week before, and says when either grew a lot, when something AgrOS took out came back, or when a trim
+stopped working (files AgrOS skips that are installed again), so neither quietly gets bigger.
 
 **What needs a person:** only a CachyOS pull request (resolve its conflict and merge it), or something held for more
 than a few days (an upstream change AgrOS's own code has to be adapted to). Everything else sorts itself out. The
