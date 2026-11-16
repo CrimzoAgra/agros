@@ -1,21 +1,32 @@
 #!/usr/bin/env bash
 # Builds the [agros] pacman repo: AgrOS's own packages (packages/*, by makepkg), the AUR packages AgrOS uses
-# (aur/packages.txt, with the AUR packages they need, by paru into a local repo) and CachyOS's installer, rebuilt, all
-# signed when a key is given.
+# (aur/packages.txt, with the AUR packages they need, by paru into a local repo) and CachyOS's installer, rebuilt. All
+# unsigned: it runs AUR build scripts, so AgrOS's signing key is never here (CI's release job signs what passed the
+# tests, ci/sign-repo.sh, in a container that ran none of this); it refuses to run with a secret key at hand.
 # Run in an Arch container, as root (it makes a "builder" user for makepkg):
 #   ci/build-repo.sh <out dir>           the repo in <out dir> (agros.db, agros.files, the packages)
 #   ci/build-repo.sh <out dir> --hold-new   this run's new AUR builds there swapped for the published ones (below)
 # Environment: AGROS_HELD (a file: the packages that didn't build, their published ones kept, "<name>: <why>" each),
-# GPGKEY (a key id in root's keyring: packages and the database signed with it, its public key in
-# agros-keyring), AGROS_SKIP_AUR=1 (only AgrOS's own packages: no AUR ones, no Calamares), AGROS_PUBLISHED (the
-# published repo's URL: a package already there under the same version is kept as published, but for a compiled one
-# built against other libraries (rebuilt and published); the build fails when the published copy can't be read or
-# verified, or when one of AgrOS's own packages changed with its version not raised)
+# AGROS_SKIP_AUR=1 (only AgrOS's own packages: no AUR ones, no Calamares), AGROS_PUBLISHED (the published repo's URL: a
+# package already there under the same version is kept as published, its signature checked against AgrOS's public key,
+# ci/agros.asc, but for a compiled one built against other libraries (rebuilt and published); the build fails when the
+# published copy can't be read or verified, or when one of AgrOS's own packages changed with its version not raised)
 set -euo pipefail
 shopt -s extglob  # (make_db's pattern, read as the function is)
 root=$(cd "$(dirname "$0")/.." && pwd)
+
+# No secret key here: the secret itself, an old caller's GPGKEY (this signed once), or one in root's keyring or the
+# builder's (an AUR build script, run as the builder with sudo, could read either and send it out)
+secret=${AGROS_GPG_KEY:+AGROS_GPG_KEY }${GPGKEY:+GPGKEY }
+for g in "${GNUPGHOME:-$HOME/.gnupg}" /home/builder/.gnupg; do
+    if compgen -G "$g/private-keys-v1.d/*" >/dev/null; then secret+="$g "; fi
+done
+[[ -z $secret ]] || {
+    echo "!! A secret signing key is at hand (${secret% }): build-repo.sh runs AUR build scripts and never signs" \
+        "(ci/sign-repo.sh does, apart). Run it without the key"
+    exit 1
+}
 out=$(mkdir -p "${1:?usage: build-repo.sh <out dir>}" && cd "$1" && pwd)
-key=${GPGKEY:-}
 
 [[ $EUID -eq 0 ]] || { echo "Run as root (in a container)"; exit 1; }
 id builder >/dev/null 2>&1 || useradd -m builder
@@ -24,26 +35,22 @@ chown -R builder: "$out"
 work=$(mktemp -d)
 cp -a "$root" "$work/agros"
 chown -R builder: "$work"
-asb() { sudo -u builder -H env ${GNUPGHOME:+GNUPGHOME=$GNUPGHOME} "$@"; }
+asb() { sudo -u builder -H "$@"; }
 
-# Signing: the key handed to the builder (makepkg --sign and repo-add --sign run as it)
-sign=() rsign=()
-if [[ -n $key ]]; then
-    src_gpg=${GNUPGHOME:-$HOME/.gnupg}  # (where the key was imported: CI's container has its own HOME)
-    export GNUPGHOME=/home/builder/.gnupg
-    install -d -m700 -o builder -g builder "$GNUPGHOME"
-    gpg --homedir "$src_gpg" --export-secret-keys "$key" | asb gpg --batch --import
-    echo "allow-loopback-pinentry" | asb tee "$GNUPGHOME/gpg-agent.conf" >/dev/null
-    sign=(--sign --key "$key") rsign=(--sign --key "$key")
-    # agros-keyring: the public key and its fingerprint
-    gpg --homedir "$src_gpg" --export "$key" >"$work/agros/packages/agros-keyring/agros.gpg"
-    fpr=$(gpg --homedir "$src_gpg" --with-colons --fingerprint "$key" | awk -F: '$1 == "fpr" {print $10; exit}')
-    echo "$fpr:4:" >"$work/agros/packages/agros-keyring/agros-trusted"
-    chown builder: "$work/agros/packages/agros-keyring/"agros*
-    # (pacman here trusts it too: the repo's signed database and packages are read below)
-    pacman-key --add "$work/agros/packages/agros-keyring/agros.gpg" >/dev/null 2>&1
-    pacman-key --lsign-key "$fpr" >/dev/null 2>&1
-fi
+# AgrOS's public key (ci/agros.asc), the published files' signatures checked against it alone (published.sh's
+# verify_sig): a keyring of its own, root's, out of the builder's reach (the builder's keyring is the AUR build
+# scripts' to change). agros-keyring is made from it (the public key and its primary key's fingerprint), and pacman
+# here trusts it (the published repo's signed database and packages are read below)
+keydir=$(mktemp -d)
+keyring=$keydir/agros.gpg
+gpg --homedir "$keydir" --batch --quiet --dearmor -o "$keyring" <"$root/ci/agros.asc"
+fpr=$(gpg --homedir "$keydir" --batch --with-colons --show-keys "$root/ci/agros.asc" | awk -F: '$1 == "fpr" { print $10; exit }')
+[[ -s $keyring && -n $fpr ]] || { echo "!! No key in ci/agros.asc"; exit 1; }
+cp "$keyring" "$work/agros/packages/agros-keyring/agros.gpg"
+echo "$fpr:4:" >"$work/agros/packages/agros-keyring/agros-trusted"
+chown builder: "$work/agros/packages/agros-keyring/"agros*
+{ pacman-key --add "$keyring" && pacman-key --lsign-key "$fpr"; } >/dev/null 2>&1 ||
+    echo "!! AgrOS's key not added to pacman's keyring (pacman-key --init first?)"
 
 # make_db [--held]: the database of the packages here (after a hold: each one as it is, none checked against the
 # published ones again)
@@ -54,7 +61,7 @@ make_db() {
     shopt -s nullglob
     pkgs=(*.pkg.tar?(.zst|.xz|.gz|.bz2|.lz4|.lzo|.lrz|.Z))
     shopt -u nullglob
-    if [[ -n ${AGROS_PUBLISHED:-} && -n $key && ${1:-} != --held ]]; then
+    if [[ -n ${AGROS_PUBLISHED:-} && ${1:-} != --held ]]; then
         for f in "${pkgs[@]}"; do
             [[ $f == agros-*-any.pkg.tar.zst ]] || keep_published "$f"  # (those checked after their build, above)
         done
@@ -62,7 +69,7 @@ make_db() {
     # The database made again from the packages here (paru's local repo already holds the AUR ones: added over it, each
     # warned that its entry already existed)
     rm -f agros.db agros.db.tar.gz agros.files agros.files.tar.gz agros.db*.sig agros.files*.sig
-    asb repo-add "${rsign[@]}" agros.db.tar.gz "${pkgs[@]/#/./}"
+    asb repo-add agros.db.tar.gz "${pkgs[@]/#/./}"
     # GitHub Pages serves no symlinks: the database's names as real files
     for f in agros.db agros.files; do
         [[ -L $f ]] && cp --remove-destination "$(readlink -f "$f")" "$f"
@@ -84,7 +91,6 @@ if [[ ${2:-} == --hold-new ]]; then
 fi
 
 # The repo, empty to start with, known to pacman (the AUR packages' own AUR dependencies are installed from it)
-# (unsigned while it's built: paru adds to it without signing; the last repo-add below signs it)
 # (an empty archive: repo-add with no packages warns, twice, that it made an empty database)
 if [[ ! -e $out/agros.db.tar.gz ]]; then
     for db in db files; do
@@ -106,13 +112,9 @@ for d in "$work/agros/packages/agros-keyring" "$work"/agros/packages/*/; do
     [[ $p == agros-keyring && -n ${keyring_done:-} ]] && continue
     [[ $p == agros-keyring ]] && keyring_done=1
     [[ -f $d/PKGBUILD ]] || continue
-    if [[ $p == agros-keyring && ! -s $d/agros.gpg ]]; then
-        echo "-- $p: skipped (no GPGKEY)"
-        continue
-    fi
     echo "-- $p"
     # (--nodeps on purpose: makepkg's warning that it skips them left out)
-    (cd "$d" && asb env PKGDEST="$out" makepkg -f --nodeps --noconfirm "${sign[@]}" 2>&1 |
+    (cd "$d" && asb env PKGDEST="$out" makepkg -f --nodeps --noconfirm 2>&1 |
         sed -u '/WARNING: Skipping dependency checks/d')
 done
 cd "$out"
@@ -164,7 +166,7 @@ keep_published() {
     [[ $code == 200 ]] || { echo "!! $f: the published copy couldn't be read (HTTP $code)"; exit 1; }
     curl -fsSL --retry 3 --max-time 60 -o "$work/pub.sig" "$AGROS_PUBLISHED/$f.sig" ||
         { echo "!! $f: the published copy's signature couldn't be read"; exit 1; }
-    asb gpg --batch --verify "$work/pub.sig" "$work/pub" 2>/dev/null ||
+    verify_sig "$work/pub.sig" "$work/pub" ||
         { echo "!! $f: the published copy's signature doesn't check out"; exit 1; }
     if [[ $f != agros-*-any.pkg.tar.zst && $(built_against "$work/pub") != "$(built_against "$f")" ]]; then
         echo "-- $f: the rebuild published (built against other libraries, Qt or Python than the published one)"
@@ -188,7 +190,7 @@ keep_published() {
     mv -f "$work/pub" "$f" && mv -f "$work/pub.sig" "$f.sig" && chown builder: "$f" "$f.sig"
     echo "-- $f: the published file kept"
 }
-if [[ -n ${AGROS_PUBLISHED:-} && -n $key ]]; then
+if [[ -n ${AGROS_PUBLISHED:-} ]]; then
     for f in agros-*-any.pkg.tar.zst; do keep_published "$f"; done
 fi
 
@@ -218,7 +220,7 @@ if [[ -z ${AGROS_SKIP_AUR:-} ]]; then
     asb gpg --batch --import <"$root/ci/papirus-folders.asc" ||  # (read here: the builder may not read the checkout)
         echo "!! papirus-folders' signing key not imported: it won't build"
     asb mkdir -p /home/builder/.config/paru
-    printf '[options]\nLocalRepo = agros\nSkipReview\nNoCheck\n[bin]\nMFlags = %s\n' "${sign[*]:-}" |
+    printf '[options]\nLocalRepo = agros\nSkipReview\nNoCheck\n' |
         asb tee /home/builder/.config/paru/paru.conf >/dev/null
     # ninja's status lines for steps with no description (blank) left out
     # (and makepkg's note that it builds in the sources it unpacked: paru unpacks, then builds, always)
@@ -233,7 +235,7 @@ if [[ -z ${AGROS_SKIP_AUR:-} ]]; then
     { asb git clone -q https://aur.archlinux.org/quickshell-git.git "$work/quickshell-git" &&
         asb "$work/agros/packages/agros-system/aur-agros-patch" "$work/quickshell-git" quickshell-git &&
         { reused "$work/quickshell-git" ||
-            (cd "$work/quickshell-git" && asb env PKGDEST="$out" makepkg -s --noconfirm "${sign[@]}"); }; } ||
+            (cd "$work/quickshell-git" && asb env PKGDEST="$out" makepkg -s --noconfirm); }; } ||
         hold quickshell-git "AgrOS's fix (packages/agros-system/aur-patches) didn't build: has Quickshell fixed it itself?"
     asb repo-add -q "$out/agros.db.tar.gz" "$out"/quickshell-git-*.pkg.tar.zst
     pacman -Sy --noconfirm >/dev/null
@@ -250,7 +252,7 @@ if [[ -z ${AGROS_SKIP_AUR:-} ]]; then
     aur_build || aur_build || true
     pacman -Sy --noconfirm >/dev/null
     { [[ -d $work/caelestia-shell ]] && { reused "$work/caelestia-shell" ||
-        (cd "$work/caelestia-shell" && asb env PKGDEST="$out" makepkg -s --noconfirm "${sign[@]}"); }; } ||
+        (cd "$work/caelestia-shell" && asb env PKGDEST="$out" makepkg -s --noconfirm); }; } ||
         hold caelestia-shell "it didn't build from the AUR (the build's log above)"
     for p in "${aur[@]}"; do
         out_has "${p#*/}" || hold "${p#*/}" "it didn't build from the AUR (the build's log above)"
@@ -308,7 +310,7 @@ SH
         { grep -q '^pkgrel=[0-9]*$' PKGBUILD || { echo "!! cachyos-calamares: its pkgrel isn't a plain number"; false; }; } &&
         asb sed -i "s/^pkgrel=\([0-9]*\)$/pkgrel=\1.$calamares_rel/" PKGBUILD &&
         asb sed -i -e "/^prepare() {/{n;r $work/calamares-labels" -e '}' PKGBUILD &&
-        { reused "$PWD" || asb env PKGDEST="$out" makepkg -s --noconfirm "${sign[@]}"; }) ||
+        { reused "$PWD" || asb env PKGDEST="$out" makepkg -s --noconfirm; }) ||
         hold cachyos-calamares-next "CachyOS's installer didn't build with AgrOS's changes (the build's log above)"
 fi
 cp "$work/makepkg.conf" /etc/makepkg.conf
@@ -316,5 +318,5 @@ cp "$work/makepkg.conf" /etc/makepkg.conf
 make_db
 # (what was held, for CI's issue)
 if ((${#held[@]})); then printf '%s\n' "${held[@]}"; fi >"${AGROS_HELD:-/dev/null}"
-rm -rf "$work"
+rm -rf "$work" "$keydir"
 ls -la "$out"

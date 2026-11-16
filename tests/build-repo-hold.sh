@@ -1,15 +1,21 @@
 #!/usr/bin/env bash
 # ci/published.sh (build-repo.sh): a package that didn't build held back, the published one kept with its signature
 # checked, and with the packages of the repo it needs (by name or what they provide), not those built here nor Arch's;
-# a tampered copy refused; none published: the build fails. A published repo here (file://), signed with a key of the
-# test's own
+# a tampered copy refused, and so is one signed by another key, even one the keyring the build runs gpg with has (only
+# AgrOS's public key counts, $keyring); none published: the build fails. A published repo here (file://), signed with a
+# key of the test's own
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 export GNUPGHOME=$t/gnupg
 mkdir -m 700 "$GNUPGHOME"
 gpg --batch --quiet --passphrase '' --quick-gen-key 'AgrOS test <test@agros.invalid>' default sign never >/dev/null 2>&1
-export key; key=$(gpg --list-secret-keys --with-colons | awk -F: '$1 == "fpr" { print $10; exit }')
+key=$(gpg --list-secret-keys --with-colons 2>/dev/null | awk -F: '$1 == "fpr" { print $10; exit }')
+# (AgrOS's public key alone, as build-repo.sh makes it from ci/agros.asc; and another key in gpg's own keyring)
+keyring=$t/agros.gpg
+gpg --batch --quiet --export "$key" >"$keyring" 2>/dev/null
+gpg --batch --quiet --passphrase '' --quick-gen-key 'Not AgrOS <other@agros.invalid>' default sign never >/dev/null 2>&1
+other=$(gpg --list-secret-keys --with-colons other@agros.invalid 2>/dev/null | awk -F: '$1 == "fpr" { print $10; exit }')
 pub=$t/pub out=$t/out work=$t/work
 mkdir -p "$pub" "$out" "$work"
 # pkg <dir> <name> <version> [<line>...]: a package (its .PKGINFO; "installed = " and "pkgbuild_sha256sum = " lines: its
@@ -27,7 +33,7 @@ pkg() {
     # shellcheck disable=SC2046  # (no .BUILDINFO, no files: not in the package)
     bsdtar -cf "$d/$n-$v-x86_64.pkg.tar.zst" --zstd -C "$s" .PKGINFO $([[ -s $s/.BUILDINFO ]] && echo .BUILDINFO) \
         $([[ -d $s/usr ]] && echo usr)
-    gpg --batch --quiet --detach-sign "$d/$n-$v-x86_64.pkg.tar.zst" 2>/dev/null
+    gpg --batch --quiet -u "${SIGNER:-$key}" --detach-sign "$d/$n-$v-x86_64.pkg.tar.zst" 2>/dev/null
     rm -rf "$s"
 }
 pkg "$pub" app 1-1 'depend = libx>=2' 'depend = glibc' 'depend = built-dep'
@@ -36,6 +42,7 @@ pkg "$pub" libdeep 1-1
 pkg "$pub" built-dep 1-1
 pkg "$pub" quickshell-git 0.3-1.1 'provides = quickshell=0.3'
 pkg "$pub" lonely 1-1
+SIGNER=$other pkg "$pub" stranger 1-1
 # (for reused: heavy, built from $t/heavy/PKGBUILD with libq 5-1: a program that needs libc.so.6, a Python 3.11 module)
 mkdir -p "$t/heavy" && echo 'pkgname=heavy' >"$t/heavy/PKGBUILD"
 pkg "$pub" heavy 2-1 'depend = libq>=5' 'installed = libq-5-1-x86_64' 'file = usr/bin/heavy' \
@@ -46,7 +53,7 @@ mapfile -t many < <(seq -f 'provides = p%g' 1 20000)
 pkg "$pub" bigprov 1-1 "${many[@]}"
 repo-add -q "$pub/agros.db.tar.gz" "$pub"/*.pkg.tar.zst 2>/dev/null
 cp --remove-destination "$pub/agros.db.tar.gz" "$pub/agros.db"
-gpg --batch --quiet --detach-sign "$pub/agros.db"
+gpg --batch --quiet -u "$key" --detach-sign "$pub/agros.db"
 # (built here: a newer built-dep)
 pkg "$out" built-dep 2-1
 export AGROS_PUBLISHED=file://$pub
@@ -69,6 +76,10 @@ carry_over quickshell >/dev/null && [[ -e $out/quickshell-git-0.3-1.1-x86_64.pkg
 printf 'x' >>"$pub/lonely-1-1-x86_64.pkg.tar.zst"
 carry_over lonely >/dev/null && fail "a tampered published package kept"
 [[ ! -e $out/lonely-1-1-x86_64.pkg.tar.zst ]] || fail "a tampered published package left in the repo"
+# ...and one signed by another key (one gpg itself would call good: it has that key)
+gpg --batch --verify "$pub/stranger-1-1-x86_64.pkg.tar.zst.sig" "$pub/stranger-1-1-x86_64.pkg.tar.zst" 2>/dev/null || fail "test setup: the other key's signature not good to gpg"
+carry_over stranger >/dev/null && fail "a published package signed by another key kept"
+[[ ! -e $out/stranger-1-1-x86_64.pkg.tar.zst ]] || fail "a published package signed by another key left in the repo"
 # hold: said ("<name>: <why>"); none published: the build stops
 grep -qx "app: it didn't build" <<<"$(hold app "it didn't build" >/dev/null; printf '%s\n' "${held[@]}")" ||
     fail "a hold not said: $(hold app x 2>&1)"
