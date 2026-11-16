@@ -1,0 +1,123 @@
+diff --git a/src/modules/locale/LocalePage.cpp b/src/modules/locale/LocalePage.cpp
+index e74373a..6da244c 100644
+--- a/src/modules/locale/LocalePage.cpp
++++ b/src/modules/locale/LocalePage.cpp
+@@ -35,7 +35,7 @@ LocalePage::LocalePage( Config* config, QWidget* parent )
+     QBoxLayout* tzwLayout = new QHBoxLayout;
+     m_tzWidget = new TimeZoneWidget( m_config->zonesModel(), this );
+     tzwLayout->addStretch();
+-    tzwLayout->addWidget( m_tzWidget );
++    tzwLayout->addWidget( m_tzWidget, 1 );  // AgrOS: the map takes the room (it scales, centred)
+     tzwLayout->addStretch();
+     // Adjust for margins and spacing in this page
+     m_tzWidget->setMinimumHeight( m_tzWidget->minimumHeight() + 12 );  // 2 * spacing
+@@ -80,7 +80,7 @@ LocalePage::LocalePage( Config* config, QWidget* parent )
+     m_formatsChangeButton->setSizePolicy( QSizePolicy::Preferred, QSizePolicy::Preferred );
+     formatsLayout->addWidget( m_formatsChangeButton );
+ 
+-    mainLayout->addLayout( tzwLayout );
++    mainLayout->addLayout( tzwLayout, 1 );  // AgrOS: and the page's height, the rows below it at their own
+     mainLayout->addStretch();
+     mainLayout->addLayout( zoneAndRegionLayout );
+     mainLayout->addStretch();
+diff --git a/src/modules/locale/timezonewidget/timezonewidget.cpp b/src/modules/locale/timezonewidget/timezonewidget.cpp
+index 67ecb09..dee0278 100644
+--- a/src/modules/locale/timezonewidget/timezonewidget.cpp
++++ b/src/modules/locale/timezonewidget/timezonewidget.cpp
+@@ -32,6 +32,14 @@ getLocationPosition( const Calamares::Locale::TimeZoneData* l )
+     return TimeZoneImageList::getLocationPosition( l->longitude(), l->latitude() );
+ }
+ 
++// AgrOS: the map scaled to fit the widget, its shape kept, centred in it: where it's drawn
++static QRect
++mapRect( const QSize& widget, const QSize& image )
++{
++    const QSize s = image.scaled( widget, Qt::KeepAspectRatio );
++    return QRect( QPoint( ( widget.width() - s.width() ) / 2, ( widget.height() - s.height() ) / 2 ), s );
++}
++
+ 
+ TimeZoneWidget::TimeZoneWidget( const Calamares::Locale::ZonesModel* zones, QWidget* parent )
+     : QWidget( parent )
+@@ -49,10 +57,9 @@ TimeZoneWidget::TimeZoneWidget( const Calamares::Locale::ZonesModel* zones, QWid
+     background = QImage( ":/images/bg.png" );
+     pin = QImage( ":/images/pin.png" );
+ 
+-    // Set size
+-    setMinimumSize( background.size() );
+-    setMaximumSize( background.size() );
+-    setSizePolicy( QSizePolicy::Fixed, QSizePolicy::Fixed );
++    // Set size (AgrOS: it grows with the window, from half the map's size)
++    setMinimumSize( background.size() / 2 );
++    setSizePolicy( QSizePolicy::Expanding, QSizePolicy::Expanding );
+ }
+ 
+ 
+@@ -102,11 +109,13 @@ TimeZoneWidget::paintEvent( QPaintEvent* )
+     painter.setRenderHint( QPainter::Antialiasing );
+     painter.setFont( font );
+ 
+-    // Draw background
+-    painter.drawImage( 0, 0, background );
++    // Draw background (AgrOS: scaled into the widget, centred)
++    const QRect target = mapRect( size(), background.size() );
++    painter.setRenderHint( QPainter::SmoothPixmapTransform );
++    painter.drawImage( target, background );
+ 
+     // Draw zone image
+-    painter.drawImage( 0, 0, currentZoneImage );
++    painter.drawImage( target, currentZoneImage );
+ 
+     if ( !m_currentLocation )
+     {
+@@ -131,8 +140,10 @@ TimeZoneWidget::paintEvent( QPaintEvent* )
+     const int width = this->width();
+     const int height = this->height();
+ 
+-    // Draw pin at current location
+-    QPoint point = getLocationPosition( m_currentLocation );
++    // Draw pin at current location (AgrOS: on the scaled map)
++    const QPoint mapPoint = getLocationPosition( m_currentLocation );
++    const QPoint point( target.x() + mapPoint.x() * target.width() / background.width(),
++                        target.y() + mapPoint.y() * target.height() / background.height() );
+ 
+     painter.drawImage( point.x() - pin.width() / 2, point.y() - pin.height() / 2, pin );
+ 
+@@ -178,8 +189,14 @@ TimeZoneWidget::mousePressEvent( QMouseEvent* event )
+         return;
+     }
+ 
+-    int mX = event->pos().x();
+-    int mY = event->pos().y();
++    // AgrOS: the click on the scaled map read back in the map's own pixels
++    const QRect target = mapRect( size(), background.size() );
++    if ( target.isEmpty() )
++    {
++        return;
++    }
++    int mX = ( event->pos().x() - target.x() ) * background.width() / target.width();
++    int mY = ( event->pos().y() - target.y() ) * background.height() / target.height();
+     auto distance = [ & ]( const Calamares::Locale::TimeZoneData* zone )
+     {
+         QPoint locPos = TimeZoneImageList::getLocationPosition( zone->longitude(), zone->latitude() );
+diff --git a/src/modules/welcome/checker/ResultsListWidget.cpp b/src/modules/welcome/checker/ResultsListWidget.cpp
+index 92e6668..876135b 100644
+--- a/src/modules/welcome/checker/ResultsListWidget.cpp
++++ b/src/modules/welcome/checker/ResultsListWidget.cpp
+@@ -113,7 +113,15 @@ ResultsListWidget::requirementsComplete()
+                 imageLabel->setSizePolicy( QSizePolicy::Expanding, QSizePolicy::Expanding );
+                 imageLabel->setObjectName( "welcomeLogo" );
+                 // This specifically isn't assigned to m_centralWidget
+-                m_centralLayout->addWidget( imageLabel );
++                // AgrOS: in the room the requirements list had, scaled to fit it as it changes, centred: not below
++                // the list's stretch, which kept half the room and left the logo at the bottom, at least its own size
++                QLayoutItem* stretch = m_centralLayout->itemAt( m_centralLayout->count() - 1 );
++                if ( stretch && stretch->spacerItem() )
++                {
++                    delete m_centralLayout->takeAt( m_centralLayout->count() - 1 );
++                }
++                imageLabel->setMinimumSize( 1, 1 );
++                m_centralLayout->addWidget( imageLabel, 1 );
+             }
+         }
+         m_explanation->setAlignment( Qt::AlignCenter );

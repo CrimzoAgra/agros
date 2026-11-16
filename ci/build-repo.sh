@@ -266,21 +266,24 @@ fi
 # colours, not black and grey (unreadable on AgrOS's dark installer); the package list's highlight gone on a click on
 # no row (Qt's single selection keeps it, its extended one clears it); the language list's English names in the
 # highlight's text colour on the highlighted row (drawn in the list's own, they were lost in the highlight); GRUB only,
-# the bootloader page's choice gone
-# Plain text swaps, each checked after (the build fails when one no longer fits)
-# Any change to the swaps raises calamares_rel, with a line for it below holding their new checksum: an unchanged
+# the bootloader page's choice gone; the welcome logo and the time zone map scaled to the window, centred (ci/calamares-
+# layout.patch: the logo shared the room with a stretch and sat at the bottom, the map was a fixed 780x340 at the top)
+# Plain text swaps, each checked after (the build fails when one no longer fits), and that patch (it not applying fails)
+# Any change to the swaps or the patch raises calamares_rel, with a line for it below holding their new checksum: an unchanged
 # version would keep the old installer published, so the build fails when the swaps' checksum isn't the one recorded
 # for this calamares_rel (each rel's line kept as it is: a new checksum under an old rel fails just the same)
 if [[ -z ${AGROS_SKIP_AUR:-} ]]; then
-    calamares_rel=5
+    calamares_rel=6
     case $calamares_rel in
         5) calamares_sum=2db12fafcbd8 ;;
+        6) calamares_sum=025bcfdf8226 ;;
     esac
     # (not fetched: its build below finds no folder, and the published one is held)
     { asb git clone -q --depth 1 --filter=blob:none --sparse https://github.com/CachyOS/CachyOS-PKGBUILDS.git "$work/cachyos-pkgbuilds" &&
         (cd "$work/cachyos-pkgbuilds" && asb git sparse-checkout set cachyos-calamares); } ||
         echo "!! CachyOS's PKGBUILDs couldn't be fetched"
     cat >"$work/calamares-labels" <<'SH'
+    patch -Np1 -i "$startdir/calamares-layout.patch"
     sed -i -e 's/painter->setPen( Qt::black );/painter->setPen( palette().windowText().color() );/' -e 's/painter->setPen( Qt::gray );/painter->setPen( palette().placeholderText().color() );/' src/modules/partition/gui/PartitionLabelsView.cpp
     sed -i 's/^\( *\)ui->groupswidget->setModel( c->model() );$/&\n\1ui->groupswidget->setSelectionMode( QAbstractItemView::ExtendedSelection );/' src/modules/netinstall/NetInstallPage.cpp
     sed -i 's/^\( *index.data( Calamares::Locale::TranslationsModel::EnglishLabelRole ).toString()\) );$/\1, option.state \& QStyle::State_Selected ? QPalette::HighlightedText : QPalette::NoRole );/' src/modules/welcome/WelcomePage.cpp
@@ -296,10 +299,12 @@ if [[ -z ${AGROS_SKIP_AUR:-} ]]; then
         grep -q 'setSelectionMode( QAbstractItemView::ExtendedSelection )' src/modules/netinstall/NetInstallPage.cpp &&
         grep -q 'QPalette::HighlightedText : QPalette::NoRole' src/modules/welcome/WelcomePage.cpp &&
         grep -q 'bootloader = QStringLiteral( "grub" )' src/modules/zfs/ZfsJob.cpp &&
+        grep -q 'AgrOS: the map scaled to fit' src/modules/locale/timezonewidget/timezonewidget.cpp &&
         ! grep -rq 'packagechooser_bootloader' src/modules --include=*.cpp ||
         { echo "AgrOS's changes to Calamares no longer fit (ci/build-repo.sh)"; return 1; }
 SH
-    sum=$(sha256sum <"$work/calamares-labels" | cut -c1-12)
+    cp "$root/ci/calamares-layout.patch" "$work/"  # (for the builder, who may not read the checkout)
+    sum=$(cat "$work/calamares-labels" "$work/calamares-layout.patch" | sha256sum | cut -c1-12)
     [[ $sum == "${calamares_sum:-}" ]] || {
         echo "!! The Calamares swaps changed: raise calamares_rel to $((calamares_rel + 1)) and add its line," \
             "$((calamares_rel + 1))) calamares_sum=$sum ;; (ci/build-repo.sh)"
@@ -310,6 +315,7 @@ SH
     (cd "$work/cachyos-pkgbuilds/cachyos-calamares" &&
         { grep -q '^pkgrel=[0-9]*$' PKGBUILD || { echo "!! cachyos-calamares: its pkgrel isn't a plain number"; false; }; } &&
         asb sed -i "s/^pkgrel=\([0-9]*\)$/pkgrel=\1.$calamares_rel/" PKGBUILD &&
+        asb cp "$work/calamares-layout.patch" . &&
         asb sed -i -e "/^prepare() {/{n;r $work/calamares-labels" -e '}' PKGBUILD &&
         { reused "$PWD" || asb env PKGDEST="$out" makepkg -s --noconfirm; }) ||
         hold cachyos-calamares-next "CachyOS's installer didn't build with AgrOS's changes (the build's log above)"
