@@ -22,7 +22,7 @@ pkg() {
     for p in "$@"; do
         [[ $p == 'file = '* ]] || continue
         p=$s/${p#file = } && mkdir -p "${p%/*}"
-        if [[ $p == */usr/bin/* ]]; then cp "$(command -v true)" "$p"; else : >"$p"; fi
+        if [[ $p == */usr/bin/* ]]; then cp "$(type -P true)" "$p"; else : >"$p"; fi
     done
     # shellcheck disable=SC2046  # (no .BUILDINFO, no files: not in the package)
     bsdtar -cf "$d/$n-$v-x86_64.pkg.tar.zst" --zstd -C "$s" .PKGINFO $([[ -s $s/.BUILDINFO ]] && echo .BUILDINFO) \
@@ -102,7 +102,7 @@ heavy && [[ -e $out/heavy-2-1-x86_64.pkg.tar.zst && -e $out/heavy-2-1-x86_64.pkg
 # (a newer libq alone: its rebuild would be thrown away, built_against the same, so not built: caelestia-shell and
 # Calamares were, every run)
 LIBQ=6-1 heavy || fail "built though only a dependency's version changed"
-readelf -d "$(command -v true)" | grep 'NEEDED.*libc.so.6' >/dev/null || fail "test setup: true doesn't need libc.so.6"
+readelf -d "$(type -P true)" | grep 'NEEDED.*libc.so.6' >/dev/null || fail "test setup: true doesn't need libc.so.6"
 GONE=libc.so.6 heavy && fail "kept though a library it needs is gone"
 PY=3.12.1-1 heavy && fail "kept though Python changed"
 REL=2 heavy && fail "kept though its version changed"
