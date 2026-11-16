@@ -29,7 +29,8 @@ echo "- With this run's [agros], on today's Arch:" >>"$report"
 mapfile -t failed < <(tests)
 ((${#failed[@]})) || { echo "    all passed" >>"$report"; result ok; }
 agros_at "$published"
-pacman -Syuu --noconfirm >/dev/null || { echo "!! the published [agros] didn't install"; result fail 1; }
+# (-yy: the sync db is the built one, newer than the published; -y kept it, checked against the published .sig)
+pacman -Syyuu --noconfirm >/dev/null || { echo "!! the published [agros] didn't install"; result fail 1; }
 echo "- The same with the published [agros]:" >>"$report"
 mapfile -t failed < <(tests "${failed[@]}")
 ((${#failed[@]})) || { echo "    passed: this run's new AUR builds broke them" >>"$report"; result hold-agros; }
