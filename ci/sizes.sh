@@ -45,8 +45,10 @@ p=$w/iso/archiso
 list() { sed 's/#.*//; s/[[:space:]]//g; /^$/d' "$1" | sort -u; }
 cp "$p/packages_desktop.x86_64" "$p/packages.x86_64"
 list "$p/packages.x86_64" >"$w/iso.before"
-bash "$w/iso/agros-trim.sh" "$p" >"$w/trim.log"
-sed -n 's/^ *-> \(.*(agros-trim\.sh)\)$/\1/p' "$w/trim.log" >"$d/iso.trim"
+# (its messages are the build's msg2: on stderr, coloured where tput can; the colour codes taken out before reading)
+bash "$w/iso/agros-trim.sh" "$p" >"$w/trim.log" 2>&1
+sed 's/\x1b\[[0-9;]*m//g; s/\x1b([A-Z]//g' "$w/trim.log" |
+    sed -n 's/^ *-> *\(.*(agros-trim\.sh)\)$/\1/p' >"$d/iso.trim"
 list "$p/packages.x86_64" >"$w/iso.list"
 comm -23 "$w/iso.before" "$w/iso.list" >"$d/iso.leftout"
 python - "$p/airootfs/usr/share/agros/netinstall.yaml" >"$w/inst.list" <<'EOF'

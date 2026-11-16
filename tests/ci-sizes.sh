@@ -174,9 +174,11 @@ iso=$t/iso
 mkdir -p "$iso/archiso/airootfs/etc" "$iso/archiso/airootfs/usr/share/agros"
 echo '[options]' >"$iso/archiso/pacman.conf"
 echo '[options]' >"$iso/archiso/airootfs/etc/pacman-more.conf"
-# (its agros-trim.sh: occt left out, the NoExtract lines written as the real one writes them)
+# (its agros-trim.sh: occt left out, the NoExtract lines written as the real one writes them, and a fallback said as
+# its msg2 says it: on stderr, in colour)
 cat >"$iso/agros-trim.sh" <<'EOF'
 sed -i '/^occt$/d' "$1/packages.x86_64"
+printf '\033[1;34m  ->\033(B\033[m\033[1m %s\033(B\033[m\n' "Not in CachyOS's list any more (renamed or dropped?): micro (agros-trim.sh)" >&2
 sed -i '/^\[options\]$/a NoExtract = usr/share/doc/* usr/share/hypr/wall*.png' "$1/pacman.conf"
 sed -i '/^\[options\]$/a NoExtract = usr/share/doc/* # agros-iso' "$1/airootfs/etc/pacman-more.conf"
 EOF
@@ -217,6 +219,8 @@ sizes || fail "ci/sizes.sh failed: $(cat "$t/err")"
 [[ $(names iso) == "aquamarine cairo hyprland" ]] || fail "the ISO's packages: $(names iso)"
 [[ $(names inst) == "aquamarine cairo foot hyprland" ]] || fail "a new install's packages: $(names inst)"
 grep -qxF '| The ISO: its packages | 3, 68 MiB installed |' "$t/sout/table" || fail "the ISO's row: $(cat "$t/sout/table")"
+grep -qxF "The ISO: not in CachyOS's list any more (renamed or dropped?): micro (agros-trim.sh)" "$t/sout/report" ||
+    fail "agros-trim.sh's fallback (stderr, in colour) not said: $(cat "$t/sout/report")"
 grep -q "the live ISO's NoExtract pattern\|installed systems' NoExtract pattern\|no repo has\|couldn't" "$t/sout/report" &&
     fail "said of a good week: $(cat "$t/sout/report")"
 cp "$t/sout/baseline" "$t/good"
