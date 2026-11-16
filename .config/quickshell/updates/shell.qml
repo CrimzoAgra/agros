@@ -1,9 +1,9 @@
 // Updates: a window in Caelestia's style listing what's waiting (system and AUR apps, firmware, Flatpaks, AppImages,
-// Proton builds, developer tools), with
-// "Update all", which runs ~/.local/bin/update-apps and shows its progress.
-//   qs -c updates -n                  open it (Super menu: "Updates")
+// Proton builds, developer tools), with "Update all", which runs ~/.local/bin/update-apps and shows its progress.
+//   qs -c updates -n                  open it (Super menu: "Updates", ~/.local/bin/updates)
 //   UPDATES_START=1 qs -c updates -n  open it and start updating (the "Update now" notification)
-// Closing the window quits it (an update already running carries on, its log in $XDG_RUNTIME_DIR/update-apps.log). Separate from Caelestia, so Caelestia updates don't touch it.
+// Closing the window quits it (an update already running carries on, its log in $XDG_RUNTIME_DIR/update-apps.log).
+// Separate from Caelestia, so Caelestia updates don't touch it.
 pragma ComponentBehavior: Bound
 
 import QtQuick

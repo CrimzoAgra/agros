@@ -5,7 +5,8 @@
 // not from Caelestia's scheme, so they stay fixed when the scheme changes.
 // Laid out around the falling figure: the two columns sit in the open sky left and right of it, on a 1920x1080
 // stage scaled and centred like the wallpaper, so they stay put around him on any size or shape of screen.
-// Separate from Caelestia, so Caelestia updates don't touch it.
+// Separate from Caelestia, so Caelestia updates don't touch it; started once Caelestia has loaded
+// (~/.local/bin/widgets-start, from user/desktop.lua).
 // Blur behind the panels comes from the "desktop-widgets" layer rule in ~/.config/caelestia/user/desktop.lua.
 // Kept alive on purpose: the widgets keep updating (stats, weather, clock, media) even while windows cover them,
 // so they're current the moment the desktop shows. Don't pause them when hidden.

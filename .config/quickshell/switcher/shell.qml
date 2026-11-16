@@ -4,14 +4,16 @@
 //   Escape cancels; clicking a preview goes there (the mouse over one only highlights it: Tab, the arrow keys or a
 //   click pick)
 // Alt+Tab opens the same panel for the windows of the current workspace instead (minimised ones too, which come
-// back when picked), most recently used first, so a quick Alt+Tab goes to the previous window; releasing Alt picks
+// back when picked), most recently used first, so a quick Alt+Tab goes to the previous window; releasing Alt picks.
 // A × on the selected card and the one under the mouse closes that window (Alt+Tab), or moves that workspace's windows
-// to the nearest one with windows (Super+Tab: dots.clean_workspace in user/workspaces.lua); the switcher stays open
+// to the nearest one with windows (Super+Tab: dots.clean_workspace in user/workspaces.lua); the switcher stays open.
 // The keys are bound in ~/.config/caelestia/user/keys.lua to these global shortcuts: Hyprland hands them over in the
-// order they happen, so a quick Super+Tab (Super let go before this has even opened) still switches. Workspaces are columns as in
-// the synced Super+N: workspace N is N on every screen, and switching goes through dots.goto_workspace(N) there.
-// The previews show the screen the switcher opens on; the icons under them, the windows on every screen.
-// Separate from Caelestia, so Caelestia updates don't touch it.
+// order they happen, so a quick Super+Tab (Super let go before this has even opened) still switches. Workspaces are
+// columns as in the synced Super+N: workspace N is N on every screen, and switching goes through
+// dots.goto_workspace(N) there. The previews show the screen the switcher opens on; the icons under them, the windows
+// on every screen.
+// Started at login (qs -c switcher -d, user/keys.lua) and kept running, so it opens at once. Separate from Caelestia,
+// so Caelestia updates don't touch it.
 pragma ComponentBehavior: Bound
 
 import QtQuick

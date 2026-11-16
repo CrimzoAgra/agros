@@ -1,5 +1,5 @@
 // The weather location picker's workings, one for the desktop forecast widget (widgets/) and Caelestia's settings
-// (Nexus > Language & region, caelestia-overlay's nexus_location), each with its own look. Both set Caelestia's own
+// (Nexus > Language & region, caelestia-overlay's nexus_region), each with its own look. Both set Caelestia's own
 // setting (services.weatherLocation in ~/.config/caelestia/shell.json, which Caelestia's weather follows too), so a
 // change in one shows in the other. Loaded at run time by each (Loader with this file's path): Quickshell blocks imports
 // from outside a config's folder.
