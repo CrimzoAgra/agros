@@ -1,7 +1,7 @@
 name: Weekly status
 
-# Fridays at 17:00 Lisbon time: one issue saying whether anything in AgrOS's upkeep needs a look (ci/status.sh), the
-# owner mentioned so GitHub notifies them. GitHub's schedule is in UTC: 17:00 in winter (UTC+0), 16:00 in summer (UTC+1);
+# Fridays at 17:00 Lisbon time: one issue saying whether anything in AgrOS's upkeep needs a look (ci/status.sh; the ISO's
+# and a new install's size against last week's, ci/sizes.sh), the owner mentioned so GitHub notifies them. GitHub's schedule is in UTC: 17:00 in winter (UTC+0), 16:00 in summer (UTC+1);
 # each run checks which one Lisbon is on that day (a run GitHub starts late still counts)
 on:
   schedule:
@@ -29,9 +29,22 @@ jobs:
           esac
       - uses: actions/checkout@v7
         if: steps.when.outputs.go == 'true'
+      # The size watch (ci/sizes.sh): what goes on the ISO and on a new install, against last week's (its baseline kept
+      # in last week's issue), in an Arch container (its pacman). Failing, the issue says so; the status still goes out
+      - name: Sizes
+        if: steps.when.outputs.go == 'true'
+        continue-on-error: true
+        timeout-minutes: 30
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ci/status.sh --last-sizes >last-sizes
+          docker run --rm -v "$PWD:/w" -w /w archlinux:latest bash -c \
+            'pacman -Sy --noconfirm --needed git python python-yaml >/dev/null && ci/sizes.sh sizes last-sizes'
       - name: Status
         if: steps.when.outputs.go == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           OWNER: ${{ github.repository_owner }}
+          SIZES: sizes
         run: ci/status.sh

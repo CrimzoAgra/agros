@@ -1101,7 +1101,13 @@ breaks something holds back that one piece, never the rest (`.github/workflows/c
 - **Every Friday at 17:00 Lisbon time** an issue (`ci/status.sh`, `.github/workflows/status.yml`, label `status`,
   last week's closed) says whether anything needs a look: the last CI and ISO runs, what's held, CachyOS changes
   waiting for a merge (agros-iso's CachyOS sync), and whether Arch's newest Hyprland is approved yet; the owner is
-  mentioned, so GitHub notifies them. The AUR packages and CachyOS's installer are built there without compiler warnings
+  mentioned, so GitHub notifies them. Its size watch (`ci/sizes.sh` in an Arch container, `ci/sizes.py`) works out
+  from the package databases what goes on the live ISO (agros-iso's list as `agros-trim.sh` leaves it) and on a new
+  install (`netinstall.yaml`'s selected groups), nothing built, and says: a package new this week of 20 MiB or more
+  and what pulled it in, either set grown 50 MiB or more, a package `agros-trim.sh` leaves out coming back, a listed
+  name no repo has, a NoExtract pattern (the live ISO's, installed systems', `agros-noextract.conf`) matching no file
+  any more, and the installed systems' two NoExtract lists differing. Last week's sizes are kept in last week's issue
+  (a comment in its body). The AUR packages and CachyOS's installer are built there without compiler warnings
 (theirs, not AgrOS's); AgrOS's own packages keep them.
 
 ## Troubleshooting
