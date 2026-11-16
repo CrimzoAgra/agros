@@ -19,6 +19,7 @@ case "$*" in
   "run list -R x/agros "*)
     if [[ $STATE == *ci-failed* ]]; then json "[$(run cancelled 2026-11-20 13), $(run failure 2026-11-19 12), $(run success 2026-11-18 11)]"
     elif [[ $STATE == *ci-quiet* ]]; then json "[$(run success 2026-11-14 12)]"
+    elif [[ $STATE == *noruns* ]]; then json '[{"status": "in_progress", "conclusion": "", "createdAt": "2026-11-20T03:00:00Z", "databaseId": 14}]'
     else json "[$(run cancelled 2026-11-20 13), $(run success 2026-11-20 12)]"; fi ;;
   "run list -R x/iso -w iso.yml "*) json "[$(run success 2026-11-20 21)]" ;;
   "run list -R x/iso -w cachyos-sync.yml "*)
@@ -87,8 +88,9 @@ grep -qxF -- '- The ISO: libplasma (40 MiB) is new this week, pulled in by qteng
     fail "the size watch's find not said: $(cat "$t/body")"
 : >"$t/sizes/report"
 # (it not having run: said, and last week's baseline kept for next week)
-SIZES='' go ""
-grep -qF -- "- The size watch didn't run" "$t/body" || fail "the size watch not running not said: $(cat "$t/body")"
+SIZES='' GITHUB_RUN_ID=42 go ""
+grep -qxF -- "- The size watch didn't run (status.yml's Sizes step, its log: https://github.com/x/agros/actions/runs/42): sizes not compared this week" "$t/body" ||
+    fail "the size watch not running not said: $(cat "$t/body")"
 cp "$t/body" "$t/lastbody"
 [[ $(last_sizes) == $'iso hyprland 66560\ninst cairo 1536' ]] || fail "last week's baseline not kept: $(last_sizes)"
 go "ci-failed held sync newhypr"
@@ -128,4 +130,23 @@ for s in "AgrOS's CI hasn't run since 2026-11-14: its daily run turned off?" \
     "The CachyOS sync hasn't run since 2026-11-01: its daily run turned off?"; do
     grep -qxF -- "- $s" "$t/body" || fail "not said: $s: $(cat "$t/body")"
 done
+# (no run finished: none, not jq's null)
+go noruns
+grep -qxF -- "- AgrOS's CI: its last run none (-); last good none" "$t/body" || fail "no finished run: $(cat "$t/body")"
+grep -q null "$t/body" && fail "null in the issue: $(cat "$t/body")"
+# (a first week whose sets pacman couldn't work out: no baseline, but it ran, and what it found is said)
+: >"$t/sizes/baseline"
+echo "The ISO: pacman couldn't work out its packages, sizes not compared this week: error: x" >"$t/sizes/report"
+go ""
+grep -qxF -- "- The ISO: pacman couldn't work out its packages, sizes not compared this week: error: x" "$t/body" ||
+    fail "the size watch's find without a baseline not said: $(cat "$t/body")"
+grep -q "didn't run" "$t/body" && fail "a size watch that ran said not to have: $(cat "$t/body")"
+: >"$t/sizes/report"
+# (a baseline too big for the issue: left out, said, the body within GitHub's 65536 characters)
+od -An -tx1 -N 120000 /dev/urandom | tr -d ' \n' | fold -w 40 | sed 's/^/iso p/; s/$/ 1/' >"$t/sizes/baseline"
+go ""
+grep -q 'agros-sizes:' "$t/body" && fail "a baseline too big for the issue left in"
+grep -qxF -- "- The size watch's baseline is too big for the issue: left out, so next week's sizes aren't compared" "$t/body" ||
+    fail "a baseline too big not said: $(cat "$t/body")"
+(($(wc -c <"$t/body") <= 65536)) || fail "the body is $(wc -c <"$t/body") bytes"
 echo "ok ci-status"
