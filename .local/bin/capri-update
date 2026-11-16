@@ -2,10 +2,11 @@
 # Installs and updates Capri, the Edgerunners 2 desktop companion: my fork (CrimzoAgra/capri-overlay: CapriDesktop with
 # her brain on Claude Code, on Hyprland, her intro and new text box) merged with the original's latest release
 # (nunezValen/CapriDesktop, its v* tags: not every commit to its main).
-#   capri-update          install her, or update her when either repo has moved on (update-apps: the Updates app, when
-#                         you start it, as AUR apps: the merged code is built and checked, so not unseen at boot)
+#   capri-update          install her, or update her when either repo has moved on (update-kinds' capri: the Updates
+#                         app, when you start it, as AUR apps: the merged code is built and checked, so not unseen at
+#                         boot)
 #   capri-update --check  only fetch and say whether an update is waiting ("capri: update available (<version>)":
-#                         update-apps' list; auto-update runs this at boot)
+#                         update-kinds' list, and its --boot run, auto-update's, instead of the update)
 # Built in ~/.local/share/capri/<build>/ and switched to only once it passes check_build (built, Electron there, her
 # types checked, her tests); ~/.local/share/capri/current points at the build ~/.local/bin/capri starts. If my changes
 # no longer merge with a new release, or its check fails, it's said once (notification, dotfiles-check), that

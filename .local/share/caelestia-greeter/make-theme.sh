@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Writes theme.json (Caelestia's current colours + user) and copies the current wallpaper
-# into the given folder, for the login screen in that folder.
+# into the given folder, for the login screen in that folder. Run at every login by greeter-theme-sync (into
+# /etc/greetd/caelestia-greeter/theme), and by agros-greeter's install for a first theme (as the user it shows).
 #   usage: make-theme.sh <folder> [user]   (user: whoever runs it, by default)
 set -euo pipefail
 dir=$1

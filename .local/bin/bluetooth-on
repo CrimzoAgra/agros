@@ -1,6 +1,6 @@
 #!/bin/sh
-# Bluetooth always unblocked and powered on at login (the adapter can come up off; agros-system covers boot
-# and waking from sleep)
+# Bluetooth always unblocked and powered on at login (user/desktop.lua; the adapter can come up off; agros-system
+# covers boot and waking from sleep)
 # No adapter (or no bluetoothd): nothing to do; bluetoothctl would wait for bluetoothd forever
 ls /sys/class/bluetooth/hci* >/dev/null 2>&1 || exit 0
 rfkill unblock bluetooth

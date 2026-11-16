@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Open Proton VPN. It starts minimised to the tray, and launching it again doesn't bring the
-# window back, so if it's already running, press "Show" in its tray menu instead.
+# Open Proton VPN (its launcher entry, ~/.local/share/applications/proton.vpn.app.gtk.desktop, runs this). It starts
+# minimised to the tray, and launching it again doesn't bring the window back, so if it's already running, press "Show"
+# in its tray menu instead.
 item=$(busctl --user list --no-legend 2>/dev/null | awk '/^org\.kde\.StatusNotifierItem-proton\.vpn\.app\.gtk-/ {print $1; exit}')
 if [[ -n $item ]]; then
     # Find the "Show" entry in the tray menu and click it

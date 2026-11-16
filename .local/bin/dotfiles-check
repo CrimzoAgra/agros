@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Health check of the dotfiles' pieces that a Hyprland or Caelestia update can break. Hyprland runs it a little
 # after login (~/.config/caelestia/user/desktop.lua): an update takes effect at the next login, so that's when breakage shows.
-#   dotfiles-check            list what's wrong (nothing printed and exit 0 when all is well; a note, such as Caelestia's
-#                             Hyprland config having an update, printed with exit 0)
+#   dotfiles-check            list what's wrong, exit 1 (nothing printed and exit 0 when all is well; a note, such as
+#                             Caelestia's Hyprland config having an update, printed with exit 0)
 #   dotfiles-check --notify   the same, as one notification (none when all is well)
 # (not on the live USB: it isn't set up as an install, so its "problems" would only be noise)
 [[ -d /run/archiso ]] && exit 0
@@ -52,7 +52,8 @@ qml=$([[ -n $changed ]] && timeout 5 qs log -c caelestia 2>/dev/null | sed 's/\x
 [[ -n $qml ]] && problems+=("Caelestia changes failing to load (overlay QML): $qml")
 
 # Caelestia internals my config relies on, which it could rename (then that part stops working without an error):
-# the game tag user/apps.lua gives native games and matches its rules on, the tags it undoes, the restart key user/keys.lua takes over, the shortcut that refreshes Caps/Num Lock
+# the game tag user/apps.lua gives native games and matches its rules on, the tags it undoes, the restart key
+# user/keys.lua takes over, the shortcut that refreshes Caps/Num Lock
 for want in 'rules.lua:"game"' 'rules.lua:"music_player"' 'rules.lua:"communication_app"' 'rules.lua:"todo_app"' \
             'rules.lua:"system_monitor"' 'keybinds.lua:"CTRL + SUPER + ALT + R"'; do
     grep -qF "${want#*:}" ~/.config/hypr/hyprland/"${want%%:*}" 2>/dev/null ||

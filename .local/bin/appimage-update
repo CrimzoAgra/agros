@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Updates the AppImages installed by appimage-open from their GitHub releases (auto-update runs it at boot).
+# Updates the AppImages installed by appimage-open from their GitHub releases (update-kinds' appimage: the Updates app,
+# and the boot's auto-update as each user).
 #   appimage-update               every installed AppImage whose launcher entry names its GitHub repo
 #   appimage-update <owner/repo>  install or update that one
 #   appimage-update --check       only list the ones with a newer version ("<owner/repo>: update available", update-apps)

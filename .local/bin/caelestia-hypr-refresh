@@ -7,9 +7,10 @@
 # one that passes goes into ~/.config/hypr; any error (or no check possible), and nothing there changes, said with the
 # errors. A file Caelestia turned into a folder, or the reverse, is left for you, said; so is one in a folder that's a
 # link of yours (stow's). (~/.config: $XDG_CONFIG_HOME when set, as Caelestia uses it.)
-#   caelestia-hypr-refresh           refresh
-#   caelestia-hypr-refresh --check   only print the newer version's commit (exit 0), else exit 1 (up to date) or 2
-#                                    (Caelestia's dots not installed, or its versions unknown here: said on stderr)
+#   caelestia-hypr-refresh           refresh (by hand: dotfiles-check says when there's one)
+#   caelestia-hypr-refresh --check   dotfiles-check's: only print the newer version's commit (exit 0), else exit 1 (up
+#                                    to date) or 2 (Caelestia's dots not installed, or its versions unknown here: said
+#                                    on stderr)
 # "Edited" is against the version last refreshed to (~/.local/state/caelestia-hypr-refresh), else the one Caelestia
 # installed (its dots-state.json). Caelestia's own record isn't changed: a later `caelestia update` sees these files
 # as yours and writes its version beside them as .new
@@ -63,7 +64,6 @@ done < <(jq -r '.deployed_files // {} | to_entries[] | "\(.key)\t\(.value)"' "$s
 mkdir -p "$state"
 exec {lockfd}>>"$state/caelestia-hypr-refresh.lock"
 flock -n "$lockfd" || { echo "Another caelestia-hypr-refresh is running: try again once it's done"; exit 2; }
-# (not passed on to the check: its Hyprland, up to a minute under timeout, outlived a kill of this script alone and kept it)
 tmpdir=${TMPDIR:-/tmp}
 find "$tmpdir" -maxdepth 1 -name 'caelestia-hypr-refresh.*' -user "$(id -u)" -exec rm -rf {} + 2>/dev/null
 tmp=$(mktemp -d "$tmpdir/caelestia-hypr-refresh.XXXXXX") || exit 2
@@ -126,6 +126,8 @@ for ((i = 1; i < ${#beside[@]}; i += 2)); do news+=("${beside[i]/#"$HOME"/\~}.ne
 ((${#linked[@]})) && printf "In a linked folder of yours, not changed (Caelestia's version: in its clone, $dots): %s\n" "${linked[@]}"
 ((${#news[@]})) && printf "Edited by you (or a link), left as it is; Caelestia's new version beside it: %s\n" "${news[@]}"
 checker=$(dirname "$(readlink -f "$0")")/hypr-config-check
+# (the lock not passed on to the check: its Hyprland, up to a minute under timeout, outlived a kill of this script alone
+# and kept it)
 if ! out=$(HOME=$tmp/home XDG_CONFIG_HOME=$tmp/config XDG_STATE_HOME=$tmp/state XDG_CACHE_HOME=$tmp/cache "$checker" {lockfd}>&- 2>&1); then
     echo "!! Caelestia's new Hyprland config didn't pass the check with the Hyprland installed: nothing changed in"
     echo "   ${live/#"$HOME"/\~}. The check said:"
