@@ -9,7 +9,7 @@
 #   pacstrap base (in its installer's package) isn't in it: the same each week, so nothing to watch
 set -euo pipefail
 export LC_ALL=C
-out=${1:?usage: ci/sizes.sh <out dir> [<last week's baseline>]}
+out=${1:?usage: ci/sizes.sh <out dir> [<last weeks baseline>]}
 prev=${2:-}
 here=$(cd "$(dirname "$0")/.." && pwd)
 w=$(mktemp -d)
