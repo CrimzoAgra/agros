@@ -15,8 +15,9 @@
 [[ -x /usr/bin/lutris ]] || { echo "Lutris isn't installed" >&2; exit 1; }
 overlay="$HOME/.local/share/lutris-overlay"
 out="${XDG_CACHE_HOME:-$HOME/.cache}/lutris-overlay"
+helpers=$(dirname "$(readlink -f "$0")")  # (the shared helpers, beside this)
 # (in the background: dots-warn waits for the notification server, and Lutris starting with the desktop shouldn't)
-warn="$(dirname "$(readlink -f "$0")")/dots-warn"
+warn=$helpers/dots-warn
 # Rebuilt when Lutris (its files: any package or version of it), the changes, or which of them are on (Settings app:
 # the lutris.* settings) change
 src=$(python3 -Ic 'import sysconfig; print(sysconfig.get_path("purelib"))')/lutris
@@ -68,7 +69,7 @@ icons="$data/runtime/icons"
 checked="${XDG_CACHE_HOME:-$HOME/.cache}/lutris/covers-checked"
 # (detached: a child of this script would become Lutris's after the exec below, and a zombie once it ended)
 # (marked checked only when it got through: offline, the next start looks again)
-[[ $data/pga.db -nt $checked ]] && ( { nice "$(dirname "$(readlink -f "$0")")/lutris-covers" && touch "$checked"; } &>/dev/null & )
+[[ $data/pga.db -nt $checked ]] && ( { nice "$helpers/lutris-covers" && touch "$checked"; } &>/dev/null & )
 # The copy of /usr/bin/lutris loads the lutris folder next to its own (the patched one)
 # (a failure mark from another stamp goes: lutris-library reads it as "the patched Lutris isn't running")
 [[ $(cat "$out/stamp" 2>/dev/null) == "$stamp" ]] && { rm -f "$out.failed"; exec "$out/bin/lutris" "$@"; }  # an older build mixed with a newer Lutris could crash

@@ -8,21 +8,23 @@
 exec >/dev/null 2>&1
 bin=$(dirname "$(readlink -f "$0")")
 tell=false; [ "${1:-}" = --tell ] && tell=true
+told=${XDG_RUNTIME_DIR:-/tmp}/hypr-reload-told  # (a --tell already said for the waiting reload)
+# tell_later: the change said to wait for the game, marked told (the notice not given fd 7, the waiter's lock)
+tell_later() {
+    : >"$told" && setsid -f "$bin/notify-when-up" -a Hyprland "Applied once your game closes" \
+        "Your change to the desktop applies then: now it would take the game out of fullscreen" </dev/null 7>&-
+}
 # A game open: one waiter per game (as caelestia-restart's); later requests during it leave it to that one's reload,
 # which reads the config then (the lock held through the reload). A --tell one said even when a waiter is there
 if "$bin/game-focus" --game-open; then
     exec 7>"${XDG_RUNTIME_DIR:-/tmp}/hypr-reload-pending"
     if ! flock -n 7; then
-        $tell && [ ! -e "${XDG_RUNTIME_DIR:-/tmp}/hypr-reload-told" ] && : >"${XDG_RUNTIME_DIR:-/tmp}/hypr-reload-told" &&
-            setsid -f "$bin/notify-when-up" -a Hyprland "Applied once your game closes" \
-                "Your change to the desktop applies then: now it would take the game out of fullscreen" </dev/null 7>&-
+        $tell && [ ! -e "$told" ] && tell_later
         exit 0
     fi
-    rm -f "${XDG_RUNTIME_DIR:-/tmp}/hypr-reload-told"
-    $tell && : >"${XDG_RUNTIME_DIR:-/tmp}/hypr-reload-told" &&
-        setsid -f "$bin/notify-when-up" -a Hyprland "Applied once your game closes" \
-            "Your change to the desktop applies then: now it would take the game out of fullscreen" </dev/null 7>&-
+    rm -f "$told"
+    $tell && tell_later
     "$bin/after-games" 7>&-
-    rm -f "${XDG_RUNTIME_DIR:-/tmp}/hypr-reload-told"
+    rm -f "$told"
 fi
 exec hyprctl -i "${HYPRLAND_INSTANCE_SIGNATURE:-0}" reload
