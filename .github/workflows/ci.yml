@@ -24,8 +24,11 @@ permissions:
   contents: read
 
 # On main: the repo built first (repo), then tested (test: on what it built; when some fail, which side broke them, and
-# that held back alone, ci/test-passes.sh), then what passed put out (release), and said (report: one issue). A pull
-# request or another branch: only the tests, on the published repo
+# that held back alone, ci/test-passes.sh), then what passed signed and put out (release), and said (report: one issue).
+# A pull request or another branch: only the tests, on the published repo.
+# AgrOS's signing key (the AGROS_GPG_KEY secret) is only ever in the release job's signing step: repo runs AUR build
+# scripts (as its builder user, with sudo), test runs what was built and the tests, so neither has it and the repo goes
+# between them unsigned; the release job runs none of that (tests/ci-signing.sh checks this file for it)
 jobs:
   test:
     needs: repo
@@ -84,7 +87,9 @@ jobs:
           pacman-key --init
           pacman-key --add ci/agros.asc
           pacman-key --lsign-key BFE9289F7759E521AE60CFCD23B6096B42D05E1E
-          printf '\n[agros]\nServer = https://crimzoagra.github.io/agros/$arch\n' >>/etc/pacman.conf
+          # (signatures checked when there (the published repo's, a kept package's), not required: this run's new builds are
+          # unsigned until the release job signs what passed)
+          printf '\n[agros]\nSigLevel = Optional TrustedOnly\nServer = https://crimzoagra.github.io/agros/$arch\n' >>/etc/pacman.conf
           pacman -Sy --noconfirm --needed caelestia-shell
           # (the dots' commit agros-hyprland-settings pins)
           dots=$(sed -n 's/^_dots=//p' packages/agros-hyprland-settings/PKGBUILD)
@@ -160,7 +165,8 @@ jobs:
 
   repo:
     # The [agros] pacman repo: built on every push to main and daily (what doesn't build: the published one kept,
-    # build-repo.sh), then tested and published by the jobs below
+    # build-repo.sh), then tested and published by the jobs below. Unsigned, with no secret: it runs AUR build scripts
+    # (only AgrOS's public key, ci/agros.asc, to check the published files it keeps)
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-26.04
     container:
@@ -191,13 +197,8 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0  # (the packages' versions count the commits)
-      - name: Signing key
-        env:
-          AGROS_GPG_KEY: ${{ secrets.AGROS_GPG_KEY }}
-        run: |
-          [ -n "$AGROS_GPG_KEY" ] || { echo "::error::Add the AGROS_GPG_KEY secret (a signing subkey of AgrOS's key, as agros-iso's manual, Building the ISO, step 7, makes it)"; exit 1; }
-          echo "$AGROS_GPG_KEY" | gpg --batch --import
-          echo "GPGKEY=$(gpg --list-secret-keys --with-colons | awk -F: '$1 == "fpr" {print $10; exit}')" >>"$GITHUB_ENV"
+          # (no token left in .git/config for the AUR build scripts to read)
+          persist-credentials: false
       - name: Build the repo
         env:
           # (a repo variable can point it elsewhere: the old repo's copy while this one's site is new)
@@ -218,37 +219,26 @@ jobs:
 
   release:
     # What passed the tests put out: this run's new AUR builds swapped for the published ones when they, or an Arch
-    # update, broke the tests (build-repo.sh --hold-new); the approved Hyprland list; the day Arch last passed
+    # update, broke the tests (build-repo.sh --hold-new); the approved Hyprland list; the day Arch last passed. Then all
+    # of it signed (ci/sign-repo.sh), the only place AgrOS's key is: a container of its own, not privileged, that never
+    # runs makepkg, paru, an AUR build script, a built package or a test (repo-add reads the packages' .PKGINFO); before
+    # the key only official Arch packages' install scripts (its tools), CachyOS's keyring's once the key is gone
     needs: [repo, test]
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-26.04
     container:
       image: archlinux:latest
     steps:
-      - name: Tools, and CachyOS's repo (the install check resolves AgrOS as installed)
+      - name: Tools
         run: |
           grep -q '^\[multilib\]' /etc/pacman.conf || printf '\n[multilib]\nInclude = /etc/pacman.d/mirrorlist\n' >>/etc/pacman.conf
           sed -i 's/^#*DownloadUser.*/#DownloadUser = alpm/' /etc/pacman.conf
           pacman-key --init
           pacman -Sy
           pacman -Su --noconfirm --needed $(pacman -T git sudo)
-          m=https://mirror.cachyos.org/repo/x86_64/cachyos
-          curl -fsSL -o /tmp/keyring.pkg "$m/$(curl -fsSL "$m/" | grep -o 'cachyos-keyring-[^"]*\.pkg\.tar\.zst' | sort -V | tail -1)"
-          curl -fsSL -o /tmp/mirrorlist.pkg "$m/$(curl -fsSL "$m/" | grep -o 'cachyos-mirrorlist-[^"]*\.pkg\.tar\.zst' | sort -V | tail -1)"
-          mkdir /tmp/k && bsdtar -xf /tmp/keyring.pkg -C /tmp/k
-          pacman-key --add /tmp/k/usr/share/pacman/keyrings/cachyos.gpg
-          pacman-key --lsign-key 882DCFE48E2051D48E2562ABF3B607488DB35A47
-          pacman -U --noconfirm /tmp/keyring.pkg /tmp/mirrorlist.pkg
-          sed -i '/^\[core\]/i [cachyos]\nInclude = /etc/pacman.d/cachyos-mirrorlist\n' /etc/pacman.conf
-          pacman -Sy --noconfirm
       - uses: actions/checkout@v7
-      - name: Signing key
-        env:
-          AGROS_GPG_KEY: ${{ secrets.AGROS_GPG_KEY }}
-        run: |
-          [ -n "$AGROS_GPG_KEY" ] || { echo "::error::Add the AGROS_GPG_KEY secret"; exit 1; }
-          echo "$AGROS_GPG_KEY" | gpg --batch --import
-          echo "GPGKEY=$(gpg --list-secret-keys --with-colons | awk -F: '$1 == "fpr" {print $10; exit}')" >>"$GITHUB_ENV"
+        with:
+          persist-credentials: false
       - uses: actions/download-artifact@v8
         with:
           name: built
@@ -300,6 +290,30 @@ jobs:
           cat /tmp/approved-before /tmp/approved-now/approved | grep -E '^[a-z0-9@._+-]+ [A-Za-z0-9.:_+~]+$' |
             awk '!seen[$0]++' | tac | awk '++n[$1] <= 20' | tac >out/x86_64/agros-approved
           cat out/x86_64/agros-approved
+      # Signed: each new package (one kept as published keeps its signature), the database, the approved list and the
+      # day Arch last passed (update-gate and agros-iso check the list's .sig against AgrOS's key). The secret (AgrOS's
+      # primary key or a signing subkey of it, either) in this step alone
+      - name: Signed
+        env:
+          AGROS_GPG_KEY: ${{ secrets.AGROS_GPG_KEY }}
+        shell: bash
+        run: |
+          [ -n "$AGROS_GPG_KEY" ] || { echo "::error::Add the AGROS_GPG_KEY secret (a signing subkey of AgrOS's key, as agros-iso's manual, Building the ISO, step 7, makes it)"; exit 1; }
+          # (the key gone when this step ends, signed or not, its agent stopped: nothing after it can read it)
+          trap 'gpgconf --kill all; rm -rf "$(gpgconf --list-dirs homedir)"' EXIT
+          echo "$AGROS_GPG_KEY" | gpg --batch --import
+          ci/sign-repo.sh out/x86_64
+      - name: CachyOS's repo (the install check resolves AgrOS as installed)
+        run: |
+          m=https://mirror.cachyos.org/repo/x86_64/cachyos
+          curl -fsSL -o /tmp/keyring.pkg "$m/$(curl -fsSL "$m/" | grep -o 'cachyos-keyring-[^"]*\.pkg\.tar\.zst' | sort -V | tail -1)"
+          curl -fsSL -o /tmp/mirrorlist.pkg "$m/$(curl -fsSL "$m/" | grep -o 'cachyos-mirrorlist-[^"]*\.pkg\.tar\.zst' | sort -V | tail -1)"
+          mkdir /tmp/k && bsdtar -xf /tmp/keyring.pkg -C /tmp/k
+          pacman-key --add /tmp/k/usr/share/pacman/keyrings/cachyos.gpg
+          pacman-key --lsign-key 882DCFE48E2051D48E2562ABF3B607488DB35A47
+          pacman -U --noconfirm /tmp/keyring.pkg /tmp/mirrorlist.pkg
+          sed -i '/^\[core\]/i [cachyos]\nInclude = /etc/pacman.d/cachyos-mirrorlist\n' /etc/pacman.conf
+          pacman -Sy --noconfirm
       - name: Install check (agros-desktop resolves in one transaction, none of what AgrOS leaves out)
         run: |
           # (with signatures required, as users have it)
