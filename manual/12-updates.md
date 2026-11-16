@@ -67,9 +67,16 @@ you. When one breaks something, only that piece waits; the rest keeps updating.
 | changes its ISO | merges it into AgrOS's ISO by itself each day, if it merges cleanly, brings back nothing AgrOS removed, adds no KDE, keeps AgrOS's installer, and the ISO still builds | isn't affected: it updates from the repos above |
 | changes its ISO in a way that can't be merged by itself | opens a pull request saying what changed and why | isn't affected; the ISO stays as it is until it's merged |
 
-A held Hyprland update isn't listed in the Updates app; the update log says it "waits for AgrOS's check". AgrOS's
-maintainer is told whenever something needs a person (a CachyOS change to merge by hand, or something held for days).
-The details: [Keeping itself up](../docs/how-it-works.md#keeping-itself-up) and
+A held Hyprland update isn't listed in the Updates app; the update log says it "waits for AgrOS's check".
+
+**AgrOS's maintainer is told** by email, through GitHub issues that mention them. One issue, labelled `held`, says
+what's held back and why, and closes by itself once everything goes out again. Every Friday at 17:00 Lisbon time a
+status issue says "Nothing broke this week" or what needs a look: a build failing, something held, a CachyOS pull
+request waiting, or Arch's newest Hyprland not approved yet.
+
+**What needs a person:** only a CachyOS pull request (resolve its conflict and merge it), or something held for more
+than a few days (an upstream change AgrOS's own code has to be adapted to). Everything else sorts itself out. The
+details: [Keeping itself up](../docs/how-it-works.md#keeping-itself-up) and
 [the upstream gate](../docs/how-it-works.md#updates-and-system).
 
 ## If an update goes wrong
