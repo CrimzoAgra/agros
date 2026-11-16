@@ -1,0 +1,39 @@
+name: Keepalive
+
+# GitHub turns a public repo's scheduled workflows off after 60 days without a commit (CI's nightly run, the weekly
+# status, the CachyOS sync). Once a month this turns every scheduled workflow here on again through GitHub's API
+# (PUT .../actions/workflows/<file>/enable, as keepalive-workflow v2 and gh-workflow-keepalive do), itself included,
+# which restarts their 60 days: no dummy commits. A workflow already off is turned back on too
+on:
+  schedule:
+    - cron: '41 6 9 * *'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/workflows
+      - name: Turn every scheduled workflow on again
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -u
+          failed=0
+          # (each file with a schedule: trigger, this one among them)
+          for f in $(grep -lE '^[[:space:]]+schedule:' .github/workflows/*.yml .github/workflows/*.yaml 2>/dev/null); do
+            name=${f##*/}
+            if gh api -X PUT "repos/$GITHUB_REPOSITORY/actions/workflows/$name/enable" --silent; then
+              echo "on: $name"
+            else
+              echo "::error::$name couldn't be turned on again"
+              failed=1
+            fi
+          done
+          exit "$failed"

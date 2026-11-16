@@ -1144,6 +1144,11 @@ breaks something holds back that one piece, never the rest (`.github/workflows/c
   GitHub's 65536 characters); the size watch not running at all is said with a link to its log.
   The AUR packages and CachyOS's installer are built there without compiler warnings
 (theirs, not AgrOS's); AgrOS's own packages keep them.
+- **Once a month** `.github/workflows/keepalive.yml` turns every scheduled workflow here (CI's nightly run, the weekly
+  status, itself) on again through GitHub's API (`gh api -X PUT repos/<repo>/actions/workflows/<file>/enable`, with
+  `actions: write`), as keepalive-workflow v2 does, so GitHub's 60 days without a commit never turn them off; no dummy
+  commits. agros-iso has the same for its CachyOS sync. That it works can only be seen once 60 days pass with no
+  commit; until then the status issue's "not seen for 3 days" is what says a schedule stopped.
 
 ## Troubleshooting
 
