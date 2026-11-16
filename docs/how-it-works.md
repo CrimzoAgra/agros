@@ -55,12 +55,27 @@ this repo (`ci/build-repo.sh`, `.github/workflows/ci.yml`) and published on GitH
 [agros]
 SigLevel = Required DatabaseRequired
 Server = https://crimzoagra.github.io/agros/$arch
+Server = https://pub-f1a3a482900748e8b69cd81361ab96e1.r2.dev/repo/$arch
 ```
 
 Its database is signed too, and required to be (`DatabaseRequired`: pacman's default takes an unsigned one, so a
 server could list packages CI never put together). agros-iso's `pacman.conf` files have the line, and `agros-system`'s
 install adds it under `[agros]` where it's missing (a machine installed before; a `SigLevel` of yours there stays),
 its removal taking it out.
+
+The second server is a mirror on Cloudflare R2 (the bucket agros-iso's ISO is downloaded from, under `repo/x86_64`), so
+a GitHub Pages outage doesn't stop every machine's updates: pacman tries Pages first and the mirror only when Pages
+fails. `.github/workflows/mirror.yml` fills it after each CI run on `main` that succeeded (and by hand): `ci/mirror.sh`
+downloads what Pages publishes (the database and `agros.files` with their `.tar.gz` copies, every package the database
+lists, `agros-approved`, `agros-arch-ok`, each with its `.sig` where published), checks every signature against
+`ci/agros.asc` alone (the database's required), then `rclone` uploads the packages first and the database last, and
+only then removes what the repo no longer has: a mirror mid-update never lists a package it doesn't have. Only the
+current set is kept (R2's free 10 GB; the repo is about 190 MB). It needs the same four secrets as agros-iso's ISO
+upload, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` and `R2_BUCKET`; without them it says so (a
+warning) and does nothing. agros-iso's `pacman.conf` files list the mirror, and `agros-system`'s install adds it after
+`[agros]`'s other servers where it's missing (a `#Server =` line of yours for it counts: not added again), its removal
+taking it out. What reads `[agros]`'s server (`update-gate`'s approved list, agros-iso's gate) takes the first, Pages;
+the boot's copy of `agros-arch-ok` tries each in turn.
 
 | Package | What it is |
 |---|---|

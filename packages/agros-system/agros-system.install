@@ -25,24 +25,34 @@ quiet_passim() {
 
 # [agros] in pacman.conf as agros-iso's pacman.conf files have it: its database's signature required too (pacman's
 # default, DatabaseOptional, took an unsigned one: a server could list packages AgrOS's CI never put together). Added under
-# [agros] where missing, at install and at upgrade (machines installed before); a SigLevel of yours there stays. Taken
-# out at removal (agros_repo remove), only as added
+# [agros] where missing, at install and at upgrade (machines installed before); a SigLevel of yours there stays. And
+# its second server, AgrOS's mirror on Cloudflare R2 (agros's mirror.yml), after its others: pacman tries GitHub Pages
+# first, the mirror when Pages can't be reached. Its line commented out (#Server = <mirror>) is yours: not added again.
+# Both taken out at removal (agros_repo remove), only as added
 _agros_sig='SigLevel = Required DatabaseRequired'
+_agros_mirror='https://pub-f1a3a482900748e8b69cd81361ab96e1.r2.dev/repo/$arch'
 agros_repo() {
     local conf=$_r/etc/pacman.conf new
     [[ -f $conf ]] && grep -q '^\[agros\][[:space:]]*$' "$conf" || return 0
-    new=$(awk -v mode="${1:-add}" -v sig="$_agros_sig" '
+    new=$(awk -v mode="${1:-add}" -v sig="$_agros_sig" -v murl="$_agros_mirror" '
         { line[NR] = $0 }
         END {
+            mirror = "Server = " murl
             for (i = 1; i <= NR; i++) if (line[i] ~ /^\[agros\][ \t]*$/) { s = i; break }
             e = NR
             for (i = s + 1; i <= NR; i++) if (line[i] ~ /^[ \t]*\[/) { e = i - 1; break }
-            for (i = s + 1; i <= e; i++) if (line[i] ~ /^[ \t]*SigLevel[ \t]*=/) hassig = 1
+            last = s
+            for (i = s + 1; i <= e; i++) {
+                if (line[i] ~ /^[ \t]*SigLevel[ \t]*=/) hassig = 1
+                if (index(line[i], murl)) hasmirror = 1
+                if (line[i] ~ /^[ \t]*(Server|Include)[ \t]*=/) last = i
+            }
             for (i = 1; i <= NR; i++) {
                 t = line[i]; sub(/[ \t]+$/, "", t)
-                if (mode == "remove" && i > s && i <= e && t == sig) continue
+                if (mode == "remove" && i > s && i <= e && (t == sig || t == mirror)) continue
                 print line[i]
                 if (mode == "add" && i == s && !hassig) print sig
+                if (mode == "add" && i == last && !hasmirror) print mirror
             }
         }' "$conf") || return 0
     # (written over in place: pacman.conf keeps its owner and mode)
