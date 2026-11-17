@@ -118,9 +118,13 @@ left=$(ps -eo pid=,args= | awk '$2 == "sleep" && $3 == "37.3" { print $1 }')
 [[ -n $left ]] || fail "what a command left running was stopped"
 kill $left
 # None of its caller's descriptors (root's open /boot, at shutdown) but those --fd names
-fds() { PATH=$t/bin:$PATH "$here/.local/bin/agros-each-user" --as "$me" "$@" sh -c 'ls /proc/$$/fd | sort -n | paste -sd" "' 7</dev/null 8</dev/null; }
-[[ $(fds) == "0 1 2" ]] || fail "a command run with --as got its caller's descriptors: $(fds)"
-[[ $(fds --fd 7) == "0 1 2 7" ]] || fail "--fd 7 not handed on alone: $(fds --fd 7)"
+# (ls as the shell's child, nothing else in it: in a pipeline the shell held the next stage's pipe open while ls looked,
+# an extra descriptor now and then, under load. The ": " keeps the shell from becoming ls, whose own are not the point)
+fds() { PATH=$t/bin:$PATH "$here/.local/bin/agros-each-user" --as "$me" "$@" sh -c 'ls /proc/$$/fd; :' 7</dev/null 8</dev/null | sort -n | paste -sd' '; }
+got=$(fds)
+[[ $got == "0 1 2" ]] || fail "a command run with --as got its caller's descriptors: $got"
+got=$(fds --fd 7)
+[[ $got == "0 1 2 7" ]] || fail "--fd 7 not handed on alone: $got"
 # --sessions: the bus of each one logged in to a desktop (AGROS_RUN_USER: the run folders), not a text login's, nor a
 # bus that's a link (theirs to point at another's); --notify-wait tells them through it, as them
 mkdir -p "$t/h" "$t/run/$UID"

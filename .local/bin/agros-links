@@ -66,6 +66,21 @@ if [[ -r $versions ]]; then
         fi
     done < <(awk '!x[substr($0, 67)]++' "$versions")  # (each file once: by its name, after the sum and two spaces)
 fi
+# The bar's status icons, the sound one among them: Caelestia's shell.json is yours (copied in once, never updated), so
+# a home from before AgrOS listed them had Caelestia's own, without it. AgrOS's list (/etc/skel's) added once, only
+# where there's none: a list of yours kept, and one you take out later stays out. No shell.json, or one jq can't read
+# (Caelestia mid-rewrite, a hand edit): looked at again at the next login
+shell=$HOME/.config/caelestia/shell.json mark=$state/bar-status-icons
+if [[ ! -e $mark && -f $shell ]] && has=$(jq '.bar.statusIcons != null' "$shell" 2>/dev/null) && [[ -n $has ]]; then
+    icons=$(jq -c '.bar.statusIcons // empty' "$root/.config/caelestia/shell.json" 2>/dev/null)
+    if [[ $has == true ]]; then
+        touch "$mark"
+    elif [[ -n $icons ]]; then
+        # (looked at again under json-edit's lock: a list Caelestia wrote in between kept)
+        "$(dirname "$(readlink -f "$0")")/json-edit" "$shell" --indent 4 --argjson i "$icons" \
+            'if .bar.statusIcons == null then .bar.statusIcons = $i else . end' && touch "$mark"
+    fi
+fi
 # (in the background: Caelestia, the notification server, isn't up yet; agros-links.service keeps it alive). Marked as
 # said only once it was: one that never got through is said at the next login
 ((${#new[@]})) && { "$(dirname "$(readlink -f "$0")")/dots-warn" "AgrOS updated settings you've changed" \
