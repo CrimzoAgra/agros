@@ -111,6 +111,13 @@ NO=1 APPIMAGE=$t/home/Applications/demo.AppImage HOME=$t/from-home PATH=$t/bin:$
 [[ -s $t/asked && ! -e $t/from-home/Applications && ! -x $t/from-app.AppImage ]] ||
     fail "a file opened from an installed AppImage run without asking: $(ls -l "$t/from-app.AppImage")"
 rm -f "$t/asked"
+# ...read for its launcher entry without running it, before you're asked: one that runs (here no squashfs in it, so
+# nothing to read it with) isn't run to find out it's that app's (it said so, and was installed unasked)
+cp "$t/orig.AppImage" "$t/same-id.AppImage"; chmod 755 "$t/same-id.AppImage"
+NO=1 APPIMAGE=$t/home/Applications/demo.AppImage HOME=$t/home PATH=$t/bin:$PATH \
+    python3 "$here/.local/bin/appimage-open" "$t/same-id.AppImage" || fail "a refused run from an installed app failed"
+[[ -s $t/asked && -e $t/same-id.AppImage ]] || fail "a file opened from an installed AppImage run to read its entry, then not asked"
+rm -f "$t/asked" "$t/same-id.AppImage"
 # A launcher entry that's another app's: an installed one's (an AppImage naming itself as LibreWolf), or a file of yours
 # (written over before), not installed, said; nothing moved into ~/Applications
 mkdir -p "$t/sys/applications"; echo '[Desktop Entry]' >"$t/sys/applications/demo.desktop"
