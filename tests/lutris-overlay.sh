@@ -45,6 +45,47 @@ P
 }
 bnet_check
 
+# egs_refresh: an Epic access token past its time renewed with the refresh token before the library is asked for (Lutris
+# used the expired one: "EGS Token expired" from a day and a half after signing in); one still good used as it is
+HOME=$t XDG_CACHE_HOME=$t/cache python3 -I - "$t/cache/lutris-overlay" "$t" <<'P' || fail "an expired Epic login not renewed"
+import os, sys
+sys.path.insert(0, sys.argv[1])
+os.makedirs(sys.argv[2] + "/cache/lutris", exist_ok=True)
+import lutris.gui.application  # noqa: F401
+from lutris.services import egs
+s = egs.EpicGamesStoreService.__new__(egs.EpicGamesStoreService)
+posted = []
+
+
+class Reply:
+    status_code = 200
+
+    def __init__(self, j):
+        self.j = j
+
+    def json(self):
+        return self.j
+
+
+class Session:
+    headers = {}
+
+    def post(self, url, data, auth):
+        posted.append(data["grant_type"])
+        return Reply({"access_token": "new", "refresh_token": "r2", "expires_at": "2999-01-01T00:00:00.000Z"})
+
+    def get(self, url):
+        return Reply({"account_id": "x"})
+
+
+s.session, s.token_path = Session(), sys.argv[2] + "/egs.token"
+s.session_data = {"access_token": "old", "refresh_token": "r1", "expires_at": "2020-01-01T00:00:00.000Z"}
+s.resume_session()
+assert posted == ["refresh_token"] and s.session.headers["Authorization"] == "bearer new", (posted, s.session.headers)
+s.resume_session()
+assert posted == ["refresh_token"], "a good token renewed again"
+P
+
 # revive_installed: a store game uninstalled in Lutris, then found installed again by its store's scan (Epic here):
 # its old entry is installed again (same id, so its playtime stays), not left "not installed"
 HOME=$t XDG_CACHE_HOME=$t/cache XDG_DATA_HOME=$t/.local/share XDG_CONFIG_HOME=$t/.config python3 -I - "$t/cache/lutris-overlay" <<'P2' || fail "an uninstalled Epic game found again isn't installed again"

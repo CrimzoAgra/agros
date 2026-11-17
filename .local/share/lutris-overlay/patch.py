@@ -705,6 +705,23 @@ class ServiceSidebarRow(SidebarRow):
 """)
 
 
+# Epic: its login renewed. Lutris only uses the access token Epic gives at sign-in (36 hours), never the refresh token
+# that comes with it (a year): a day and a half after signing in (or a restore's login, older than that) every sync
+# failed with "EGS Token expired". Now an access token past its time is renewed first, as Epic's own launcher does.
+# (Lutris's main renews it itself, after 0.5.22: there this no longer fits and is left out, theirs doing it)
+def egs_refresh():
+    edit("services/egs.py", """    def resume_session(self):
+        self.session.headers["Authorization"] = "bearer %s" % self.session_data["access_token"]
+""", """    def resume_session(self):
+        # lutris-overlay: egs_refresh (5 minutes' margin: not running out mid-sync)
+        import time
+        soon = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(time.time() + 300))
+        if self.session_data.get("refresh_token") and self.session_data.get("expires_at", "") < soon:
+            self.start_session()
+        self.session.headers["Authorization"] = "bearer %s" % self.session_data["access_token"]
+""")
+
+
 # Changes that can be turned off, by setting name, with their label in the Settings app. The others are always on: the
 # Steam fix keeps installed games from being deleted, starting hidden only happens when asked (at login), and the
 # start-up once is a plain fix
@@ -728,6 +745,7 @@ OPTIONAL = {
 PLUMBING = {
     "library_refresh": "An open Lutris shows lutris-library's changes at once (else once it restarts)",
     "source_page_ids": "A store's own page shows all its games (else some go missing at random)",
+    "egs_refresh": "Epic: the login renewed, not expired a day and a half after signing in",
 }
 if sys.argv[1:] == ["--list"]:
     print(json.dumps([{"id": k, "label": v} for k, v in OPTIONAL.items()]))
@@ -743,7 +761,7 @@ except (OSError, ValueError):
     values = {}
 changes = [c for c in (sections, steam_placeholder, hide_uninstalled, launchers_apart, same_size_covers, start_hidden, startup_once,
                         vulkaninfo_once, rounded_covers, store_icons, window_after_game, reap_children, flathub_steam, library_refresh, sync_all, revive_installed,
-                        bnet_not_installed, bnet_source, rockstar_source, bnet_login, source_page_ids, source_icons, tall_covers) if values.get(f"lutris.{c.__name__}") is not False]
+                        bnet_not_installed, bnet_source, rockstar_source, bnet_login, source_page_ids, source_icons, tall_covers, egs_refresh) if values.get(f"lutris.{c.__name__}") is not False]
 while True:
     try:
         for change in changes:
