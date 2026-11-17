@@ -363,6 +363,19 @@ SIGNED=equibop FOREIGN=equibop PENDING="foo 1-1 -> 2-1" "$t/auto-update-aur" "$t
 [[ $(cat "$aur/failed") == "equibop: equibop came from a repository that no longer has it, and the AUR's equibop is someone else's: update it from Updates, where you can review it" &&
     $(cat "$aur/wanted") == "equibop 1.1-1" ]] && ! grep -q '^git clone' "$t/calls" ||
     fail "a package its repository dropped built from the AUR, or not said: $(cat "$aur/failed" 2>/dev/null)"
+# A change that went back (the old maintainer again) forgets the one waiting: the same account's adoption later, with
+# the version installed moved on since, isn't taken as updated from Updates
+echo "equibop alice" >"$t/au/aur-maintainers"
+echo "equibop malloryb 0.9-1" >"$t/au/aur-maintainer-changed"
+maintained alice
+: >"$t/calls"
+FOREIGN=equibop PENDING="foo 1-1 -> 2-1" "$t/auto-update-aur" "$t/db" >"$t/out" 2>&1 || fail "a build by the old maintainer again failed: $(cat "$t/out")"
+[[ ! -s $t/au/aur-maintainer-changed ]] || fail "a change that went back still waiting: $(cat "$t/au/aur-maintainer-changed")"
+maintained malloryb
+: >"$t/calls"
+FOREIGN=equibop PENDING="foo 1-1 -> 2-1" "$t/auto-update-aur" "$t/db" >"$t/out" 2>&1 && fail "a second change to the same account reported success"
+[[ $(cat "$aur/failed") == "equibop: its AUR maintainer changed (alice to malloryb): update it from Updates, where you can review it" ]] &&
+    ! grep -q '^git clone' "$t/calls" || fail "built after a second change to the same account: $(cat "$aur/failed" 2>/dev/null)"
 # (the builds' logs the admins' alone: what they printed names every user's AUR apps)
 [[ $(stat -c %a "$aur/log") == 750 ]] || fail "the builds' logs open to every account: $(stat -c %a "$aur/log")"
 rm -f "$t/au/aur-maintainers" "$t/au/aur-maintainer-changed"

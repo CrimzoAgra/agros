@@ -261,7 +261,12 @@ guard() {
         return 1
     fi
     was=$(field "$maint" "$2" 2)
-    [[ -n $was && $was != "$3" ]] || return 0
+    if [[ -z $was || $was == "$3" ]]; then
+        # (a change that went back: the one waiting forgotten, else a later change to that same account, once the
+        # version installed had moved on, was taken as reviewed in Updates)
+        [[ -z $(field "$changed" "$2" 2) ]] || set_line "$changed" "$2"
+        return 0
+    fi
     if [[ $(field "$changed" "$2" 2) == "$3" && $(field "$changed" "$2" 3) != "$4" ]]; then
         set_line "$changed" "$2"  # (updated from Updates since: the new maintainer taken, recorded at its build)
         return 0
