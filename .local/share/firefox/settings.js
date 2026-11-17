@@ -11,7 +11,6 @@ user_pref("network.http.speculative-parallel-limit", 0);
 user_pref("network.prefetch-next", false);
 user_pref("dom.forms.autocomplete.formautofill", true);
 user_pref("media.eme.enabled", true);
-user_pref("browser.ipProtection.enabled", true);
 user_pref("browser.newtabpage.activity-stream.feeds.topsites", false);
 user_pref("browser.newtabpage.activity-stream.showSponsoredTopSites", false);
 user_pref("browser.newtabpage.activity-stream.newtabWallpapers.user.enabled", true);
