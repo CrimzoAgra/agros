@@ -25,8 +25,9 @@ you try: look a game up on [ProtonDB](https://www.protondb.com) before you buy i
 Lutris lists every game you own, on every store, in one place: Steam, EA, Ubisoft, Epic, GOG, Battle.net and
 Rockstar. Installed games come first, the rest below; opening one you haven't installed installs it through its store.
 
-The store launchers (EA app, Ubisoft Connect, Battle.net, Epic, GOG Galaxy, Rockstar) are under **Launchers** in Lutris's
-sidebar: open one there to install it. To add Battle.net or Rockstar games, sign in to them from Lutris's sources.
+The store launchers (EA app, Ubisoft Connect, Battle.net, Epic, GOG Galaxy, Rockstar) are under **Launchers** in
+Lutris's sidebar: open one there to install it. To add Battle.net or Rockstar games, sign in to them from Lutris's
+sources.
 
 Lutris starts in the tray when you log in.
 

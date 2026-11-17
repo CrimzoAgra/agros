@@ -22,7 +22,8 @@ the search bar checks for updates.
 ## Notifications
 
 Pop-ups appear in the corner. To see older ones, move the pointer to the top edge of the screen above them, or press
-**Super+N** (**Super+K** opens them with every other panel). Click a notification to go to the app that sent it. **Ctrl+Alt+C** clears them all.
+**Super+N** (**Super+K** opens them with every other panel). Click a notification to go to the app that sent it.
+**Ctrl+Alt+C** clears them all.
 
 ## Desktop widgets
 
@@ -36,5 +37,5 @@ desktop, Discord and Spotify follow the wallpaper.
 
 ## Lock screen
 
-**Super+L** locks the screen. It also locks itself before the computer goes to sleep. When the computer wakes, the screens
-come back on by themselves, on the lock screen (no key press needed).
+**Super+L** locks the screen. It also locks itself before the computer goes to sleep. When the computer wakes, the
+screens come back on by themselves, on the lock screen (no key press needed).

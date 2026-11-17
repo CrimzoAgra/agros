@@ -11,8 +11,8 @@ to piece together.
   weather, calendar, system meters, music), and colours taken from your wallpaper.
 - **Windows-style habits**: windows float and open in the middle, with title bars, minimise and maximise.
   Alt+Tab switches windows, and Ctrl+Shift+Esc opens a task manager.
-- **Your apps, installed**: a browser, Discord, Spotify, an office suite, an image viewer, a video player, a code editor and more. See
-  [Apps](08-apps.md).
+- **Your apps, installed**: a browser, Discord, Spotify, an office suite, an image viewer, a video player, a code editor
+  and more. See [Apps](08-apps.md).
 - **Gaming**: Steam, Lutris (one library for Steam, EA, Ubisoft, Epic, GOG, Battle.net and Rockstar), Proton,
   MangoHud and Gamescope. See [Gaming](09-gaming.md).
 - **Updates that look after themselves**: Flatpaks, AppImages, Proton builds and developer tools are updated at boot,

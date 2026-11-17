@@ -2,8 +2,8 @@
 
 ## Something stopped working
 
-Run `dotfiles-check` in a terminal. It checks the desktop's settings, AgrOS's changes, and that everything that should be
-running is, and tells you what's wrong. It also runs by itself 30 seconds after you log in, and only sends a
+Run `dotfiles-check` in a terminal. It checks the desktop's settings, AgrOS's changes, and that everything that should
+be running is, and tells you what's wrong. It also runs by itself 30 seconds after you log in, and only sends a
 notification when it finds something.
 
 ## The bar or widgets look wrong

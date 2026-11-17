@@ -17,8 +17,8 @@ Windows behave the way they do on Windows:
   and maximised windows move to fit the new gaps and stay side by side.
 - A window can always be dragged back: its title bar never ends up out of reach.
 - The panels on the screen's edges (dashboard, Super menu, notifications, volume, quick settings) open when the
-  pointer touches the very edge (on a side with another screen beyond, near it: the pointer goes on across there), and not while you drag
-  something.
+  pointer touches the very edge (on a side with another screen beyond, near it: the pointer goes on across there), and
+  not while you drag something.
 - Minimised windows stay in the dock, dimmed. Click them, or press Alt+Tab, to bring them back.
 - In the Alt+Tab switcher, the **×** in a window's corner closes it (as its own close button would), and the switcher
   stays open.
@@ -33,8 +33,8 @@ Press **Super+Alt+Space** (or right-click an empty part of the bar) to switch be
 ## Workspaces
 
 Workspaces are like Windows' virtual desktops. You have ten: **Super+1** to **Super+0** jumps between them, and the dots
-at the top of the bar show which ones hold windows. Hover a dot for a live preview; rest the pointer on the preview for a
-moment and that workspace's windows show alone on the screen, the others faded out, until you move away. The dock's
+at the top of the bar show which ones hold windows. Hover a dot for a live preview; rest the pointer on the preview for
+a moment and that workspace's windows show alone on the screen, the others faded out, until you move away. The dock's
 previews do the same for one window: rest on a window's preview and that window shows alone.
 
 On a laptop, swipe sideways on the touchpad to move between them.

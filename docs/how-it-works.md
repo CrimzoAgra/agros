@@ -12,9 +12,9 @@ desktop (RTX 2060, external monitor). Things that depend on the hardware check f
 both. The files are laid out like `$HOME`; `packages/` turns them into pacman packages.
 
 **What's not in this repo:** your personal data, meaning logins, keys, your browser profile and bookmarks (they travel
-encrypted on your pen drive, see below), and wallpapers: the default is Caelestia's own. The logo, three leaves drawn in one line width,
-is `agros-logo` (#bec4ee, `.local/share/icons/hicolor/scalable/apps`), installed with the icons in `/usr/share/icons`,
-so every install has it.
+encrypted on your pen drive, see below), and wallpapers: the default is Caelestia's own. The logo, three leaves drawn in
+one line width, is `agros-logo` (#bec4ee, `.local/share/icons/hicolor/scalable/apps`), installed with the icons in
+`/usr/share/icons`, so every install has it.
 
 Laptop settings and lighting are in a separate repo: **legion-control-linux**.
 
@@ -69,15 +69,16 @@ server could list packages CI never put together).
 
 The second server is a mirror on Cloudflare R2 (the bucket agros-iso's ISO is downloaded from, under `repo/x86_64`), so
 a GitHub Pages outage doesn't stop every machine's updates: pacman tries Pages first and the mirror only when Pages
-fails. `.github/workflows/mirror.yml` fills it after each CI run on `main`, also one that failed after Pages was deployed (and by hand): `ci/mirror.sh`
-downloads what Pages publishes (the database and `agros.files` with their `.tar.gz` copies, every package the database
-lists, `agros-approved`, `agros-arch-ok`, each with its `.sig` where published), checks every signature against
-`ci/agros.asc` alone (the database's required), then `rclone` uploads the packages first and the database last, and
-only then removes what the repo no longer has: a mirror mid-update never lists a package it doesn't have. Only the
-current set is kept (R2's free 10 GB; the repo is about 190 MB). It needs the same four secrets as agros-iso's ISO
-upload, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` and `R2_BUCKET`, set on this repo too (secrets
-are per repo); without them it says so (a warning) and does nothing. `update-gate`'s approved list, the boot's copy
-of `agros-arch-ok` and agros-iso's gate try each of `[agros]`'s servers in turn (Pages down: the mirror's).
+fails. `.github/workflows/mirror.yml` fills it after each CI run on `main`, also one that failed after Pages was
+deployed (and by hand): `ci/mirror.sh` downloads what Pages publishes (the database and `agros.files` with their
+`.tar.gz` copies, every package the database lists, `agros-approved`, `agros-arch-ok`, each with its `.sig` where
+published), checks every signature against `ci/agros.asc` alone (the database's required), then `rclone` uploads the
+packages first and the database last, and only then removes what the repo no longer has: a mirror mid-update never lists
+a package it doesn't have. Only the current set is kept (R2's free 10 GB; the repo is about 190 MB). It needs the same
+four secrets as agros-iso's ISO upload, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` and `R2_BUCKET`, set
+on this repo too (secrets are per repo); without them it says so (a warning) and does nothing. `update-gate`'s approved
+list, the boot's copy of `agros-arch-ok` and agros-iso's gate try each of `[agros]`'s servers in turn (Pages down: the
+mirror's).
 
 agros-iso's `pacman.conf` files have both the `SigLevel` line and the mirror. On a machine installed before them,
 `agros-system`'s install adds each under `[agros]` where it's missing (a `SigLevel` of yours stays; a `#Server =` line
@@ -102,49 +103,50 @@ of yours for the mirror counts, not added again), and its removal takes them out
 The AUR packages AgrOS uses (`aur/packages.txt`: Caelestia, equibop, Spicetify, darkly, ...) are built into
 the same repo. Quickshell is built first, on its own, with AgrOS's fix
 (`packages/agros-system/aur-patches/quickshell-git.patch`, added by `aur-agros-patch`, its pkgrel a `.<rel>` above the
-AUR's, raised when what it adds changes; stripped, as Arch's own packages are). Without it, a window that closed while Quickshell was asking Hyprland for the window list came back from the
-late answer and stayed listed for good (a game quit, its icon left in the dock). The boot's rebuild on a new Qt
-(`auto-update-aur`) adds the same fix, and a patch that no longer applies fails the build rather than going out without
-it. CachyOS's installer is built there too: `cachyos-calamares` rebuilt with AgrOS's changes (the live ISO installs
-it from `[agros]`; among them, an EFI partition already on the disk checked against the minimum size, agros-iso's 64
-MB, not the 512 MB a new one gets, so it installs beside Windows' 100 MB one): its version is CachyOS's with a `.N`
-after the pkgrel (`calamares_rel` in `ci/build-repo.sh`), raised with any change to AgrOS's changes or to the pins
-below, beside their new checksum (`calamares_sum`, over both), or CI fails. A build whose settings name a module it
-wasn't built with (CMake leaves one out unsaid when its library is missing, and the installer stopped at that step) is
-held, the published one kept. CachyOS's recipe for it is taken at a fixed commit of CachyOS-PKGBUILDS
-(`calamares_pkgbuild`), and the installer's code at a fixed commit of its `cachyos` branch (`calamares_src`), not their
-newest: their changes reach AgrOS's installer only once looked at, the pins moved on and `calamares_rel` raised; the
-weekly status says when either has moved. (On 2026-11-17 CachyOS moved the recipe from `cachyos-dev`, as
-`cachyos-calamares-next`, to `cachyos`; that branch's installer installs every package-list group, `platform:` or not,
-so AgrOS's list lost its handheld kernel group first. Their own ISO builds `cachyos-staging`: `cachyos` plus their
-newest work.) Most of AgrOS's own packages are versioned by the repo's commits (one built again from the same commit with
-other contents fails CI: a build that isn't reproducible); `agros-vmware` and `agros-thunar-usage`, compiled, by the
-commits that touch their own folder (`2.r<count>.<commit>`, `1.r<count>.<commit>`: the `2.` keeps `agros-vmware` above
-the `1-1` published before, with no epoch, whose `:` would go in the file's name); `agros-boot` by the commits that
-touch what it's made from (its folder, `system/boot-video-mode`, the login screen's `screenmode.py`: `1.r<count>.<commit>`,
-the `1.` keeping it above the whole repo's `r<count>` it had before), as each new version makes every boot image again (it
-ships a file mkinitcpio's pacman hook watches); `agros-hyprbars` by the Hyprland it's built for, then the commits that
-touch it (`<hyprland version>.r<count>.<commit>`: a build for another Hyprland is a new version); `agros-desktop`,
-`agros-welcome`, `agros-keyring`, `agros-nvidia` and `agros-wine` have a fixed `pkgver`, raised by
-hand in their `PKGBUILD` with any change to them: CI fails when one changed under a version already published. A
-version already published keeps the published file (a rebuild under the same name read as corrupted in pacman's
-cache), except a compiled one built against other libraries, Qt or Python than it (`built_against`): that rebuild goes
-out, so new installs and the ISO get one that runs. Quickshell, Caelestia and Calamares aren't even built when nothing
-that would change that has (`reused` in `ci/published.sh`). To change AgrOS, change this repo: CI builds and publishes the packages, and pacman updates every
-machine. Settings in `/etc/skel` reach new accounts. An account that has them already gets an update's new version
-at its next login (`agros-links`) where its file is still one AgrOS shipped, byte for byte (one you never edited); one
-you edited is kept, AgrOS's new version put beside it as `<file>.agros-new` (as pacman's `.pacnew`), and a
-notification says so once. The settings that are yours to change, mostly through the apps that write them, are never
-updated, only copied in when missing: Caelestia's `shell.json` (its settings, the weather location), the dock's pins,
-`mimeapps.list`, `~/.config/autostart` (Settings > Startup), VSCodium's, Legion Control's, and `user/hosts/` (one machine's
-screens). A file `package()` changes at build time only has its current version listed (Caelestia's `execs.lua` has
-every version, with the same change made).
+AUR's, raised when what it adds changes; stripped, as Arch's own packages are). Without it, a window that closed while
+Quickshell was asking Hyprland for the window list came back from the late answer and stayed listed for good (a game
+quit, its icon left in the dock). The boot's rebuild on a new Qt (`auto-update-aur`) adds the same fix, and a patch that
+no longer applies fails the build rather than going out without it. CachyOS's installer is built there too:
+`cachyos-calamares` rebuilt with AgrOS's changes (the live ISO installs it from `[agros]`; among them, an EFI partition
+already on the disk checked against the minimum size, agros-iso's 64 MB, not the 512 MB a new one gets, so it installs
+beside Windows' 100 MB one): its version is CachyOS's with a `.N` after the pkgrel (`calamares_rel` in
+`ci/build-repo.sh`), raised with any change to AgrOS's changes or to the pins below, beside their new checksum
+(`calamares_sum`, over both), or CI fails. A build whose settings name a module it wasn't built with (CMake leaves one
+out unsaid when its library is missing, and the installer stopped at that step) is held, the published one kept.
+CachyOS's recipe for it is taken at a fixed commit of CachyOS-PKGBUILDS (`calamares_pkgbuild`), and the installer's code
+at a fixed commit of its `cachyos` branch (`calamares_src`), not their newest: their changes reach AgrOS's installer
+only once looked at, the pins moved on and `calamares_rel` raised; the weekly status says when either has moved. (On
+2026-11-17 CachyOS moved the recipe from `cachyos-dev`, as `cachyos-calamares-next`, to `cachyos`; that branch's
+installer installs every package-list group, `platform:` or not, so AgrOS's list lost its handheld kernel group first.
+Their own ISO builds `cachyos-staging`: `cachyos` plus their newest work.) Most of AgrOS's own packages are versioned by
+the repo's commits (one built again from the same commit with other contents fails CI: a build that isn't reproducible);
+`agros-vmware` and `agros-thunar-usage`, compiled, by the commits that touch their own folder (`2.r<count>.<commit>`,
+`1.r<count>.<commit>`: the `2.` keeps `agros-vmware` above the `1-1` published before, with no epoch, whose `:` would go
+in the file's name); `agros-boot` by the commits that touch what it's made from (its folder, `system/boot-video-mode`,
+the login screen's `screenmode.py`: `1.r<count>.<commit>`, the `1.` keeping it above the whole repo's `r<count>` it had
+before), as each new version makes every boot image again (it ships a file mkinitcpio's pacman hook watches);
+`agros-hyprbars` by the Hyprland it's built for, then the commits that touch it (`<hyprland version>.r<count>.<commit>`:
+a build for another Hyprland is a new version); `agros-desktop`, `agros-welcome`, `agros-keyring`, `agros-nvidia` and
+`agros-wine` have a fixed `pkgver`, raised by hand in their `PKGBUILD` with any change to them: CI fails when one
+changed under a version already published. A version already published keeps the published file (a rebuild under the
+same name read as corrupted in pacman's cache), except a compiled one built against other libraries, Qt or Python than
+it (`built_against`): that rebuild goes out, so new installs and the ISO get one that runs. Quickshell, Caelestia and
+Calamares aren't even built when nothing that would change that has (`reused` in `ci/published.sh`). To change AgrOS,
+change this repo: CI builds and publishes the packages, and pacman updates every machine. Settings in `/etc/skel` reach
+new accounts. An account that has them already gets an update's new version at its next login (`agros-links`) where its
+file is still one AgrOS shipped, byte for byte (one you never edited); one you edited is kept, AgrOS's new version put
+beside it as `<file>.agros-new` (as pacman's `.pacnew`), and a notification says so once. The settings that are yours to
+change, mostly through the apps that write them, are never updated, only copied in when missing: Caelestia's
+`shell.json` (its settings, the weather location), the dock's pins, `mimeapps.list`, `~/.config/autostart` (Settings >
+Startup), VSCodium's, Legion Control's, and `user/hosts/` (one machine's screens). A file `package()` changes at build
+time only has its current version listed (Caelestia's `execs.lua` has every version, with the same change made).
 
 The CI needs two repository secrets: `AGROS_GPG_KEY`, AgrOS's key itself without a passphrase, kept only there (no
-other copy, and no revocation certificate; the same secret in both repos); and `AGROS_ISO_TOKEN`, a fine-grained token for `agros-iso` only with **Actions: Read and write**, which starts
-agros-iso's ISO build after each publish (the `iso` job fails without it). It also needs GitHub Pages turned on with
-"GitHub Actions" as its source. An optional repository variable, `AGROS_PUBLISHED`, points the build at another
-published repo to compare with (default `https://crimzoagra.github.io/agros/x86_64`).
+other copy, and no revocation certificate; the same secret in both repos); and `AGROS_ISO_TOKEN`, a fine-grained token
+for `agros-iso` only with **Actions: Read and write**, which starts agros-iso's ISO build after each publish (the `iso`
+job fails without it). It also needs GitHub Pages turned on with "GitHub Actions" as its source. An optional repository
+variable, `AGROS_PUBLISHED`, points the build at another published repo to compare with (default
+`https://crimzoagra.github.io/agros/x86_64`).
 
 ### The apps
 
@@ -158,7 +160,8 @@ With the Windows ones they replace in brackets:
 - With the device plugged in (`agros-welcome --system`): Boxflat (Moza Pit House), OpenRazer + Polychromatic (Razer
   Synapse), Solaar (Logitech G Hub, Logi Options+), OpenTabletDriver (tablet app)
 - File Roller + 7-Zip (WinRAR, 7-Zip; Extract/Compress in Thunar's right-click menu)
-- VSCodium, VS Code's open-source build (with your extensions), LibreOffice (Microsoft Office), qBittorrent, AntiMicroX (JoyToKey)
+- VSCodium, VS Code's open-source build (with your extensions), LibreOffice (Microsoft Office), qBittorrent, AntiMicroX
+  (JoyToKey)
 - Text Editor (Notepad), qView (Photos), mpv (Media Player)
 - VMware Workstation (`agros-welcome --system`: the AUR package, its installer from a copy on archive.org, as Broadcom
   gives it only to signed-in users; checked against the package's checksum)
@@ -183,9 +186,9 @@ a lost drive gives nothing without it. `agros-personal` decrypts it straight int
 anywhere else) and backs up what it replaces; the keyring opens with your old login password. It refuses while an app
 whose files it brings back is open, but closes Lutris and Proton VPN when they're only in the tray (they start there at
 login, Proton VPN once you turn that on), asking first in a terminal. It's never in the repo (`--save` refuses a
-folder inside a git repo): saved logins get past your password and 2FA, and git keeps every version. With no drive, it opens each app for you to
-sign in instead (LibreWolf's Firefox account brings bookmarks and passwords through Sync) and asks the weather
-widget's place. Save again now and then: logins expire.
+folder inside a git repo): saved logins get past your password and 2FA, and git keeps every version. With no drive, it
+opens each app for you to sign in instead (LibreWolf's Firefox account brings bookmarks and passwords through Sync) and
+asks the weather widget's place. Save again now and then: logins expire.
 
 ## Credits and licenses
 
@@ -222,8 +225,8 @@ Changes apply right away.
   shortcuts, a slider and -/+ for a number, a text field, a JSON field, pictures), a button back to the default on any
   that's changed, a note where AgrOS relies on the value, and a search over every page above the list of pages
 - **`.local/share/dots-settings/schema.json`**: every setting, its kind, default, and how a change applies (reload
-  Hyprland...). A new setting is added here, then read where it's used; a new kind of setting is added to `dots-settings`
-  and the app once, for every page
+  Hyprland...). A new setting is added here, then read where it's used; a new kind of setting is added to
+  `dots-settings` and the app once, for every page
 - **`.local/bin/dots-settings`**: saves your choices (only those that differ from the default) to
   `~/.config/dots/settings.json`, for this machine only, and writes them to `settings.lua` for Hyprland, where
   `dots.setting(key)` reads them (written again at Hyprland's load when the schema's md5sum isn't the one it was made
@@ -250,9 +253,9 @@ Changes apply right away.
   - **Windows**: floating or tiling, focus on click or hover, cascading, title bars
   - **Mouse and keyboard**: mouse DPI (the mouse's own, through Solaar: `.local/bin/mouse-dpi`, also at login; Solaar
     in the tray puts it back on reconnect), acceleration, pointer speed, natural scrolling, the touchpad (tap to click,
-    off while typing, scrolling speed), key repeat (`hypr-user.lua` sets them), and the keyboard layout, variant and options:
-    the system's, as the installer set it, through `localectl` (it asks for the password; the login screen and Scroll
-    Lock's keymap follow it, from the Hyprland reload)
+    off while typing, scrolling speed), key repeat (`hypr-user.lua` sets them), and the keyboard layout, variant and
+    options: the system's, as the installer set it, through `localectl` (it asks for the password; the login screen and
+    Scroll Lock's keymap follow it, from the Hyprland reload)
   - **Screens**: each connected screen (Hyprland's list) by its full description: on or off, resolution and refresh
     rate, scale (only those giving the mode a whole size in pixels, as Hyprland needs), position, and the main screen.
     Empty is AgrOS's own choice (the host file's rule, the fastest rate)
@@ -263,9 +266,9 @@ Changes apply right away.
     **Launcher**, **Notifications** (and toasts), **Lock and session** (lock screen, idle, the session menu), **Region
     and services** (weather place and units, clock, data units, media player, volume step): the Caelestia options most
     often changed, with plain labels
-  - **Features**: low input lag in games (tearing allowed for games only; while one is open the pointer is drawn into the picture,
-    as Hyprland allows no tearing with the graphics card's cursor layer showing one: `user/apps.lua`), each of game-focus's four
-    behaviours, store launchers starting minimised, each Lutris change, and
+  - **Features**: low input lag in games (tearing allowed for games only; while one is open the pointer is drawn into
+    the picture, as Hyprland allows no tearing with the graphics card's cursor layer showing one: `user/apps.lua`), each
+    of game-focus's four behaviours, store launchers starting minimised, each Lutris change, and
     each change to Caelestia (listed from `caelestia-overlay`'s and the Lutris overlay's `patch.py --list`, so new ones
     show up by themselves). A Caelestia change turned off is left out of the rebuild (`Off:`, not a warning)
   - **Startup**: the apps `user/apps.lua` can start at login (Lutris and Capri on by default;
@@ -273,11 +276,12 @@ Changes apply right away.
     autostart entry (`/etc/xdg/autostart`, `~/.config/autostart`); turning one of those off writes your copy of it
     with `Hidden=true`, as GNOME's startup settings do
   - **Shortcuts**: my shortcuts (`dots.bind` in `user/keys.lua`, `user/windows.lua` and `user/apps.lua`; defaults in the
-    schema), Caelestia's (its `kb*` variables, by its sections, minus the ones `hypr-vars.lua` turns off; your changes go
-    back through `hypr-vars.lua`), and the fixed ones neither can change (Caelestia's arrows, media keys...: Hyprland's
-    list of binds, `hyprctl binds`), shown so a clash with them shows too. + records a new one: Hyprland switches to an
-    empty submap (`dots-capture`) meanwhile so every key reaches the app, and Esc always leaves it. A shortcut used twice
-    shows in red. A new shortcut of mine is a `dots.bind` with its default in the schema: no other code
+    schema), Caelestia's (its `kb*` variables, by its sections, minus the ones `hypr-vars.lua` turns off; your changes
+    go back through `hypr-vars.lua`), and the fixed ones neither can change (Caelestia's arrows, media keys...:
+    Hyprland's list of binds, `hyprctl binds`), shown so a clash with them shows too. + records a new one: Hyprland
+    switches to an empty submap (`dots-capture`) meanwhile so every key reaches the app, and Esc always leaves it. A
+    shortcut used twice shows in red. A new shortcut of mine is a `dots.bind` with its default in the schema: no other
+    code
   - **All Caelestia options**: every option of the Caelestia installed (about 420), by area (closed until opened),
     named from the option's own name, each with the control its type needs (a JSON field for lists)
 
@@ -361,9 +365,9 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
   - Notifications:
     - The sidebar slides down from the top when you hover the top edge above it, with notifications only (no
       divider, ending above the bottom-right panel); Super+N (the letter) opens it alone, and Super+K (Caelestia's
-      "show all": the launcher, dashboard, volume slider and bottom-right panel, Caelestia's utilities: quick settings) opens it too, merged with the
-      bottom-right panel. The launcher closing (Esc) closes them all unless hovered (Caelestia's left the bottom-right
-      panel open)
+      "show all": the launcher, dashboard, volume slider and bottom-right panel, Caelestia's utilities: quick settings)
+      opens it too, merged with the bottom-right panel. The launcher closing (Esc) closes them all unless hovered
+      (Caelestia's left the bottom-right panel open)
       (a Caelestia with its own shortcut mode for the sidebar, as main has, keeps it: its choice of which opening counts
       as by the key is replaced, as its own counts the top edge's, and as on v2.5.0 the pointer on the sidebar puts it
       back under hover control and the launcher closing closes it unless hovered)
@@ -385,18 +389,19 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
     pop-up when the shell starts or the sound device changes; a critical battery, and the session menu's Hibernate
     (unless `shell.json`'s `session.commands.hibernate` sets another command), hibernate where the system can and
     suspend where it can't (`systemctl hibernate || systemctl suspend`): an AgrOS install has no swap to hibernate into
-    (zram only), where Caelestia's call did nothing and the laptop died; no warnings about a missing account picture (`~/.face`)
+    (zram only), where Caelestia's call did nothing and the laptop died; no warnings about a missing account picture
+    (`~/.face`)
 - **`.local/bin/caelestia-overlay`**: builds `~/.config/quickshell/caelestia` (Caelestia + the patches); also run by the
   pacman hook after every `caelestia-shell` or `agros-scripts` update. Nothing it's built from changed since the last
   build (Caelestia's files, the script, the patches, the Settings app's `caelestia.*` switches: one checksum, kept in
-  the folder's `.agros-built`): left as it is, the shell not restarted. With a Caelestia running from the overlay (an update from the
-  Updates app, inside the session) it hands over to `caelestia-restart --rebuild`, which stops the shell, rebuilds and
-  starts it again: swapped under a running shell, the folder got it dropped by Hyprland. It checks under the overlay's
-  lock (`~/.config/quickshell/caelestia.lock`), which `caelestia-restart` and `caelestia-start` hold from the shell's
-  stop to its new start, so a rebuild waiting on one finds the shell up and hands over too. A game open: the restart
-  waits until it closes (`after-games`, in the background); a session that ends first loses it, and the next login's
-  `caelestia-start` makes it. Skipped patches go to `~/.local/state/caelestia-overlay-skipped` (reported by
-  `dotfiles-check`)
+  the folder's `.agros-built`): left as it is, the shell not restarted. With a Caelestia running from the overlay (an
+  update from the Updates app, inside the session) it hands over to `caelestia-restart --rebuild`, which stops the
+  shell, rebuilds and starts it again: swapped under a running shell, the folder got it dropped by Hyprland. It checks
+  under the overlay's lock (`~/.config/quickshell/caelestia.lock`), which `caelestia-restart` and `caelestia-start` hold
+  from the shell's stop to its new start, so a rebuild waiting on one finds the shell up and hands over too. A game
+  open: the restart waits until it closes (`after-games`, in the background); a session that ends first loses it, and
+  the next login's `caelestia-start` makes it. Skipped patches go to `~/.local/state/caelestia-overlay-skipped`
+  (reported by `dotfiles-check`)
 - **`.local/bin/caelestia-start`**: starts Caelestia at login (Caelestia's `execs.lua` runs it, so set by
   `agros-hyprland-settings`), running `caelestia-overlay` first (at every login: it rebuilds only what's out of date,
   so one an update left waiting for a game is made then). `caelestia-start --prepare` (`caelestia-prepare.service`,
@@ -436,14 +441,15 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
 - **`.local/bin/timezone-auto`**: Settings > Language & region > "Set the time zone automatically" (Caelestia's
   Settings app, `nexus-time-block.qml`; on while `~/.local/state/agros/timezone-auto` is there; off by default). Its
   zone comes from Caelestia's weather location: `lat,lon` through Open-Meteo's forecast (`timezone=auto`), a town
-  through Open-Meteo's geocoding, empty (automatic) by IP through ipinfo.io (HTTPS: an attacker on the network can't pick it). Not
-  geoclue: it says only coordinates, and the weather location is what you picked. Run at login (`user/desktop.lua`),
-  when turned on, and when the page sees the weather location change; set with `timedatectl` only when it differs.
-  `agros-system`'s polkit rule (`/usr/share/polkit-1/rules.d/50-agros-timezone.rules`) lets an admin (wheel) at the
-  machine change the time zone without the password, so the one at login never asks; for anyone else it's left as it
-  is (`--no-ask-password`). No network or no answer: nothing changes. While it's on, the Time zone field only shows it
-- **`.config/quickshell/widgets/`**: desktop widgets, designed around AgrOS's old Spider-Verse wallpaper and kept as they
-  are on Caelestia's (the default now)
+  through Open-Meteo's geocoding, empty (automatic) by IP through ipinfo.io (HTTPS: an attacker on the network can't
+  pick it). Not geoclue: it says only coordinates, and the weather location is what you picked. Run at login
+  (`user/desktop.lua`), when turned on, and when the page sees the weather location change; set with `timedatectl` only
+  when it differs. `agros-system`'s polkit rule (`/usr/share/polkit-1/rules.d/50-agros-timezone.rules`) lets an admin
+  (wheel) at the machine change the time zone without the password, so the one at login never asks; for anyone else it's
+  left as it is (`--no-ask-password`). No network or no answer: nothing changes. While it's on, the Time zone field only
+  shows it
+- **`.config/quickshell/widgets/`**: desktop widgets, designed around AgrOS's old Spider-Verse wallpaper and kept as
+  they are on Caelestia's (the default now)
   - Comic panels with halftone dots and the film's red/cyan misprint glitch, laid out where the sky was around the
     falling Miles
   - A clock, weather with a 3-day forecast, a calendar, "Sixth sense" CPU/RAM/GPU/SSD meters (they shake when the
@@ -451,7 +457,8 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
   - Weather follows Caelestia's `services.weatherLocation` in `shell.json` (a city, or `lat,lon`; empty finds you by
     IP, as on a fresh install). The pencil by the weather panel's tab (with the mouse over it) types it there, as does
     Settings > Language & region (one picker for both, `.config/quickshell/common/PlacePicker.qml`); it's
-    this machine's own, so an update keeps yours and `dotfiles-sync` doesn't copy it into the repo; media shows the same player as Caelestia's dashboard
+    this machine's own, so an update keeps yours and `dotfiles-sync` doesn't copy it into the repo; media shows the same
+    player as Caelestia's dashboard
   - A dimmed skeleton until the first forecast or player arrives; kept updating while windows cover them, so they're
     current whenever the desktop shows
   - Started by `widgets-start` once Caelestia has loaded; `user/desktop.lua` blurs behind the panels
@@ -474,11 +481,12 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
     the sessions' list the same way: above the pill, the current one ticked, picked with a click or the arrow keys and
     Enter, closed by Esc or a click elsewhere
   - A wrong password said at once: its PAM service, `/etc/pam.d/greetd`, is made by `greetd-pam` from `greetd.pam` and
-    the system's own stack as it is (its auth lines, with nodelay on pam_unix and pam_faillock, which still counts and locks
-    out; the passwords keyring unlocked at login, from the template's lines, not for the login screen's own `greeter`
-    account), and made again after each `pambase` or `pam` update (a pacman hook), so it follows the system's changes.
-    A stack it can't follow leaves the file as it was, said (never one that can't log in; on a first install, greetd's
-    own, so the keyring isn't unlocked at login and apps ask for its password). sudo and the text consoles keep theirs
+    the system's own stack as it is (its auth lines, with nodelay on pam_unix and pam_faillock, which still counts and
+    locks out; the passwords keyring unlocked at login, from the template's lines, not for the login screen's own
+    `greeter` account), and made again after each `pambase` or `pam` update (a pacman hook), so it follows the system's
+    changes. A stack it can't follow leaves the file as it was, said (never one that can't log in; on a first install,
+    greetd's own, so the keyring isn't unlocked at login and apps ask for its password). sudo and the text consoles keep
+    theirs
 - **`.config/spicetify/Themes/caelestia/user.css`**: Caelestia's Spotify theme (from its dots)
   with thin scrollbars; its colours (`color.ini`) are written by Caelestia
 - **`.config/hypr/xdph.conf`**: screen sharing without asking each time
@@ -492,8 +500,8 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
   - Next/previous (Super+scroll, Ctrl+Super+Left/Right, Super+PageUp/PageDown) stay within the focused screen's 10 and
     stop at its 1st and 10th (no wrap: a scroll a notch too far doesn't fling you from the 10th back to the 1st); the
     swipe past the last one stays there too
-  - Moving a window to N (Super+Alt+N, Super+Shift+N without following it, Super+Alt+PageUp/PageDown) puts it on the same
-    screen's N; Ctrl+Super+N and Ctrl+Super+scroll go to screen N, or the next/previous screen, same column, and
+  - Moving a window to N (Super+Alt+N, Super+Shift+N without following it, Super+Alt+PageUp/PageDown) puts it on the
+    same screen's N; Ctrl+Super+N and Ctrl+Super+scroll go to screen N, or the next/previous screen, same column, and
     Ctrl+Super+Alt+N moves the window there
   - With one screen, Caelestia's own workspaces and keys, unchanged
   - A screen unplugged (or the laptop lid closed, below): each of its workspaces with windows (minimised windows with
@@ -506,8 +514,8 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
 - **Laptop lid** (`user/monitors.lua`): closed with another screen connected (docked: logind doesn't suspend), the
   laptop's panel turns off and its windows go to the other screen as above; opened, it's back with them. Closed with no
   other screen: logind suspends as usual. Booting or reloading with the lid closed keeps it off
-- **Switchers** (`.config/quickshell/switcher/`, in Caelestia's style; releasing Super/Alt or clicking picks, Tab and the
-  arrow keys move, the mouse over a preview only highlights it, Escape cancels):
+- **Switchers** (`.config/quickshell/switcher/`, in Caelestia's style; releasing Super/Alt or clicking picks, Tab and
+  the arrow keys move, the mouse over a preview only highlights it, Escape cancels):
   - Super+Tab: live previews of the workspaces with windows, the current one first, then the last used first (as
     Alt+Tab orders windows), Tab cycling on from the current one
   - Alt+Tab: the current workspace's windows, most recently used first (minimised ones too), each preview in its
@@ -544,10 +552,11 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
     preview (the overlay's `SnapPreview.qml`) shows the zone and follows the pointer between zones. Dragged away, a
     snapped window gets back the size it had; maximised or floated by the switch, it's no longer snapped. Snapped
     windows next to each other (side by side or one above the other) share their seam: a two-way resize cursor over
-    the gap (not while a special workspace is open over them), where a press resizes that one edge (the plugin takes the press: not the app's, nor a title bar button's); resizing one
-    moves every edge on that seam's line (the whole line with four quarters) in the same frame, stopping at either
-    app's smallest size. Snapping, its seams and maximise follow Hyprland's gaps and border as they are now (Caelestia's
-    Game mode sets them while it runs), as the plugin's seams do
+    the gap (not while a special workspace is open over them), where a press resizes that one edge (the plugin takes the
+    press: not the app's, nor a title bar button's); resizing one moves every edge on that seam's line (the whole line
+    with four quarters) in the same frame, stopping at either app's smallest size. Snapping, its seams and maximise
+    follow Hyprland's gaps and border as they are now (Caelestia's Game mode sets them while it runs), as the plugin's
+    seams do
   - Always within reach: after a move and after a screen change, a floating window's title bar is all below the top
     border and at least 150 px of it inside the other borders (not on a side with another screen beyond). A screen's
     size change (a VM window resized) re-fits windows once, from Hyprland's event: maximised ones fill it again, snapped
@@ -567,8 +576,8 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
     40 px wide and the bar's full height, side by side at the right edge, no background until hovered
     (a rounded rectangle inside the button: faint white for minimise and maximise, the power button's red for close)
   - The only window buttons there are: GTK apps (LibreWolf included, and any installed later) draw none (the GTK button
-    layout, set by `agros-welcome`), VSCodium's are hidden (`window.controlsStyle`); Steam, which can't turn its own off,
-    gets no bar
+    layout, set by `agros-welcome`), VSCodium's are hidden (`window.controlsStyle`); Steam, which can't turn its own
+    off, gets no bar
   - None on fullscreen windows or games (the `game` tag: Proton's `steam_app_<id>`, Lutris's, gamescope's and native
     Steam games; often borderless over the whole screen), X11 menus and pop-ups (Caelestia's `xwl_popup` tag, Wine's
     included), nor apps with their own buttons (Steam, Proton VPN)
@@ -597,40 +606,41 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
 ## Screens and colours
 
 - **`user/monitors.lua`**: the shared rules and a
-  fallback for any other screen (to the right of the others); **`user/hosts/<hostname>.lua`**: one machine's own screens, loaded on that machine only
-  (`LegionCachy.lua`: the laptop's OLED and a Samsung LF27T450F; `TerraCachy.lua`: the desktop's Samsung C24F390 at
-  its fastest mode). Copy it under your machine's hostname to fix a
+  fallback for any other screen (to the right of the others); **`user/hosts/<hostname>.lua`**: one machine's own
+  screens, loaded on that machine only (`LegionCachy.lua`: the laptop's OLED and a Samsung LF27T450F; `TerraCachy.lua`:
+  the desktop's Samsung C24F390 at its fastest mode). Copy it under your machine's hostname to fix a
   screen's mode or position by hand. The Settings app's Screens page goes over both (`screens.*` settings, by the
   screen's full description, serial included: two of one model each keep theirs): what's set there is applied on top
   of the rule that applied to that screen, so a field left empty keeps it. The main screen goes to 0x0 (the first
   screen: workspaces 1-10, and the windows of a screen unplugged) and the others to its right unless given a position
   (there, or by the host file); the last screen on can't be turned off (all set off: the main one stays on, else the
-  laptop's panel, else the first by name). A mode the screen no longer has is left out (the rule it had applies). A screen's settings stay while it's unplugged. Applied by a Hyprland reload
-  (`hypr-reload`, after any game)
+  laptop's panel, else the first by name). A mode the screen no longer has is left out (the rule it had applies). A
+  screen's settings stay while it's unplugged. Applied by a Hyprland reload (`hypr-reload`, after any game)
 
 ## Games
 
 - **`.config/environment.d/shader-cache.conf`**: keeps compiled game shaders (the NVIDIA driver would otherwise trim
   its cache, and games stutter again)
-- **`.local/bin/steam-start`**: Steam in the tray, in a scope of its own (listed as an app, with its games inside). Lutris
-  starts Steam games through it, so one launched while Steam is closed doesn't open Steam's window. No store launcher
-  starts at login: Lutris does, in its tray
+- **`.local/bin/steam-start`**: Steam in the tray, in a scope of its own (listed as an app, with its games inside).
+  Lutris starts Steam games through it, so one launched while Steam is closed doesn't open Steam's window. No store
+  launcher starts at login: Lutris does, in its tray
 - **`.local/bin/nvidia-shader-fix`**: fixes Cyberpunk 2077 crashing at startup on Turing GPUs (RTX 20xx, GTX 16xx) with
-  NVIDIA 610/615 drivers. Only applied where that's the case: adds itself to the game's Steam launch options when Steam starts
-  (`steam-start`),
+  NVIDIA 610/615 drivers. Only applied where that's the case: adds itself to the game's Steam launch options when Steam
+  starts (`steam-start`),
   and builds the fixed shader from the game's own files
 - **`.local/bin/steam-installed-games`**: installed games, for the bar's Steam menu
-- **`.local/bin/lutris-library`**: Lutris's Games view lists every game you own on Steam, EA, Ubisoft, Epic, GOG, Battle.net and Rockstar,
-  installed first and the rest below (opening one installs it through its store). One run at a time. Rerun after every store sync by
-  `.config/systemd/user/lutris-library.path`; an open Lutris shows the changes at once (the overlay's `library-refresh`
-  action, asked over D-Bus; a plain Lutris once restarted). Installed Steam games join even when
-  Lutris can't read the Steam library (game details private), with their covers (Steam's own copy when Lutris can't
-  download one). A game on more than one store shows once: an installed
+- **`.local/bin/lutris-library`**: Lutris's Games view lists every game you own on Steam, EA, Ubisoft, Epic, GOG,
+  Battle.net and Rockstar, installed first and the rest below (opening one installs it through its store). One run at a
+  time. Rerun after every store sync by `.config/systemd/user/lutris-library.path`; an open Lutris shows the changes at
+  once (the overlay's `library-refresh` action, asked over D-Bus; a plain Lutris once restarted). Installed Steam games
+  join even when Lutris can't read the Steam library (game details private), with their covers (Steam's own copy when
+  Lutris can't download one). A game on more than one store shows once: an installed
   copy, else the Steam one. The other copies go to Lutris's Hidden category. The store launchers (EA app, Ubisoft
   Connect, Battle.net, Epic, GOG Galaxy, Rockstar, Steam) are listed under Launchers in the sidebar (Library, below
   Uncategorized), installed or not: open one there to install it through Lutris (`agros-welcome` lists them too at the
-  first login, making Lutris's folders and database first if it has never run). Steam installed on the system is listed installed:
-  it opens it. A launcher lutris.net has no cover for gets one from `/etc/skel/.local/share/lutris/coverart` (Rockstar's, this repo's `.local/share/lutris/coverart`)
+  first login, making Lutris's folders and database first if it has never run). Steam installed on the system is listed
+  installed: it opens it. A launcher lutris.net has no cover for gets one from `/etc/skel/.local/share/lutris/coverart`
+  (Rockstar's, this repo's `.local/share/lutris/coverart`)
 - **`.local/bin/lutris`**: Lutris with the changes in `.local/share/lutris-overlay` (built into `~/.cache` the first
   time after Lutris or the changes update; Lutris starts unchanged, with a notification, if they no longer fit)
   - The grid splits into collapsible "Installed" and "Not installed" sections (`sections.py`), its covers a little
@@ -656,16 +666,16 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
   - Started at login in its tray only (`LUTRIS_START_HIDDEN=1`)
   - Games with no proper cover (none, a wide one, or Steam's padded one: its header art on a stretched background, when
     the publisher uploaded no cover) get one from SteamGridDB: `.local/bin/lutris-covers`, run in the background when
-    the library or the key changed, one run at a time. Needs a free API key (steamgriddb.com → Preferences → API) in `~/.config/dots/steamgriddb.key`,
-    not in this repo; without it nothing happens
+    the library or the key changed, one run at a time. Needs a free API key (steamgriddb.com → Preferences → API) in
+    `~/.config/dots/steamgriddb.key`, not in this repo; without it nothing happens
   - Its window, closed for a game ("Minimize client when a game is launched"), doesn't come back when the game closes:
     Lutris stays in its tray
   - Opening it while it runs in the tray doesn't redo its start-up (GPU checks that made the mouse stutter, a scan of
     every game folder): once per run
   - The GPU's name and ID (`vulkaninfo`, which also stutters) asked once per boot, at the login start
 - **`.local/bin/game-focus`**: a user service (`.config/systemd/user/game-focus.service`)
-  - A Steam game's sound plays only while its window is focused (other apps keep playing; a game you muted yourself stays
-    muted)
+  - A Steam game's sound plays only while its window is focused (other apps keep playing; a game you muted yourself
+    stays muted)
   - In tiling mode, a game that goes fullscreen next to other windows moves to the first free workspace, and you with
     it; in floating mode it stays where it opened (Alt+Tab minimises it), and switching to tiling moves it then
   - When a game asks for attention (what flashes orange on the Windows taskbar), a notification shows until you clear
@@ -682,8 +692,8 @@ One problem, one place: the scripts call these (beside themselves, `$(dirname "$
 helper a package update just brought works before `agros-links` has linked it), never their own copy of the logic.
 
 - **`.local/bin/after-games`**: waits while a game is open; the update check, `lutris-library`, `hypr-reload`,
-  `hyprbars-build` and `caelestia-restart` run after it, not while you play. What a game is: `game-focus --game-open` (its `is_game`, the one definition: a store
-  launcher's window isn't one; `dots.is_game` in `user/apps.lua` agrees)
+  `hyprbars-build` and `caelestia-restart` run after it, not while you play. What a game is: `game-focus --game-open`
+  (its `is_game`, the one definition: a store launcher's window isn't one; `dots.is_game` in `user/apps.lua` agrees)
 - **`.local/bin/store-launchers`**: the store launchers that run under Wine beside their games (EA app, Ubisoft
   Connect, Epic, Rockstar's...), one list read by `game-focus` and `user/apps.lua`: not games, though under Proton
   their windows get the games' class
@@ -713,7 +723,8 @@ helper a package update just brought works before `agros-links` has linked it), 
   the file keeps its mode. `json-edit --lock <file> <command>`: a command
   under the same lock (`caelestia-pin`'s dock order: its check, the change and its note as one)
 - **`.local/bin/nvidia-screen`**: whether an NVIDIA card drives a screen (`--id`: its PCI address), for VA-API on it
-  (`uwsm/env.d/nvidia-vaapi.sh`, by its installed path: read before `agros-links` runs) and the desktop widgets' stats panel's GPU meter
+  (`uwsm/env.d/nvidia-vaapi.sh`, by its installed path: read before `agros-links` runs) and the desktop widgets' stats
+  panel's GPU meter
 - **`.local/bin/fail-streak`**: counts a failure that keeps coming back, so it's given up on at the third run in a row
   rather than tried for good (`capri-update`'s download or merge, `agros-welcome`'s VSCodium step)
 - **`.local/bin/wait-online`**: waits (at most ~2 min) for the network at boot or login (`auto-update`,
@@ -725,7 +736,8 @@ helper a package update just brought works before `agros-links` has linked it), 
   another database
   (`-b`/`--dbpath`, or another system's, `-r`/`--root`; a plain pacman is on `/var/lib/pacman`'s)
 - **`.local/bin/battery-low`**: whether the computer runs on a battery nearly empty (off its charger, below 15%; the
-  computer's own batteries, not a mouse's): the shutdown's install (`auto-update`) and `update-apps` install nothing then
+  computer's own batteries, not a mouse's): the shutdown's install (`auto-update`) and `update-apps` install nothing
+  then
 - **`.local/bin/updates-pending`**: the updates waiting from a `pacman -Qu`/`paru -Qua` list, those `pacman.conf` holds
   back left out (`update-apps`, `update-kinds`, `auto-update`, `auto-update-aur`)
 - **`.local/bin/update-kinds`**: the kinds of update, how each is listed (`--list`, what the Updates app shows: system,
@@ -739,15 +751,15 @@ helper a package update just brought works before `agros-links` has linked it), 
   AgrOS's own program, the user's link to it run from `/usr/lib/agros/bin` (a user's own file there held pacman's
   lock, and every update), for 10 minutes at most (`--limit`: the title bar plugin's hook, 5; it builds from AgrOS's
   own patch, never the user's, which their login build takes); `--list`
-  lists them; `--as <user>` runs one as that user (or the boot's AUR builds' `agros-aur`) from root with `setpriv` (never `runuser`, `su` or `sudo`: their PAM
-  opens a logind session, whose processes leave the calling service's cgroup and time limit, and makes the user count
-  as logged in). Either way the command runs in a session of its own, with nothing on its input and its output
-  through pipes this opens and waits for: a user's command (theirs to change) never reaches root's terminal nor root's
-  own files (auto-update's log); the caller's stop (a timeout, a signal) is passed on to that whole session and then
-  taken by `agros-each-user` itself (a run over the users stops, not on to the next one); the list of users is read
-  whole first, nothing of it left open for a command to read; `--sessions` the session bus of each one logged in to a desktop (a logind session of type Wayland or
-  X11, class user: not the greeter's, a text or SSH login, nor a background one; its bus the user's own, not a link;
-  camera switch); `--notify [--user
+  lists them; `--as <user>` runs one as that user (or the boot's AUR builds' `agros-aur`) from root with `setpriv`
+  (never `runuser`, `su` or `sudo`: their PAM opens a logind session, whose processes leave the calling service's cgroup
+  and time limit, and makes the user count as logged in). Either way the command runs in a session of its own, with
+  nothing on its input and its output through pipes this opens and waits for: a user's command (theirs to change) never
+  reaches root's terminal nor root's own files (auto-update's log); the caller's stop (a timeout, a signal) is passed on
+  to that whole session and then taken by `agros-each-user` itself (a run over the users stops, not on to the next one);
+  the list of users is read whole first, nothing of it left open for a command to read; `--sessions` the session bus of
+  each one logged in to a desktop (a logind session of type Wayland or X11, class user: not the greeter's, a text or SSH
+  login, nor a background one; its bus the user's own, not a link; camera switch); `--notify [--user
   <name>]` says something on their desktops, now or once someone logs in (up to 12 h), from a unit of its own
   (`systemd-run`), so the caller doesn't wait, as the user in their account's group (not the bus file's): the system's
   one way (the firmware note, the boot's
@@ -757,12 +769,12 @@ helper a package update just brought works before `agros-links` has linked it), 
   fullscreen game: nothing sent), no reload, the pointer never moved; tried 10 times a second apart (just after waking
   Hyprland may not answer yet), each answer waited for up to 3 s: up to ~40 s per session when Hyprland doesn't answer,
   ~70 s when it answers the check but not the switch. Run after waking by `agros-system`'s sleep hook, as each user
-- **`.local/share/github-release/lib.sh`**: a GitHub release's x86_64 file and its checksum, when the release has any (`appimage-update`,
-  `flatpak-bundle-update`)
+- **`.local/share/github-release/lib.sh`**: a GitHub release's x86_64 file and its checksum, when the release has any
+  (`appimage-update`, `flatpak-bundle-update`)
 - **`.local/bin/app-for-window`**: the app a window belongs to when its class names none Quickshell finds (Java, Wine
   and script apps, a Flatpak's id): by the class's last part, the Flatpak's id, then the window's program against each
-  app's `Exec`. So the dock, the switchers and the bar show the app's own icon (`.config/quickshell/common/WindowApps.qml`,
-  the overlay's)
+  app's `Exec`. So the dock, the switchers and the bar show the app's own icon
+  (`.config/quickshell/common/WindowApps.qml`, the overlay's)
 
 ## Tray apps and startup
 
@@ -792,36 +804,38 @@ helper a package update just brought works before `agros-links` has linked it), 
   text under the desktop at shutdown), `cursor-hide-at-shutdown` (the pointer is on the graphics card's cursor layer,
   Hyprland's default, which follows the mouse with no lag; nothing clears that layer when the desktop closes, so this
   hides it at logind's PrepareForShutdown, holding a delay lock until Hyprland has taken that up; a shutdown called off
-  after that brings it back), `keyring-default`, `bluetooth-on`, `vm-screen-follow` (in a VM), `timezone-auto` (when on), the update check timer, and `dotfiles-check`
-  after 30 s
+  after that brings it back), `keyring-default`, `bluetooth-on`, `vm-screen-follow` (in a VM), `timezone-auto` (when
+  on), the update check timer, and `dotfiles-check` after 30 s
 - **`.config/autostart/`**: Geoclue's demo agent (Caelestia starts it already) and Polychromatic's own autostart
   off (OpenRazer's service applies the
-  lighting). Turning one on or off in the Settings app changes your copy here; `dotfiles-sync` commits it if it's in the repo
-  already, else `dotfiles-sync add` it
+  lighting). Turning one on or off in the Settings app changes your copy here; `dotfiles-sync` commits it if it's in the
+  repo already, else `dotfiles-sync add` it
 
 ## Apps
 
-- **`.config/VSCodium/`**: VSCodium (VS Code's open-source build) settings and extension list (`extensions.txt`), with open replacements for the
-  Microsoft-only extensions (basedpyright for Pylance, clangd for the C/C++ tools). Its launcher entries
-  (`.local/share/applications/vscodium*.desktop`) show its logo without the white circle
+- **`.config/VSCodium/`**: VSCodium (VS Code's open-source build) settings and extension list (`extensions.txt`), with
+  open replacements for the Microsoft-only extensions (basedpyright for Pylance, clangd for the C/C++ tools). Its
+  launcher entries (`.local/share/applications/vscodium*.desktop`) show its logo without the white circle
   (`.local/share/icons/hicolor/scalable/apps/vscodiumlogo.svg`).
   Claude Code's plugins and conversations are in `~/.claude`, shared by both
-- **`.local/bin/claude`**: Claude Code in the terminal (the CLI inside the editor's extension; without it, the next `claude` on PATH), for what the extension
-  can't do, like `/plugin`. Its plugins (installed by `agros-welcome`, `CLAUDE_PLUGINS` in
-  `.local/bin/agros-welcome`): [ponytail](https://github.com/DietrichGebert/ponytail) (minimal code; needs
-  Node.js) and Addy Osmani's [agent-skills](https://github.com/addyosmani/agent-skills), each at its repo's latest version (not pinned: what they are at your first login). `.local/bin/claude-notify`: a notification when it finishes an answer (its Stop hook, added to `~/.claude/settings.json` by `agros-welcome` too)
+- **`.local/bin/claude`**: Claude Code in the terminal (the CLI inside the editor's extension; without it, the next
+  `claude` on PATH), for what the extension can't do, like `/plugin`. Its plugins (installed by `agros-welcome`,
+  `CLAUDE_PLUGINS` in `.local/bin/agros-welcome`): [ponytail](https://github.com/DietrichGebert/ponytail) (minimal code;
+  needs Node.js) and Addy Osmani's [agent-skills](https://github.com/addyosmani/agent-skills), each at its repo's latest
+  version (not pinned: what they are at your first login). `.local/bin/claude-notify`: a notification when it finishes
+  an answer (its Stop hook, added to `~/.claude/settings.json` by `agros-welcome` too)
 - **`.local/share/firefox/`**: the LibreWolf settings Firefox Sync doesn't carry (`settings.js`: privacy, new tab,
   theme, toolbar layout, sidebar; add a `user_pref` line to keep another; its values refreshed from your profile by
   `dotfiles-sync`), the Lagoon theme with the Linux system theme off (a new profile gets Lagoon installed from
   addons.mozilla.org by `agros-welcome`), and the new tab's background picture (`newtab-wallpaper.jpg`). Your bookmarks
-  aren't here: they travel in your LibreWolf profile on the pen drive (`agros-personal`). `.local/bin/firefox-bookmarks-export`
-  writes them to a `bookmarks.html` LibreWolf can import, by hand; its `--profile` finds the LibreWolf profile's folder
-  for `agros-welcome`, `agros-personal` and `dotfiles-sync`
+  aren't here: they travel in your LibreWolf profile on the pen drive (`agros-personal`).
+  `.local/bin/firefox-bookmarks-export` writes them to a `bookmarks.html` LibreWolf can import, by hand; its `--profile`
+  finds the LibreWolf profile's folder for `agros-welcome`, `agros-personal` and `dotfiles-sync`
 - **`.config/librewolf/librewolf/librewolf.overrides.cfg`**: LibreWolf keeps cookies, logins and history when it closes
   (it erases them on every quit by default), allows the Firefox account and Sync, and tells sites the desktop's dark
-  mode (Firefox's fingerprinting protection, all of it but that, instead of Resist Fingerprinting, which always says light).
-  Video decoded on the graphics card (VA-API), and no AV1 (the desktop's RTX 2060 can't decode it, so YouTube sends VP9;
-  on every machine). The default browser
+  mode (Firefox's fingerprinting protection, all of it but that, instead of Resist Fingerprinting, which always says
+  light). Video decoded on the graphics card (VA-API), and no AV1 (the desktop's RTX 2060 can't decode it, so YouTube
+  sends VP9; on every machine). The default browser
 - **`.config/mimeapps.list`**: default apps for file types
 - **`.local/bin/appimage-open`**: opens AppImages (`.local/share/applications/appimage-open.desktop`): installs the app
   in `~/Applications` with a launcher entry, or replaces the old version, and starts it; so an app's own Update button
@@ -881,17 +895,18 @@ brings each change; nothing to run by hand).
     title bar; an update already running carries on (its log: `$XDG_RUNTIME_DIR/update-apps.log`), and opening it
     again and pressing "Update all" follows it
 - **Files never unpacked** (`packages/agros-system/agros-noextract.conf` at `/etc/pacman.d/agros-noextract.conf`,
-  included by `pacman.conf` the same way, at install and at upgrade): pacman's `NoExtract` for what no one on AgrOS uses:
-  docs and help pages (fish's and HPLIP's kept), the Nerd font styles nothing names (JetBrains Mono's Mono, Propo and NL,
-  Cascadia's Mono and Propo), Material Symbols' Outlined and Sharp, Hyprland's own wallpapers, the pointer's 11 Bibata
-  styles but the desktop's and login screen's (`Bibata-Modern-Ice`, ~295 MiB). A new install has them
+  included by `pacman.conf` the same way, at install and at upgrade): pacman's `NoExtract` for what no one on AgrOS
+  uses: docs and help pages (fish's and HPLIP's kept), the Nerd font styles nothing names (JetBrains Mono's Mono, Propo
+  and NL, Cascadia's Mono and Propo), Material Symbols' Outlined and Sharp, Hyprland's own wallpapers, the pointer's 11
+  Bibata styles but the desktop's and login screen's (`Bibata-Modern-Ice`, ~295 MiB). A new install has them
   left out from its first package: agros-iso's `agros-trim.sh` puts the same list in the installed `pacman.conf`
   (marked `# agros-iso`), which agros-system's install swaps for its Include; keep the two lists the same. On a machine
   installed before, a package's go at its next update
 - **The upstream gate** (`packages/agros-system/agros-gate.conf` at `/etc/pacman.d/agros-gate.conf`, which
-  `agros-system`'s install adds to `pacman.conf`'s Include lines, with the file; `.local/bin/update-gate`): Hyprland and its libraries (the packages AgrOS's config, title
-  bar plugin and shell patches are written against) are held back from every pacman run, a manual one too, and updated
-  by AgrOS's own updates (the boot's, the Updates app) only to versions AgrOS's CI has checked:
+  `agros-system`'s install adds to `pacman.conf`'s Include lines, with the file; `.local/bin/update-gate`): Hyprland and
+  its libraries (the packages AgrOS's config, title bar plugin and shell patches are written against) are held back from
+  every pacman run, a manual one too, and updated by AgrOS's own updates (the boot's, the Updates app) only to versions
+  AgrOS's CI has checked:
   - CI's test job runs every test against the newest Hyprland from Arch (the real one loading the whole config,
     `tests/hypr-api.sh`; against Hyprland's own Lua stubs, in handlers too: every Hyprland name and event AgrOS uses,
     the settings it reads by name, and those it makes in one-line `hl.config` calls (a multi-line one only through the
@@ -904,26 +919,28 @@ brings each change; nothing to run by hand).
     is (held together, and said: "waits for AgrOS's check"); a library whose update would break a held one held with it,
     and a package whose update needs one held (one rebuilt for a held library's new version; pacman's
     own dry run says which); and the set, approved too, whose update would break a package not held (`agros-hyprbars`
-    built for the last Hyprland series): it waits for that one's rebuild, rather than the whole update failing). Held, it's held by the gate's Include even when `pacman.conf` lost its own (a merged
-    `.pacnew`). Every place that works out what to update goes through it, on the lists it uses: the boot's download
-    and AUR builds (one needing a held package, or a newer version of one, isn't built: said; one `pacman.conf` itself
-    holds back, `IgnorePkg`, isn't built either, nor the others of its build, and isn't counted as waiting; one a new Qt
-    needs rebuilt holds that Qt back, said as any rebuild that can't be done), the shutdown's install
-    (deciding again, the Updates app may have synced newer lists since, but from the approved list kept at the boot,
-    `--offline`: nothing let through that the boot didn't download), the Updates app's list and its update. A held
-    update isn't listed in the Updates app; the update log says what waits ("waits for AgrOS's check"). A version older
-    in the repo than installed (a rollback) doesn't count: pacman keeps the newer one. The list is fetched from each of
-    `[agros]`'s servers in turn (Pages, then the mirror) and kept for when none can be reached; never fetched, nothing
-    new. It's taken only with a good signature by AgrOS's key beside it
-    (`agros-approved.sig`, CI's release job signs it; checked with `gpgv` against `agros-keyring`'s key file alone,
-    `/usr/share/pacman/keyrings/agros.gpg`): with none, or a bad one (a mirror or a network in between that changed it),
-    that server's is as if it couldn't be reached, said ("no good signature by AgrOS's key"), and the next one is tried:
-    none good, the kept list, nothing new let through. agros-iso's build and installer check it the same way
+    built for the last Hyprland series): it waits for that one's rebuild, rather than the whole update failing). Held,
+    it's held by the gate's Include even when `pacman.conf` lost its own (a merged `.pacnew`). Every place that works
+    out what to update goes through it, on the lists it uses: the boot's download and AUR builds (one needing a held
+    package, or a newer version of one, isn't built: said; one `pacman.conf` itself holds back, `IgnorePkg`, isn't built
+    either, nor the others of its build, and isn't counted as waiting; one a new Qt needs rebuilt holds that Qt back,
+    said as any rebuild that can't be done), the shutdown's install (deciding again, the Updates app may have synced
+    newer lists since, but from the approved list kept at the boot, `--offline`: nothing let through that the boot
+    didn't download), the Updates app's list and its update. A held update isn't listed in the Updates app; the update
+    log says what waits ("waits for AgrOS's check"). A version older in the repo than installed (a rollback) doesn't
+    count: pacman keeps the newer one. The list is fetched from each of `[agros]`'s servers in turn (Pages, then the
+    mirror) and kept for when none can be reached; never fetched, nothing new. It's taken only with a good signature by
+    AgrOS's key beside it (`agros-approved.sig`, CI's release job signs it; checked with `gpgv` against
+    `agros-keyring`'s key file alone, `/usr/share/pacman/keyrings/agros.gpg`): with none, or a bad one (a mirror or a
+    network in between that changed it), that server's is as if it couldn't be reached, said ("no good signature by
+    AgrOS's key"), and the next one is tried: none good, the kept list, nothing new let through. agros-iso's build and
+    installer check it the same way
   - Checks that stop passing are said on the machine too: the boot's update keeps the day they last passed on Arch
     (`agros-arch-ok`, beside the repo; `/var/lib/agros/agros-arch-ok`, from the first of `[agros]`'s servers that
-    answers, taken only with a good signature by AgrOS's key, as the list is), and `dotfiles-check` says after login, once it was over 10 days old when fetched: "AgrOS's checks haven't
-    passed for N days: Hyprland updates wait until they do" (a broken check, or CI no longer running). No network at
-    login: a copy the boot hasn't refreshed yet is counted to when it was fetched, not to today
+    answers, taken only with a good signature by AgrOS's key, as the list is), and `dotfiles-check` says after login,
+    once it was over 10 days old when fetched: "AgrOS's checks haven't passed for N days: Hyprland updates wait until
+    they do" (a broken check, or CI no longer running). No network at login: a copy the boot hasn't refreshed yet is
+    counted to when it was fetched, not to today
   - The ISO build (agros-iso's `check_gate`) stops when its Hyprland isn't approved, keeping the published ISO; the
     ISO keeps a copy of that approved set, and a new install gets it rather than the newest unchecked one (agros-iso's
     `agros-gate-install`, an installer step)
@@ -931,11 +948,11 @@ brings each change; nothing to run by hand).
     machine from before the gate, a merged `pacman.conf.pacnew`; its removal takes it out): pacman can't read a config
     including a missing file, and the ISO's `pacman.conf` for the installed system is in place before anything is
     installed
-- **`.local/bin/update-apps`**: updates everything (system and AUR apps with `paru` through the upstream gate, then each kind
-  `update-kinds` runs: firmware with fwupd, Flatpaks, AppImages, Capri, Proton builds, developer tools), like at boot.
-  `--list` is what the Updates app shows (`update-kinds --list`); every 6 hours (`update-check.timer`) it checks, and when
-  updates are waiting a notification's "Update now" opens the Updates app and starts (an admin's, in `wheel`: an
-  account that can't sudo isn't offered it, nor `agros-welcome`'s system part, and `update-apps` itself refuses it;
+- **`.local/bin/update-apps`**: updates everything (system and AUR apps with `paru` through the upstream gate, then each
+  kind `update-kinds` runs: firmware with fwupd, Flatpaks, AppImages, Capri, Proton builds, developer tools), like at
+  boot. `--list` is what the Updates app shows (`update-kinds --list`); every 6 hours (`update-check.timer`) it checks,
+  and when updates are waiting a notification's "Update now" opens the Updates app and starts (an admin's, in `wheel`:
+  an account that can't sudo isn't offered it, nor `agros-welcome`'s system part, and `update-apps` itself refuses it;
   the boot's update covers it). Not on a snapshot booted from the menu, nor the live USB (said; the check offers
   nothing there). Not on a battery nearly empty (`battery-low`, the boot update's check too: below 15%,
   discharging). The keyrings first, on their own, when a newer one waits (as the boot's: a package signed with a key
@@ -963,14 +980,14 @@ brings each change; nothing to run by hand).
     `dotfiles-check`): those with a newer AUR version (not in
     a repo: `paru -Qua`'s), and, when the download brings a new version of a runtime that breaks what's built on it,
     those built on it (from the AUR or `[agros]`, not a `-bin`, not rebuilt by their repo in the same download). The
-    runtimes are one list, `update-kinds`' (`runtimes`, which `update-apps` uses too): Qt (`qt6-base`, `qt6-declarative`: any new version; what needs them,
-    Quickshell, Caelestia, qtengine, qt6-m3shapes..., uses Qt's private parts and won't start on another Qt) and Python
-    (a new minor version, 3.13 to 3.14: the packages with files in the old `/usr/lib/python3.13`, which the new one
-    doesn't look in). Built in their dependency order (their `.SRCINFO`'s `depends`/`makedepends` on each other's
-    packages or `provides`: quickshell-git before caelestia-shell), else by name. One of `[agros]`'s rebuilt for a runtime
-    is rebuilt at the version installed (CI's, tested), not the AUR's newest: a git package's source pinned to the
-    commit in its version, another's AUR files at the commit with that version; one not found isn't built, and the
-    runtime waits, as on a failed build. Their
+    runtimes are one list, `update-kinds`' (`runtimes`, which `update-apps` uses too): Qt (`qt6-base`,
+    `qt6-declarative`: any new version; what needs them, Quickshell, Caelestia, qtengine, qt6-m3shapes..., uses Qt's
+    private parts and won't start on another Qt) and Python (a new minor version, 3.13 to 3.14: the packages with files
+    in the old `/usr/lib/python3.13`, which the new one doesn't look in). Built in their dependency order (their
+    `.SRCINFO`'s `depends`/`makedepends` on each other's packages or `provides`: quickshell-git before caelestia-shell),
+    else by name. One of `[agros]`'s rebuilt for a runtime is rebuilt at the version installed (CI's, tested), not the
+    AUR's newest: a git package's source pinned to the commit in its version, another's AUR files at the commit with
+    that version; one not found isn't built, and the runtime waits, as on a failed build. Their
     build scripts are unreviewed (your choice), so they're built as an account of their own, `agros-aur` (a system
     account from `agros-system`'s `sysusers.d`: no login shell, no password, owning nothing but the run's build
     folder), never as root and never as a person (`agros-each-user --as`: `setpriv`, no PAM, so no logind session: the
@@ -979,14 +996,14 @@ brings each change; nothing to run by hand).
     rewrite a package's build files, sources or the staged system between its fetch and its build, or enter the
     sandbox's user namespace (the same uid), and so get a build of its own installed as root at shutdown. Another
     uid's processes are out of their reach (no ptrace, no signals, no `setns` into its namespaces), and so is its build
-    folder (0700, its own, in root's 0755 `/var/lib/auto-update`); the main user takes no part in the builds. Every step that
-    touches what the AUR sent runs in a `bwrap` sandbox: git's clone, the keys and sources' download and check
+    folder (0700, its own, in root's 0755 `/var/lib/auto-update`); the main user takes no part in the builds. Every step
+    that touches what the AUR sent runs in a `bwrap` sandbox: git's clone, the keys and sources' download and check
     (`makepkg --verifysource`), reading its `.SRCINFO`, the build, unpacking what it built, reading the packages back.
     The sandbox has its own namespaces (`--unshare-all`), no new privileges (so `sudo` can't work in it), `/usr`, `/etc`
     and `/opt` read-only and nothing else of the system (but pacman's list of what's installed, for the package's
-    `.BUILDINFO`): no `/home` (yours neither), `/root`, `/run` (the system bus, the sessions'), `/mnt`, `/media`, `/srv`,
-    nor the rest of `/var`; its own empty `/tmp`, `/var/tmp` and home, gone after each step. The network only while
-    fetching and building (Go, Rust and Node apps fetch their own dependencies in `prepare()` or `build()`; the
+    `.BUILDINFO`): no `/home` (yours neither), `/root`, `/run` (the system bus, the sessions'), `/mnt`, `/media`,
+    `/srv`, nor the rest of `/var`; its own empty `/tmp`, `/var/tmp` and home, gone after each step. The network only
+    while fetching and building (Go, Rust and Node apps fetch their own dependencies in `prepare()` or `build()`; the
     sources fetched and their signatures checked before, `makepkg --holdver`), and never the host's: a network
     namespace of the sandbox's own, outbound internet through pasta (`passt`, run as `agros-aur`: `pasta --config-net`
     makes the namespace, bwrap starts in it and maps the account back from pasta's root). 127.0.0.1 and ::1 are its own
@@ -1004,66 +1021,67 @@ brings each change; nothing to run by hand).
     addresses (`fe80::`, `169.254/16`: not routed through pasta), and routes in tables other than the main one (a
     VPN's policy routing). One that can't be closed off stops the step (nothing runs open). DNS goes to an address of
     each family of its own (its own `resolv.conf`: `169.254.0.53` and `fd53:a6e4:2c3a::53`) that pasta sends to the
-    host's resolver of that family, so an IPv6-only `resolv.conf` resolves too. Each base is fetched, checked and built on its own, its
-    sources in a folder of its own (two bases' same-named files don't collide). Writable: only that run's build folder (`/var/lib/auto-update/aur-build`,
-    `agros-aur`'s alone, made anew each run and removed after: no git config, cache or anything else a build wrote reaches the
-    next run, nor a step outside the sandbox). Root opens nothing in it: each step's output goes to root's own
-    `/var/lib/auto-update/aur/log/`; right after each build, the packages it made are read through the sandbox into
-    root's own folder (a regular file only: a FIFO a build left there would block the read; each read under a
-    `timeout`), and only those the plan names are kept (their `.PKGINFO`'s name and version as their file names
-    them, at least the version planned, the AUR's or the installed one a runtime rebuild is pinned to: a `sudo` or `linux` a build left beside them isn't); a dependency a `.SRCINFO`
-    names must look like one (`name`, `name>=1.2`) and reaches root's pacman after `--`. Nothing a build wrote reaches
-    a notification as it is: the reasons `dotfiles-check` shows are fixed sentences, with a name stripped to
-    `[A-Za-z0-9@._+<>=-]` (and `dotfiles-check` keeps only plain characters of anything `auto-update` wrote down,
-    pacman's error included, which can carry an install script's words: Caelestia's notifications render Markdown,
-    links and images); a build's own output reaches root's log through `cat -v` (no terminal escapes). What's left:
-    an AUR package's own install script runs as root when it's installed at shutdown: that's what installing from the
-    AUR is (paru's the same), the build scripts unreviewed being your choice; and the builds of one boot share the
-    account and the folder, so one AUR app's build can tamper with another's built after it (or with the staged system
-    it sees), all of them trusted the same. The sandbox sees
-    the system as the download leaves it: every package the shutdown's transaction installs (`pacman -Sup`'s:
-    upgrades, new dependencies, replacements), and what the builds need that isn't installed (downloaded from the
-    repos, never installed), unpacked and laid over `/usr` (overlayfs), so they're built against the new runtime before
-    it's installed. That download writes pacman's cache, as the boot's main one does: from the
+    host's resolver of that family, so an IPv6-only `resolv.conf` resolves too. Each base is fetched, checked and built
+    on its own, its sources in a folder of its own (two bases' same-named files don't collide). Writable: only that
+    run's build folder (`/var/lib/auto-update/aur-build`, `agros-aur`'s alone, made anew each run and removed after: no
+    git config, cache or anything else a build wrote reaches the next run, nor a step outside the sandbox). Root opens
+    nothing in it: each step's output goes to root's own `/var/lib/auto-update/aur/log/`; right after each build, the
+    packages it made are read through the sandbox into root's own folder (a regular file only: a FIFO a build left there
+    would block the read; each read under a `timeout`), and only those the plan names are kept (their `.PKGINFO`'s name
+    and version as their file names them, at least the version planned, the AUR's or the installed one a runtime rebuild
+    is pinned to: a `sudo` or `linux` a build left beside them isn't); a dependency a `.SRCINFO` names must look like
+    one (`name`, `name>=1.2`) and reaches root's pacman after `--`. Nothing a build wrote reaches a notification as it
+    is: the reasons `dotfiles-check` shows are fixed sentences, with a name stripped to `[A-Za-z0-9@._+<>=-]` (and
+    `dotfiles-check` keeps only plain characters of anything `auto-update` wrote down, pacman's error included, which
+    can carry an install script's words: Caelestia's notifications render Markdown, links and images); a build's own
+    output reaches root's log through `cat -v` (no terminal escapes). What's left: an AUR package's own install script
+    runs as root when it's installed at shutdown: that's what installing from the AUR is (paru's the same), the build
+    scripts unreviewed being your choice; and the builds of one boot share the account and the folder, so one AUR app's
+    build can tamper with another's built after it (or with the staged system it sees), all of them trusted the same.
+    The sandbox sees the system as the download leaves it: every package the shutdown's transaction installs (`pacman
+    -Sup`'s: upgrades, new dependencies, replacements), and what the builds need that isn't installed (downloaded from
+    the repos, never installed), unpacked and laid over `/usr` (overlayfs), so they're built against the new runtime
+    before it's installed. That download writes pacman's cache, as the boot's main one does: from the
     run's start to the end of its main download, and again around this one, the boot marks it
     (`/var/lib/auto-update/downloading`), and Updates' `update-apps` waits while it's there (not through the Flatpaks or
-    the builds) before its `paru`, so both never write the cache at once. That was picked over the alternatives: a devtools clean chroot needs root to make
-    and a full base system downloaded; installing Qt at shutdown and rebuilding at the next boot leaves a desktop that
-    can't start if that build fails. Collected (read as `agros-aur`, through the sandbox) into a local repo, `agros-aur`, and installed at
-    shutdown in the same `pacman -Su` as the repo's (`agros-aur/<name>` targets, a reinstall for a runtime rebuild of
-    the same version), each one that built. Each base is on its own: one that failed keeps the version it has (as
-    `paru -Syu` leaves it), named by `dotfiles-check` (until it's at the version the boot meant to build, Updates having
-    built it; not beside the held update for the same failure), and the rest goes in. Only a new runtime waits for
-    what's built on it: one of its rebuilds failed (or came out older than what's installed, which pacman would leave),
-    and the whole update waits (a part of it would be a partial upgrade, and the shells or the Python apps wouldn't
-    start), built again at the next boot, or by Updates (its `update-apps` rebuilds the same ones after its `paru
-    -Syu`). An AUR app pacman refuses at the install (a conflict, a file conflict, a missing dependency: it refuses the
-    whole transaction, and every shutdown failed the same way, the system never updated) is left out of a second try
-    (`--ignore`; pacman installs nothing of a transaction it refuses), unless a new runtime in it needs it (then it
-    fails as one, the lists put back); what's left out is written down (`/var/lib/auto-update/aur-install-failed`)
-    and named by `dotfiles-check` until it's installed.
+    the builds) before its `paru`, so both never write the cache at once. That was picked over the alternatives: a
+    devtools clean chroot needs root to make and a full base system downloaded; installing Qt at shutdown and rebuilding
+    at the next boot leaves a desktop that can't start if that build fails. Collected (read as `agros-aur`, through the
+    sandbox) into a local repo, `agros-aur`, and installed at shutdown in the same `pacman -Su` as the repo's
+    (`agros-aur/<name>` targets, a reinstall for a runtime rebuild of the same version), each one that built. Each base
+    is on its own: one that failed keeps the version it has (as `paru -Syu` leaves it), named by `dotfiles-check` (until
+    it's at the version the boot meant to build, Updates having built it; not beside the held update for the same
+    failure), and the rest goes in. Only a new runtime waits for what's built on it: one of its rebuilds failed (or came
+    out older than what's installed, which pacman would leave), and the whole update waits (a part of it would be a
+    partial upgrade, and the shells or the Python apps wouldn't start), built again at the next boot, or by Updates (its
+    `update-apps` rebuilds the same ones after its `paru -Syu`). An AUR app pacman refuses at the install (a conflict, a
+    file conflict, a missing dependency: it refuses the whole transaction, and every shutdown failed the same way, the
+    system never updated) is left out of a second try (`--ignore`; pacman installs nothing of a transaction it refuses),
+    unless a new runtime in it needs it (then it fails as one, the lists put back); what's left out is written down
+    (`/var/lib/auto-update/aur-install-failed`) and named by `dotfiles-check` until it's installed.
     A Qt the shells were rebuilt for is written down (`/var/lib/auto-update/qt-built`), so Updates doesn't rebuild
     them again
   - **Firmware** (fwupd): its metadata refreshed (LVFS, signed) and checked at boot (nothing said when offline or
     none). Any waiting is said on each user's desktop ("Firmware update ready... installed when you shut down or
     restart", once someone's logged in to a desktop: `agros-each-user --notify-wait`) and installed at the next shutdown
     only then, before the packages (a flash cut off could leave a device unusable; a package install cut off is taken
-    up again at the next shutdown, with the snapshot to go back to), by `fwupdtool update --assume-yes` (fwupd's daemon can't be started at shutdown). Never under a time limit
-    of its own (one sent it SIGTERM mid-flash; only fwupd's queries have one): the install's unit has 60 min, firmware
-    starts only with 55 of them left, and the packages start only with their 30 left, else wait for the next shutdown
-    (counted, as below); a flash still writing at the unit's 60 min has hung. The install's unit is ordered after udisks2 and the system bus (fwupd finds the EFI
-    partition through udisks2, which stopped first before: a UEFI update was "installed" with nothing staged). fwupd's
-    own checks stand (on battery below its level, or without AC power, it skips the device); its exit says nothing of
-    a skipped device (nor, in 2.1, of a failed flash), so a device still offering the same update after it (`fwupdtool
-    get-updates`) wasn't updated: tried at the next shutdown, said by `dotfiles-check` with fwupd's reason (Updates
-    checks the same after its `fwupdmgr update`); that note goes once nothing's waiting. One fwupd refuses because the
-    EFI partition is too small for it (beside Windows, often Windows' own 100 MB, nearly full; fwupd checks before it
-    writes anything) isn't tried at every shutdown nor said at every login: said once on the desktop ("Firmware update
-    can't be installed... the boot partition (EFI) is too small for it"), and tried again only for a newer one
-    (`/var/lib/auto-update/firmware-noroom`). A UEFI or BIOS update is
-    staged and applied at the next boot. Passim (fwupd's optional LAN cache: a listener sharing its metadata over mDNS
-    and HTTPS, which fwupd starts over D-Bus) is masked once by `agros-system` (fwupd works without it, only logging
-    that it's not there; removing `agros-system` unmasks it)
+    up again at the next shutdown, with the snapshot to go back to), by `fwupdtool update --assume-yes` (fwupd's daemon
+    can't be started at shutdown). Never under a time limit of its own (one sent it SIGTERM mid-flash; only fwupd's
+    queries have one): the install's unit has 60 min, firmware starts only with 55 of them left, and the packages start
+    only with their 30 left, else wait for the next shutdown (counted, as below); a flash still writing at the unit's 60
+    min has hung. The install's unit is ordered after udisks2 and the system bus (fwupd finds the EFI partition through
+    udisks2, which stopped first before: a UEFI update was "installed" with nothing staged). fwupd's own checks stand
+    (on battery below its level, or without AC power, it skips the device); its exit says nothing of a skipped device
+    (nor, in 2.1, of a failed flash), so a device still offering the same update after it (`fwupdtool get-updates`)
+    wasn't updated: tried at the next shutdown, said by `dotfiles-check` with fwupd's reason (Updates checks the same
+    after its `fwupdmgr update`); that note goes once nothing's waiting. One fwupd refuses because the EFI partition is
+    too small for it (beside Windows, often Windows' own 100 MB, nearly full; fwupd checks before it writes anything)
+    isn't tried at every shutdown nor said at every login: said once on the desktop ("Firmware update can't be
+    installed... the boot partition (EFI) is too small for it"), and tried again only for a newer one
+    (`/var/lib/auto-update/firmware-noroom`). A UEFI or BIOS update is staged and applied at the next boot. Passim
+    (fwupd's optional LAN cache: a listener sharing its metadata over mDNS and HTTPS, which fwupd starts over D-Bus) is
+    masked once by `agros-system` (fwupd works without it, only logging that it's not there; removing `agros-system`
+    unmasks it)
   - **Proton builds** (yours, as you) where Steam and Lutris look for them: Steam's `compatibilitytools.d` and Lutris's
     Wine runners (`$XDG_DATA_HOME/lutris/runners/wine`, or `lutris.conf`'s `runner_dir` when named in full: a relative
     one is skipped, as what's removed must be inside it). For each family there
@@ -1077,38 +1095,41 @@ brings each change; nothing to run by hand).
     else its data folder (Lutris's own rule). Lutris's own `dw-proton-x86_64` is lutris.net's "dw-proton" runner (a
     fixed name, no version in it): Lutris installs it once and never updates it, so the newest dwproton goes beside it
     and your games stay on it until you pick the new one. Lutris newer than 0.5.22 (its development version) also lists
-    Steam's `compatibilitytools.d` and names a GE build without its folder's `-x86_64`: a folder is in use when any game of Steam's or Lutris's names
-    it, either way. Running: its real path (Steam's is under the `~/.steam/root` link) in a process's command line, as
-    text. A download cut off is removed on the way out, or (a power cut) at a run 6 h later. Steam lists its tools at
-    its start: while your Steam runs, a notification says to restart it (never restarted for you). A new one in Lutris:
-    a notification says to restart Lutris and pick it in a game's Configure, Runner options, Wine version (and, per
-    family, which games' old one is kept). From the boot's run these are handed to root, which says them once you're
-    logged in (`agros-each-user --notify`); from Updates, at once. The boot's run and Updates' never at once: the
-    second waits (`update-kinds`' lock; the folder moved in with `mv -T`, never into one already there)
+    Steam's `compatibilitytools.d` and names a GE build without its folder's `-x86_64`: a folder is in use when any game
+    of Steam's or Lutris's names it, either way. Running: its real path (Steam's is under the `~/.steam/root` link) in a
+    process's command line, as text. A download cut off is removed on the way out, or (a power cut) at a run 6 h later.
+    Steam lists its tools at its start: while your Steam runs, a notification says to restart it (never restarted for
+    you). A new one in Lutris: a notification says to restart Lutris and pick it in a game's Configure, Runner options,
+    Wine version (and, per family, which games' old one is kept). From the boot's run these are handed to root, which
+    says them once you're logged in (`agros-each-user --notify`); from Updates, at once. The boot's run and Updates'
+    never at once: the second waits (`update-kinds`' lock; the folder moved in with `mv -T`, never into one already
+    there)
   - **Developer tools**, yours, only those there: npm's global packages only where its prefix is in your home (`/usr`'s
     are pacman's), `uv tool upgrade --all`, `rustup update`, cargo's programs with `cargo install-update` (without
     cargo-update, a one-line note), `pipx upgrade-all`
   Log: `/var/log/auto-update.log` (its last 20 runs kept; readable by admins, `wheel`, only: it holds every account's
   updates);
   `dotfiles-check` says an install at shutdown that failed or was held back (until one goes through), AUR builds, AUR
-  apps the install left out, or a firmware update that failed, and 3 shutdowns in a row with nothing installed, with the last one's reason (the boot's
-  download didn't finish: only a finished one is installed; something else using pacman still held its lock; a soft
-  reboot, which keeps the kernel running; with pacman's error when the download failed; on battery, nearly empty: below 15%, discharging; pacman's lists couldn't be
-  kept aside, a full disk). An install cut off has pacman's lists put back, and its lock removed, at the
-  next boot or install. The boot's run (download, Flatpaks, AUR builds and all, everything it started: nothing it runs
-  as a user leaves its unit) stops after 4 h; a Flatpak from a file isn't reinstalled with less than 35 min of that
-  left (cut off between its removal and install, the app would be gone). The Updates app waits only for its downloads. The install has 60 min (shutdown's own limit is made 75 min for it); `paccache.timer` keeps pacman's
-  cache from growing for good
+  apps the install left out, or a firmware update that failed, and 3 shutdowns in a row with nothing installed, with the
+  last one's reason (the boot's download didn't finish: only a finished one is installed; something else using pacman
+  still held its lock; a soft reboot, which keeps the kernel running; with pacman's error when the download failed; on
+  battery, nearly empty: below 15%, discharging; pacman's lists couldn't be kept aside, a full disk). An install cut off
+  has pacman's lists put back, and its lock removed, at the next boot or install. The boot's run (download, Flatpaks,
+  AUR builds and all, everything it started: nothing it runs as a user leaves its unit) stops after 4 h; a Flatpak from
+  a file isn't reinstalled with less than 35 min of that left (cut off between its removal and install, the app would be
+  gone). The Updates app waits only for its downloads. The install has 60 min (shutdown's own limit is made 75 min for
+  it); `paccache.timer` keeps pacman's cache from growing for good
 - **`agros-boot`**: hidden boot menu (GRUB or Limine): straight into the system, Esc in the first second shows
   the menu (Windows and snapshots listed). No motherboard wait before the boot loader (`efibootmgr -t 0`; F11 still
   opens its boot menu). An update that changes `boot-menu` applies its settings again, over any of yours (one that
   doesn't change it leaves them): `boot-menu` notes each run in `/var/lib/agros/boot-menu.sum` (its checksum; empty when
   it failed, so the next update runs it again). With the boot loader not set up yet (the installer's package step: no
   `/boot/grub/grub.cfg` or `limine.conf`) it changes nothing; the installer's own step runs it once GRUB is set up, so
-  `grub.agros-orig` is CachyOS's settings, not the grub package's own file. Removing it puts back the settings it changed from the copies kept before AgrOS
-  (`grub.agros-orig`, `limine.conf.agros-orig`: timeout, menu, default entry, theme, `quiet`), takes out the `video=`
-  options it set (in the form it writes, `video=<screen>:<W>x<H>@<Hz>`; your others stay), the quiet boot's options
-  below that weren't there before AgrOS, the splash and the motherboard's wait (where it noted the one before)
+  `grub.agros-orig` is CachyOS's settings, not the grub package's own file. Removing it puts back the settings it
+  changed from the copies kept before AgrOS (`grub.agros-orig`, `limine.conf.agros-orig`: timeout, menu, default entry,
+  theme, `quiet`), takes out the `video=` options it set (in the form it writes, `video=<screen>:<W>x<H>@<Hz>`; your
+  others stay), the quiet boot's options below that weren't there before AgrOS, the splash and the motherboard's wait
+  (where it noted the one before)
 - **`agros-boot`** also: a snapshot booted from the menu is made writable in RAM (`agros-snapshot-overlay`, a
   systemd boot image's hook, added by `/etc/mkinitcpio.conf.d/91-agros-snapshot-overlay.conf` on a Btrfs root;
   CachyOS's installer rewrites `HOOKS` without grub-btrfs's, which only busybox images run): read-only, the desktop
@@ -1116,35 +1137,36 @@ brings each change; nothing to run by hand).
   overlaid: `/home` and the other subvolumes are the real ones. Making a snapshot the system for good is Btrfs
   Assistant's restore (CachyOS's installer puts it in on Btrfs), as the manual says
 - **`agros-boot`** also: no text at boot or shutdown, only the splash. `boot-menu` adds the kernel options missing from
-  the normal entries' line (`GRUB_CMDLINE_LINUX_DEFAULT`, or Limine's `KERNEL_CMDLINE[default]` in `/etc/default/limine`,
-  kept first as `limine.agros-orig`), through `boot-video-mode --quiet-boot`, the one place that edits that line for
-  both. The file is a shell script: a `KEY=` line sets the options, each `KEY+=` after it adds to them, so the line is the
-  set in effect (the last `=` and the `+=` after it): the missing ones go on its last line, one on any of them counts as
-  there, and removal takes AgrOS's out of those lines only (the screens' `video=` out of every one). The options: `quiet` (kernel messages but critical ones off), `splash` (Plymouth's splash, not its text mode),
+  the normal entries' line (`GRUB_CMDLINE_LINUX_DEFAULT`, or Limine's `KERNEL_CMDLINE[default]` in
+  `/etc/default/limine`, kept first as `limine.agros-orig`), through `boot-video-mode --quiet-boot`, the one place that
+  edits that line for both. The file is a shell script: a `KEY=` line sets the options, each `KEY+=` after it adds to
+  them, so the line is the set in effect (the last `=` and the `+=` after it): the missing ones go on its last line, one
+  on any of them counts as there, and removal takes AgrOS's out of those lines only (the screens' `video=` out of every
+  one). The options: `quiet` (kernel messages but critical ones off), `splash` (Plymouth's splash, not its text mode),
   `loglevel=3`, `rd.udev.log_level=3` (udev's start-up line in the boot image, before Plymouth is up) and
   `systemd.show_status=false` (systemd's status lines, failures too: they're in the journal, `journalctl -b -p err`; Esc
-  on the splash still shows the text). One you set yourself under the same name (`loglevel=7`) stays.
-  No `vt.global_cursor_default=0`: a text console and the emergency shell would have no cursor. Plymouth's hook is put
-  in the boot image where the install left it out (`/etc/mkinitcpio.conf.d/90-agros-plymouth.conf`: before an
-  `encrypt` hook, else last, an older `HOOKS="..."` string split into words first; in the images from the next time
-  they're made), so the splash is up from the start. The
-  shutdown's own steps already say nothing on screen: the update install (`auto-update --install`) writes to the
-  journal, its progress on the splash (`plymouth display-message`), and the shutdown splash is Plymouth's own
-  (`plymouth-poweroff`/`-reboot`)
-- **`agros-boot`** also: no "no video" between the login screen and the desktop. `system/boot-video-mode` at every boot gives the kernel console each connected screen's best mode as a
-  `video=` boot option (Limine or GRUB), and only rebuilds the boot entries when the screens changed
+  on the splash still shows the text). One you set yourself under the same name (`loglevel=7`) stays. No
+  `vt.global_cursor_default=0`: a text console and the emergency shell would have no cursor. Plymouth's hook is put in
+  the boot image where the install left it out (`/etc/mkinitcpio.conf.d/90-agros-plymouth.conf`: before an `encrypt`
+  hook, else last, an older `HOOKS="..."` string split into words first; in the images from the next time they're made),
+  so the splash is up from the start. The shutdown's own steps already say nothing on screen: the update install
+  (`auto-update --install`) writes to the journal, its progress on the splash (`plymouth display-message`), and the
+  shutdown splash is Plymouth's own (`plymouth-poweroff`/`-reboot`)
+- **`agros-boot`** also: no "no video" between the login screen and the desktop. `system/boot-video-mode` at every boot
+  gives the kernel console each connected screen's best mode as a `video=` boot option (Limine or GRUB), and only
+  rebuilds the boot entries when the screens changed
 - **`agros-nvidia`**: loads the NVIDIA driver from the start of the boot (in the initramfs, which CachyOS's
   `chwd` leaves it out of): about 2 s sooner, with the boot splash on it. Installed by `agros-welcome --system` when
   there's an NVIDIA card (PCI vendor 10de, a display controller)
 - **The boot images** after `agros-boot` or `agros-nvidia` is installed, updated or removed: made again once, after the
   transaction, by mkinitcpio's own pacman hook (Limine's `limine-mkinitcpio-hook` has its own in its place), which
-  watches `usr/lib/initcpio/*`: `agros-boot` ships a file there (`plymouth-title-font`), `agros-nvidia` one only for this
-  (its list is in `/etc/mkinitcpio.conf.d`, which the hook doesn't watch). Not from their install scripts: with a kernel
-  updated in the same transaction, its old modules were gone, so they failed (said so for nothing) and the images were
-  made twice. `splash-theme` run by hand or by its own hook still makes them (`limine-mkinitcpio` on Limine, else
+  watches `usr/lib/initcpio/*`: `agros-boot` ships a file there (`plymouth-title-font`), `agros-nvidia` one only for
+  this (its list is in `/etc/mkinitcpio.conf.d`, which the hook doesn't watch). Not from their install scripts: with a
+  kernel updated in the same transaction, its old modules were gone, so they failed (said so for nothing) and the images
+  were made twice. `splash-theme` run by hand or by its own hook still makes them (`limine-mkinitcpio` on Limine, else
   `mkinitcpio -P`, the command it names when they fail)
-- **`agros-greeter`** and **`agros-system`**: unlock the passwords keyring with your login password (no keyring prompts from
-  Proton VPN, Equibop...)
+- **`agros-greeter`** and **`agros-system`**: unlock the passwords keyring with your login password (no keyring prompts
+  from Proton VPN, Equibop...)
 - **`agros-system`**: Bluetooth on at boot and after sleep (`system/bluetooth-resume`,
   a systemd sleep hook: waking resets the adapter, which comes back off)
 - **`agros-system`** also: the screens on after waking, with no key press (`system/screens-resume`, a systemd sleep
@@ -1162,13 +1184,14 @@ brings each change; nothing to run by hand).
   every `caelestia-shell` update; the title bar plugin built for a new Hyprland (or a library its plugins hang on)
   straight away; the Hyprland config checked against a new Hyprland (`hypr-config-check`, its errors said by
   `dotfiles-check`); the overlay, the title bar plugin and the config check also after an `agros-scripts` update
-  (their scripts are in it; the check is `Hyprland --verify-config`, well under a second per user). `agros-boot` adds one that
-  hides GRUB's loading messages again after each GRUB update, and one that remakes the faster splash after a CachyOS
-  splash update (and the boot images, when it changed and is the splash in use)
+  (their scripts are in it; the check is `Hyprland --verify-config`, well under a second per user). `agros-boot` adds
+  one that hides GRUB's loading messages again after each GRUB update, and one that remakes the faster splash after a
+  CachyOS splash update (and the boot images, when it changed and is the splash in use)
 - **The splash** (`agros-boot`): the CachyOS animation without its closing animation, boot/shutdown text hidden,
   "Shutting Down..." and "Restarting..." in the system language. Not on an AMD GPU (`chwd --check amd`, as CachyOS's
   installer asks; without `chwd`, an AMD card in `/sys/class/drm`): the animation breaks on amdgpu, so CachyOS's
-  installer sets its plain `cachyos` splash there, and AgrOS keeps it (the faster one, set by an older AgrOS, moved to it)
+  installer sets its plain `cachyos` splash there, and AgrOS keeps it (the faster one, set by an older AgrOS, moved to
+  it)
 
 ## Laptop hardware
 
@@ -1212,15 +1235,15 @@ Functions other programs call through `hyprctl eval 'dots.<name>(...)'`, kept in
 
 ## Keeping it in sync
 
-`dotfiles-sync` (below) pushes to the repo you cloned (`~/Projects/agros`, which is **public**): to keep your own copy, fork this repo
-first and clone your fork. Your bookmarks and the new tab's picture are never exported into it; they're personal and
-travel in your LibreWolf profile on the pen drive.
+`dotfiles-sync` (below) pushes to the repo you cloned (`~/Projects/agros`, which is **public**): to keep your own copy,
+fork this repo first and clone your fork. Your bookmarks and the new tab's picture are never exported into it; they're
+personal and travel in your LibreWolf profile on the pen drive.
 
 After changing settings, run `dotfiles-sync` (`-n` to see what changed first; `add <file>` to keep a new file). It
 copies your current settings into the repo (`$DOTFILES_DIR`, default `~/Projects/agros`; Legion Control into
 `$LEGION_CONTROL_DIR`), commits and pushes. Only what it copied, or what matches your copy at home,
-is committed: a file you're editing in the repo itself (newer than yours, said as skipped) and any other change there are
-left out, set aside for the pull and put back after (one that clashes with what was pulled stays in `git stash`, and
+is committed: a file you're editing in the repo itself (newer than yours, said as skipped) and any other change there
+are left out, set aside for the pull and put back after (one that clashes with what was pulled stays in `git stash`, and
 the sync says it failed).
 
 After pulling changes made elsewhere, copy the ones you want into your home first, or the next `dotfiles-sync` skips
@@ -1232,26 +1255,27 @@ the `pkgver` of a package that has a fixed one: see [How it's packaged](#how-its
 
 `tests/run.sh` runs them all (`tests/run.sh lutris-overlay` just one), each in a throwaway home, so nothing of yours is
 touched. Several run at once (one per CPU; `AGROS_TEST_JOBS=1`, one at a time), and one that fails among them runs again
-alone: only a failure there counts (one that passed only alone is said, as flaky). Each test has 10 minutes. A pass ends on the test's own `ok <test>` line, so one that stops early with exit 0
-fails. Run it after changing a script, and after Caelestia, Lutris or Hyprland updates: they check that the
-Caelestia and Lutris changes and the hyprbars patch still fit, besides the boot update (its AUR builds, firmware,
-Proton and developer tools too), the account restore, the
+alone: only a failure there counts (one that passed only alone is said, as flaky). Each test has 10 minutes. A pass ends
+on the test's own `ok <test>` line, so one that stops early with exit 0 fails. Run it after changing a script, and after
+Caelestia, Lutris or Hyprland updates: they check that the Caelestia and Lutris changes and the hyprbars patch still
+fit, besides the boot update (its AUR builds, firmware, Proton and developer tools too), the account restore, the
 bookmarks export, dotfiles-sync not undoing pulled changes, the settings file Lua reads, the login screen's theme,
 lutris-covers' cover checks and the boot video mode, and that every program the configs run (login starts, keys,
-Caelestia's too, the Super menu's actions, the user services, the Quickshell apps) is installed (`config-programs`). One is a lint (`no-pipefail-grep-q`): every shell script that sets
-`pipefail` must not pipe into `grep -q` (it stops reading at its first match, the writer dies of SIGPIPE, and the
-pipeline reads as "not found": a running Proton was removed under a game), nor into `head`/`grep -m` where the
-pipeline's status decides something; read the output whole (`grep -q x <<<"$(cmd)"`), or mark a line
-`# pipefail-ok: <why>`.
+Caelestia's too, the Super menu's actions, the user services, the Quickshell apps) is installed (`config-programs`). One
+is a lint (`no-pipefail-grep-q`): every shell script that sets `pipefail` must not pipe into `grep -q` (it stops reading
+at its first match, the writer dies of SIGPIPE, and the pipeline reads as "not found": a running Proton was removed
+under a game), nor into `head`/`grep -m` where the pipeline's status decides something; read the output whole (`grep -q
+x <<<"$(cmd)"`), or mark a line `# pipefail-ok: <why>`.
 
-CI runs them on every push (not one changing only the manual, a README or the docs' images), pull request and night, with what the checks against Caelestia, Hyprland, Qt and the kernel need
-(its dots at the pinned commit), so none is skipped there: a skip there, whole or in part (`skipped` in
-`tests/lib.sh`; `tests/run.sh` for a whole one), fails CI, as its pass approves that Hyprland. The checks against
-upstream's next release (Caelestia's, Lutris's and Hyprland's main branches, hyprland-plugins' main: a change there
-that breaks one of AgrOS's shows first) are the exception: one that doesn't fit, or couldn't be fetched, is said on the
-test's last line (`ahead` in `tests/lib.sh`: "ok caelestia-overlay (AHEAD: ...)"), never a failure. Neither the published
-`[agros]` nor an older Arch undoes a change on main, so it read as AgrOS's own code and nothing went out; the release,
-once it comes, is checked as installed like any other.
+CI runs them on every push (not one changing only the manual, a README or the docs' images), pull request and night,
+with what the checks against Caelestia, Hyprland, Qt and the kernel need (its dots at the pinned commit), so none is
+skipped there: a skip there, whole or in part (`skipped` in `tests/lib.sh`; `tests/run.sh` for a whole one), fails CI,
+as its pass approves that Hyprland. The checks against upstream's next release (Caelestia's, Lutris's and Hyprland's
+main branches, hyprland-plugins' main: a change there that breaks one of AgrOS's shows first) are the exception: one
+that doesn't fit, or couldn't be fetched, is said on the test's last line (`ahead` in `tests/lib.sh`: "ok
+caelestia-overlay (AHEAD: ...)"), never a failure. Neither the published `[agros]` nor an older Arch undoes a change on
+main, so it read as AgrOS's own code and nothing went out; the release, once it comes, is checked as installed like any
+other.
 
 ### Keeping itself up
 
@@ -1276,19 +1300,20 @@ breaks something holds back that one piece, never the rest (`.github/workflows/c
   the install check with signatures required, the upload to Pages). `tests/ci-signing.sh` checks the workflow keeps it
   so. The install check also resolves `agros-desktop` with CachyOS's v3 and znver4 repos above `[cachyos]`, as the
   installer sets them on such CPUs (`ci/cpu-repos.sh`, no such CPU needed): not resolving there (their lag behind
-  Arch's), or a library at another soname than below them, is a warning, and the release goes out. Changing the signing key: add the new one to `ci/agros.asc` (and agros-iso's
-  `agros.asc`) and raise `agros-keyring`'s `pkgver`, let machines update, then replace the secret; signing with a key
-  `ci/agros.asc` lacks fails the release, before anything goes out.
+  Arch's), or a library at another soname than below them, is a warning, and the release goes out. Changing the signing
+  key: add the new one to `ci/agros.asc` (and agros-iso's `agros.asc`) and raise `agros-keyring`'s `pkgver`, let
+  machines update, then replace the secret; signing with a key `ci/agros.asc` lacks fails the release, before anything
+  goes out.
 - **A package that doesn't build** (an AUR change, AgrOS's Quickshell patch or Calamares changes no longer fitting,
   Calamares built without a module its settings name, a download that failed): the published one is kept, its
   signature checked, with the packages of the repo it needs (`ci/published.sh`); the rest goes out. None published yet:
   the build fails. The AUR packages and CachyOS's installer are built without compiler warnings (theirs, not AgrOS's);
   AgrOS's own packages keep them.
-- **Tests that fail** (`ci/test-passes.sh`): all the tests are run again, to see which side broke them: with the published `[agros]`
-  (they pass: this run's new AUR builds broke them, swapped for the published ones by `build-repo.sh --hold-new`; the
-  new Hyprland still approved), then on Arch as of the last day the tests passed on it (its archive's snapshot; the day
-  published as `agros-arch-ok`): they pass, an Arch update broke them (its Hyprland not approved, the new AUR builds
-  held, AgrOS's own packages still out). Failing even then: AgrOS's own code, and nothing goes out.
+- **Tests that fail** (`ci/test-passes.sh`): all the tests are run again, to see which side broke them: with the
+  published `[agros]` (they pass: this run's new AUR builds broke them, swapped for the published ones by `build-repo.sh
+  --hold-new`; the new Hyprland still approved), then on Arch as of the last day the tests passed on it (its archive's
+  snapshot; the day published as `agros-arch-ok`): they pass, an Arch update broke them (its Hyprland not approved, the
+  new AUR builds held, AgrOS's own packages still out). Failing even then: AgrOS's own code, and nothing goes out.
 - **Upstream's next release** no longer fitting AgrOS's changes (a check against a main branch, above): nothing held,
   everything goes out, and the issue below says which change to adapt before that release.
 - **One issue** (`ci/report.sh`, label `held`) says what was held back or why nothing went out (or, as "Heads-up", what
@@ -1323,13 +1348,14 @@ breaks something holds back that one piece, never the rest (`.github/workflows/c
 
 ## Troubleshooting
 
-- **The login screen broke**: Ctrl+Alt+F2, log in, `sudo login-reset` (a text login; `sudo login-reset --back` undoes it)
+- **The login screen broke**: Ctrl+Alt+F2, log in, `sudo login-reset` (a text login; `sudo login-reset --back` undoes
+  it)
 - **Something stopped working after a Hyprland or Caelestia update**: run `dotfiles-check`. It lists Hyprland config
   errors (the config checked from disk with `Hyprland --verify-config`, by `hypr-config-check`: the running Hyprland's
-  own list is cleared by every `hyprctl eval`) and outdated settings, Caelestia changes that no longer fit (skipped by the overlay), and parts that aren't
-  running (Caelestia, the switcher, the widgets, the title bar plugin, the services) or logged errors, and my QML in
-  Caelestia that fails to load (a Caelestia update renamed something it uses, which the patches can't see). It also runs
-  30 s after login and sends a notification only if something's wrong
+  own list is cleared by every `hyprctl eval`) and outdated settings, Caelestia changes that no longer fit (skipped by
+  the overlay), and parts that aren't running (Caelestia, the switcher, the widgets, the title bar plugin, the services)
+  or logged errors, and my QML in Caelestia that fails to load (a Caelestia update renamed something it uses, which the
+  patches can't see). It also runs 30 s after login and sends a notification only if something's wrong
 - **Caelestia's Hyprland config has an update** (a low-urgency note from `dotfiles-check`, once per new version): run
   `caelestia-hypr-refresh`. It refreshes `~/.config/hypr` alone (files you haven't edited replaced, Caelestia's new
   version written beside the ones you have as `.new`) and checks the config. Not `caelestia update`: its own system
