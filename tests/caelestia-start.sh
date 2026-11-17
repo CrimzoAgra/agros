@@ -106,7 +106,8 @@ for _ in $(seq 50); do [[ -e $t/home/.local/state/agros/scheme-again ]] || break
 # (a shell already up from that folder: --prepare builds nothing under it)
 HOME=$t/home PATH=$t/bin:$PATH "$t/home/.local/bin/caelestia-start" --prepare
 [[ $(wc -l <"$t/home/overlay-runs") -eq 2 ]] || fail "--prepare with the shell up: built under it"
-[[ $(tail -1 "$t/home/started") == "caelestia shell -d" ]] || fail "after --prepare: the shell wasn't started"
+# (started by the run after it, --prepare never starts it: not necessarily last, the colours set again beside it)
+grep -qx 'caelestia shell -d' "$t/home/started" || fail "after --prepare: the shell wasn't started: $(cat "$t/home/started")"
 # (the unit that runs it: packaged, wanted as the session starts, after agros-links and uwsm's environment loader.
 # Hyprland waits for it (graphical-session-pre.target is after what it wants, and uwsm starts Hyprland after that), so
 # a time limit: a oneshot has none, and one that hung kept the screen black after the login for good)
