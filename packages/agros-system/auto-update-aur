@@ -132,7 +132,7 @@ pin() {
             { echo "$base: not one git source to pin at $hash"; return 1; }
         # (the quoted git+ URL in its source array, any #branch= or #tag= after it replaced; checked as makepkg reads it)
         sed -i "/^[[:space:]]*source\(_x86_64\)\{0,1\}=(/,/)/ s|\(\"[^\"]*git+[^\"#]*\)\(#[^\"]*\)\{0,1\}\"|\1#commit=$hash\"|" PKGBUILD
-        makepkg --printsrcinfo 2>/dev/null | grep -qE "^[[:space:]]*source(_x86_64)? = ([^:]*::)?git\+[^#]*#commit=$hash\$" ||
+        makepkg --printsrcinfo 2>/dev/null | grep -E "^[[:space:]]*source(_x86_64)? = ([^:]*::)?git\+[^#]*#commit=$hash$" >/dev/null ||
             { echo "$base: its git source couldn't be pinned at $hash"; return 1; }
         return 0
     fi
