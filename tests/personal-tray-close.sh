@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# agros-personal's restore with Lutris and Proton VPN in their tray (both start so at login, user/apps.lua): closed for
-# it (no terminal to ask in), then the restore goes on; Lutris with a game's window (a process it started) left open,
-# and the restore refused; Hyprland not reachable to tell, both left open. VSCodium found open by its command, either
-# build's. (Lutris's and Proton VPN's processes stand-ins, found by a pgrep stand-in: yours are never touched)
+# agros-personal's restore with Lutris and Proton VPN in their tray (as they start at login, user/apps.lua: Lutris by
+# default, Proton VPN when turned on): closed for it (no terminal to ask in), then the restore goes on; Lutris with a
+# game's window (a process it started) left open, and the restore refused; Hyprland not reachable to tell, both left
+# open. VSCodium found open by its command, either build's. (Lutris's and Proton VPN's processes stand-ins, found by a
+# pgrep stand-in: yours are never touched)
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
