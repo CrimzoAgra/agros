@@ -729,7 +729,8 @@ helper a package update just brought works before `agros-links` has linked it), 
   (`--runtime-target`, `--runtimes-now`, `--built-on`): what the boot's AUR builds and `update-apps` both rebuild
 - **`.local/bin/agros-each-user`**: runs a command as each AgrOS user (pacman hooks, the boot's update): only
   AgrOS's own program, the user's link to it run from `/usr/lib/agros/bin` (a user's own file there held pacman's
-  lock, and every update), for 10 minutes at most; `--list`
+  lock, and every update), for 10 minutes at most (`--limit`: the title bar plugin's hook, 5; it builds from AgrOS's
+  own patch, never the user's, which their login build takes); `--list`
   lists them; `--as <user>` runs one as that user (or the boot's AUR builds' `agros-aur`) from root with `setpriv` (never `runuser`, `su` or `sudo`: their PAM
   opens a logind session, whose processes leave the calling service's cgroup and time limit, and makes the user count
   as logged in). Either way the command runs in a session of its own, with nothing on its input and its output
@@ -824,7 +825,9 @@ helper a package update just brought works before `agros-links` has linked it), 
 - **`.local/bin/flatpak-bundle-update`**: updates Flatpaks installed from a downloaded `.flatpak` file (no Flatpak repo,
   e.g. ArtCraft Launcher) from their GitHub releases (the repo each was installed from, else its metainfo's own link
   the first time, kept so a later version can't point elsewhere), checked the same way and only when the file is that
-  app; `--check` lists the ones with a newer version
+  app; `--check` lists the ones with a newer version. A new version asking for more access (its sandbox permissions)
+  is held at boot for Updates, which installs it and says what it adds; the `-origin` remote a bundle makes has its
+  URL emptied (a bundle names it: `flatpak update` would otherwise follow it), and a missing runtime comes from Flathub
   (both use `.local/share/github-release/lib.sh`: the release's x86_64 file and its checksum). At boot, each user's
   own are done as that user and the system-wide ones once, as root
 - **`.local/bin/capri-update`**: installs and updates Capri: my fork (`CrimzoAgra/capri-overlay`: CapriDesktop with
