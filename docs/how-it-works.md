@@ -100,7 +100,10 @@ late answer and stayed listed for good (a game quit, its icon left in the dock).
 it. CachyOS's installer is built there too: `cachyos-calamares-next` rebuilt with AgrOS's changes (the live ISO
 installs it from `[agros]`): its version is CachyOS's with a `.N` after the pkgrel (`calamares_rel` in
 `ci/build-repo.sh`), raised with any change to AgrOS's changes, beside their new checksum (`calamares_sum`), or CI
-fails. Most of AgrOS's own packages are versioned by the repo's commits (one built again from the same commit with
+fails. CachyOS's recipe for it is taken at a fixed commit of CachyOS-PKGBUILDS (`calamares_pkgbuild`), not their
+newest: their own changes (on 2026-11-17 a new name, `cachyos-calamares`, and another branch, whose installer has no
+per-platform kernels and would have put the handheld kernel on every install) reach AgrOS's installer only once looked
+at, the pin moved on and `calamares_rel` raised; the weekly status says when theirs has changed. Most of AgrOS's own packages are versioned by the repo's commits (one built again from the same commit with
 other contents fails CI: a build that isn't reproducible); `agros-vmware` and `agros-thunar-usage`, compiled, by the
 commits that touch their own folder (`2.r<count>.<commit>`, `1.r<count>.<commit>`: the `2.` keeps `agros-vmware` above
 the `1-1` published before, with no epoch, whose `:` would go in the file's name); `agros-boot` by the commits that

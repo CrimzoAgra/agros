@@ -278,10 +278,16 @@ if [[ -z ${AGROS_SKIP_AUR:-} ]]; then
         5) calamares_sum=2db12fafcbd8 ;;
         6) calamares_sum=025bcfdf8226 ;;
     esac
+    # CachyOS's recipe as AgrOS last checked it (a commit of CachyOS-PKGBUILDS), not its newest: a change of theirs
+    # reaches AgrOS's installer only once looked at, with this moved on and calamares_rel raised. (Their 5c2ef554, a
+    # new name and the cachyos branch, whose installer has no platform: kernels, would have put the handheld kernel on
+    # every install.) The weekly status (ci/status.sh) says when theirs has moved on
+    calamares_pkgbuild=8630282e004ea3a0711d30cbff3329a7b86a6229
     # (not fetched: its build below finds no folder, and the published one is held)
-    { asb git clone -q --depth 1 --filter=blob:none --sparse https://github.com/CachyOS/CachyOS-PKGBUILDS.git "$work/cachyos-pkgbuilds" &&
-        (cd "$work/cachyos-pkgbuilds" && asb git sparse-checkout set cachyos-calamares); } ||
-        echo "!! CachyOS's PKGBUILDs couldn't be fetched"
+    { asb git clone -q --no-checkout --depth 1 --filter=blob:none --sparse https://github.com/CachyOS/CachyOS-PKGBUILDS.git "$work/cachyos-pkgbuilds" &&
+        (cd "$work/cachyos-pkgbuilds" && asb git fetch -q --depth 1 --filter=blob:none origin "$calamares_pkgbuild" &&
+            asb git sparse-checkout set cachyos-calamares && asb git checkout -q "$calamares_pkgbuild"); } ||
+        echo "!! CachyOS's PKGBUILDs couldn't be fetched (at $calamares_pkgbuild)"
     cat >"$work/calamares-labels" <<'SH'
     patch -Np1 -i "$startdir/calamares-layout.patch"
     sed -i -e 's/painter->setPen( Qt::black );/painter->setPen( palette().windowText().color() );/' -e 's/painter->setPen( Qt::gray );/painter->setPen( palette().placeholderText().color() );/' src/modules/partition/gui/PartitionLabelsView.cpp

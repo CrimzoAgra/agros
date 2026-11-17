@@ -96,6 +96,17 @@ if [[ -n $dots ]] && d=$(gh api "repos/caelestia-dots/caelestia/compare/$dots...
 else
     dots_cell+=", upstream couldn't be read"
 fi
+# CachyOS's installer recipe: pinned too (ci/build-repo.sh's calamares_pkgbuild); a change of theirs since is a problem
+# (a look needed: their recipe's own changes, a new name or branch, reach AgrOS's installer only once it's moved on)
+cpin=$(sed -n 's/^ *calamares_pkgbuild=//p' "$here/ci/build-repo.sh")
+if c=$(gh api "repos/CachyOS/CachyOS-PKGBUILDS/commits?path=cachyos-calamares&per_page=1" \
+    -q '.[0] | "\(.sha) \(.commit.committer.date[:10])"' 2>/dev/null) && [[ -n $c ]]; then
+    read -r newest when <<<"$c"
+    [[ $newest == "$cpin" ]] ||
+        problems+=("CachyOS changed its installer's recipe (cachyos-calamares, ${newest:0:8}, $when) since AgrOS's pin (${cpin:0:8}): look at it, then move calamares_pkgbuild on (ci/build-repo.sh)")
+else
+    problems+=("CachyOS's installer recipe couldn't be read: whether it changed since AgrOS's pin not checked")
+fi
 # The size watch: each thing it found needs a look; it not having run, too, with its log (or the next week's finds
 # nothing to compare with: last week's baseline kept then). (Its table says it ran, not its baseline: a first week
 # whose sets pacman couldn't work out has none, and what pacman said goes in the issue)

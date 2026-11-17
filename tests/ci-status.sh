@@ -8,7 +8,8 @@ set -euo pipefail
 mkdir -p "$t/bin"
 # (gh's answers as JSON, its -q run on them by jq, as the real one does: the queries are checked too)
 # shellcheck disable=SC2016
-sed "s|@T@|$t|g" >"$t/bin/gh" <<'GH'
+cpin=$(sed -n 's/^ *calamares_pkgbuild=//p' "$here/ci/build-repo.sh")
+sed -e "s|@T@|$t|g" -e "s|@PIN@|$cpin|g" >"$t/bin/gh" <<'GH'
 #!/bin/bash
 echo "gh $*" >>@T@/gh.log
 q=. p=
@@ -50,6 +51,11 @@ case "$*" in
   "api repos/caelestia-dots/caelestia/compare/"*)
     [[ $STATE == *gh-down* ]] && exit 1
     json '{"ahead_by": 12, "base_commit": {"commit": {"committer": {"date": "2026-11-03T10:00:00Z"}}}}' ;;
+  # (CachyOS's installer recipe: the newest commit on it, AgrOS's pin unless it has moved on)
+  "api repos/CachyOS/CachyOS-PKGBUILDS/commits?path=cachyos-calamares"*)
+    [[ $STATE == *gh-down* ]] && exit 1
+    sha=@PIN@; [[ $STATE == *calamares-moved* ]] && sha=5c2ef554aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    json "[{\"sha\": \"$sha\", \"commit\": {\"committer\": {\"date\": \"2026-11-17T08:10:48Z\"}}}]" ;;
   "issue list --label status --state all"*) cat @T@/lastbody 2>/dev/null; true ;;
   "issue list --label status"*) echo 7 ;;
   "issue create"*) for a; do [[ $p == --body-file ]] && cp "$a" @T@/body; p=$a; done ;;
@@ -109,6 +115,12 @@ for s in "CI's held issue couldn't be read: whether anything is held not checked
     grep -qxF -- "- $s" "$t/body" || fail "a failed lookup not said: $s: $(cat "$t/body")"
 done
 grep -qF "| Caelestia's dots | pinned ${dots:0:7}, upstream couldn't be read |" "$t/body" || fail "the dots' upstream not read said: $(cat "$t/body")"
+grep -qxF -- "- CachyOS's installer recipe couldn't be read: whether it changed since AgrOS's pin not checked" "$t/body" ||
+    fail "CachyOS's installer recipe not read not said: $(cat "$t/body")"
+# (CachyOS's installer recipe moved on past AgrOS's pin: a look needed)
+go "calamares-moved"
+grep -qxF -- "- CachyOS changed its installer's recipe (cachyos-calamares, 5c2ef554, 2026-11-17) since AgrOS's pin (${cpin:0:8}): look at it, then move calamares_pkgbuild on (ci/build-repo.sh)" "$t/body" ||
+    fail "CachyOS's installer recipe moving on not said: $(cat "$t/body")"
 go "arch-down"
 grep -q "approved list" "$t/body" && fail "a readable approved list said unreadable: $(cat "$t/body")"
 # (the ISO held by the upstream gate: GitHub's success, said; one already published isn't)
