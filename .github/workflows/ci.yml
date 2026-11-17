@@ -2,11 +2,13 @@ name: CI
 
 on:
   push:
-    # (not for a change to the docs alone: no package holds them, the daily run below still checks all. But the Lua
-    # API table, docs/how-it-works.md, which hypr-config's test reads. The last match wins, as agros-iso's iso.yml)
+    # (not for a change to the docs alone, their images too: no package holds them, the daily run below still checks
+    # all. But the Lua API table, docs/how-it-works.md, which hypr-config's test reads. The last match wins, as
+    # agros-iso's iso.yml)
     paths:
       - '**'
       - '!**.md'
+      - '!docs/images/**'
       - 'docs/how-it-works.md'
   pull_request:
   # Daily: the AUR packages AgrOS carries rebuilt when they've moved on (and against the latest Arch libraries)
