@@ -239,7 +239,9 @@ covers() { rm -f "$t/covers-ran"; printf '#!/bin/sh\necho $PPID >%s/ran.tmp && m
 waitfor() { for _ in {1..50}; do [[ -e $1 ]] && return; sleep 0.1; done; return 1; }
 touch "$t/.local/share/lutris/pga.db"; covers 1; run >/dev/null
 waitfor "$t/covers-ran" || fail "lutris-covers didn't run for a changed library"
-job=$(cat "$t/covers-ran"); for _ in {1..50}; do kill -0 "$job" 2>/dev/null || break; sleep 0.1; done
+# (a zombie is done too: CI's container's process 1 doesn't reap the detached job, and kill -0 still finds it)
+job=$(cat "$t/covers-ran")
+for _ in {1..50}; do [[ $(awk '$1 == "State:" {print $2}' "/proc/$job/status" 2>/dev/null) == [^Z]* ]] || break; sleep 0.1; done
 [[ ! -e $checked ]] || fail "the library marked checked after lutris-covers failed"
 covers 0; run >/dev/null
 waitfor "$checked" || fail "the library not marked checked after lutris-covers got through"
