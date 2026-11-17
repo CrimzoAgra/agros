@@ -7,8 +7,6 @@ set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 export HOME=$t XDG_DATA_HOME=$t/.local/share XDG_CACHE_HOME=$t/.cache XDG_CONFIG_HOME=$t/.config
-# (no session bus: the Lutris you have open isn't told to refresh for a test)
-export DBUS_SESSION_BUS_ADDRESS=unix:path=$t/no-bus
 # Steam installed on the system: a stand-in first on the PATH (its Launchers entry opens it, no install)
 mkdir -p "$t/bin" && printf '#!/bin/sh\n' >"$t/bin/steam" && chmod +x "$t/bin/steam" && export PATH="$t/bin:$PATH"
 mkdir -p "$t/.local/share/lutris" "$t/.cache/lutris" "$t/.config/lutris"

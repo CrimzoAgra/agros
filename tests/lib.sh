@@ -37,6 +37,8 @@ export PYTHONDONTWRITEBYTECODE=1
 mkdir "$t/.py" && printf '#!/bin/sh\nexec %s -B "$@"\n' "$(command -v python3)" >"$t/.py/python3" && chmod +x "$t/.py/python3"
 export PATH=$t/.py:$PATH
 fail() { echo "FAIL: $*"; exit 1; }
+# stub <name> <bash code>: a stand-in program, $t/bin/<name> (the test puts $t/bin first on the PATH it runs with)
+stub() { mkdir -p "$t/bin" && printf '#!/bin/bash\n%s\n' "$2" >"$t/bin/$1" && chmod +x "$t/bin/$1"; }
 # A part of a test this machine can't run, said; on CI a failure (CI has all a test needs, and its pass approves that
 # Hyprland for AgrOS's machines: the upstream gate)
 skipped() { [[ -z ${CI:-} ]] || fail "skipped on CI: $*"; echo "($*)"; }
