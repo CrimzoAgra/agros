@@ -420,6 +420,26 @@ FOREIGN_HAVE=1.0.5-1 FOREIGN=equibop PENDING="foo 1-1 -> 2-1" "$t/auto-update-au
     fail "an old change waiting not taken once updated from Updates: $(cat "$t/out")"
 [[ $(cat "$t/au/aur-maintainers") == "equibop malloryb:bob" && ! -s $t/au/aur-maintainer-changed ]] ||
     fail "the new maintainers not recorded after an old change waiting: $(cat "$t/au/aur-maintainers")"
+# (updated from Updates, the new maintainers taken at once: a build here that fails doesn't hold it again at the next
+# boot, nor does a split base's other package, asked about after the first, find it held)
+echo "equibop alice:" >"$t/au/aur-maintainers"
+echo "equibop malloryb: 1.0-1" >"$t/au/aur-maintainer-changed"
+maintained malloryb
+FAIL_BASE=equibop FOREIGN_HAVE=1.0.5-1 FOREIGN=equibop PENDING="foo 1-1 -> 2-1" "$t/auto-update-aur" "$t/db" >"$t/out" 2>&1 &&
+    fail "a failed build reported success"
+[[ $(cat "$t/au/aur-maintainers") == "equibop malloryb:" && ! -s $t/au/aur-maintainer-changed ]] ||
+    fail "the new maintainers not taken when updated from Updates: $(cat "$t/au/aur-maintainers") / $(cat "$t/au/aur-maintainer-changed")"
+FOREIGN_HAVE=1.0.5-1 FOREIGN=equibop PENDING="foo 1-1 -> 2-1" "$t/auto-update-aur" "$t/db" >"$t/out" 2>&1 ||
+    fail "held again after its build failed: $(cat "$aur/failed" 2>/dev/null)"
+echo "equibop alice:" >"$t/au/aur-maintainers"
+echo "equibop malloryb: 1.0-1" >"$t/au/aur-maintainer-changed"
+stub curl "echo '{\"results\":[{\"Name\":\"equibop\",\"PackageBase\":\"equibop\",\"Version\":\"1.1-1\",\"Maintainer\":\"malloryb\"},
+    {\"Name\":\"equibop-extra\",\"PackageBase\":\"equibop\",\"Version\":\"1.1-1\",\"Maintainer\":\"malloryb\"}]}'"
+: >"$t/calls"
+FOREIGN="equibop equibop-extra" FOREIGN_HAVE=1.0.5-1 PENDING="foo 1-1 -> 2-1" "$t/auto-update-aur" "$t/db" >"$t/out" 2>&1 || true
+! grep -q 'maintainers changed' "$aur/failed" 2>/dev/null && grep -q '^git clone' "$t/calls" &&
+    [[ $(cat "$t/au/aur-maintainers") == "equibop malloryb:" && ! -s $t/au/aur-maintainer-changed ]] ||
+    fail "a split base held by its own change taken: $(cat "$aur/failed" 2>/dev/null) / $(cat "$t/au/aur-maintainer-changed")"
 # (the builds' logs the admins' alone: what they printed names every user's AUR apps)
 [[ $(stat -c %a "$aur/log") == 750 ]] || fail "the builds' logs open to every account: $(stat -c %a "$aur/log")"
 rm -f "$t/au/aur-maintainers" "$t/au/aur-maintainer-changed"

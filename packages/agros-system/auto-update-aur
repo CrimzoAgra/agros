@@ -249,7 +249,7 @@ mapfile -t ignored < <(pacman-conf --config "$conf" IgnorePkg 2>/dev/null)
 # base had at its last build here (aur-maintainers, "<base> <maintainers>": the first seen taken as they are), and a
 # change waiting (aur-maintainer-changed, "<base> <maintainers> <version installed then>"): once that version is
 # replaced (updated from Updates), the new maintainers are taken. A line from before co-maintainers were kept (no ":",
-# the maintainer alone) is compared by the maintainer alone, so the update doesn't hold every app back once
+# the maintainer alone) is compared by the maintainer alone, so the update that added them didn't hold every app back
 maint=$au/aur-maintainers changed=$au/aur-maintainer-changed
 from_repo=''
 ((${#foreign[@]} == 0)) || from_repo=$(LC_ALL=C pacman -Qi --dbpath "$db" -- "${foreign[@]}" 2>/dev/null |
@@ -278,7 +278,10 @@ guard() {
         return 0
     fi
     if [[ -n $waiting ]] && same "$waiting" "$3" && [[ $(field "$changed" "$2" 3) != "$4" ]]; then
-        set_line "$changed" "$2"  # (updated from Updates since: the new maintainers taken, recorded at its build)
+        # (updated from Updates since: the new maintainers taken now, not at its build. A build here that then fails
+        # would have held it again, and a split base's next package, asked here too, found it held)
+        set_line "$maint" "$2" "$3"
+        set_line "$changed" "$2"
         return 0
     fi
     [[ -n $waiting ]] && same "$waiting" "$3" || set_line "$changed" "$2" "$3 $4"
