@@ -56,6 +56,7 @@ cat >"$t/bin/curl" <<'C'
 echo "curl $*" >>"$CALLS"
 [[ -z $OFFLINE ]] || exit 7
 url=${*: -1}
+url=${url%%\?t=*}  # (the address without its cache-busting stamp)
 # ($DOWN: that server unreachable; $SIG_AT: $SIG for that server's list alone, the others' signed well)
 [[ -z ${DOWN:-} || $url != "$DOWN"/* ]] || exit 7
 sig=${SIG:-}
@@ -130,8 +131,8 @@ out=$(HAVE_hyprland=0.57.2-1 NEW_hyprland=0.58.0-1 APPROVED='hyprland 0.58.0' HB
 # The list fetched from beside [agros]'s database; a --dbpath (the boot's own copy of the lists) passed to every pacman
 : >"$CALLS"
 HAVE_hyprland=0.57.2-1 NEW_hyprland=0.57.2-1 APPROVED='hyprland 0.57.2' gate --dbpath "$t/db" >/dev/null
-grep -q "^curl .*https://agros.invalid/x86_64/agros-approved$" "$CALLS" && [[ -z $(grep "^pacman" "$CALLS" | grep -v -- "--dbpath $t/db") ]] ||
-    fail "not the list beside [agros], or a pacman run without the --dbpath: $(cat "$CALLS")"
+grep -qE "^curl .*--retry 3 --retry-all-errors .*https://agros.invalid/x86_64/agros-approved\?t=[0-9]+$" "$CALLS" && [[ -z $(grep "^pacman" "$CALLS" | grep -v -- "--dbpath $t/db") ]] ||
+    fail "not the list beside [agros] (tried again on an error, a stamp against a cached copy), or a pacman run without the --dbpath: $(cat "$CALLS")"
 # --offline (the shutdown's install): the kept list only, nothing fetched (and no list file of its own to remove: not a
 # .sig in the folder it runs from)
 : >"$CALLS"; mkdir "$t/cwd"; : >"$t/cwd/.sig"
