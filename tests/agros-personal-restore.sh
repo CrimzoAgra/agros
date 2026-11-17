@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # agros-personal --save onto a made-up pen drive, then agros-personal into another home: the logins (Claude Code's too) come back (LibreWolf's into
 # the new profile, whatever its name), caches stay out, replaced files are backed up, the weather's place comes back,
-# nothing is readable on the drive, a wrong passphrase brings nothing back, and it won't save into the repo. Without
-# the drive: signing in refused with no terminal, the weather's place asked
+# nothing is readable on the drive, a wrong passphrase brings nothing back, and it won't save into the repo; Capri left
+# to the next login when gh can't take the GitHub login brought back yet. Without the drive: signing in refused with no
+# terminal, the weather's place asked
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
@@ -32,7 +33,8 @@ echo '{"services": {"weatherLocation": "Porto"}}' >"$old/.config/caelestia/shell
 mkdir -p "$old/.claude/projects/-home-me/memory" "$old/.claude/skills/s"
 echo SECRET-CLAUDE >"$old/.claude/.credentials.json"; echo '{"oauthAccount": 1}' >"$old/.claude.json"
 mkdir -p "$old/.local/share/Steam/config" "$old/.local/share/Steam/userdata/42/config" "$old/.local/share/Steam/userdata/42/7"
-mkdir -p "$old/.config/dots"; echo SECRET-SGDB >"$old/.config/dots/steamgriddb.key"
+mkdir -p "$old/.config/dots" "$old/.config/gh"; echo SECRET-SGDB >"$old/.config/dots/steamgriddb.key"
+echo SECRET-GH >"$old/.config/gh/hosts.yml"
 echo SECRET-STEAM >"$old/.local/share/Steam/config/config.vdf"; echo cfg >"$old/.local/share/Steam/userdata/42/config/localconfig.vdf"
 echo shot >"$old/.local/share/Steam/userdata/42/7/screenshot"
 echo note >"$old/.claude/projects/-home-me/memory/MEMORY.md"; echo skill >"$old/.claude/skills/s/SKILL.md"
@@ -89,7 +91,14 @@ HOME=$new XDG_RUNTIME_DIR=$t bash -c '
 lutris_db "$new" ea-app 0 "" ""  # (lutris-library's entry for it, not installed)
 nl=$new/.config/librewolf/librewolf/xyz.default-release
 echo stale >"$nl/logins.json-wal"  # the new profile's journal, which would be replayed over the one brought back
-run "$new" personal_main >/dev/null || fail "--personal failed"
+# GitHub's login back, gh not taking it yet (it's in the keyring brought back, which opens from the next login): Capri
+# left to that login (dotfiles-check's mark), said, not tried now
+mkdir -p "$t/ghbin"; printf '#!/bin/sh\n[ "$1 $2" = "auth status" ] && exit 1\nexit 0\n' >"$t/ghbin/gh"
+printf '#!/bin/sh\ntouch "%s/capri-ran"\n' "$t" >"$repo/.local/bin/capri-update"; chmod +x "$t/ghbin/gh" "$repo/.local/bin/capri-update"
+out=$(PATH=$t/ghbin:$PATH run "$new" personal_main) || fail "--personal failed"
+[[ $(cat "$new/.config/gh/hosts.yml") == SECRET-GH ]] || fail "GitHub's login not back"
+[[ -e $new/.local/state/agros/capri-at-login && ! -e $t/capri-ran ]] || fail "Capri not left to the next login, or tried now"
+[[ $out == *"Capri is installed at your next login"* ]] || fail "Capri's install at the next login not said: $out"
 [[ -e $nl/logins.json-wal ]] && fail "a stale journal left beside a file brought back"
 [[ $(cat "$nl/logins.json") == SECRET-LOGIN ]] || fail "LibreWolf's logins not in the new profile"
 [[ -f $nl/storage/default/moz-extension+++x/d ]] || fail "extension data missing"
