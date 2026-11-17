@@ -52,6 +52,7 @@ sudo pacman-key --lsign-key BFE9289F7759E521AE60CFCD23B6096B42D05E1E
 sudo pacman -Syu agros-keyring agros-desktop
 ```
 
-New accounts get AgrOS's settings. For your current account, copy `/etc/skel` into your home folder.
+Installing it adds the repo's second server (a mirror) and requires its database to be signed. New accounts
+get AgrOS's settings. For your current account, copy `/etc/skel` into your home folder.
 
 Next: [Your first login](03-first-login.md)

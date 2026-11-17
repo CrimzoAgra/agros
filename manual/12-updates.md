@@ -78,7 +78,8 @@ what's held back and why (or, as a heads-up, what of an upstream's next release 
 closes by itself once everything goes out again. Every Friday at 17:00 Lisbon time a
 status issue says "Nothing broke this week" or what needs a look: a build failing, something held (and since when), an
 ISO waiting for AgrOS's check of its Hyprland, a CachyOS pull request waiting or the CachyOS sync failing, a daily job
-that stopped running, Arch's newest Hyprland not approved yet, or anything it couldn't check. It also checks how big
+that stopped running, Arch's newest Hyprland not approved yet, CachyOS's installer changed since AgrOS last checked
+it, or anything it couldn't check. It also checks how big
 the ISO and a new install are against the week before, and says when either grew a lot, when something AgrOS took out
 came back, or when a trim stopped working (files AgrOS skips that are installed again), so neither quietly gets bigger.
 
