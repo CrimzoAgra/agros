@@ -910,7 +910,11 @@ brings each change; nothing to run by hand).
   USB devices until a reboot): the system, kernel and CachyOS gaming packages, the AUR apps, and firmware. The keyrings
   (Arch's, CachyOS's, AgrOS's) are downloaded alone first and installed first: a key expired on the machine doesn't stop
   the rest's download for good.
-  - **AUR apps** (`packages/agros-system/auto-update-aur`, after the download): those with a newer AUR version (not in
+  - Not on a snapshot booted from the menu (the root an overlay in RAM): nothing downloaded or installed, said in the
+    log. The day Arch last passed AgrOS's tests (`agros-arch-ok`) is taken only with AgrOS's signature
+  - **AUR apps** (`packages/agros-system/auto-update-aur`, after the download; an app whose AUR maintainer changed
+    since its last build, or one its repo dropped (signed, now foreign), isn't built: left for Updates, where its build
+    files can be read, and said by `dotfiles-check`): those with a newer AUR version (not in
     a repo: `paru -Qua`'s), and, when the download brings a new version of a runtime that breaks what's built on it,
     those built on it (from the AUR or `[agros]`, not a `-bin`, not rebuilt by their repo in the same download). The
     runtimes are one list, `update-kinds`' (`runtimes`, which `update-apps` uses too): Qt (`qt6-base`, `qt6-declarative`: any new version; what needs them,
@@ -1039,7 +1043,8 @@ brings each change; nothing to run by hand).
   dialog). After its `paru -Syu` it rebuilds what's built on a runtime it changed (the boot's same list: Quickshell,
   Caelestia, qtengine for a new Qt; the AUR's Python packages for a new Python minor version), and on a Qt changed
   since they were last built, once the runtime is in: `[agros]`'s own at the version installed with AgrOS's Quickshell fix
-  (through `auto-update-aur --fetch`, as the boot's), the AUR's others at their newest. Log: `/var/log/auto-update.log` (its last 20 runs kept);
+  (through `auto-update-aur --fetch`, as the boot's), the AUR's others at their newest. Log: `/var/log/auto-update.log` (its last 20 runs kept; readable by admins, `wheel`, only: it holds every account's
+  updates);
   `dotfiles-check` says an install at shutdown that failed or was held back (until one goes through), AUR builds, AUR
   apps the install left out, or a firmware update that failed, and 3 shutdowns in a row with nothing installed, with the last one's reason (the boot's
   download didn't finish: only a finished one is installed; something else using pacman still held its lock; a soft
@@ -1210,6 +1215,10 @@ once it comes, is checked as installed like any other.
 On `main` CI builds the repo first, then tests what it built, then puts out what passed, so an upstream change that
 breaks something holds back that one piece, never the rest (`.github/workflows/ci.yml`):
 
+- **AgrOS's own packages apart from the AUR's.** The `agros` job builds `packages/*` alone (no AUR code there, no
+  privileges) and hands the `repo` job the packages and, as a job output, their checksums; the release signs an
+  `agros-*` package only when it's that job's, byte for byte (`ci/own-check.sh`, by file name and by `.PKGINFO`): an
+  AUR build script, which runs as root in `repo`, can't slip one in to be signed with AgrOS's key
 - **Signed apart from the build.** The `repo` job runs AUR build scripts (as its builder user, with passwordless
   sudo) and `test` runs what was built and the tests, so neither has a secret: the repo goes between them unsigned
   (`ci/build-repo.sh` refuses to start with a secret key at hand), with only AgrOS's public key (`ci/agros.asc`), which
