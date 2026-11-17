@@ -19,9 +19,16 @@ printf '#!/bin/sh\nexit 1\n' >"$sb/librewolf"; printf '#!/bin/sh\nexit 1\n' >"$s
 # (the offer: its text noted, the notification server up)
 printf '#!/bin/sh\nprintf "%%s\\n" "$@" >>"%s"\n' "$t/offer" >"$sb/notify-send"
 echo some.extension >"$h/.config/VSCodium/extensions.txt"
+# (the shell up at its second look; the looks and the overlay's lock taken noted in order)
+printf '#!/bin/sh\necho qs-running >>"%s/order"\n[ -e "%s/up" ] && exit 0\ntouch "%s/up"; exit 1\n' "$t" "$t" "$t" >"$h/.local/bin/qs-running"
+printf '#!/bin/sh\necho flock >>"%s/order"\n' "$t" >"$sb/flock"
 chmod +x "$sb"/* "$h"/.local/bin/*
 env -i HOME="$h" PATH="$sb:/usr/bin" bash "$h/.local/bin/agros-welcome" >/dev/null 2>&1 </dev/null || true
 st=$h/.local/state/agros
+# The shell waited for before caelestia-start's lock: this unit starts beside Hyprland's start, and the lock taken
+# first went through before caelestia-start took it (the first wallpaper and colours then set twice at once)
+[[ $(head -3 "$t/order" | paste -sd' ') == "qs-running qs-running flock" ]] ||
+    fail "caelestia-start's lock taken before the shell was waited for: $(paste -sd' ' "$t/order")"
 # The offer (in the background), marked once sent, and not saying all is installed when a step failed
 for _ in $(seq 50); do [[ -e $st/offered ]] && break; sleep 0.1; done
 [[ -e $st/offered ]] || fail "the offer sent but not marked offered"

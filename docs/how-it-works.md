@@ -26,7 +26,8 @@ Laptop settings and lighting are in a separate repo: **legion-control-linux**.
    in one go; nothing is installed only to be taken away again, and nothing is built during the install.
 2. Reboot and log in. At your first login, `caelestia-prepare.service` (`caelestia-start --prepare`) builds
    Caelestia's overlay and sets its wallpaper and colours before Hyprland starts, so the shell comes up at once
-   (`agros-welcome` does both if that failed, and moves the shell onto the overlay). `agros-welcome` does the rest of
+   (`agros-welcome`, which waits for the shell and then for `caelestia-start` to let go of the overlay's lock, does
+   both if that failed, and moves the shell onto the overlay). `agros-welcome` does the rest of
    what's per user: LibreWolf's settings, the Spotify, Nuvio and ArtCraft Flatpaks with Spicetify, VSCodium's
    extensions and Claude Code's plugins.
 3. **The one thing you run:** its notification offers *Restore my accounts*. Plug in your pen drive and click it, or

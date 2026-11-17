@@ -370,10 +370,13 @@ step() {
     echo "-- $name"
     "$@" && touch "$st/done-$name"
 }
-# (the shell up first: the overlay's restart and the wallpaper talk to it). caelestia-start's build waited for first,
-# under the overlay's lock: past the 60 s, this went on to build again, swapping the folder under the shell just started
-flock "$HOME/.config/quickshell/caelestia.lock" true 2>/dev/null
+# (the shell up first: the overlay's restart and the wallpaper talk to it), then caelestia-start's run waited for to
+# the end, under the overlay's lock (it holds it from its start until the shell answers): past the 60 s, this went on
+# to build again, swapping the folder under the shell just started. In that order: this unit starts beside Hyprland's
+# start, and the lock taken first went through before caelestia-start took it; with the shell slow, this then set the
+# first wallpaper and colours alongside caelestia-start's own (the folder icons recoloured twice at once)
 for _ in $(seq 60); do "$qs_running" /quickshell/caelestia/ && break; sleep 1; done
+flock "$HOME/.config/quickshell/caelestia.lock" true 2>/dev/null
 step caelestia caelestia_setup
 # The live USB (the ISO's own session): only the desktop's look, nothing downloaded, no accounts to restore
 [[ -d /run/archiso ]] && { echo "== live system: done $(date '+%F %T')"; exit 0; }
