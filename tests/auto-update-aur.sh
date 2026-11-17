@@ -440,6 +440,14 @@ FOREIGN="equibop equibop-extra" FOREIGN_HAVE=1.0.5-1 PENDING="foo 1-1 -> 2-1" "$
 ! grep -q 'maintainers changed' "$aur/failed" 2>/dev/null && grep -q '^git clone' "$t/calls" &&
     [[ $(cat "$t/au/aur-maintainers") == "equibop malloryb:" && ! -s $t/au/aur-maintainer-changed ]] ||
     fail "a split base held by its own change taken: $(cat "$aur/failed" 2>/dev/null) / $(cat "$t/au/aur-maintainer-changed")"
+# (orphaned, its maintainer none: said as no one, not "-")
+echo "equibop alice:" >"$t/au/aur-maintainers"
+rm -f "$t/au/aur-maintainer-changed"
+stub curl "echo '{\"results\":[{\"Name\":\"equibop\",\"PackageBase\":\"equibop\",\"Version\":\"1.1-1\",\"Maintainer\":null}]}'"
+FOREIGN=equibop PENDING="foo 1-1 -> 2-1" "$t/auto-update-aur" "$t/db" >"$t/out" 2>&1 && fail "an orphaned app's change reported success"
+[[ $(cat "$aur/failed") == "equibop: its AUR maintainers changed (alice to no one): update it from Updates, where you can review it" &&
+    $(cat "$t/au/aur-maintainer-changed") == "equibop -: 1.0-1" ]] ||
+    fail "an orphaned app's change not said as no one: $(cat "$aur/failed" 2>/dev/null)"
 # (the builds' logs the admins' alone: what they printed names every user's AUR apps)
 [[ $(stat -c %a "$aur/log") == 750 ]] || fail "the builds' logs open to every account: $(stat -c %a "$aur/log")"
 rm -f "$t/au/aur-maintainers" "$t/au/aur-maintainer-changed"

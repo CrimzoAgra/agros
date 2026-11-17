@@ -259,8 +259,12 @@ field() { awk -v b="$2" -v n="$3" '$1 == b { print $n; exit }' "$1" 2>/dev/null;
 set_line() { { awk -v b="$2" '$1 != b' "$1" 2>/dev/null; [[ -z ${3:-} ]] || echo "$2 $3"; } >"$1.new" && mv -f "$1.new" "$1"; }
 # same <maintainers kept> <maintainers now>: the same ones (a line from before co-maintainers: the maintainer alone)
 same() { [[ $1 == *:* && $1 == "$2" ]] || [[ $1 != *:* && $1 == "${2%%:*}" ]]; }
-# who <maintainers>: as said ("alice", "alice, co-maintained by bob,carol")
-who() { if [[ $1 == *:?* ]]; then echo "${1%%:*}, co-maintained by ${1#*:}"; else echo "${1%%:*}"; fi; }
+# who <maintainers>: as said ("alice", "alice, co-maintained by bob,carol"; an orphan's "-": "no one")
+who() {
+    local m=${1%%:*}
+    [[ $m != - ]] || m="no one"
+    if [[ $1 == *:?* ]]; then echo "$m, co-maintained by ${1#*:}"; else echo "$m"; fi
+}
 # guard <name> <base> <maintainers> <version installed>: why not to build it unreviewed, if so (exit 1)
 guard() {
     local was waiting
