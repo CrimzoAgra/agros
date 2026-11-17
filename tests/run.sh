@@ -12,7 +12,7 @@ if ((!${#tests[@]})); then
 fi
 # one <test>: its line, "ok <test>" or "FAIL <test>: <why>"
 one() {
-    local t=$1 out f last
+    local t=$1 out f last raw=
     case $t in
         boot-video-mode) out=$(python3 "$here/../system/boot-video-mode" --test 2>&1 </dev/null) && out="ok boot-video-mode" ;;
         # (no test can wait on the terminal: no stdin, and in a session of its own, without it, as sudo asks there)
@@ -22,10 +22,12 @@ one() {
         *) out=$(setsid -w timeout -k 10 "$limit" "$here/$t.sh" 2>&1 </dev/null) ;;
     esac || {
         local rc=$?
+        raw=$out
         f=$(grep -m1 "^FAIL: " <<<"$out") || f=${out##*$'\n'}
         ((rc != 124 && rc != 137)) || f="stopped at its time limit (${limit}s; its last line: ${f:-none})"
         out="FAIL $t: ${f#FAIL: }"
     }
+    raw=${raw:-$out}
     # (a pass ends on its own "ok <test>" or "skip <test>" line: one that stopped early with exit 0, an exit meant for a
     # stand-in it writes or a script it sources, never reached its last checks)
     last=${out##*$'\n'}
@@ -39,13 +41,15 @@ one() {
     if [[ -n ${CI:-} && ( $last == skip\ * || $last == *SKIPPED* ) ]]; then
         out="FAIL $t: skipped on CI, where a pass approves Hyprland: ${last}"
     fi
+    # (a failure's whole output kept beside its line, when run among the others: said if it then passes alone)
+    [[ $out != "FAIL $t: "* || -z ${ONE_LOGS:-} ]] || printf '%s\n' "$raw" >"$ONE_LOGS/$t.log"
     echo "$out" | tail -1
 }
 jobs=${AGROS_TEST_JOBS:-$(nproc 2>/dev/null || echo 1)}
 limit=${AGROS_TEST_TIMEOUT:-600}
 res=$(mktemp -d) && trap 'rm -rf "$res"' EXIT
 if ((jobs > 1 && ${#tests[@]} > 1)); then
-    export -f one && export here limit
+    export -f one && export here limit ONE_LOGS=$res
     # shellcheck disable=SC2016  # (expanded by that bash)
     printf '%s\0' "${tests[@]}" | xargs -0 -P "$jobs" -I{} bash -c 'one "$1" >"$2/$1"' _ {} "$res"
 fi
@@ -54,7 +58,11 @@ for t in "${tests[@]}"; do
     first=$(cat "$res/$t" 2>/dev/null) line=$first
     [[ -n $line && $line != FAIL\ * ]] || line=$(one "$t")
     # (one that failed among the others and passed alone said on stderr, out of the results: a flaky test showed nowhere)
-    [[ $first != FAIL\ * || $line == FAIL\ * ]] || echo "!! $t failed among the others, passed alone: ${first#"FAIL $t: "}" >&2
+    # (with the last of what it printed then: its line alone gave no why, "lutris-library failed")
+    if [[ $first == FAIL\ * && $line != FAIL\ * ]]; then
+        echo "!! $t failed among the others, passed alone: ${first#"FAIL $t: "}" >&2
+        [[ ! -s $res/$t.log ]] || tail -n 15 "$res/$t.log" | sed 's/^/!!   /' >&2
+    fi
     [[ $line != FAIL\ * ]] || failed=1
     echo "$line"
 done
