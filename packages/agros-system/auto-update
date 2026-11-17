@@ -83,7 +83,8 @@ aur=$au/aur
 # (systemd-run, by the boot's run), so the boot's run doesn't wait on a login
 if [[ ${1:-} == --firmware-note ]]; then
     names=$(cut -f2 "$au/firmware" | paste -sd, | sed 's/,/, /g')
-    title="Firmware update ready" text="$names: installed when you shut down or restart (Updates installs it now)"
+    # (every desktop gets it, an account that isn't an administrator too, which Updates offers no Update all)
+    title="Firmware update ready" text="$names: installed when you shut down or restart (an administrator can install it now from Updates)"
     # (one the EFI partition has no room for, the shutdown found: said once, as that)
     cmp -s "$au/firmware" "$au/firmware-noroom" && title="Firmware update can't be installed" \
         text="$names: the boot partition (EFI) is too small for it. It isn't tried again until a newer one comes"

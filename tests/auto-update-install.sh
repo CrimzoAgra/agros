@@ -620,8 +620,9 @@ grep -q fwupdtool "$t/calls" && fail "firmware installed before the users were t
 NOBODY=1 "$t/auto-update" --firmware-note
 [[ ! -e $t/au/firmware-told ]] || fail "the firmware marked told with nobody told"
 "$t/auto-update" --firmware-note
-grep -q "^notify .*Firmware update ready System Firmware: installed when you shut down or restart" "$t/calls" ||
-    fail "the firmware not said on the desktop: $(cat "$t/calls")"
+# (to every desktop, an account that isn't an administrator too: Updates offers that one no Update all)
+grep -qx "notify .*Firmware update ready System Firmware: installed when you shut down or restart (an administrator can install it now from Updates)" "$t/calls" ||
+    fail "the firmware not said on the desktop, for every account: $(cat "$t/calls")"
 cmp -s "$t/au/firmware" "$t/au/firmware-told" || fail "the firmware said not marked told"
 : >"$t/calls"
 "$t/auto-update" --install >/dev/null
