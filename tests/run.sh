@@ -18,6 +18,13 @@ one() {
         # (no test can wait on the terminal: no stdin, and in a session of its own, without it, as sudo asks there)
         *) out=$(setsid -w "$here/$t.sh" 2>&1 </dev/null) ;;
     esac || { f=$(grep -m1 "^FAIL: " <<<"$out") || f=${out##*$'\n'}; out="FAIL $t: ${f#FAIL: }"; }
+    # (a pass ends on its own "ok <test>" or "skip <test>" line: one that stopped early with exit 0, an exit meant for a
+    # stand-in it writes or a script it sources, never reached its last checks)
+    last=${out##*$'\n'}
+    case $last in
+        "FAIL $t: "* | "ok $t" | "ok $t "* | "skip $t" | "skip $t "*) ;;
+        *) out="FAIL $t: it ended without its \"ok $t\" line: ${last:-no output}" ;;
+    esac
     # (on CI a pass approves that Hyprland for AgrOS's machines (the upstream gate), and CI has all the tests need: a
     # test skipped there, in part or whole (offline, a check that couldn't run), isn't a pass)
     last=${out##*$'\n'}

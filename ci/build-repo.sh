@@ -173,8 +173,9 @@ keep_published() {
         echo "-- $f: the rebuild published (built against other libraries, Qt or Python than the published one)"
         return 0
     fi
-    # (the fixed versions: agros-desktop, agros-welcome, agros-keyring, agros-nvidia; not compiled ones, whose build
-    # differs with each compiler: agros-vmware's and agros-thunar-usage's versions count the commits that touch them)
+    # (the fixed versions: agros-desktop, agros-welcome, agros-keyring, agros-nvidia, agros-wine; not compiled ones,
+    # whose build differs with each compiler: agros-vmware's, agros-thunar-usage's and agros-hyprbars' versions count
+    # the commits that touch what they're built from, so a change to them is always a new version)
     # One versioned by the commits (a pkgver()) differs only if built differently from the same commit: a build that
     # isn't reproducible (it read something besides the repo), stopped here too rather than published over or hidden
     if [[ $f == agros-*-any.pkg.tar.zst && $(contents "$work/pub") != "$(contents "$f")" ]]; then
@@ -269,15 +270,17 @@ fi
 # the bootloader page's choice gone; the welcome logo and the time zone map scaled to the window, centred (ci/calamares-
 # layout.patch: the logo shared the room with a stretch and sat at the bottom, the map was a fixed 780x340 at the top)
 # Plain text swaps, each checked after (the build fails when one no longer fits), and that patch (it not applying fails)
-# Any change to the swaps or the patch raises calamares_rel, with a line for it below holding their new checksum: an unchanged
-# version would keep the old installer published, so the build fails when the swaps' checksum isn't the one recorded
-# for this calamares_rel (each rel's line kept as it is: a new checksum under an old rel fails just the same)
+# Any change to the swaps, the patch or the pins below (calamares_pkgbuild, calamares_src) raises calamares_rel, with a
+# line for it below holding their new checksum: an unchanged version would keep the old installer published, so the
+# build fails when their checksum isn't the one recorded for this calamares_rel (each rel's line kept as it is: a new
+# checksum under an old rel fails just the same). (7's line counts the pins since they joined the checksum, its
+# installer unchanged: a pin moved on alone had its new build thrown away for the published one, silently)
 if [[ -z ${AGROS_SKIP_AUR:-} ]]; then
     calamares_rel=7
     case $calamares_rel in
         5) calamares_sum=2db12fafcbd8 ;;
         6) calamares_sum=025bcfdf8226 ;;
-        7) calamares_sum=720cf57ae6f7 ;;
+        7) calamares_sum=4dd603b19be3 ;;
     esac
     # CachyOS's recipe as AgrOS last checked it (a commit of CachyOS-PKGBUILDS), and the installer's code at the commit
     # AgrOS last checked on that recipe's branch (calamares_src, for the recipe's #branch=), not their newest: a change of
@@ -324,11 +327,32 @@ if [[ -z ${AGROS_SKIP_AUR:-} ]]; then
         { echo "AgrOS's changes to Calamares no longer fit (ci/build-repo.sh)"; return 1; }
 SH
     cp "$root/ci/calamares-layout.patch" "$work/"  # (for the builder, who may not read the checkout)
-    sum=$(cat "$work/calamares-labels" "$work/calamares-layout.patch" | sha256sum | cut -c1-12)
+    sum=$(printf '%s\n' "$calamares_pkgbuild" "$calamares_src" |
+        cat - "$work/calamares-labels" "$work/calamares-layout.patch" | sha256sum | cut -c1-12)
     [[ $sum == "${calamares_sum:-}" ]] || {
-        echo "!! The Calamares swaps changed: raise calamares_rel to $((calamares_rel + 1)) and add its line," \
+        echo "!! The Calamares swaps or pins changed: raise calamares_rel to $((calamares_rel + 1)) and add its line," \
             "$((calamares_rel + 1))) calamares_sum=$sum ;; (ci/build-repo.sh)"
         exit 1
+    }
+    # calamares_modules <package>: each module its settings' sequences name (a "module@instance" by its module) built
+    # into it. Calamares' CMake leaves out a module whose library is missing, saying nothing (cachyos-staging's gucc,
+    # without the cachyos-installer library), and the installer then stops at that step
+    calamares_modules() {
+        local d m n=0 missing=()
+        d=$(mktemp -d)
+        bsdtar -xf "$1" -C "$d" || { rm -rf "$d"; return 1; }
+        for m in $(find "$d" -name 'settings*.conf' -path '*calamares*' -exec awk '
+            /^sequence:/ { on = 1; next }
+            on && /^[^[:space:]#-]/ { on = 0 }
+            on && /^[[:space:]]*-[[:space:]]*[A-Za-z0-9_.-]+(@[A-Za-z0-9_.-]+)?[[:space:]]*$/ {
+                sub(/^[[:space:]]*-[[:space:]]*/, ""); sub(/[@[:space:]].*/, ""); print }' {} + | sort -u); do
+            n=$((n + 1))
+            [[ -f $d/usr/lib/calamares/modules/$m/module.desc ]] || missing+=("$m")
+        done
+        rm -rf "$d"
+        # (the build taken out: the published one kept in its place, hold)
+        ((n)) || { echo "!! ${1##*/}: no settings with a sequence of modules in it"; rm -f "$1" "$1.sig"; return 1; }
+        ((${#missing[@]} == 0)) || { echo "!! ${1##*/}: its settings name modules it wasn't built with: ${missing[*]}"; rm -f "$1" "$1.sig"; return 1; }
     }
     # (CachyOS's own pkgrel with a dot already: not raised, and AgrOS's build would have CachyOS's version)
     # (it not building, AgrOS's changes no longer fitting: the published one held)
@@ -339,7 +363,11 @@ SH
         { grep -q "#commit=$calamares_src\")$" PKGBUILD || { echo "!! cachyos-calamares: its source isn't the cachyos branch any more"; false; }; } &&
         asb cp "$work/calamares-layout.patch" . &&
         asb sed -i -e "/^prepare() {/{n;r $work/calamares-labels" -e '}' PKGBUILD &&
-        { reused "$PWD" || asb env PKGDEST="$out" makepkg -s --noconfirm; }) ||
+        # (no prepare() to add them to: CachyOS's installer built without them, its checks with them, published as AgrOS's)
+        { grep -qxF '    patch -Np1 -i "$startdir/calamares-layout.patch"' PKGBUILD ||
+            { echo "!! cachyos-calamares: no prepare() { line for AgrOS's changes"; false; }; } &&
+        { reused "$PWD" || asb env PKGDEST="$out" makepkg -s --noconfirm; } &&
+        calamares_modules "$out"/cachyos-calamares-[0-9]*.pkg.tar.zst) ||
         hold cachyos-calamares "CachyOS's installer didn't build with AgrOS's changes (the build's log above)"
 fi
 cp "$work/makepkg.conf" /etc/makepkg.conf
