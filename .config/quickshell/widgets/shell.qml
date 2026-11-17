@@ -701,6 +701,9 @@ ShellRoot {
 
                 // ---- Left column: weather, calendar ----
                 ColumnLayout {
+                    // (the whole column over the caption and the clock beside it while the location is edited: the
+                    // suggestions, wider than the panel, reach under them)
+                    z: cityEdit.editing ? 1 : 0
                     x: stage.width * 0.30
                     y: 120 + stage.drop
                     width: 290
