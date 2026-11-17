@@ -13,7 +13,7 @@ another window, or press **Ctrl+Alt+Esc**, to have them back.
 | Super | App menu |
 | Super+T | Terminal |
 | Super+W | Browser (LibreWolf) |
-| Super+E | Files |
+| Super+E | Files (Thunar) |
 | Super+C | Code editor (VSCodium) |
 | Super+Q | Close the window |
 | Super+L | Lock |
