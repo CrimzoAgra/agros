@@ -14,7 +14,10 @@ url='https://github.com/CrimzoAgra/agros'
 license=('BSD-3-Clause')
 _root=$(realpath "${startdir}/../..")
 _inputs=(packages/agros-hyprbars .local/share/hyprbars .local/bin/hyprbars-build)
-# (the Hyprland release series it's built for, as the AUR's: a point release keeps the plugin ABI, the next series not)
+# (the Hyprland release series it's built for, as the AUR's: only a bound. The plugin starts only on the Hyprland build
+# it was made for (its ABI hash: the commit and its libraries' versions), a point release not either, and hyprbars-build
+# loads it only there; an exact version here would make a Hyprland update CachyOS has a day before Arch, or after,
+# fail the whole system update)
 _hypr=$(pacman -Q hyprland 2>/dev/null | awk '{ print $2 }')
 _series=$(cut -d. -f1,2 <<<"${_hypr:-0.0}")
 depends=("hyprland>=${_series}.0" "hyprland<${_series%.*}.$((${_series#*.} + 1)).0")

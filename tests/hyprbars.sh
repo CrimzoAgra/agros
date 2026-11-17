@@ -16,6 +16,25 @@ grep -qx -- '-i 0 plugin load /usr/lib/libhyprbars.so' "$t/live-calls" || fail "
 rm -f "$t/live-calls"
 HOME=$t/livehome HYPRBARS_LIVE=$t/live PATH=$t/livebin:$PATH "$here/.local/bin/hyprbars-build" || fail "live USB, a build: failed"
 [[ ! -e $t/live-calls && ! -e $t/livehome ]] || fail "live USB: a build tried: $(cat "$t/live-calls" 2>/dev/null)"
+# --login with this account's build not made for the running Hyprland yet (an update, offline then): the packaged one
+# (agros-hyprbars) loaded only when it was built for that Hyprland (its commit in it). Another build's fails the plugin's
+# own check, with a red "Version mismatch" error on screen at every login. (The build after it fails at once here: the
+# headers aren't the running Hyprland's)
+mkdir -p "$t/pkg" "$t/lbin" "$t/lhome/.local/share/hyprbars" "$t/lhome/.cache"
+cp "$here/.local/share/hyprbars/hyprbars.patch" "$t/lhome/.local/share/hyprbars/"
+printf 'ELF\0%s\0' 1111111111111111111111111111111111111111 >"$t/pkg/libhyprbars.so"
+# shellcheck disable=SC2016  # (expanded by the stand-in)
+printf '#!/bin/sh\necho "$*" >>%s/login-calls\n[ "$3" = version ] && echo "{\\"commit\\":\\"$COMMIT\\",\\"version\\":\\"0.57.2\\",\\"abiHash\\":\\"${COMMIT}_aq_0.12\\"}"\n[ "$3" = plugin ] && [ "$4" = list ] && echo "[]"\nexit 0\n' \
+    "$t" >"$t/lbin/hyprctl"
+printf '#!/bin/sh\nexit 0\n' >"$t/lbin/notify-send"
+chmod +x "$t/lbin/"*
+login() { HOME=$t/lhome HYPRBARS_LIVE=$t/nolive HYPRBARS_PACKAGED=$t/pkg/libhyprbars.so PATH=$t/lbin:$PATH COMMIT=$1 \
+    "$here/.local/bin/hyprbars-build" --login >/dev/null 2>&1; }
+login 1111111111111111111111111111111111111111 || fail "--login failed"
+grep -qx -- "-i 0 plugin load $t/pkg/libhyprbars.so" "$t/login-calls" || fail "--login: the packaged one built for this Hyprland not loaded: $(cat "$t/login-calls")"
+: >"$t/login-calls"
+login 2222222222222222222222222222222222222222 || fail "--login on another Hyprland failed"
+grep -q 'plugin load' "$t/login-calls" && fail "--login: the packaged one loaded on a Hyprland it wasn't built for: $(cat "$t/login-calls")"
 [[ -f /usr/include/hyprland/src/version.h ]] || { echo "skip hyprbars (no Hyprland headers)"; exit 0; }
 
 # A running Hyprland older than the headers on disk

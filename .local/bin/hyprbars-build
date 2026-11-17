@@ -20,7 +20,7 @@ helpers=$(dirname "$(readlink -f "$0")")  # (the shared helpers, beside this)
 patch="$HOME/.local/share/hyprbars/hyprbars.patch"
 out="$HOME/.local/lib/hyprbars/libhyprbars.so"
 stamp="${out%/*}/built-for"  # the Hyprland build (its ABI) and the patch it was built from
-aur=/usr/lib/libhyprbars.so  # (the packaged one, agros-hyprbars; the AUR's own build before it, the name kept)
+aur=${HYPRBARS_PACKAGED:-/usr/lib/libhyprbars.so}  # (the packaged one, agros-hyprbars; the AUR's own build before it, the name kept)
 # Hyprland named (its first one when run from an SSH login or a text console: there hyprctl didn't know it, and this
 # stopped on jq's parse error)
 hyprctl() { command hyprctl -i "${HYPRLAND_INSTANCE_SIGNATURE:-0}" "$@"; }
@@ -59,22 +59,26 @@ loaded() {
     hyprctl plugin list -j 2>/dev/null |
         jq -e --arg mine "${1:-}" 'any(.[]?; .name == "hyprbars" and ($mine == "" or (.version | contains("dotfiles"))))' >/dev/null
 }
+# The packaged one loaded, only when it was built for this Hyprland (its commit is in it): any other Hyprland build, a
+# point release too, fails the plugin's own check with a red "Version mismatch" error on screen, at every login until
+# this account's build is made (a Hyprland update whose plugin build failed, offline at the update)
+load_packaged() { if [[ -f $aur ]] && grep -qaF -- "$hypr" "$aur"; then hyprctl plugin load "$aur" >/dev/null 2>&1 || true; fi; }
 
 if [[ ${1:-} == --login ]]; then
     if [[ -f $out && $(cat "$stamp" 2>/dev/null) == "$build_id" ]]; then
         hyprctl plugin load "$out" >/dev/null 2>&1 || true
         loaded mine && exit 0
     fi
-    [[ -f $aur ]] && { hyprctl plugin load "$aur" >/dev/null 2>&1 || true; }
+    load_packaged
     log="$HOME/.cache/hyprbars-build.log"
     if ! "$0" >"$log" 2>&1; then
         # (notify-when-up: at login Caelestia, the notification server, may not be up yet)
         warn() { "$helpers/notify-when-up" -u normal -a Hyprbars -i dialog-warning "$@"; }
-        # (the AUR one is built for one Hyprland version: after an update it may not start either)
+        # (the packaged one is built for one Hyprland build: after an update it may not fit either)
         if loaded; then
             warn "Title bar highlight not rebuilt" "Building it for Hyprland $ver failed, so the title bars have no hover highlight for now. Details: $log"
         else
-            warn "No title bars" "Building hyprbars for Hyprland $ver failed, and the AUR one doesn't start on it: no title bars for now. Details: $log"
+            warn "No title bars" "Building hyprbars for Hyprland $ver failed, and the packaged one wasn't built for it: no title bars for now. Details: $log"
         fi
     fi
     exit 0
@@ -139,8 +143,8 @@ fi
 for so in "$out" "$aur"; do hyprctl plugin unload "$so" >/dev/null 2>&1 || true; done
 hyprctl plugin load "$out" >/dev/null 2>&1 || true
 if ! loaded mine; then
-    [[ -f $aur ]] && { hyprctl plugin load "$aur" >/dev/null 2>&1 || true; }
-    echo "The new build didn't start; the AUR one is loaded instead."
+    load_packaged
+    echo "The new build didn't start; the packaged one is loaded instead, if it was built for this Hyprland."
     exit 1
 fi
 echo "hyprbars with the hover highlight is built and loaded."
