@@ -71,7 +71,8 @@ local cpu_apps = vmware and not shim
 -- Most apps aren't Hyprland's children: under uwsm, XDG autostart, `uwsm app` (app-launch) and D-Bus activation start
 -- them as systemd user units, with the user manager's environment. So into it (and D-Bus's) too, here as the config
 -- loads: before Hyprland puts WAYLAND_DISPLAY there, which uwsm waits for before graphical-session.target (autostart
--- after it), so nothing starts without them. uwsm takes them out again at logout, as it does Hyprland's own variables
+-- after it), so nothing starts without them. uwsm takes them out again at logout: its start of Hyprland (aux exec)
+-- lists every variable that reaches the user manager before WAYLAND_DISPLAY does, and its cleanup-env unsets that list
 -- (not for a check of the config: its process has no shim to find; nor on a reload: Hyprland has them by then)
 if cpu_apps and os.getenv("DOTS_VERIFY_CONFIG") ~= "1" and os.getenv("LIBGL_ALWAYS_SOFTWARE") ~= "1" then
     local set = "LIBGL_ALWAYS_SOFTWARE=1 XWAYLAND_NO_GLAMOR=1"
