@@ -29,9 +29,8 @@ Laptop settings and lighting are in a separate repo: **legion-control-linux**.
    `agros-welcome` does the rest of what's per user: LibreWolf's settings, the Spotify, Nuvio and ArtCraft Flatpaks with Spicetify, VSCodium's extensions
    and Claude Code's plugins.
 3. **The one thing you run:** its notification offers *Restore my accounts*. Plug in your pen drive and click it, or
-   run `agros-personal`. It brings back your logins (Discord, Spotify, Nuvio, Proton VPN, Steam, Lutris's stores,
-   Claude Code, GitHub), the login keyring and your LibreWolf profile (bookmarks, passwords, extensions). Capri
-   installs right after that, since her fork is private and needs your GitHub login.
+   run `agros-personal` ([Your accounts](#your-accounts)). Capri installs right after that, since her fork is private
+   and needs your GitHub login.
 
 The same notification offers *Install hardware apps and VMware* (`agros-welcome --system`). It installs the apps for
 the hardware that's plugged in: Boxflat (Moza), OpenRazer + Polychromatic (Razer), Solaar (Logitech),
@@ -41,10 +40,15 @@ license forbids passing it on.
 Before reinstalling, put this PC's accounts on the pen drive: `agros-personal --save` (encrypted with a passphrase
 you pick; never in the repo).
 
-Already on CachyOS (only CachyOS: `agros-desktop` needs packages from CachyOS's repos, such as
-`cachyos-gaming-meta`, `paru` and `vscodium`; on Arch, add CachyOS's repos first): add the `[agros]` repo (below),
-trust its key (`ci/agros.asc`: `pacman-key --add`, then `--lsign-key`), `sudo pacman -Syu agros-keyring
-agros-desktop`, then make a new account (it gets AgrOS's settings from `/etc/skel`) or copy `/etc/skel` into your home.
+Already on CachyOS (only CachyOS: `agros-desktop` needs packages from its repos, such as `cachyos-gaming-meta`, `paru`
+and `vscodium`): add the `[agros]` repo, trust `ci/agros.asc` and install `agros-keyring agros-desktop`, as in the
+manual's [Installing](../manual/02-installing.md#already-running-cachyos). `agros-greeter` takes over the display
+manager (the one it replaced is noted, and turned back on by its removal).
+
+More people: each account made with `useradd -m` (uid 1000 and up, a login shell) gets `/etc/skel` and is one of
+AgrOS's users (`agros-each-user --list`): the pacman hooks and the boot's update serve each, the login screen lists
+them, and its first login runs `agros-welcome`. Only `wheel` members are offered the system's part (`agros-welcome
+--system`, the Updates app's "Update now"): another account can't sudo.
 
 ### How it's packaged
 
@@ -59,9 +63,7 @@ Server = https://pub-f1a3a482900748e8b69cd81361ab96e1.r2.dev/repo/$arch
 ```
 
 Its database is signed too, and required to be (`DatabaseRequired`: pacman's default takes an unsigned one, so a
-server could list packages CI never put together). agros-iso's `pacman.conf` files have the line, and `agros-system`'s
-install adds it under `[agros]` where it's missing (a machine installed before; a `SigLevel` of yours there stays),
-its removal taking it out.
+server could list packages CI never put together).
 
 The second server is a mirror on Cloudflare R2 (the bucket agros-iso's ISO is downloaded from, under `repo/x86_64`), so
 a GitHub Pages outage doesn't stop every machine's updates: pacman tries Pages first and the mirror only when Pages
@@ -72,10 +74,12 @@ lists, `agros-approved`, `agros-arch-ok`, each with its `.sig` where published),
 only then removes what the repo no longer has: a mirror mid-update never lists a package it doesn't have. Only the
 current set is kept (R2's free 10 GB; the repo is about 190 MB). It needs the same four secrets as agros-iso's ISO
 upload, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` and `R2_BUCKET`; without them it says so (a
-warning) and does nothing. agros-iso's `pacman.conf` files list the mirror, and `agros-system`'s install adds it after
-`[agros]`'s other servers where it's missing (a `#Server =` line of yours for it counts: not added again), its removal
-taking it out. `update-gate`'s approved list, the boot's copy of `agros-arch-ok` and agros-iso's gate try each of
-`[agros]`'s servers in turn (Pages down: the mirror's).
+warning) and does nothing. `update-gate`'s approved list, the boot's copy of `agros-arch-ok` and agros-iso's gate try
+each of `[agros]`'s servers in turn (Pages down: the mirror's).
+
+agros-iso's `pacman.conf` files have both the `SigLevel` line and the mirror. On a machine installed before them,
+`agros-system`'s install adds each under `[agros]` where it's missing (a `SigLevel` of yours stays; a `#Server =` line
+of yours for the mirror counts, not added again), and its removal takes them out.
 
 | Package | What it is |
 |---|---|
@@ -180,9 +184,6 @@ anywhere else) and backs up what it replaces; the keyring opens with your old lo
 saved logins get past your password and 2FA, and git keeps every version. With no drive, it opens each app for you to
 sign in instead (LibreWolf's Firefox account brings bookmarks and passwords through Sync) and asks the weather
 widget's place. Save again now and then: logins expire.
-
-Other screens get their own resolution at its fastest refresh rate; a machine's own screens go in
-`.config/caelestia/user/hosts/<hostname>.lua` (see [Screens and colours](#screens-and-colours)).
 
 ## Credits and licenses
 
@@ -387,10 +388,10 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
 - **`.local/bin/caelestia-start`**: starts Caelestia at login (Caelestia's `execs.lua` runs it, so set by
   `agros-hyprland-settings`), running `caelestia-overlay` first (at every login: it rebuilds only what's out of date,
   so one an update left waiting for a game is made then); each start logged in
-  `~/.local/state/agros/caelestia-start.log`. A shell that comes up but never loads its config (it doesn't answer `qs
-  ipc show` within 30 s: Quickshell stays running with nothing on screen when a part can't be created, AgrOS's changes
-  on a Caelestia or Quickshell other than the one CI checked, a type renamed), on the overlay's changes, is started
-  again without them (`caelestia-restart --without-changes`, below), not left with no bar, notifications or lock screen
+  `~/.local/state/agros/caelestia-start.log`. A shell that never loads its config on the overlay's changes (Quickshell
+  stays running with nothing on screen when a part can't be created: AgrOS's changes on a Caelestia or Quickshell other
+  than the one CI checked) is started again without them (`caelestia-restart --without-changes`, below), not left with
+  no bar, notifications or lock screen
 - **`.local/bin/caelestia-restart`**: restarts Caelestia with a clean environment (also Ctrl+Super+Alt+R), keeping
   Spotify hidden. `--rebuild` (the Settings app's Caelestia changes) rebuilds the overlay while the shell is stopped:
   rebuilt under the running shell, Hyprland dropped it. Exit 3 when that build failed (the shell started again on what
@@ -1048,11 +1049,7 @@ brings each change; nothing to run by hand).
   as a user leaves its unit) stops after 4 h; a Flatpak from a file isn't reinstalled with less than 35 min of that
   left (cut off between its removal and install, the app would be gone). The Updates app waits only for its downloads. The install has 60 min (shutdown's own limit is made 75 min for it); `paccache.timer` keeps pacman's
   cache from growing for good
-- **`agros-boot`** also: a snapshot booted from the menu is made writable in RAM (`agros-snapshot-overlay`, a
-  systemd boot image's hook, added by `/etc/mkinitcpio.conf.d/91-agros-snapshot-overlay.conf` on a Btrfs root;
-  CachyOS's installer rewrites `HOOKS` without grub-btrfs's, which only busybox images run): read-only, the desktop
-  couldn't log in on it. Limine's own (`sd-btrfs-overlayfs`) counts, and nothing's added twice
-- **`agros-boot`**: hidden boot menu (GRUB or Limine): straight into CachyOS, Esc in the first second shows
+- **`agros-boot`**: hidden boot menu (GRUB or Limine): straight into the system, Esc in the first second shows
   the menu (Windows and snapshots listed). No motherboard wait before the boot loader (`efibootmgr -t 0`; F11 still
   opens its boot menu). An update that changes `boot-menu` applies its settings again, over any of yours (one that
   doesn't change it leaves them): `boot-menu` notes each run in `/var/lib/agros/boot-menu.sum` (its checksum; empty when
@@ -1062,6 +1059,12 @@ brings each change; nothing to run by hand).
   (`grub.agros-orig`, `limine.conf.agros-orig`: timeout, menu, default entry, theme, `quiet`), takes out the `video=`
   options it set (in the form it writes, `video=<screen>:<W>x<H>@<Hz>`; your others stay), the quiet boot's options
   below that weren't there before AgrOS, the splash and the motherboard's wait (where it noted the one before)
+- **`agros-boot`** also: a snapshot booted from the menu is made writable in RAM (`agros-snapshot-overlay`, a
+  systemd boot image's hook, added by `/etc/mkinitcpio.conf.d/91-agros-snapshot-overlay.conf` on a Btrfs root;
+  CachyOS's installer rewrites `HOOKS` without grub-btrfs's, which only busybox images run): read-only, the desktop
+  couldn't log in on it. Limine's own (`sd-btrfs-overlayfs`) counts, and nothing's added twice. Only the root is
+  overlaid: `/home` and the other subvolumes are the real ones. Making a snapshot the system for good is Btrfs
+  Assistant's restore (CachyOS's installer puts it in on Btrfs), as the manual says
 - **`agros-boot`** also: no text at boot or shutdown, only the splash. `boot-menu` adds the kernel options missing from
   the normal entries' line (`GRUB_CMDLINE_LINUX_DEFAULT`, or Limine's `KERNEL_CMDLINE[default]` in `/etc/default/limine`,
   kept first as `limine.agros-orig`), through `boot-video-mode --quiet-boot`, the one place that edits that line for
@@ -1174,11 +1177,8 @@ the sync says it failed).
 
 After pulling changes made elsewhere, copy the ones you want into your home first, or the next `dotfiles-sync` skips
 the files the repo has newer (and says so) until you do. Changes to `packages/`, `system/` or the login screen reach
-the system as package updates: push them, CI publishes the new packages, and the next update installs them (a change
-to `agros-desktop`, `agros-welcome`, `agros-keyring`, `agros-nvidia` or `agros-wine` with its `pkgver` raised: CI fails
-without it; `agros-vmware`'s and `agros-thunar-usage`'s versions move only with a commit to their folder in
-`packages/`, `agros-boot`'s only with one to what it's made from, `agros-hyprbars`' with one to it or a new
-Hyprland).
+the system as package updates: push them, CI publishes the new packages, and the next update installs them (raise
+the `pkgver` of a package that has a fixed one: see [How it's packaged](#how-its-packaged)).
 
 ## Tests
 
@@ -1277,6 +1277,9 @@ breaks something holds back that one piece, never the rest (`.github/workflows/c
   `caelestia-hypr-refresh`. It refreshes `~/.config/hypr` alone (files you haven't edited replaced, Caelestia's new
   version written beside the ones you have as `.new`) and checks the config. Not `caelestia update`: its own system
   update skips the Qt rebuild (the boot update's and the Updates app's), and a new Qt leaves the shell unable to start
+- **An update broke the system**: boot the snapshot from before it (Esc at start-up; it runs in RAM, above), then Btrfs
+  Assistant's Snapper, Browse/Restore, to keep it (the manual's
+  [If an update goes wrong](../manual/12-updates.md#if-an-update-goes-wrong))
 - **No title bar highlight**: see `~/.cache/hyprbars-build.log`, or run `hyprbars-build`
 - **A first-login step failed**: `agros-welcome` runs again at the next login (or run it yourself); its log is
   `~/.local/state/agros/welcome.log`
