@@ -31,4 +31,9 @@ manifest "$steam" 6 "Not Yet" 1
 # A library path that isn't UTF-8 (a byte no encoding has): the rest still read, not a traceback and no list
 printf '\t"2"\n\t{\n\t\t"path"\t\t"/run/media/dr\x81ve"\n\t}\n' >>"$steam/libraryfolders.vdf"
 [[ $(run 2>&1) == "$want" ]] || fail "an odd byte in the library list: got $(run 2>&1), want $want"
+# A library in a folder named with a pattern's characters ("Games [SSD]"): its games read all the same
+odd="$t/Games [SSD]"; mkdir -p "$odd/steamapps"; manifest "$odd/steamapps" 8 "Bracketed" 4
+printf '\t"3"\n\t{\n\t\t"path"\t\t"%s"\n\t}\n' "$odd" >>"$steam/libraryfolders.vdf"
+want='["Bracketed", "Half-Life", "The \"Quoted\" Game", "Updating"]'
+[[ $(run 2>&1) == "$want" ]] || fail "a library in a folder with [ ] in its name: got $(run 2>&1), want $want"
 echo "ok steam-installed-games"

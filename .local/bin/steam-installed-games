@@ -30,7 +30,8 @@ if not STEAM:  # (an empty list would hide every recent game)
     raise SystemExit
 names = set()
 for lib in libraries():
-    for f in glob.glob(f"{lib}/steamapps/appmanifest_*.acf"):
+    # (the folder as it is: "Games [SSD]" read as a pattern matched nothing, its games left out)
+    for f in glob.glob(f"{glob.escape(lib)}/steamapps/appmanifest_*.acf"):
         try:
             text = open(f, encoding="utf-8", errors="replace").read()  # (one odd byte doesn't end the whole list)
         except OSError:
