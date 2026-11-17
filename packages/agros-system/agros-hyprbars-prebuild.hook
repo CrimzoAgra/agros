@@ -1,8 +1,9 @@
 # agros-system: for every AgrOS user (agros-each-user)
-# A Hyprland update (or one of the libraries its plugins' ABI hangs on) builds each user's hyprbars for it straight
-# away, so the next login loads it at once instead of the packaged one (agros-hyprbars, loaded only when built for that
-# Hyprland) for a minute while it builds (hyprbars-build --prebuild; it does nothing when it's already built for it,
-# and a failure leaves the build at login as before)
+# A Hyprland update (or one of the libraries its plugins' ABI hangs on), or an agros-scripts one (AgrOS's hyprbars
+# patch is in it), builds each user's hyprbars for it straight away, so the next login loads it at once instead of the
+# packaged one (agros-hyprbars, loaded only when built for that Hyprland and patch) for a minute while it builds
+# (hyprbars-build --prebuild; it does nothing when it's already built for that Hyprland and patch, and a failure leaves
+# the build at login as before)
 [Trigger]
 Operation = Install
 Operation = Upgrade

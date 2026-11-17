@@ -36,7 +36,7 @@ sed -e "s|/var/lib/auto-update|$t/au|g" -e "s|/var/lib/pacman|$t/pac|g" -e "s|/v
     -e "s|command -v limine-snapper-sync|command -v $t/limine-sync|; s|^\( *\)limine-snapper-sync >|\1$t/limine-sync >|" \
     -e "s|\${AGROS_EACH_USER:-/usr/lib/agros/bin/agros-each-user}|$t/bin/agros-each-user|" \
     -e "s|/usr/lib/agros/auto-update-aur|$t/auto-update-aur|g; s|/usr/lib/agros/auto-update |$t/auto-update |g" \
-    -e "s|/usr/lib/agros/bin/|$here/.local/bin/|g" \
+    -e "s|/usr/lib/agros/bin/|$here/.local/bin/|g" -e "s|/sys/class/power_supply|$t/ps|" \
     "$au/auto-update" >"$t/auto-update"
 sed -e "s|/var/lib/auto-update|$t/au|g" -e "s|/usr/lib/agros/auto-update-aur|$t/auto-update-aur|g" \
     -e "s|/usr/lib/agros/bin/|$here/.local/bin/|g" "$au/auto-update-aur" >"$t/auto-update-aur"
@@ -274,6 +274,47 @@ lists
 JOBS="  42 soft-reboot.target start waiting" "$t/auto-update" --install || fail "an install at a soft reboot failed"
 [[ $(cat "$t/pac/sync/core.db") == old && ! -s $t/calls && $(cut -d' ' -f3- "$t/au/skipped") == "a soft reboot"* ]] ||
     fail "installed at a soft reboot, or not counted: $(cat "$t/calls") $(cat "$t/au/skipped")"
+# Nearly empty on battery (a laptop off its charger): nothing installed, counted with its reason; on its charger, or
+# with more charge (a mouse's own battery, nearly empty, isn't the computer's), installed
+battery() {  # <name> <capacity> <status> [<scope>]
+    mkdir -p "$t/ps/$1"
+    echo Battery >"$t/ps/$1/type"; echo "$2" >"$t/ps/$1/capacity"; echo "$3" >"$t/ps/$1/status"
+    [[ -z ${4:-} ]] || echo "$4" >"$t/ps/$1/scope"
+}
+battery BAT0 9 Discharging
+lists; : >"$t/calls"
+"$t/auto-update" --install || fail "an install on a nearly empty battery failed"
+[[ $(cat "$t/pac/sync/core.db") == old && ! -s $t/calls && $(cut -d' ' -f3- "$t/au/skipped") == "on battery, nearly empty (9 percent)"* ]] ||
+    fail "installed on a nearly empty battery, or not counted: $(cat "$t/calls") $(cat "$t/au/skipped")"
+for b in "BAT0 9 Charging" "BAT0 80 Discharging"; do
+    rm -rf "$t/ps"
+    # shellcheck disable=SC2086  # (its name, capacity and status: one word each)
+    battery $b
+    battery hidpp_battery_0 5 Discharging Device
+    lists; : >"$t/calls"
+    "$t/auto-update" --install >/dev/null || fail "an install with the battery $b failed"
+    grep -q '^pacman -Su' "$t/calls" || fail "nothing installed with the battery $b (and a mouse's nearly empty): $(cat "$t/au/skipped")"
+done
+rm -rf "$t/ps"
+# pacman's lists kept aside, whole and on disk (sync), before the first is replaced and the install marked; one that
+# can't be kept (a full disk): nothing replaced, nothing installed, counted
+# shellcheck disable=SC2016  # (expanded by the stand-ins)
+printf '#!/bin/sh\necho "$* installing=$([ -e %s/au/installing ] && echo yes || echo no) list=$(cat %s/pac/sync/core.db) kept=$(cat %s/au/prev/core.db 2>/dev/null)" >%s/synced\n' \
+    "$t" "$t" "$t" "$t" >"$t/bin/sync"
+# shellcheck disable=SC2016
+printf '#!/bin/sh\nfor a; do last=$a; done\n[ -z "$CP_FAIL_PREV" ] || [ "$last" != %s/au/prev/ ] || exit 1\nexec %s "$@"\n' \
+    "$t" "$(command -v cp)" >"$t/bin/cp"
+chmod +x "$t/bin/sync" "$t/bin/cp"
+lists; : >"$t/calls"
+"$t/auto-update" --install >/dev/null || fail "an install failed: $(tail -5 "$t/log")"
+[[ $(cat "$t/synced" 2>/dev/null) == "-f $t/au/prev $t/pac/sync installing=no list=old kept=old" ]] ||
+    fail "pacman's lists not kept aside and on disk before they're replaced and the install marked: $(cat "$t/synced" 2>/dev/null)"
+lists; : >"$t/calls"
+CP_FAIL_PREV=1 "$t/auto-update" --install || fail "an install whose lists couldn't be kept aside failed"
+[[ $(cat "$t/pac/sync/core.db") == old && ! -e $t/au/installing && ! -s $t/calls &&
+    $(cut -d' ' -f3- "$t/au/skipped") == "pacman's package lists couldn't be kept aside"* ]] ||
+    fail "pacman's lists replaced (or installed) with no copy kept aside: $(cat "$t/calls") $(cat "$t/au/skipped")"
+rm "$t/bin/sync" "$t/bin/cp"
 # A real install after them: the count gone, how it went written down
 lists
 QU='' QU_RC=1 "$t/auto-update" --install || fail "nothing to install failed"
