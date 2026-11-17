@@ -1,0 +1,6 @@
+# One btrfs over several partitions (a games drive grown onto a second one): udisks lists each partition as a drive of
+# its own, but links the mount only to the one the kernel names, its lowest devid. The others always read as not
+# mounted, and the file manager's "Games" mounted the same filesystem again at every click (Games1, Games2...). They're
+# hidden from it (UDISKS_IGNORE), the one it can show as mounted listed alone. (agros-btrfs-member decides)
+SUBSYSTEM=="block", ACTION=="add|change", ENV{ID_FS_TYPE}=="btrfs", ENV{ID_FS_UUID}=="?*", \
+    IMPORT{program}="/usr/lib/udev/agros-btrfs-member $devnode"

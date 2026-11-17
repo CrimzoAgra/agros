@@ -13,9 +13,10 @@ arch=('any')
 url='https://github.com/CrimzoAgra/agros'
 license=('GPL-3.0-or-later')
 # (fwupd: firmware updates; base-devel and bubblewrap: the boot's AUR builds, in a sandbox, as an account of their own
-# (agros-aur, sysusers.d); passt: that sandbox's own network, pasta; iproute2 and jq: the host's addresses closed off in it)
+# (agros-aur, sysusers.d); passt: that sandbox's own network, pasta; iproute2 and jq: the host's addresses closed off in it;
+# btrfs-progs: a btrfs over several partitions listed once by udisks, agros-btrfs-member)
 depends=('agros-scripts' 'pacman-contrib' 'bluez' 'bluez-utils' 'gnome-keyring' 'libsecret' 'sudo' 'curl' 'flatpak'
-         'iproute2' 'fwupd' 'base-devel' 'bubblewrap' 'passt' 'git' 'jq')
+         'iproute2' 'fwupd' 'base-devel' 'bubblewrap' 'passt' 'git' 'jq' 'btrfs-progs')
 optdepends=('snapper: a snapshot before each update' 'ananicy-cpp: the shell rule')
 install=agros-system.install
 # (settings of /etc yours to change: an edited one kept at upgrade, AgrOS's new one beside it as .pacnew. Not the gate,
@@ -54,6 +55,8 @@ package() {
     install -dm750 "$pkgdir/etc/sudoers.d"  # (as sudo has it: 755 made pacman warn at every install)
     install -Dm440 "$_root/system/sudoers/agros-papirus-folders" "$pkgdir/etc/sudoers.d/50-agros-papirus-folders"
     install -Dm644 "$_root/system/resolved/agros.conf" "$pkgdir/usr/lib/systemd/resolved.conf.d/50-agros.conf"
+    install -Dm644 "$_root/system/udev/90-agros-btrfs-members.rules" "$pkgdir/usr/lib/udev/rules.d/90-agros-btrfs-members.rules"
+    install -Dm755 "$_root/system/udev/agros-btrfs-member" "$pkgdir/usr/lib/udev/agros-btrfs-member"
     # qView without its first-run Welcome dialog (or update checks), for every account, also one made before: Qt reads a
     # setting missing from yours here. Not in /etc/skel: qView writes its window size and recent files into yours, which
     # dotfiles-sync would then push to the repo

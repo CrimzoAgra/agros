@@ -1,0 +1,20 @@
+#!/bin/bash
+# agros-btrfs-member <device>: UDISKS_IGNORE=1 when the device is a btrfs partition that isn't its filesystem's lowest
+# devid (90-agros-btrfs-members.rules: udisks shows that one alone). Its other members found by the filesystem's UUID
+# (blkid probes them all, so also at boot, before their own udev events); one alone, or an unreadable one: nothing said
+set -uo pipefail
+devid() { btrfs inspect-internal dump-super "$1" 2>/dev/null | awk '$1 == "dev_item.devid" { print $2; exit }'; }
+dev=$1
+super=$(btrfs inspect-internal dump-super "$dev" 2>/dev/null) || exit 0
+mine=$(awk '$1 == "dev_item.devid" { print $2; exit }' <<<"$super")
+uuid=$(awk '$1 == "fsid" { print $2; exit }' <<<"$super")
+[[ $(awk '$1 == "num_devices" { print $2; exit }' <<<"$super") -gt 1 && -n $mine && -n $uuid ]] || exit 0
+while read -r other; do
+    [[ $other == "$dev" ]] && continue
+    d=$(devid "$other")
+    if [[ -n $d ]] && ((d < mine)); then
+        echo UDISKS_IGNORE=1
+        exit 0
+    fi
+done < <(blkid -o device -t UUID="$uuid" 2>/dev/null)
+exit 0
