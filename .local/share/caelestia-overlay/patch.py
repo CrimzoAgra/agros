@@ -109,6 +109,11 @@ def own(name):
 
 
 def write(files):
+    # Every file's folder there first: one gone (a Caelestia update moved it) skips the feature before anything is
+    # written, not after its other files were (the bar then used a part never made, and the whole shell didn't load)
+    for rel in files:
+        if not os.path.isdir(os.path.dirname(os.path.join(dst, rel))):
+            raise LookupError(f"{os.path.dirname(rel)}/ not found")
     for rel, content in files.items():
         path = os.path.join(dst, rel)
         if os.path.lexists(path):
