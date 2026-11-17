@@ -43,23 +43,51 @@ bundle_app() {
         [[ -s $2/.metadata ]] && ref=${ref#app/} && [[ -n ${ref%%/*} ]] && echo "${ref%%/*}"
 }
 
-# access: the access a Flatpak metadata file (stdin) grants, one "[group]key=value" a line: its [Context] (each of a
-# list's values on its own), its bus policies and USB devices
-access() {
-    awk '/^\[/ { g = $0; next }
-        g ~ /^\[(Context|Session Bus Policy|System Bus Policy|USB Devices)\]$/ && !/^#/ && (i = index($0, "=")) {
-            k = substr($0, 1, i - 1); v = substr($0, i + 1); gsub(/^ +| +$/, "", k); gsub(/^ +| +$/, "", v)
-            if (g ~ /Bus Policy/) { print g k "=" v; next }
-            n = split(v, a, ";"); for (j = 1; j <= n; j++) if (a[j] != "") print g k "=" a[j]
-        }' | LC_ALL=C sort -u
+# keyfile <access|runtime>: a Flatpak metadata file (stdin) read by GLib's own GKeyFile, as flatpak reads it. An awk of
+# its own missed what GLib takes: a group header with a space or tab after it, an indented one, CRLF line ends, so a
+# [Context] written so gave its access unseen. Fails on a file GLib can't read. access: what it grants, one
+# "[group]key=value" a line, sorted (its [Context], each of a list's values on its own; its bus policies, USB devices
+# and portal policies); runtime: its [Application]'s runtime
+keyfile() {
+    python3 -I -c '
+import sys
+from gi.repository import GLib
+
+
+def names(r):  # (PyGObject hands some lists back with their length)
+    return r[0] if isinstance(r, tuple) else r
+
+
+raw = sys.stdin.buffer.read()
+if b"\0" in raw:
+    sys.exit(1)
+kf = GLib.KeyFile()
+try:
+    kf.load_from_bytes(GLib.Bytes.new(raw), GLib.KeyFileFlags.NONE)
+    if sys.argv[1] == "runtime":
+        print(kf.get_string("Application", "runtime"))
+        sys.exit(0)
+    for g in names(kf.get_groups()):
+        if g not in ("Context", "Session Bus Policy", "System Bus Policy", "USB Devices") and not g.startswith("Policy "):
+            continue
+        for k in names(kf.get_keys(g)):
+            values = [kf.get_string(g, k)] if g.endswith("Bus Policy") else names(kf.get_string_list(g, k))
+            for v in values:
+                if v:
+                    print(f"[{g}]{k}={v}".replace("\\", "\\\\").replace("\n", "\\n"))
+except Exception:  # (GLib.Error; text not UTF-8 too)
+    sys.exit(1)
+' "$1" | LC_ALL=C sort -u
 }
 
 # more_access <user|system> <app id> <new metadata>: what the new version asks for that the one installed doesn't have
-# (a "!" taking access away isn't more), ", " between; fails when the installed one's can't be read
+# (a "!" taking access away isn't more), ", " between; fails when the installed one's can't be read. A new one GLib
+# can't read counts as more (what it asks for unknown)
 more_access() {
-    local old
-    old=$(flatpak info --"$1" --show-metadata "$2" 2>/dev/null) && [[ -n $old ]] || return 1
-    LC_ALL=C comm -13 <(access <<<"$old") <(access <"$3") | awk '!/=!/' | paste -sd, | sed 's/,/, /g'
+    local old new
+    old=$(flatpak info --"$1" --show-metadata "$2" 2>/dev/null) && [[ -n $old ]] && old=$(keyfile access <<<"$old") || return 1
+    new=$(keyfile access <"$3") || { echo "metadata that couldn't be read"; return 0; }
+    LC_ALL=C comm -13 <(printf '%s\n' "$old") <(printf '%s\n' "$new") | awk 'NF && !/=!/' | paste -sd, | sed 's/,/, /g'
 }
 
 # fetch_from <release JSON> <dir> <user|system> [app id]: download its Linux x86_64 .flatpak into dir, verified (by
@@ -113,7 +141,7 @@ reinstall() {
     # dependencies of its own: a file can name a repo for its runtime (build-bundle --runtime-repo), which flatpak
     # install -y adds as a new remote unasked, every flatpak update trusting it from then on. (One installed for every
     # account counts for the user's apps too)
-    rt=$(awk -F= '/^\[/ { g = $0 } g == "[Application]" && $1 == "runtime" { print $2 }' "${2%/*}/.metadata" 2>/dev/null)
+    rt=$(keyfile runtime 2>/dev/null <"${2%/*}/.metadata")
     [[ $rt == */*/* ]] || { echo "${2##*/}: its runtime couldn't be read, not installed" >&2; return 1; }
     [[ $1 == user ]] || where=(--system)
     flatpak info "${where[@]}" "runtime/$rt" >/dev/null 2>&1 ||

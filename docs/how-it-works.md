@@ -856,7 +856,8 @@ helper a package update just brought works before `agros-links` has linked it), 
 - **`.local/bin/flatpak-bundle-update`**: updates Flatpaks installed from a downloaded `.flatpak` file (no Flatpak repo,
   e.g. ArtCraft Launcher) from their GitHub releases (the repo each was installed from, else its metainfo's own link
   the first time, kept so a later version can't point elsewhere), checked the same way and only when the file is that
-  app; `--check` lists the ones with a newer version. A new version asking for more access (its sandbox permissions)
+  app; `--check` lists the ones with a newer version. A new version asking for more access (its sandbox permissions,
+  its metadata read by GLib as flatpak reads it; one GLib can't read counts as more)
   is held at boot for Updates, which installs it and says what it adds; the `-origin` remote a bundle makes has its
   URL emptied (a bundle names it: `flatpak update` would otherwise follow it), and a missing runtime comes from Flathub
   (both use `.local/share/github-release/lib.sh`: the release's x86_64 file and its checksum). At boot, each user's

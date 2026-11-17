@@ -123,6 +123,24 @@ mkdir -p "$t/fetched-more"
 out=$(fbu --fetch "$t/fetched-more" 2>&1) && fail "--fetch took a version asking for more access: $out"
 [[ ! -s $t/fetched-more/fetched && $out == *"com.x.App: its new version asks for more access ([Context]filesystems=host, [Session Bus Policy]org.freedesktop.Flatpak=talk): update it from Updates"* ]] ||
     fail "a version asking for more access fetched at boot, or not said: $out"
+# ...read as flatpak reads it (GLib's GKeyFile): a group header with a space or tab after it, an indented one, CRLF
+# line ends hide nothing; one GLib can't read counts as more
+evade() {  # evade <name> <metadata printf format>: a new version so written, refused at boot
+    # shellcheck disable=SC2059  # (the format is the case)
+    printf "$2" >"$t/newmeta"
+    mkdir -p "$t/fetched-$1"
+    out=$(fbu --fetch "$t/fetched-$1" 2>&1) && fail "--fetch took a version asking for more access ($1): $out"
+    [[ ! -s $t/fetched-$1/fetched && $out == *"com.x.App: its new version asks for more access ($3): update it from Updates"* ]] ||
+        fail "a version asking for more access ($1) fetched at boot, or not said: $out"
+}
+evade space '[Application]\nname=com.x.App\n[Context] \nshared=network;\nfilesystems=host;\n' '[Context]filesystems=host'
+evade indent '[Application]\nname=com.x.App\n  [Context]\nshared=network;\nfilesystems=host;\n' '[Context]filesystems=host'
+evade tab '[Application]\nname=com.x.App\n[Session Bus Policy]\t\norg.freedesktop.Flatpak=talk\n[Context]\nshared=network;\n' \
+    '[Session Bus Policy]org.freedesktop.Flatpak=talk'
+evade crlf '[Application]\r\nname=com.x.App\r\n[Context]\r\nshared=network;\r\nfilesystems=host;\r\n' '[Context]filesystems=host'
+evade unreadable '[Application]\nname=com.x.App\n[Context]\nshared=network;\nfilesystems=\377host;\n' "metadata that couldn't be read"
+printf '%s\n' '[Application]' 'name=com.x.App' 'runtime=org.x.Platform/x86_64/1' '[Context]' 'shared=network;' 'filesystems=host;' \
+    '[Session Bus Policy]' 'org.freedesktop.Flatpak=talk' >"$t/newmeta"
 # ...from Updates (no --fetch: you started it), installed, what it adds said in its log
 rm -f "$t/installs"
 out=$(REF=com.x.App FLATPAK_BUNDLE_HELD=1 fbu 2>&1) || true  # (a temp folder here, not one named after the app)
