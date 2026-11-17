@@ -38,6 +38,8 @@ Scope {
     }
 
     FileView {
+        id: schemeFile
+
         path: `${Quickshell.env("HOME")}/.local/state/caelestia/scheme.json`
         watchChanges: true
         onFileChanged: reload()
@@ -46,5 +48,14 @@ Scope {
                 root.colours = JSON.parse(text())?.colours ?? {};
             } catch (e) {}
         }
+        // Not there yet (a new account's first login, before Caelestia writes it): a missing file isn't watched, so the
+        // switcher, up all session, kept the default colours. Read again until it's there (not made: it's Caelestia's)
+        onLoadFailed: retry.start()
+    }
+    Timer {
+        id: retry
+
+        interval: 10000
+        onTriggered: schemeFile.reload()
     }
 }
