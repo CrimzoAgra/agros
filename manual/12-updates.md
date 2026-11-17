@@ -28,7 +28,8 @@ You don't have to think about updates.
 - **Some updates wait for you.** An AUR app whose maintainers changed since it was last built waits until you review
   it: run `update-apps` in a terminal, which shows what its build script changed before building it (a warning after
   you log in names it, and the Updates app leaves it out and says so). An app installed from a Flatpak file (ArtCraft)
-  whose new version asks for more access waits for the Updates app, which says what it adds.
+  whose new version asks for more access waits for the Updates app, which lists what it adds, and **Update all** asks
+  before installing it: say yes only if you trust it with that.
 - **A new Proton build** (GE-Proton, dwproton, in Steam or Lutris) shows up in Steam once you restart Steam, and in
   Lutris once you restart it and pick it in a game's **Configure**, **Runner options**, **Wine version** (a
   notification says so). The old one stays while a game uses it, and one you installed yourself is never removed.

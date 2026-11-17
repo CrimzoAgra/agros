@@ -861,7 +861,8 @@ helper a package update just brought works before `agros-links` has linked it), 
   the first time, kept so a later version can't point elsewhere), checked the same way and only when the file is that
   app; `--check` lists the ones with a newer version. A new version asking for more access (its sandbox permissions,
   its metadata read by GLib as flatpak reads it; one GLib can't read counts as more)
-  is held at boot for Updates, which installs it and says what it adds. A file can name a repo URL for its
+  is held at boot, said in Updates' list with what it adds (`--check`), and Update all installs it only once you said
+  yes to a question listing that (no: held, said in the list). A file can name a repo URL for its
   `-origin` remote, which `flatpak update` would follow past these checks: the file installed is made again
   (`flatpak build-bundle`) from what flatpak read of it, with no URL nor runtime repo, and every `-origin` remote's
   URL is emptied before each `flatpak update` (`--no-origin-urls`: auto-update's as root, `update-kinds`' as each

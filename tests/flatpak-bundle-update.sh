@@ -154,12 +154,29 @@ evade crlf '[Application]\r\nname=com.x.App\r\n[Context]\r\nshared=network;\r\nf
 evade unreadable '[Application]\nname=com.x.App\n[Context]\nshared=network;\nfilesystems=\377host;\n' "metadata that couldn't be read"
 printf '%s\n' '[Application]' 'name=com.x.App' 'runtime=org.x.Platform/x86_64/1' '[Context]' 'shared=network;' 'filesystems=host;' \
     '[Session Bus Policy]' 'org.freedesktop.Flatpak=talk' >"$t/newmeta"
-# ...from Updates (no --fetch: you started it), installed, what it adds said in its log
+# ...held so at boot: said in Updates' list (--check), with what it adds
+rm -rf "$t/fetched-more"; mkdir -p "$t/fetched-more"
+fbu --fetch "$t/fetched-more" >/dev/null 2>&1 || true
+out=$(fbu --check) || true
+[[ $out == *"com.x.App: update available (1.0 -> 1.1 (asks for more access: [Context]filesystems=host, [Session Bus Policy]org.freedesktop.Flatpak=talk))"* ]] ||
+    fail "an update held for asking for more access not said so in the list: $out"
+# ...from Updates (no --fetch: you started it): not by Update all alone, only once you said yes to what it adds
+# (zenity, which lists it; "Update" unless $NO, noted). No, and it's left as it is, said, not a failure
+# shellcheck disable=SC2016  # (expanded by the stand-in)
+printf '#!/bin/sh\necho "zenity $*" >>%s/asked\n[ -z "$NO" ]\n' "$t" >"$t/bin/zenity"
+chmod +x "$t/bin/zenity"
+rm -f "$t/installs" "$t/asked"
+out=$(NO=1 REF=com.x.App FLATPAK_BUNDLE_HELD=1 fbu 2>&1) || true  # (a temp folder here, not one named after the app)
+[[ $out == *"com.x.App: not updated: its new version asks for more access ([Context]filesystems=host, [Session Bus Policy]org.freedesktop.Flatpak=talk), not said yes to"* &&
+    $out != *"com.x.App: updated"* && $(cat "$t/asked" 2>/dev/null) == *"[Context]filesystems=host, [Session Bus Policy]org.freedesktop.Flatpak=talk"* ]] &&
+    ! grep -q -- '--user .*--bundle ' "$t/installs" 2>/dev/null ||
+    fail "Updates installed a version asking for more access without a yes, or didn't ask what it adds: $out / $(cat "$t/asked" 2>/dev/null)"
+# ...yes, and it's installed, what it adds said in its log
 rm -f "$t/installs"
-out=$(REF=com.x.App FLATPAK_BUNDLE_HELD=1 fbu 2>&1) || true  # (a temp folder here, not one named after the app)
-[[ $out == *"com.x.App: its new version asks for more access: [Context]filesystems=host, [Session Bus Policy]org.freedesktop.Flatpak=talk"* &&
+out=$(REF=com.x.App FLATPAK_BUNDLE_HELD=1 fbu 2>&1) || true
+[[ $out == *"com.x.App: its new version asks for more access, said yes to: [Context]filesystems=host, [Session Bus Policy]org.freedesktop.Flatpak=talk"* &&
     $out == *"com.x.App: updated to 1.1"* ]] && grep -q -- '--user .*--bundle ' "$t/installs" ||
-    fail "Updates didn't install a version asking for more access, or didn't say what it adds: $out / $(cat "$t/installs" 2>/dev/null)"
+    fail "Updates didn't install a version asking for more access after a yes, or didn't say what it adds: $out / $(cat "$t/installs" 2>/dev/null)"
 # ...its download and the repo it's read into in your cache, on disk (in /tmp they took memory), gone after
 [[ $(tail -1 "$t/imported") == "$t/home/.cache/agros-flatpak."*/.ref.* && -z $(ls -A "$t/home/.cache") ]] ||
     fail "Updates' download not in the cache, or left there: $(tail -1 "$t/imported") / $(ls -A "$t/home/.cache")"
