@@ -22,7 +22,7 @@ gpg --batch --quiet --export agros@agros.invalid >"$keyring" 2>/dev/null
 # shellcheck disable=SC2034  # (read by build-repo.sh's functions)
 work=$t/work out=$t/out root=$t/root
 mkdir -p "$work" "$out" "$t/pub" "$t/bin" "$root/packages/agros-foo" "$root/packages/agros-bar"
-eval "$(sed -n '/^verify_sig() /p' "$here/ci/published.sh")"
+eval "$(sed -n '/^verify_sig() /p; /^stamp=/p' "$here/ci/published.sh")"
 sed -n '/^built_against() {$/,/^}$/p; /^contents() {$/,/^}$/p; /^keep_published() {$/,/^}$/p' "$b" >"$t/fns"
 # shellcheck disable=SC1091
 . "$t/fns"
@@ -30,11 +30,14 @@ for f in verify_sig built_against contents keep_published; do declare -F "$f" >/
 chown() { :; }  # (the builder account, CI's)
 echo 'pkgname=agros-foo' >"$root/packages/agros-foo/PKGBUILD"
 printf 'pkgname=agros-bar\npkgver() { echo r1; }\n' >"$root/packages/agros-bar/PKGBUILD"
-# (the published repo: a file there, 200; none, 404; $CODE: that answer instead. The URL is the last argument)
+# (the published repo: a file there, 200; none, 404; $CODE: that answer instead. The URL is the last argument. Only
+# the current copy asked for, a ?t= query past the CDN's: without one, 000)
 cat >"$t/bin/curl" <<C
 #!/bin/bash
 url=\${*: -1} o= w=
 while ((\$#)); do case \$1 in -o) o=\$2; shift ;; -w) w=1 ;; esac; shift; done
+[[ \$url == *"?t="[0-9]* ]] || CODE=000
+url=\${url%%\?*}
 f=$t/pub/\${url##*/} code=\${CODE:-}
 [[ -n \$code ]] || { [[ -e \$f ]] && code=200 || code=404; }
 [[ \$code == 200 ]] && cp "\$f" "\$o"
