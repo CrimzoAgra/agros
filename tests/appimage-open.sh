@@ -100,6 +100,14 @@ NO=1 HOME=$t/ask-home PATH=$t/bin:$PATH python3 "$here/.local/bin/appimage-open"
 rm -f "$t/asked"
 HOME=$t/home PATH=$t/bin:$PATH python3 "$here/.local/bin/appimage-open" --install "$t/ask.AppImage" >/dev/null 2>&1 || fail "--install failed"
 [[ ! -e $t/asked ]] || fail "--install (appimage-update) asked"
+# Opened from an installed AppImage (its APPIMAGE, which a download it opens or a terminal's shell inherits): asked all
+# the same, unless it's that app's own new version (read without running it: below, with unsquashfs)
+cp "$t/home/Applications/demo.AppImage" "$t/from-app.AppImage"; chmod 644 "$t/from-app.AppImage"
+NO=1 APPIMAGE=$t/home/Applications/demo.AppImage HOME=$t/from-home PATH=$t/bin:$PATH \
+    python3 "$here/.local/bin/appimage-open" "$t/from-app.AppImage" || fail "a refused run from an installed app failed"
+[[ -s $t/asked && ! -e $t/from-home/Applications && ! -x $t/from-app.AppImage ]] ||
+    fail "a file opened from an installed AppImage run without asking: $(ls -l "$t/from-app.AppImage")"
+rm -f "$t/asked"
 # A launcher entry that's another app's: an installed one's (an AppImage naming itself as LibreWolf), or a file of yours
 # (written over before), not installed, said; nothing moved into ~/Applications
 mkdir -p "$t/sys/applications"; echo '[Desktop Entry]' >"$t/sys/applications/demo.desktop"
@@ -125,6 +133,12 @@ if command -v mksquashfs >/dev/null && command -v unsquashfs >/dev/null; then
         fail "an AppImage not read with unsquashfs"
     grep -qx "Exec=$t/real-home/Applications/demo.AppImage %U" "$t/real-home/.local/share/applications/demo.desktop" &&
         [[ $(cat "$t/real-home/.local/share/icons/demo-appimage.png") == png ]] || fail "an AppImage's entry or icon not read with unsquashfs"
+    # That app's own new version, opened by its Update button (its APPIMAGE the installed file): not asked, installed
+    cp "$t/real-home/Applications/demo.AppImage" "$t/real-new.AppImage"; rm -f "$t/asked"
+    NO=1 APPIMAGE=$t/real-home/Applications/demo.AppImage HOME=$t/real-home PATH=$t/bin:$PATH \
+        python3 "$here/.local/bin/appimage-open" "$t/real-new.AppImage" >/dev/null 2>&1 || fail "an app's own update not installed"
+    [[ ! -e $t/asked && ! -e $t/real-new.AppImage ]] ||
+        fail "an app's own update (its APPIMAGE) asked about, or not installed"
 else
     skipped "no squashfs-tools here: an AppImage read without running it not checked"
 fi

@@ -51,16 +51,18 @@ def squashfs_offset(appimage: str) -> int | None:
         return None
 
 
-def extract(appimage: str, pattern: str, into: str) -> None:
+def extract(appimage: str, pattern: str, into: str, run: bool = True) -> None:
     """Its files matching the pattern (one per path part) into <into>/squashfs-root, links as links. Read by unsquashfs,
     the AppImage never run for it; only where that can't be (no squashfs-tools, another kind of AppImage) by its own
     --appimage-extract, which runs it: by then you've said to run it (ask_to_run), or it's an install from the GitHub
-    release you picked (appimage-update)"""
+    release you picked (appimage-update). run=False: nothing then (ask_to_run's look before you're asked)"""
     offset = squashfs_offset(appimage)
     if offset is not None and shutil.which("unsquashfs"):
         cmd = ["unsquashfs", "-q", "-n", "-f", "-o", str(offset), "-d", f"{into}/squashfs-root", appimage, pattern]
-    else:
+    elif run:
         cmd = [appimage, "--appimage-extract", pattern]
+    else:
+        return
     # (one that doesn't run here or hangs: nothing extracted, so "no launcher entry", not a traceback)
     try:
         subprocess.run(cmd, cwd=into, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60)
@@ -69,11 +71,18 @@ def extract(appimage: str, pattern: str, into: str) -> None:
 
 
 def ask_to_run(src: str) -> bool:
-    """You said to run it (zenity), before it's made runnable or anything of it read: a file you opened, from a download
-    or a stick. Not asked for one in ~/Applications (installed), nor the new version an installed app's own Update button
-    opens (it runs from ~/Applications: its APPIMAGE). No answer (no zenity, no desktop): not run"""
-    for path in (src, os.environ.get("APPIMAGE", "")):
-        if path and os.path.realpath(path).startswith(os.path.realpath(APPS) + "/"):
+    """You said to run it (zenity), before it's made runnable or run: a file you opened, from a download or a stick.
+    Not asked for one in ~/Applications (installed), nor the new version an installed app's own Update button opens:
+    the same app (its launcher entry's id, read by unsquashfs, never run) as the installed AppImage it's opened from
+    (its APPIMAGE). Any other file opened from that app (a download, a link), or from what it started (a terminal's
+    shell, which inherits APPIMAGE too), is asked about. No answer (no zenity, no desktop): not run"""
+    if os.path.realpath(src).startswith(os.path.realpath(APPS) + "/"):
+        return True
+    running = os.environ.get("APPIMAGE", "")
+    if running and os.path.realpath(running).startswith(os.path.realpath(APPS) + "/"):
+        with tempfile.TemporaryDirectory() as tmp:
+            found = entry_of(src, tmp, run=False)
+        if found and os.path.realpath(f"{APPS}/{found[0].lower()}.AppImage") == os.path.realpath(running):
             return True
     try:
         return subprocess.run(["zenity", "--question", "--no-markup", "--title=Run this AppImage?", "--ok-label=Run",
@@ -102,7 +111,7 @@ def clashing_entry(app: str, install_only: bool) -> str:
     return ""
 
 
-def resolve(appimage: str, tmp: str, name: str) -> str:
+def resolve(appimage: str, tmp: str, name: str, run: bool = True) -> str:
     """The extracted file <name> in tmp, with what it links to extracted too: linuxdeploy's AppImages have their launcher
     entry and icon at the top as links into usr/share, and extracting a link extracts only the link"""
     path = f"{tmp}/squashfs-root/{name}"
@@ -112,19 +121,19 @@ def resolve(appimage: str, tmp: str, name: str) -> str:
         name = os.path.normpath(os.path.join(os.path.dirname(name), os.readlink(path)))
         if name.startswith(("/", "..")):  # (outside the AppImage)
             break
-        extract(appimage, name, tmp)
+        extract(appimage, name, tmp, run)
         path = f"{tmp}/squashfs-root/{name}"
     return path
 
 
-def entry_of(appimage: str, tmp: str) -> tuple[str, str, str] | None:
-    """(app id, launcher entry text, icon file in tmp or "") from inside the AppImage."""
-    extract(appimage, "*.desktop", tmp)
+def entry_of(appimage: str, tmp: str, run: bool = True) -> tuple[str, str, str] | None:
+    """(app id, launcher entry text, icon file in tmp or "") from inside the AppImage (run=False: as extract's)."""
+    extract(appimage, "*.desktop", tmp, run)
     root = f"{tmp}/squashfs-root"
     desktops = [f for f in os.listdir(root) if f.endswith(".desktop")] if os.path.isdir(root) else []
     if not desktops:
         return None
-    entry = resolve(appimage, tmp, desktops[0])
+    entry = resolve(appimage, tmp, desktops[0], run)
     if not os.path.isfile(entry):
         return None
     text = open(entry).read()
@@ -133,8 +142,8 @@ def entry_of(appimage: str, tmp: str) -> tuple[str, str, str] | None:
     name = re.search(r"^Icon=(.+)$", text, re.M)
     if name:
         for ext in ("png", "svg"):
-            extract(appimage, f"{name.group(1)}.{ext}", tmp)
-            found = resolve(appimage, tmp, f"{name.group(1)}.{ext}")
+            extract(appimage, f"{name.group(1)}.{ext}", tmp, run)
+            found = resolve(appimage, tmp, f"{name.group(1)}.{ext}", run)
             if os.path.isfile(found):
                 icon = found
                 break
