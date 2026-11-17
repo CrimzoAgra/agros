@@ -190,6 +190,8 @@ jobs:
           # (as in the test job: a machine id, and no kernel-modules hook with no systemd running)
           systemd-machine-id-setup >/dev/null
           mkdir -p /etc/pacman.d/hooks && ln -sf /dev/null /etc/pacman.d/hooks/36-systemd-modules-load.hook
+          # (nor DKMS's: an AUR build's dependency pulls in a driver, and with no kernel here its hook's "error:" misled)
+          ln -sf /dev/null /etc/pacman.d/hooks/70-dkms-install.hook
           pacman-key --init
           pacman -Sy
           pacman -Su --noconfirm --needed $(pacman -T base-devel git sudo)
