@@ -7,6 +7,7 @@
 set -euo pipefail
 personal_dir=
 mode=restore
+st=${XDG_STATE_HOME:-$HOME/.local/state}/agros  # (agros-welcome's marks)
 helpers=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")  # (the shared helpers beside this, not links not added yet)
 case ${1:-} in
     -h | --help) sed -n '2,7s/^# \{0,1\}//p' "$0"; exit 0 ;;
@@ -264,6 +265,13 @@ personal_restore() {
     [[ -z $open ]] || { echo "Close these first (they'd write over what's brought back): $(echo $open)."; return 1; }
     # The file's list first, and nothing done unless it's read: a mistyped passphrase here had nothing backed up, and the
     # next ask, typed right, brought everything back over your files
+    # The first login's setup still going (agros-welcome: LibreWolf's profile, Claude Code's files, the same ones): waited for
+    local pid
+    pid=$(cat "$st/setup-running" 2>/dev/null) || pid=
+    if [[ -n $pid ]] && kill -0 "$pid" 2>/dev/null; then
+        echo "Waiting for AgrOS's first setup to finish (apps downloading)..."
+        while kill -0 "$pid" 2>/dev/null && [[ -e $st/setup-running ]]; do sleep 2; done
+    fi
     list=$(personal_gpg -d "$file" | tar -itf -) ||
         { echo "$file couldn't be read (a wrong passphrase?): nothing brought back."; return 1; }
     prof=$(firefox_profile)
@@ -320,6 +328,8 @@ personal_restore() {
         echo "Proton VPN starts at login only if you turn it on: Desktop Settings → Startup."
     fi
     echo "Accounts back. Log out and in (the keyring): it opens with the password you logged in with on your old PC."
+    # (however it was run: the welcome's offer answered, not made again at the next login)
+    mkdir -p "$st" && touch "$st/offered"
 }
 
 # The launchers brought back, installed again in Lutris: their entries (made by lutris-library, else new) marked

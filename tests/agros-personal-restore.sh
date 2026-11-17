@@ -98,7 +98,13 @@ mkdir -p "$t/ghbin"; printf '#!/bin/sh\n[ "$1 $2" = "auth status" ] && exit 1\ne
 printf '#!/bin/sh\ntouch "%s/capri-ran"\n' "$t" >"$repo/.local/bin/capri-update"; chmod +x "$t/ghbin/gh" "$repo/.local/bin/capri-update"
 # (the desktop's settings: Proton VPN's start at login off, as it is at first)
 printf '#!/bin/sh\n[ "$*" = "get startup.protonvpn" ] && echo false\n' >"$repo/.local/bin/dots-settings"; chmod +x "$repo/.local/bin/dots-settings"
+# (the first login's setup still going: waited for; agros-welcome's offer not made again once it's back)
+[[ -e $new/.local/state/agros/offered ]] && fail "a restore that failed marked the welcome's offer answered"
+mkdir -p "$new/.local/state/agros"; sleep 3 & echo $! >"$new/.local/state/agros/setup-running"; setup=$!
 out=$(PATH=$t/ghbin:$PATH run "$new" personal_main) || fail "--personal failed"
+[[ $out == *"Waiting for AgrOS's first setup"* ]] && ! kill -0 "$setup" 2>/dev/null ||
+    fail "the restore didn't wait for the first login's setup: $out"
+[[ -e $new/.local/state/agros/offered ]] || fail "accounts back, but the welcome's offer made again at the next login"
 [[ $(cat "$new/.config/gh/hosts.yml") == SECRET-GH ]] || fail "GitHub's login not back"
 [[ -e $new/.local/state/agros/capri-at-login && ! -e $t/capri-ran ]] || fail "Capri not left to the next login, or tried now"
 [[ $out == *"Capri is installed at your next login"* ]] || fail "Capri's install at the next login not said: $out"
