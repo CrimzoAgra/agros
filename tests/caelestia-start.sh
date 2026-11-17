@@ -89,10 +89,15 @@ run
 HOME=$t/home PATH=$t/bin:$PATH "$t/home/.local/bin/caelestia-start" --prepare
 [[ $(wc -l <"$t/home/overlay-runs") -eq 2 ]] || fail "--prepare with the shell up: built under it"
 [[ $(tail -1 "$t/home/started") == "caelestia shell -d" ]] || fail "after --prepare: the shell wasn't started"
-# (the unit that runs it: packaged, wanted as the session starts, after agros-links, nothing ordered after it)
+# (the unit that runs it: packaged, wanted as the session starts, after agros-links. Hyprland waits for it
+# (graphical-session-pre.target is after what it wants, and uwsm starts Hyprland after that), so a time limit: a
+# oneshot has none, and one that hung kept the screen black after the login for good)
 u=$here/packages/agros-scripts/caelestia-prepare.service
-grep -qx 'ExecStart=/usr/lib/agros/bin/caelestia-start --prepare' "$u" && grep -qx 'After=agros-links.service' "$u" &&
+grep -qx 'ExecStart=/usr/lib/agros/bin/caelestia-start --prepare' "$u" &&
+    grep -qx 'After=agros-links.service' "$u" &&
     grep -qx 'WantedBy=graphical-session-pre.target' "$u" && ! grep -q '^Before=' "$u" || fail "caelestia-prepare.service: $(cat "$u")"
+limit=$(sed -n 's/^TimeoutStartSec=//p' "$u")
+[[ $limit =~ ^[0-9]+$ ]] && ((limit > 0 && limit <= 120)) || fail "caelestia-prepare.service: Hyprland waits on it with no time limit (TimeoutStartSec)"
 grep -q 'graphical-session-pre.target.wants/caelestia-prepare.service' "$here/packages/agros-scripts/PKGBUILD" ||
     fail "agros-scripts doesn't enable caelestia-prepare.service"
 echo "ok caelestia-start"
