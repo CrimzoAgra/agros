@@ -26,7 +26,7 @@ fetch() {
     local stamp
     stamp=$(date +%s)
     get() {
-        code=$(curl -sS --retry 3 --connect-timeout 20 -m 600 -o "$dir/$1" -w '%{http_code}' "$site/$1?t=$stamp") || code=000
+        code=$(curl -sS --retry 8 --retry-delay 15 --connect-timeout 20 -m 600 -o "$dir/$1" -w '%{http_code}' "$site/$1?t=$stamp") || code=000
         [[ $code == 200 ]] && return 0
         rm -f "$dir/$1"
         [[ $code == 404 && -n ${2:-} ]] && return 1

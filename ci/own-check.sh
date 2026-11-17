@@ -27,11 +27,11 @@ if [[ -n ${AGROS_PUBLISHED:-} ]]; then
     h=$(mktemp -d)
     trap 'rm -rf "$h"' EXIT
     stamp=$(date +%s)
-    code=$(curl -sS --retry 3 -o "$h/db" -w '%{http_code}' "$AGROS_PUBLISHED/agros.db?t=$stamp") || code=000
+    code=$(curl -sS --retry 8 --retry-delay 15 -o "$h/db" -w '%{http_code}' "$AGROS_PUBLISHED/agros.db?t=$stamp") || code=000
     case $code in
         404) ;;
         200)
-            { curl -fsS --retry 3 -o "$h/db.sig" "$AGROS_PUBLISHED/agros.db.sig?t=$stamp" &&
+            { curl -fsS --retry 8 --retry-delay 15 -o "$h/db.sig" "$AGROS_PUBLISHED/agros.db.sig?t=$stamp" &&
                 gpg --homedir "$h" --batch --quiet --dearmor -o "$h/key.gpg" <"${AGROS_PUBKEY:-$root/ci/agros.asc}" &&
                 gpgv --keyring "$h/key.gpg" "$h/db.sig" "$h/db" >/dev/null 2>&1 &&
                 mkdir "$h/x" && bsdtar -xf "$h/db" -C "$h/x"; } ||

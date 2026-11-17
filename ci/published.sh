@@ -17,8 +17,8 @@ field() { awk -v f="%$2%" '$0 == f { on = 1; next } /^%/ { on = 0 } on && NF' "$
 pub_db() {
     [[ -d $pubdb ]] && return 0
     [[ -n ${AGROS_PUBLISHED:-} ]] || { echo "!! no published repo to keep packages from"; return 1; }
-    curl -fsSL --retry 3 --max-time 120 -o "$work/pub.db" "$AGROS_PUBLISHED/agros.db?t=$stamp" &&
-        curl -fsSL --retry 3 --max-time 60 -o "$work/pub.db.sig" "$AGROS_PUBLISHED/agros.db.sig?t=$stamp" &&
+    curl -fsSL --retry 8 --retry-delay 15 --max-time 120 -o "$work/pub.db" "$AGROS_PUBLISHED/agros.db?t=$stamp" &&
+        curl -fsSL --retry 8 --retry-delay 15 --max-time 60 -o "$work/pub.db.sig" "$AGROS_PUBLISHED/agros.db.sig?t=$stamp" &&
         verify_sig "$work/pub.db.sig" "$work/pub.db" &&
         mkdir -p "$pubdb" && bsdtar -xf "$work/pub.db" -C "$pubdb" ||
         { echo "!! the published database couldn't be read or verified"; rm -rf "$pubdb"; return 1; }
@@ -50,8 +50,8 @@ carry_over() {
     out_has "$1" && return 0
     pub_db && desc=$(pub_desc "$1") || { echo "!! $1: none published to keep"; return 1; }
     f=$(field "$desc" FILENAME)
-    curl -fsSL --retry 3 --max-time 600 -o "$out/$f" "$AGROS_PUBLISHED/$f?t=$stamp" &&
-        curl -fsSL --retry 3 --max-time 60 -o "$out/$f.sig" "$AGROS_PUBLISHED/$f.sig?t=$stamp" &&
+    curl -fsSL --retry 8 --retry-delay 15 --max-time 600 -o "$out/$f" "$AGROS_PUBLISHED/$f?t=$stamp" &&
+        curl -fsSL --retry 8 --retry-delay 15 --max-time 60 -o "$out/$f.sig" "$AGROS_PUBLISHED/$f.sig?t=$stamp" &&
         verify_sig "$out/$f.sig" "$out/$f" ||
         { echo "!! $f: the published copy couldn't be read or verified"; rm -f "$out/$f" "$out/$f.sig"; return 1; }
     chown builder: "$out/$f" "$out/$f.sig"
