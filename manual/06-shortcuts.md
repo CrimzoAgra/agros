@@ -44,8 +44,8 @@
 
 | Shortcut | Does |
 |---|---|
-| Print | Screenshot of an area |
-| Super+Shift+S | Screenshot with the screen frozen |
+| Print, Super+Shift+S | Screenshot of an area, the screen frozen meanwhile |
+| Super+Shift+Alt+S | Screenshot of an area, the screen left moving |
 | Ctrl+Alt+R | Record the screen |
 | Super+Shift+C | Colour picker |
 | Super+V | Clipboard history |

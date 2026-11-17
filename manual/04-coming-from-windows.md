@@ -9,7 +9,7 @@ Most things work the way you're used to. A few are different.
 | Alt+Tab | **Alt+Tab**: the same, with live previews |
 | Task Manager (Ctrl+Shift+Esc) | **Ctrl+Shift+Esc** opens btop |
 | Win+D, virtual desktops | **Workspaces**: Super+1...0 jumps to one (see [Windows and workspaces](07-windows-and-workspaces.md)) |
-| Snipping Tool (Win+Shift+S) | **Print** selects an area; **Super+Shift+S** freezes the screen first |
+| Snipping Tool (Win+Shift+S) | **Print** or **Super+Shift+S** selects an area, the screen frozen meanwhile |
 | Clipboard history (Win+V) | **Super+V** |
 | Emoji panel (Win+.) | **Super+.** |
 | Lock (Win+L) | **Super+L** |
