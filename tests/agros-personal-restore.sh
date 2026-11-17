@@ -69,6 +69,20 @@ echo "wrong" >"$t/pass"
 run "$new" personal_main >/dev/null 2>&1 && fail "a wrong passphrase was taken"
 [[ $(cat "$new/.config/equibop/sessionData/token") == mine ]] || fail "a wrong passphrase still changed files"
 echo "correct horse battery staple" >"$t/pass"
+# Wrong at the first ask only (the file's list), right at the next: nothing brought back (it was brought back over your
+# files, none of them backed up)
+echo wrong >"$t/wrong"
+HOME=$new XDG_RUNTIME_DIR=$t bash -c '
+    set -euo pipefail
+    source "$0/.local/bin/agros-personal"; personal_dir=$1 wrong=$2
+    personal_open() { :; }; personal_claude_open() { :; }
+    eval "right_$(declare -f personal_gpg)"
+    personal_gpg() {  # (a file marks the first ask: the list is read in a subshell)
+        if [[ -e $wrong.asked ]]; then right_personal_gpg "$@"; else : >"$wrong.asked"; PERSONAL_PASSFILE=$wrong right_personal_gpg "$@"; fi
+    }
+    personal_main' "$repo" "$drive" "$t/wrong" >/dev/null 2>&1 && fail "a wrong passphrase at the first ask was taken"
+[[ $(cat "$new/.config/equibop/sessionData/token") == mine ]] || fail "a wrong passphrase at the first ask, right at the next: files brought back over yours"
+[[ -e $new/.dotfiles-backup ]] && fail "a wrong passphrase at the first ask still started a backup"
 lutris_db "$new" ea-app 0 "" ""  # (lutris-library's entry for it, not installed)
 nl=$new/.config/librewolf/librewolf/xyz.default-release
 echo stale >"$nl/logins.json-wal"  # the new profile's journal, which would be replayed over the one brought back

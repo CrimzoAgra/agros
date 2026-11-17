@@ -200,9 +200,13 @@ personal_main() {
 # Your logins back from the file on the drive, decrypted straight into place (three times: the file's list, its
 # files, the weather's place and the launchers' Lutris entries; gpg's agent asks the passphrase once)
 personal_restore() {
-    local file=$1 open prof loc name dest backup meta to=() shell="$HOME/.config/caelestia/shell.json"
+    local file=$1 open prof loc name dest backup meta list to=() shell="$HOME/.config/caelestia/shell.json"
     open=$(personal_open; personal_claude_open)
     [[ -z $open ]] || { echo "Close these first (they'd write over what's brought back): $(echo $open)."; return 1; }
+    # The file's list first, and nothing done unless it's read: a mistyped passphrase here had nothing backed up, and the
+    # next ask, typed right, brought everything back over your files
+    list=$(personal_gpg -d "$file" | tar -itf -) ||
+        { echo "$file couldn't be read (a wrong passphrase?): nothing brought back."; return 1; }
     prof=$(firefox_profile)
     [[ $prof == "$HOME"/* ]] || prof=  # (kept outside your home: brought back by hand)
     # LibreWolf's files into its profile here; none yet (LibreWolf never started): left out, said below
@@ -223,7 +227,7 @@ personal_restore() {
         [[ -f $HOME/$dest ]] || continue
         mkdir -p "$backup/$(dirname "$dest")"
         cp -a "$HOME/$dest" "$backup/$dest"
-    done < <(personal_gpg -d "$file" | tar -itf -)
+    done <<<"$list"
     personal_gpg -d "$file" | tar -C "$HOME" -ixf - "${to[@]}" --exclude=weather-location --exclude=lutris-launchers.json
     # the weather's place and the launchers' Lutris entries (either may not be in it: an older save)
     meta=$(mktemp -d "${XDG_RUNTIME_DIR:-/tmp}/personal.XXXXXX")
