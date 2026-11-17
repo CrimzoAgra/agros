@@ -7,7 +7,8 @@
 #   ci/build-repo.sh <out dir>           the repo in <out dir> (agros.db, agros.files, the packages)
 #   ci/build-repo.sh <out dir> --hold-new   this run's new AUR builds there swapped for the published ones (below)
 # Environment: AGROS_HELD (a file: the packages that didn't build, their published ones kept, "<name>: <why>" each),
-# AGROS_SKIP_AUR=1 (only AgrOS's own packages: no AUR ones, no Calamares), AGROS_PUBLISHED (the published repo's URL: a
+# AGROS_SKIP_AUR=1 (only AgrOS's own packages: no AUR ones, no Calamares; CI's agros job), AGROS_SKIP_OWN=1 (all but
+# AgrOS's own, which are in <out dir> already: CI's repo job, given the agros job's), AGROS_PUBLISHED (the published repo's URL: a
 # package already there under the same version is kept as published, its signature checked against AgrOS's public key,
 # ci/agros.asc, but for a compiled one built against other libraries (rebuilt and published); the build fails when the
 # published copy can't be read or verified, or when one of AgrOS's own packages changed with its version not raised)
@@ -63,7 +64,8 @@ make_db() {
     shopt -u nullglob
     if [[ -n ${AGROS_PUBLISHED:-} && ${1:-} != --held ]]; then
         for f in "${pkgs[@]}"; do
-            [[ $f == agros-*-any.pkg.tar.zst ]] || keep_published "$f"  # (those checked after their build, above)
+            # (those checked after their build, above, or in CI's agros job)
+            [[ $f == agros-*-any.pkg.tar.zst || ( -n ${AGROS_SKIP_OWN:-} && $f == agros-* ) ]] || keep_published "$f"
         done
     fi
     # The database made again from the packages here (paru's local repo already holds the AUR ones: added over it, each
@@ -106,9 +108,12 @@ sed -i 's/^\(OPTIONS=(.*\) debug/\1 !debug/' /etc/makepkg.conf
 # 1. AgrOS's own packages, first: one changed with its version not raised fails the build (below) before the long
 # builds of the AUR's and Calamares. No dependencies installed to build them: they're files and settings, but for
 # agros-vmware's shim, built against libdrm, agros-thunar-usage, a Thunar plugin, and agros-hyprbars, a Hyprland plugin
-# (Hyprland's headers). Keyring first
-pacman -T libdrm thunar hyprland >/dev/null || pacman -S --needed --noconfirm libdrm thunar hyprland >/dev/null
-for d in "$work/agros/packages/agros-keyring" "$work"/agros/packages/*/; do
+# (Hyprland's headers). Keyring first. (Not with AGROS_SKIP_OWN: CI builds them in a job of their own, the agros job,
+# where no AUR build script runs, and the release checks they're still what it built: ci/own-check.sh)
+[[ -n ${AGROS_SKIP_OWN:-} ]] ||
+    pacman -T libdrm thunar hyprland >/dev/null || pacman -S --needed --noconfirm libdrm thunar hyprland >/dev/null
+[[ -n ${AGROS_SKIP_OWN:-} ]] && own=() || own=("$work/agros/packages/agros-keyring" "$work"/agros/packages/*/)
+for d in "${own[@]}"; do
     d=${d%/}; p=${d##*/}
     [[ $p == agros-keyring && -n ${keyring_done:-} ]] && continue
     [[ $p == agros-keyring ]] && keyring_done=1
@@ -192,7 +197,7 @@ keep_published() {
     mv -f "$work/pub" "$f" && mv -f "$work/pub.sig" "$f.sig" && chown builder: "$f" "$f.sig"
     echo "-- $f: the published file kept"
 }
-if [[ -n ${AGROS_PUBLISHED:-} ]]; then
+if [[ -n ${AGROS_PUBLISHED:-} && -z ${AGROS_SKIP_OWN:-} ]]; then
     for f in agros-*-any.pkg.tar.zst; do keep_published "$f"; done
 fi
 
