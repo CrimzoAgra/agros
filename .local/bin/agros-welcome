@@ -147,6 +147,8 @@ caelestia_setup() {
             echo "!! Wallpaper set, but not its colours (run: caelestia scheme set -n dynamic)"
         fi
         mkdir -p "${mark%/*}" && touch "$mark"
+        # (the login screen's copy of them, as caelestia-start does once it sets them)
+        "$helpers/greeter-theme-sync" >/dev/null 2>&1
     else
         echo "Wallpaper will be set from inside Caelestia (run: caelestia wallpaper -f $wall)"
     fi
