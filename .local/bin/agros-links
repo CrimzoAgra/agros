@@ -4,6 +4,11 @@
 # package update since. Never over a file of your own: only missing ones, and links that point into AgrOS. Also
 # AgrOS's settings an update added or changed (below). Run at every login (agros-links.service).
 set -uo pipefail
+case ${1:-} in
+    '') ;;
+    -h | --help) sed -n '2,${/^#/!q;s/^# \{0,1\}//p;}' "$0"; exit 0 ;;
+    *) echo "agros-links: unknown option $1 (agros-links --help)" >&2; exit 2 ;;
+esac
 lib=${AGROS_LIB:-/usr/lib/agros}
 link() {  # link <target> <link>
     if [[ -L $2 ]]; then

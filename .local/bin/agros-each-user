@@ -134,6 +134,7 @@ sessions() {
     done < <(users)
 }
 case ${1:-} in
+    -h | --help) sed -n '2,${/^#/!q;s/^# \{0,1\}//p;}' "$0"; exit 0 ;;
     --list) users | cut -d: -f1; exit 0 ;;
     --sessions) sessions; exit 0 ;;
     --as) shift; as "$@"; exit ;;
@@ -163,8 +164,10 @@ esac
 limit=600
 [[ ${1:-} == --limit ]] && { limit=$2; shift 2; }
 limit=${AGROS_EACH_USER_LIMIT:-$limit}
-cmd=${1:?usage: agros-each-user [--limit <s>] <command> [args...]}
+cmd=${1:?usage: agros-each-user [--limit <s>] <command> [args...] (agros-each-user --help)}
 shift
+# (an option this doesn't know: refused, not looked for as a command in each home, where it silently ran for no one)
+[[ $cmd != -* ]] || { echo "agros-each-user: unknown option $cmd (agros-each-user --help)" >&2; exit 2; }
 [[ ${AGROS_NO_USER_HOOKS:-} != 1 ]] || exit 0
 rc=0
 # (the list read whole first: none of it left open for a command, a user's, to read the next users away)

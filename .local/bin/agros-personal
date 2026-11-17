@@ -12,6 +12,7 @@ case ${1:-} in
     -h | --help) sed -n '2,7s/^# \{0,1\}//p' "$0"; exit 0 ;;
     --save) mode=save; shift ;;
 esac
+[[ ${1:-} != -* ]] || { echo "agros-personal: unknown option $1 (agros-personal --help)" >&2; exit 2; }
 [[ ${1:-} ]] && personal_dir=$1
 [[ $EUID -ne 0 || ${BASH_SOURCE[0]} != "$0" ]] || { echo "Run this as your normal user, not with sudo."; exit 1; }
 # The default LibreWolf profile's folder (nothing if LibreWolf hasn't made one yet)
