@@ -23,7 +23,11 @@ Everything here comes installed, listed next to the Windows app it replaces.
 | **Nuvio**, **ArtCraft** | |
 | **Claude Code**, in the terminal and in VSCodium | |
 
-For WhatsApp, Outlook, Teams and OneDrive, use their web versions in LibreWolf.
+For WhatsApp, Outlook, Teams and OneDrive, use their web versions in LibreWolf. LibreWolf's own built-in VPN is turned
+off: Proton VPN is the VPN.
+
+VSCodium opens on an empty window; the windows you had a folder open in come back. Claude Code asks whether to trust a
+folder the first time you start it in that folder.
 
 ## Hardware apps
 

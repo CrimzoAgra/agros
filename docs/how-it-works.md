@@ -844,6 +844,12 @@ helper a package update just brought works before `agros-links` has linked it), 
   open replacements for the Microsoft-only extensions (basedpyright for Pylance, clangd for the C/C++ tools). Its
   launcher entries (`.local/share/applications/vscodium*.desktop`) show its logo without the white circle
   (`.local/share/icons/hicolor/scalable/apps/vscodiumlogo.svg`).
+  It starts on a new empty window, bringing back only the windows that had a folder (`window.restoreWindows`:
+  `folders`): a Claude Code tab left in a window without one came back at every start and asked again whether to trust
+  your home folder, an answer Claude Code never keeps for home. It asks once per project folder, when you start it
+  there. `agros-links` adds that setting once to a `settings.json` from before (yours: never updated), where it has
+  none and jq can read it (not one with comments). It also makes `~/.claude/projects` once: the Claude Code Usage
+  extension reads Claude Code's sessions there, and showed a red "Usage refresh failed" error until a first session.
   Claude Code's plugins and conversations are in `~/.claude`, shared by both
 - **`.local/bin/claude`**: Claude Code in the terminal (the CLI inside the editor's extension; without it, the next
   `claude` on PATH), for what the extension can't do, like `/plugin`. Its plugins (installed by `agros-welcome`,
@@ -862,7 +868,9 @@ helper a package update just brought works before `agros-links` has linked it), 
   (it erases them on every quit by default), allows the Firefox account and Sync, and tells sites the desktop's dark
   mode (Firefox's fingerprinting protection, all of it but that, instead of Resist Fingerprinting, which always says
   light). Video decoded on the graphics card (VA-API), and no AV1 (the desktop's RTX 2060 can't decode it, so YouTube
-  sends VP9; on every machine). The default browser
+  sends VP9; on every machine). No built-in VPN (`browser.ipProtection.enabled`, its "VPN BETA" toolbar button):
+  Proton VPN is the VPN; set with `pref`, not `defaultPref`, so it's off at every start in a profile that had it on too.
+  No "PDFs just got easier" bar over PDFs. The default browser
 - **`.config/mimeapps.list`**: default apps for file types
 - **`.local/bin/appimage-open`**: opens AppImages (`.local/share/applications/appimage-open.desktop`): installs the app
   in `~/Applications` with a launcher entry, or replaces the old version, and starts it; so an app's own Update button
