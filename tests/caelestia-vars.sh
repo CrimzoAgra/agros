@@ -2,7 +2,8 @@
 # Caelestia's Hyprland variables AgrOS names are still Caelestia's (its variables.lua at the commit
 # agros-hyprland-settings pins): the ones hypr-vars.lua changes, the Settings app's (caelestia-vars.* in its schema)
 # and the ones user/*.lua reads (vars.<name>). One Caelestia renamed is set or read for nothing, silently: its key back
-# beside AgrOS's (Print doing both), Super+W's browser Firefox again, the gaps snapping uses Caelestia's defaults
+# beside AgrOS's (Print doing both), Super+W's browser Firefox again, the gaps snapping uses Caelestia's defaults; and
+# the panels' hover edge past the dots' cursor padding
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
@@ -38,4 +39,11 @@ if bad:
     print("FAIL: not one of Caelestia's variables (renamed or gone): " + "; ".join(sorted(bad)))
     sys.exit(1)
 P
+# The panels' edge hover (caelestia-overlay's edge_triggers) reaches past the pointer's padding from the screen's edges
+# (Hyprland's cursor:hotspot_padding, which the dots set): with an edge as thin as the padding, the pointer never got
+# there and no panel opened on hover at all
+pad=$(sed -n '/^ *hotspot_padding *=/{s/^ *hotspot_padding *= *\([0-9]*\).*/\1/p;q;}' "$t/dots/hypr/hyprland/input.lua")
+edge=$(sed -n 's/^ *readonly property int edgePx: \([0-9]*\)$/\1/p' "$here/.local/share/caelestia-overlay/patch.py")
+[[ -n $edge ]] || fail "the panels' edge (edgePx) not found in caelestia-overlay's patch.py"
+((edge > ${pad:-0})) || fail "the panels' edge ($edge px) isn't past the dots' cursor padding ($pad px): no hover opens a panel"
 echo "ok caelestia-vars"

@@ -1153,7 +1153,7 @@ def sidebar_with_utilities():
         inter = swap_block(inter, "        function onSidebarChanged() {", on_sidebar, "sidebar onSidebarChanged",
                            must="sidebarShortcutActive")
         # (and as below: back to hover control once the pointer is on it, not only in its hover trigger, which the
-        # edge-only trigger (edge_triggers) made its last pixel; the launcher closing closes it unless it's hovered)
+        # edge-only trigger (edge_triggers) made its last few pixels; the launcher closing closes it unless it's hovered)
         inter = swap(inter, "                } else if (showSidebarHover) {\n",
                      "                } else if (showSidebarHover || inRightPanel(panels.sidebar, x, y)) {\n",
                      "sidebar hovered: back to hover control")
@@ -1643,17 +1643,20 @@ def snap_preview():
 
 def edge_triggers():
     # The panels that open on hover (dashboard, Super menu, notification sidebar, volume, utilities) open only from the
-    # screen's very edge, its last pixel, not the border's whole width (on an empty workspace, a band 80 px deep); not
-    # while a mouse button is held or a window is being dragged (WindowDrag.qml: a window dragged to the top to maximise
-    # it opened the dashboard). Once open, one stays open while the pointer is over it, as before. On a side with another
-    # screen beyond (sideShared), the old band: there the pointer goes on across, the last pixel hard to stop on
+    # screen's very edge (its last few pixels, edgePx), not the border's whole width (on an empty workspace, a band 80 px
+    # deep); not while a mouse button is held or a window is being dragged (WindowDrag.qml: a window dragged to the top
+    # to maximise it opened the dashboard). Once open, one stays open while the pointer is over it, as before. On a side
+    # with another screen beyond (sideShared), the old band: there the pointer goes on across, the edge hard to stop on
     inter = read("modules/drawers/Interactions.qml")
     # (WindowDrag is a service: Caelestia's Interactions imports none, and without this every hover failed)
     if not re.search(r"^import qs\.services$", inter, re.M):
         inter = insert(inter, "import qs.components\n", "import qs.services\n", before=False)
     inter = insert(inter, "    property bool utilitiesShortcutActive\n", """
-    // caelestia-overlay: a panel opens on hover from the screen's last pixel only, with no button held and no window
+    // caelestia-overlay: a panel opens on hover from the screen's edge only, with no button held and no window
     // being dragged (WindowDrag); open, it stays while the pointer is over it
+    // (the edge: its last edgePx pixels. Not the last one alone: Caelestia's dots set Hyprland's cursor:hotspot_padding
+    // to 1, which keeps the pointer a pixel short of every edge, and no panel opened on hover at all)
+    readonly property int edgePx: 3
     function edgeHover(open: bool, atEdge: bool): bool {
         return open || (!pressed && !WindowDrag.dragging && atEdge);
     }
@@ -1673,22 +1676,22 @@ def edge_triggers():
     }
 """, before=False)
     inter = swap(inter, "const showDashboard = Config.dashboard.showOnHover && inTopPanel(panels.dashboard, x, y);",
-                 "const showDashboard = Config.dashboard.showOnHover && inTopPanel(panels.dashboard, x, y) && root.edgeHover(screenState.dashboard, y < 1 || root.sideShared(\"top\"));",
+                 "const showDashboard = Config.dashboard.showOnHover && inTopPanel(panels.dashboard, x, y) && root.edgeHover(screenState.dashboard, y < root.edgePx || root.sideShared(\"top\"));",
                  "the dashboard's hover")
     inter = swap(inter, "const showUtilities = inBottomPanel(panels.utilities, x, y, true);",
-                 "const showUtilities = inBottomPanel(panels.utilities, x, y, true) && root.edgeHover(screenState.utilities, y >= height - 1 || root.sideShared(\"bottom\"));",
+                 "const showUtilities = inBottomPanel(panels.utilities, x, y, true) && root.edgeHover(screenState.utilities, y >= height - root.edgePx || root.sideShared(\"bottom\"));",
                  "the utilities' hover")
     inter = swap(inter, "if (!screenState.launcher && inBottomPanel(panels.launcher, x, y))",
-                 "if (!screenState.launcher && inBottomPanel(panels.launcher, x, y) && root.edgeHover(false, y >= height - 1 || root.sideShared(\"bottom\")))",
+                 "if (!screenState.launcher && inBottomPanel(panels.launcher, x, y) && root.edgeHover(false, y >= height - root.edgePx || root.sideShared(\"bottom\")))",
                  "the Super menu's hover")
     # (the volume's, over a fullscreen window too)
     inter = swap(inter, "root.panels.osd.hovered = inRightPanel(panels.osdWrapper, x, y);",
-                 "root.panels.osd.hovered = inRightPanel(panels.osdWrapper, x, y) && root.edgeHover(root.panels.osd.hovered, x >= width - 1 || root.sideShared(\"right\"));",
+                 "root.panels.osd.hovered = inRightPanel(panels.osdWrapper, x, y) && root.edgeHover(root.panels.osd.hovered, x >= width - root.edgePx || root.sideShared(\"right\"));",
                  "the volume's hover over a fullscreen window")
     osd = "inRightPanel(panels.osdWrapper, x, y);"
     if inter.count(osd) != 2:
         raise LookupError("the volume's hover")
-    inter = inter.replace(osd, "inRightPanel(panels.osdWrapper, x, y) && root.edgeHover(screenState.osd, x >= width - 1 || root.sideShared(\"right\"));")
+    inter = inter.replace(osd, "inRightPanel(panels.osdWrapper, x, y) && root.edgeHover(screenState.osd, x >= width - root.edgePx || root.sideShared(\"right\"));")
     # The sidebar's: from the top over it (the sidebar from the top), or Caelestia's own, the right edge; and the sidebar
     # patches' own test of that edge, which must stay the same (atSidebarEdge: "return <it>;")
     found = set(re.findall(r"const showSidebarHover = (.*);\n", inter))
@@ -1696,9 +1699,9 @@ def edge_triggers():
         raise LookupError("the sidebar's hover")
     edge = found.pop()
     if edge.endswith("&& withinPanelWidth(panels.sidebar, x, y)"):
-        new = edge + ' && root.edgeHover(false, y < 1 || root.sideShared("top"))'
+        new = edge + ' && root.edgeHover(false, y < root.edgePx || root.sideShared("top"))'
     elif edge.endswith("&& y <= sidebarTriggerY"):
-        new = edge + ' && root.edgeHover(false, x >= width - 1 || root.sideShared("right"))'
+        new = edge + ' && root.edgeHover(false, x >= width - root.edgePx || root.sideShared("right"))'
     else:
         raise LookupError("the sidebar's hover")
     inter = inter.replace(f"const showSidebarHover = {edge};", f"const showSidebarHover = {new};")

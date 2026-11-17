@@ -83,7 +83,7 @@ r.push(edgeHover(true, false));                              // open, a button h
 pressed = false; WindowDrag.dragging = true; r.push(edgeHover(false, true)); // a window dragged to the edge: no
 console.log(r.join(' '));")
     [[ $seq == "true false false true false" ]] || fail "the panels' edge hover: $seq (want: true false false true false)"
-    # ...and on a side with another screen beyond (two side by side): the old band there, the last pixel elsewhere
+    # ...and on a side with another screen beyond (two side by side): the old band there, the edge elsewhere
     fn=$(sed -n '/^    function sideShared(side: string): bool {$/,/^    }$/p' "$i" | sed 's/(side: string): bool {/(side) {/')
     seq=$(node -e "const a = { x: 0, y: 0, width: 1920, height: 1080 }, b = { x: 1920, y: 0, width: 1152, height: 2048 };
 const Quickshell = { screens: [a, b] }; let root = { screen: a };
