@@ -8,10 +8,12 @@
 # Everything it says goes to /var/log/auto-update.log; its notes for dotfiles-check and Updates in /var/lib/auto-update
 log=/var/log/auto-update.log
 # (the last 20 runs kept: every boot's download and every shutdown's pacman output are added to it. Not by the firmware
-# note, which runs beside the boot's run)
+# note, which runs beside the boot's run). Written beside it and renamed over it: on a full disk, written over in place,
+# the whole log was lost, when it's what says why nothing installs
 if [[ ${1:-} != --firmware-note ]] && [[ -s $log ]]; then
     kept=$(awk 'function run() { return /^===== / && !/^===== done / } NR == FNR { runs += run(); next } run() { n++ } n > runs - 20' "$log" "$log") &&
-        printf '%s\n' "$kept" >"$log"
+        { printf '%s\n' "$kept" >"$log.new" && mv -f "$log.new" "$log"; }
+    rm -f "$log.new"
 fi
 exec >>"$log" 2>&1
 echo "===== $(date) ${1:-} ====="
@@ -113,7 +115,8 @@ if [[ ${1:-} == --install ]]; then
     # JobTimeoutSec, 75), counted from this start. The packages need up to 30 min of it (a kernel's boot images)
     stop=$((60 * 60)) packages=$((30 * 60))
     # Firmware first (fwupd), only what the users were told of (auto-update --firmware-note): a flash cut off could
-    # leave a device unusable, a package install cut off is put back. fwupdtool, by itself (it stops fwupd's daemon,
+    # leave a device unusable, a package install cut off is taken up again at the next shutdown (the snapshot before
+    # it there to go back to). fwupdtool, by itself (it stops fwupd's daemon,
     # which can't be started any more at shutdown; it finds the EFI partition through udisks2, which this unit stops
     # before); its own checks stand (on battery below its level it refuses: tried again at the next shutdown). A UEFI or
     # BIOS update is staged, applied at the next boot. --assume-yes: its questions (a device's warning) answered, never
@@ -147,6 +150,18 @@ if [[ ${1:-} == --install ]]; then
     fi
     # (the packages only with their time left: a firmware update that took long puts them off to the next shutdown)
     ((SECONDS <= stop - packages)) || skip "the firmware update took long: the packages at the next shutdown"
+    # Nor on a battery nearly empty (a laptop off its charger, below 15%: a low-battery shutdown, or one it may not last
+    # through): a power cut mid-install leaves packages half in, which pacman doesn't undo. Left for a shutdown on AC
+    # power or with more charge. The highest of the computer's own batteries (not a mouse's: scope Device)
+    on_battery='' charge=0
+    for s in /sys/class/power_supply/*; do
+        [[ $(cat "$s/type" 2>/dev/null) == Battery && $(cat "$s/scope" 2>/dev/null) != Device ]] || continue
+        c=$(cat "$s/capacity" 2>/dev/null)
+        [[ $c =~ ^[0-9]+$ ]] || continue
+        charge=$((c > charge ? c : charge))
+        [[ $(cat "$s/status" 2>/dev/null) != Discharging ]] || on_battery=1
+    done
+    [[ -z $on_battery ]] || ((charge >= 15)) || skip "on battery, nearly empty ($charge percent): at a shutdown on AC power"
     # Only what a finished download brought (its mark, "complete"): one cut off (its 2 h, a shutdown during it) has
     # lists newer than the packages it got, and installing from them would download the rest at shutdown
     [[ -e $db/complete ]] || skip "the boot's download didn't finish"
@@ -170,17 +185,27 @@ if [[ ${1:-} == --install ]]; then
     # where newer than pacman's: by the mirror's time (the download's and pacman's own sync keep it; cp -p here too),
     # or pacman's is still the one this put there (by content: copied before -p, its time was the copy's, and a list
     # downloaded the next day looked older and was skipped). Not when the Updates app synced newer ones since. The ones
-    # replaced kept aside
+    # replaced kept aside first, every one, and on disk (sync) before the first is replaced and the install marked: a
+    # power cut from then on finds them whole at the next boot. One that can't be kept (a full disk): nothing replaced,
+    # nothing installed (it went on, and a failed install left pacman on lists newer than its packages)
     rm -rf "$prev"
-    mkdir -p "$prev" "$au/copied"
-    touch "$au/installing"
+    mkdir -p "$prev" "$au/copied" || skip "pacman's package lists couldn't be kept aside (a full disk?)"
+    new=()
     for f in "$db"/sync/*.db; do
         name=${f##*/}
         dst=/var/lib/pacman/sync/$name
         ! cmp -s "$f" "$dst" || continue
         [[ $f -nt $dst || $(sha256sum <"$dst" 2>/dev/null) == "$(cat "$au/copied/$name.sum" 2>/dev/null)" ]] || continue
-        [[ ! -e $dst ]] || cp -a "$dst" "$prev/"
-        [[ ! -e $dst.sig ]] || cp -a "$dst.sig" "$prev/"
+        for x in "$dst" "$dst.sig"; do
+            [[ ! -e $x ]] || cp -a "$x" "$prev/" || skip "pacman's package lists couldn't be kept aside (a full disk?)"
+        done
+        new+=("$f")
+    done
+    sync -f "$prev" "$pacdb/sync"
+    touch "$au/installing"
+    for f in "${new[@]}"; do
+        name=${f##*/}
+        dst=/var/lib/pacman/sync/$name
         cp -p "$f" "$dst"
         if [[ -e $f.sig ]]; then cp -p "$f.sig" "$dst.sig"; else rm -f "$dst.sig"; fi
         sha256sum <"$dst" >"$au/copied/$name.sum"
