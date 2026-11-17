@@ -25,7 +25,7 @@ Laptop settings and lighting are in a separate repo: **legion-control-linux**.
    meta package, from the `[agros]` repo, alongside CachyOS's base. pacman puts in exactly the final set of packages
    in one go; nothing is installed only to be taken away again, and nothing is built during the install.
 2. Reboot and log in. At your first login, `caelestia-start` builds Caelestia's overlay and sets its wallpaper and
-   colours before the shell starts (started as the session starts, by `caelestia-prepare.service`, so the shell comes
+   colours before the shell starts (done by `caelestia-prepare.service` before Hyprland starts, so the shell comes
    up at once; `agros-welcome` does both if that failed, and moves the shell onto the overlay), and
    `agros-welcome` does the rest of what's per user: LibreWolf's settings, the Spotify, Nuvio and ArtCraft Flatpaks with Spicetify, VSCodium's extensions
    and Claude Code's plugins.
@@ -395,9 +395,10 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
 - **`.local/bin/caelestia-start`**: starts Caelestia at login (Caelestia's `execs.lua` runs it, so set by
   `agros-hyprland-settings`), running `caelestia-overlay` first (at every login: it rebuilds only what's out of date,
   so one an update left waiting for a game is made then). `caelestia-start --prepare` (`caelestia-prepare.service`,
-  `agros-scripts`' user unit in `graphical-session-pre.target`) does that build, and a first login's wallpaper and
-  colours, alongside Hyprland's own start; the run at Hyprland's start waits for it on the overlay's lock and starts
-  the shell at once (built first there, the live USB's installer window came up before the bar). Each start logged in
+  `agros-scripts`' user unit in `graphical-session-pre.target`, which uwsm starts Hyprland after) does that build, and
+  a first login's wallpaper and colours, before Hyprland starts (at most a minute: then Hyprland starts and the run
+  there does what's left), so the run at Hyprland's start starts the shell at once (built there, the live USB's
+  installer window came up before the bar). Each start logged in
   `~/.local/state/agros/caelestia-start.log`. A shell that never loads its config on the overlay's changes (Quickshell
   stays running with nothing on screen when a part can't be created: AgrOS's changes on a Caelestia or Quickshell other
   than the one CI checked) is started again without them (`caelestia-restart --without-changes`, below), not left with
