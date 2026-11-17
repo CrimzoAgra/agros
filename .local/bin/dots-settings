@@ -15,7 +15,7 @@ The list of settings, their defaults and how each one applies: ~/.local/share/do
                                      caelestia (rebuild and restart it), mouse-dpi (set it on the mouse); lutris changes
                                      apply when Lutris next starts. Prints "deferred" when hypr or caelestia waits
                                      for a game to close
-  dots-settings lua                  write settings.lua again (Hyprland's config does when the schema is newer)
+  dots-settings lua                  write settings.lua again (Hyprland's config does when the schema changed)
 A setting with "get"/"set" shell commands in the schema lives elsewhere (the window mode: ~/.local/state/window-mode);
 "set" gets the value in $VALUE. A group with "from" lists the changes of a patch that can be turned off, from the
 patch itself (patch.py --list), so a new one shows without editing the schema; "from": "autostart" lists the apps
@@ -39,6 +39,7 @@ hypr-vars.lua like its shortcuts. "from": "screens" lists the connected screens'
 scale, position, enabled; screens.main), read by user/monitors.lua; "from": "binds" the shortcuts no setting changes
 (Hyprland's list of binds), to show and to find clashes with."""
 import fcntl
+import hashlib
 import json
 import math
 import os
@@ -665,8 +666,17 @@ def write_lua(settings):
     # (its own temporary file: "lua", run by Hyprland's config, and a "set" at once wrote the same one, and could leave
     # half of each; UTF-8, as its strings keep their non-ASCII, whatever the locale)
     tmp = f"{CONFIG}/settings.lua.{os.getpid()}.tmp"
+    # The schema's checksum (md5sum's) on its second line: hypr-user.lua writes this again when the schema's differs (an
+    # update). Not by the files' times: a package's files carry its build's, so a setting changed after the build left
+    # this the newer file, and the update's new settings nil
+    try:
+        with open(SCHEMA, "rb") as f:
+            schema_sum = hashlib.md5(f.read()).hexdigest()
+    except OSError:
+        schema_sum = ""
     with open(tmp, "w", encoding="utf-8") as f:
         f.write("-- Written by ~/.local/bin/dots-settings from settings.json: change settings in the Settings app\n")
+        f.write(f"-- schema md5 {schema_sum}\n")
         f.write("return {\n" + "\n".join(lines) + "\n}\n")
     os.replace(tmp, f"{CONFIG}/settings.lua")
 
