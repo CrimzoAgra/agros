@@ -25,7 +25,9 @@ end
 local scheme, vars = module("scheme.current"), module("variables")
 for k, v in pairs({ surfaceContainer = "1f1f25", onSurface = "e4e1e9", surfaceContainerHighest = "35343a",
                     error = "ffb4ab", onError = "690005" }) do scheme[k] = scheme[k] or v end
-local alpha = string.format("%02x", math.floor((vars.windowOpacity or 1) * 255))
+-- (from 0 to 1 whatever it is: a hand edit's 1.5 made three digits, a colour Hyprland can't read, and text that isn't
+-- a number an error that stopped this file)
+local alpha = string.format("%02x", math.floor(math.max(0, math.min(1, tonumber(vars.windowOpacity) or 1)) * 255))
 -- This bar is the only set of window buttons: GTK apps (LibreWolf too, and any installed later) draw none, as the GTK
 -- button layout has none (agros-welcome: window_buttons); VSCodium's are hidden (window.controlsStyle); Electron and Qt apps
 -- draw none under Hyprland unless they draw their own title bar. Apps that can't hide theirs get no bar from here (a
