@@ -76,13 +76,17 @@ cat >"$t/bin/flatpak" <<F
 case "\$*" in
     list*) printf 'com.x.App\tapp-origin\tuser\ncom.x.Sys\tsys-origin\tsystem\n' ;;
     *--show-location*) echo "$t/app" ;;
+    *--show-metadata*) cat "$t/oldmeta" ;;
     info*) echo '  Version: 1.0' ;;
     install*) echo "flatpak \$*" >>"$t/installs" ;;
     build-import-bundle*) echo "app/\${REF:-\$(basename "\$(dirname "\$2")")}/x86_64/stable" >"\$2/refs" ;;
 esac
 F
+# (the metadata of the version installed, oldmeta, and of the file's, newmeta: the same access here)
+printf '[Application]\nname=com.x.App\nruntime=org.x.Platform/x86_64/1\n\n[Context]\nshared=network;\n' >"$t/oldmeta"
+cp "$t/oldmeta" "$t/newmeta"
 # shellcheck disable=SC2016  # (the stand-in's)
-stub ostree 'case $1 in refs) cat "${2#--repo=}/refs" ;; esac'
+stub ostree 'case $1 in refs) cat "${2#--repo=}/refs" ;; cat) cat "'"$t"'/newmeta" ;; esac'
 sum=$(echo bundle | sha256sum | cut -d' ' -f1)
 cat >"$t/bin/curl" <<C
 #!/bin/sh
@@ -103,6 +107,27 @@ out=$(fbu --fetch "$t/fetched" 2>&1) || fail "--fetch failed: $out"
 mkdir -p "$t/fetched-other"
 out=$(REF=com.evil.App fbu --fetch "$t/fetched-other" 2>&1) && fail "--fetch took another app's file: $out"
 [[ ! -s $t/fetched-other/fetched && $out == *"is com.evil.App, not com.x.App"* ]] || fail "another app's file not refused, said: $out"
+# A new version asking for more access than the one installed (your whole home, Flatpak's own bus: out of its sandbox):
+# not taken at boot (flatpak install -y would grant it unasked), said to be updated from Updates
+printf '%s\n' '[Application]' 'name=com.x.App' '[Context]' 'shared=network;' 'filesystems=host;' \
+    '[Session Bus Policy]' 'org.freedesktop.Flatpak=talk' >"$t/newmeta"
+mkdir -p "$t/fetched-more"
+out=$(fbu --fetch "$t/fetched-more" 2>&1) && fail "--fetch took a version asking for more access: $out"
+[[ ! -s $t/fetched-more/fetched && $out == *"com.x.App: its new version asks for more access ([Context]filesystems=host, [Session Bus Policy]org.freedesktop.Flatpak=talk): update it from Updates"* ]] ||
+    fail "a version asking for more access fetched at boot, or not said: $out"
+# ...from Updates (no --fetch: you started it), installed, what it adds said in its log
+rm -f "$t/installs"
+out=$(FLATPAK_BUNDLE_HELD=1 fbu 2>&1) || true
+[[ $out == *"com.x.App: its new version asks for more access: [Context]filesystems=host, [Session Bus Policy]org.freedesktop.Flatpak=talk"* &&
+    $out == *"com.x.App: updated to 1.1"* ]] && grep -q -- '--user .*--bundle ' "$t/installs" ||
+    fail "Updates didn't install a version asking for more access, or didn't say what it adds: $out / $(cat "$t/installs" 2>/dev/null)"
+rm -f "$t/installs"
+# ...and less (a list's value gone, a "!" taking one away) isn't more: fetched at boot
+printf '%s\n' '[Application]' 'name=com.x.App' '[Context]' 'filesystems=!home;' >"$t/newmeta"
+mkdir -p "$t/fetched-less"
+out=$(fbu --fetch "$t/fetched-less" 2>&1) || fail "--fetch refused a version asking for less access: $out"
+[[ $(cut -f3 "$t/fetched-less/fetched") == com.x.App ]] || fail "a version asking for less access not fetched: $out"
+cp "$t/oldmeta" "$t/newmeta"
 # As root (the boot's own run: here in a user namespace, root in name only), the system-wide one is fetched too, but
 # only from a release with checksums
 if unshare -r true 2>/dev/null; then

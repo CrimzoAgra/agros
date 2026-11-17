@@ -34,18 +34,38 @@ newer() {
 }
 
 # bundle_app <file> <dir>: the app a .flatpak file installs (its ref, read by flatpak itself into a repo of its own in
-# dir, nothing installed)
+# dir, nothing installed); its metadata (the access it asks for) written beside the file, <dir>/.metadata
 bundle_app() {
     local repo ref
     repo=$(mktemp -d "$2/.ref.XXXXXX") && ostree init --repo="$repo" --mode=archive >/dev/null 2>&1 &&
         flatpak build-import-bundle "$repo" "$1" >/dev/null 2>&1 && ref=$(ostree refs --repo="$repo" 2>/dev/null) || return 1
-    ref=$(grep -m1 '^app/' <<<"$ref") && ref=${ref#app/} && [[ -n ${ref%%/*} ]] && echo "${ref%%/*}"
+    ref=$(grep -m1 '^app/' <<<"$ref") && ostree cat --repo="$repo" "$ref" /metadata >"$2/.metadata" 2>/dev/null &&
+        [[ -s $2/.metadata ]] && ref=${ref#app/} && [[ -n ${ref%%/*} ]] && echo "${ref%%/*}"
+}
+
+# access: the access a Flatpak metadata file (stdin) grants, one "[group]key=value" a line: its [Context] (each of a
+# list's values on its own), its bus policies and USB devices
+access() {
+    awk '/^\[/ { g = $0; next }
+        g ~ /^\[(Context|Session Bus Policy|System Bus Policy|USB Devices)\]$/ && !/^#/ && (i = index($0, "=")) {
+            k = substr($0, 1, i - 1); v = substr($0, i + 1); gsub(/^ +| +$/, "", k); gsub(/^ +| +$/, "", v)
+            if (g ~ /Bus Policy/) { print g k "=" v; next }
+            n = split(v, a, ";"); for (j = 1; j <= n; j++) if (a[j] != "") print g k "=" a[j]
+        }' | LC_ALL=C sort -u
+}
+
+# more_access <user|system> <app id> <new metadata>: what the new version asks for that the one installed doesn't have
+# (a "!" taking access away isn't more), ", " between; fails when the installed one's can't be read
+more_access() {
+    local old
+    old=$(flatpak info --"$1" --show-metadata "$2" 2>/dev/null) && [[ -n $old ]] || return 1
+    LC_ALL=C comm -13 <(access <<<"$old") <(access <"$3") | awk '!/=!/' | paste -sd, | sed 's/,/, /g'
 }
 
 # fetch_from <release JSON> <dir> <user|system> [app id]: download its Linux x86_64 .flatpak into dir, verified (by
 # the release's checksums, required for a system-wide one; and that it's the app given); prints "<app id>\t<path>"
 fetch_from() {
-    local url want file got need=()
+    local url want file got more need=()
     url=$(asset_url "$1" flatpak)
     [[ -n $url ]] || { echo "no Linux .flatpak in the latest release" >&2; return 1; }
     [[ $3 != system ]] || need=(required)
@@ -53,6 +73,18 @@ fetch_from() {
     file=$2/${url##*/}
     got=$(bundle_app "$file" "$2") || { echo "${url##*/}: which app it is couldn't be read, not installed" >&2; return 1; }
     [[ -z ${4:-} || $got == "$4" ]] || { echo "${url##*/} is $got, not $4: not installed" >&2; return 1; }
+    # An update asking for more access than the version installed (a release of the same app made to read your home or
+    # talk to Flatpak itself, out of its sandbox): flatpak install -y would grant it unasked. Not at boot (--fetch);
+    # from Updates, which you start, installed with what it adds said in its log
+    if [[ -n ${4:-} ]]; then
+        more=$(more_access "$3" "$4" "$2/.metadata") ||
+            { echo "$4: the access the installed version has couldn't be read, not updated" >&2; return 1; }
+        if [[ -n $more && -n $fetch ]]; then
+            echo "$4: its new version asks for more access ($more): update it from Updates, where you can review it" >&2
+            return 1
+        fi
+        [[ -z $more ]] || echo "$4: its new version asks for more access: $more" >&2
+    fi
     printf '%s\t%s\n' "$got" "$file"
 }
 
