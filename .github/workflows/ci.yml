@@ -200,12 +200,14 @@ jobs:
           git config --system init.defaultBranch main
           m=https://mirror.cachyos.org/repo/x86_64/cachyos
           curl -fsSL -o /tmp/keyring.pkg "$m/$(curl -fsSL "$m/" | grep -o 'cachyos-keyring-[^"]*\.pkg\.tar\.zst' | sort -V | tail -1)"
-          curl -fsSL -o /tmp/mirrorlist.pkg "$m/$(curl -fsSL "$m/" | grep -o 'cachyos-mirrorlist-[^"]*\.pkg\.tar\.zst' | sort -V | tail -1)"
           mkdir /tmp/k && bsdtar -xf /tmp/keyring.pkg -C /tmp/k
           pacman-key --add /tmp/k/usr/share/pacman/keyrings/cachyos.gpg
           pacman-key --lsign-key 882DCFE48E2051D48E2562ABF3B607488DB35A47
-          pacman -U --noconfirm /tmp/keyring.pkg /tmp/mirrorlist.pkg
-          sed -i '/^\[core\]/i [cachyos]\nInclude = /etc/pacman.d/cachyos-mirrorlist\n' /etc/pacman.conf
+          # (the keyring and the mirror list then installed from [cachyos] itself, their signatures by that key required:
+          # pacman -U of a downloaded file checked none, and ran its install script as root)
+          sed -i '/^\[core\]/i [cachyos]\nServer = '"$m"'\n' /etc/pacman.conf
+          pacman -Sy --noconfirm cachyos-keyring cachyos-mirrorlist
+          sed -i "s|^Server = $m\$|Include = /etc/pacman.d/cachyos-mirrorlist|" /etc/pacman.conf
           pacman -Sy --noconfirm
       - uses: actions/checkout@v7
         with:
@@ -367,12 +369,14 @@ jobs:
         run: |
           m=https://mirror.cachyos.org/repo/x86_64/cachyos
           curl -fsSL -o /tmp/keyring.pkg "$m/$(curl -fsSL "$m/" | grep -o 'cachyos-keyring-[^"]*\.pkg\.tar\.zst' | sort -V | tail -1)"
-          curl -fsSL -o /tmp/mirrorlist.pkg "$m/$(curl -fsSL "$m/" | grep -o 'cachyos-mirrorlist-[^"]*\.pkg\.tar\.zst' | sort -V | tail -1)"
           mkdir /tmp/k && bsdtar -xf /tmp/keyring.pkg -C /tmp/k
           pacman-key --add /tmp/k/usr/share/pacman/keyrings/cachyos.gpg
           pacman-key --lsign-key 882DCFE48E2051D48E2562ABF3B607488DB35A47
-          pacman -U --noconfirm /tmp/keyring.pkg /tmp/mirrorlist.pkg
-          sed -i '/^\[core\]/i [cachyos]\nInclude = /etc/pacman.d/cachyos-mirrorlist\n' /etc/pacman.conf
+          # (the keyring and the mirror list then installed from [cachyos] itself, their signatures by that key required:
+          # pacman -U of a downloaded file checked none, and ran its install script as root)
+          sed -i '/^\[core\]/i [cachyos]\nServer = '"$m"'\n' /etc/pacman.conf
+          pacman -Sy --noconfirm cachyos-keyring cachyos-mirrorlist
+          sed -i "s|^Server = $m\$|Include = /etc/pacman.d/cachyos-mirrorlist|" /etc/pacman.conf
           pacman -Sy --noconfirm
       - name: Install check (agros-desktop resolves in one transaction, none of what AgrOS leaves out; with CachyOS's CPU-optimised repos too)
         run: |
