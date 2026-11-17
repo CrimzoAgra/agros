@@ -212,6 +212,12 @@ want=$(printf '%s\n' 'GRUB_DEFAULT=0' 'GRUB_TIMEOUT=1' "GRUB_CMDLINE_LINUX_DEFAU
     fail "GRUB's loading lines left, or no .agros-orig"
 grep -qx "grub-mkconfig -o $r/boot/grub/grub.cfg" <<<"$(calls)" && grep -qx 'efibootmgr -q -t 0' <<<"$(calls)" ||
     fail "boot-menu's GRUB calls: $(calls)"
+# A settings file with no newline after its last line (an editor that leaves it off): the settings it adds on lines of
+# their own, not run onto that one (GRUB_TIMEOUT=1GRUB_TIMEOUT_STYLE=hidden)
+printf '%s' 'GRUB_TIMEOUT=5' >"$r/etc/default/grub"; rm -f "$r/etc/default/grub.agros-orig"
+bash "$b/boot-menu" >/dev/null || fail "boot-menu on a GRUB file with no last newline failed"
+grep -qx 'GRUB_TIMEOUT=1' "$r/etc/default/grub" && grep -qx 'GRUB_TIMEOUT_STYLE=hidden' "$r/etc/default/grub" ||
+    fail "a setting run onto the file's last line: $(cat "$r/etc/default/grub")"
 # The install: agros-boot's package step runs before GRUB is set up (no /boot/grub/grub.cfg, /etc/default/grub the grub
 # package's own): nothing done, no .agros-orig, an empty note. The installer's own step then (after its grubcfg wrote
 # CachyOS's settings) runs boot-menu: the .agros-orig is CachyOS's, the run noted. The first upgrade (boot-menu unchanged)

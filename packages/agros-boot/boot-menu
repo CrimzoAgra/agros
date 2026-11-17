@@ -82,6 +82,9 @@ boot_menu() {
     # (as it was before AgrOS, once: its own name, not a .bak of yours; agros-boot's removal puts its settings back)
     cp -n "$conf" "$conf.agros-orig"
     local kv key value
+    # (a last line with no newline after it, as some editors leave it, ended first: a setting added after it was run onto
+    # it, GRUB_TIMEOUT=5GRUB_TIMEOUT_STYLE=hidden, then that whole line replaced by the next key's)
+    [[ ! -s $conf || -z $(tail -c1 "$conf") ]] || echo >>"$conf"
     # (AgrOS's theme: agros-boot's /usr/share/grub/themes/agros, in place of CachyOS's)
     for kv in GRUB_TIMEOUT_STYLE=hidden GRUB_TIMEOUT=1 GRUB_DEFAULT=0 GRUB_SAVEDEFAULT=false GRUB_DISABLE_OS_PROBER=false \
         GRUB_THEME=/usr/share/grub/themes/agros/theme.txt; do
