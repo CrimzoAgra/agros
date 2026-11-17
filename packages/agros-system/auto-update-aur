@@ -202,7 +202,8 @@ fi
 # ---- Root's part
 db=${1:?usage: auto-update-aur <dbpath>}
 rm -rf "$aur"
-mkdir -p "$aur/log"
+# (the steps' logs: what the builds printed, the paths and names of every user's AUR apps: root's and the admins' alone)
+mkdir -p "$aur" && mkdir -m 750 "$aur/log" && { chgrp wheel "$aur/log" 2>/dev/null || true; }
 # fail <why>: none built; drop <base> <why>: that one not built, the others go on
 fail() { echo "AUR: $1"; echo "$1" >>"$aur/failed"; touch "$aur/planned"; exit 1; }
 drop() { echo "AUR: $1: $2"; echo "$1: $2" >>"$aur/failed"; }
@@ -236,13 +237,47 @@ fi
 args=()
 for p in "${foreign[@]}" "${rebuild[@]}"; do args+=(--data-urlencode "arg[]=$p"); done
 info=$(curl -fsS --connect-timeout 10 -m 120 -G "https://aur.archlinux.org/rpc/v5/info" "${args[@]}" |
-    jq -r '.results[] | [.Name, .PackageBase, .Version] | @tsv') || fail "the AUR couldn't be reached"
+    jq -r '.results[] | [.Name, .PackageBase, .Version, (.Maintainer // "-")] | @tsv') || fail "the AUR couldn't be reached"
 mapfile -t ignored < <(pacman-conf --config "$conf" IgnorePkg 2>/dev/null)
+# The foreign apps are built unreviewed (the user's choice), but not where the AUR's package may not be the one they
+# chose: one a signed repository installed (pacman's "Validated By": Signature; foreign only since that repository
+# dropped it, the AUR's of that name is someone else's build), or one whose AUR maintainer changed since its last build
+# here (adopted by another). Those wait for Updates, where its build files can be reviewed (dotfiles-check says so, from
+# failed and wanted). Kept across runs: the maintainer each base had at its last build here (aur-maintainers, "<base>
+# <maintainer>": the first one seen taken as it is), and a change waiting (aur-maintainer-changed, "<base> <maintainer>
+# <version installed then>"): once that version is replaced (updated from Updates), the new maintainer is taken
+maint=$au/aur-maintainers changed=$au/aur-maintainer-changed
+from_repo=''
+((${#foreign[@]} == 0)) || from_repo=$(LC_ALL=C pacman -Qi --dbpath "$db" -- "${foreign[@]}" 2>/dev/null |
+    awk -F' *: ' '$1 == "Name" { n = $2 } $1 == "Validated By" && $2 ~ /Signature/ { print n }')
+# field <file> <base> <n>: word <n> of its line; set_line <file> <base> [<rest>]: its line replaced (no <rest>: removed)
+field() { awk -v b="$2" -v n="$3" '$1 == b { print $n; exit }' "$1" 2>/dev/null; }
+set_line() { { awk -v b="$2" '$1 != b' "$1" 2>/dev/null; [[ -z ${3:-} ]] || echo "$2 $3"; } >"$1.new" && mv -f "$1.new" "$1"; }
+# guard <name> <base> <maintainer> <version installed>: why not to build it unreviewed, if so (exit 1)
+guard() {
+    local was
+    if grep -qxF -- "$1" <<<"$from_repo"; then
+        echo "$1 came from a repository that no longer has it, and the AUR's $1 is someone else's: update it from Updates, where you can review it"
+        return 1
+    fi
+    was=$(field "$maint" "$2" 2)
+    [[ -n $was && $was != "$3" ]] || return 0
+    if [[ $(field "$changed" "$2" 2) == "$3" && $(field "$changed" "$2" 3) != "$4" ]]; then
+        set_line "$changed" "$2"  # (updated from Updates since: the new maintainer taken, recorded at its build)
+        return 0
+    fi
+    [[ $(field "$changed" "$2" 2) == "$3" ]] || set_line "$changed" "$2" "$3 $4"
+    echo "its AUR maintainer changed ($was to $3): update it from Updates, where you can review it"
+    return 1
+}
 # (pins: a rebuild of one [agros] publishes, at the version installed: what CI built and tested, never the AUR's newest,
 # which may be untested or one CI held back. --fetch's <base>=<version>)
-declare -A bases=() held_bases=() pins=()
-while IFS=$'\t' read -r name base ver; do
+declare -A bases=() held_bases=() pins=() guarded=() maintainer=()
+while IFS=$'\t' read -r name base ver m; do
     [[ -n $name ]] || continue
+    # (a name as the AUR allows them; an orphan's none, "-")
+    m=${m//[^A-Za-z0-9@._+-]/}
+    m=${m:--}
     [[ $name =~ $name_re && $base =~ $name_re && $ver =~ ^[A-Za-z0-9.:_+~-]+$ ]] || fail "the AUR named a package oddly"
     have=$(pacman -Q "$name" 2>/dev/null | cut -d' ' -f2)
     for g in "${ignored[@]}"; do
@@ -267,9 +302,20 @@ while IFS=$'\t' read -r name base ver; do
             echo "$name $have" >>"$aur/wanted"
         else
             echo "$name $ver" >>"$aur/wanted"
+            # (a foreign one: [agros]'s are CI's, built from build files it checked)
+            if ! grep -qxF -- "$name" <<<"$agros"; then
+                maintainer[$base]=$m
+                [[ -n ${guarded[$base]:-} ]] || guarded[$base]=$(guard "$name" "$base" "$m" "$have")
+            fi
         fi
     fi
 done <<<"$info"
+# (its whole base, as for one held back; still in wanted, so dotfiles-check says it waits)
+for b in "${!guarded[@]}"; do
+    [[ -n ${guarded[$b]} && -n ${bases[$b]:-} ]] || continue
+    drop "$b" "${guarded[$b]}"
+    unset "bases[$b]"
+done
 for b in "${!held_bases[@]}"; do
     [[ ${held_bases[$b]} == said || -z ${bases[$b]:-} ]] ||
         drop "$b" "${held_bases[$b]}, of the same build, is held back by pacman.conf (IgnorePkg): not built"
@@ -464,6 +510,7 @@ for b in "${order[@]}"; do
         continue
     fi
     printf '%s\n' "${made[@]}" >>"$aur/built"
+    [[ -z ${maintainer[$b]:-} ]] || set_line "$maint" "$b" "${maintainer[$b]}"
     box run --ro "$aur/repo" -- timeout 30m "$self" --unpack "$dir/stage" "${got[@]}" >>"$aur/log/unpack.log" 2>&1
 done
 finish
