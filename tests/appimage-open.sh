@@ -120,7 +120,7 @@ if command -v mksquashfs >/dev/null && command -v unsquashfs >/dev/null; then
     cp "$t/img/usr/share/applications/demo.desktop" "$t/sq/usr/share/applications/"
     ln -s usr/share/applications/demo.desktop "$t/sq/demo.desktop"; echo png >"$t/sq/demo.png"
     mksquashfs "$t/sq" "$t/sq.img" -quiet -noappend >/dev/null
-    cat "$(command -v true)" "$t/sq.img" >"$t/real.AppImage"; chmod +x "$t/real.AppImage"
+    cat "$(type -P true)" "$t/sq.img" >"$t/real.AppImage"; chmod +x "$t/real.AppImage"
     HOME=$t/real-home PATH=$t/bin:$PATH python3 "$here/.local/bin/appimage-open" --install "$t/real.AppImage" >/dev/null 2>&1 ||
         fail "an AppImage not read with unsquashfs"
     grep -qx "Exec=$t/real-home/Applications/demo.AppImage %U" "$t/real-home/.local/share/applications/demo.desktop" &&
