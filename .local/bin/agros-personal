@@ -130,6 +130,10 @@ personal_save() {
     # the weather's place (a file of its own) and Claude Code's files, staged in your runtime folder (in memory, yours
     # only) and gone after
     staged=$(mktemp -d "${XDG_RUNTIME_DIR:-/tmp}/personal.XXXXXX")
+    # (gone however this ends: a step failing (set -e) left it there, a big ~/.claude's copy in memory and the runtime
+    # folder, which the desktop needs room in, full)
+    # shellcheck disable=SC2064  # (its path now: $staged is this function's own, gone by the time the script ends)
+    trap "rm -rf $(printf %q "$staged")" EXIT
     local onstage=(weather-location)
     jq -r '.services.weatherLocation // empty' "$HOME/.config/caelestia/shell.json" 2>/dev/null >"$staged/weather-location" || true
     if [[ -d $HOME/.claude ]]; then
@@ -137,7 +141,8 @@ personal_save() {
         for f in "$HOME"/.claude/* "$HOME"/.claude/.[!.]*; do
             [[ -e $f ]] || continue
             for s in "${PERSONAL_CLAUDE_SKIP[@]}"; do [[ ${f##*/} == "$s" ]] && continue 2; done
-            cp -a "$f" "$staged/.claude/"
+            cp -a "$f" "$staged/.claude/" ||
+                { echo "Claude Code's files couldn't be copied into ${staged%/*} (too big for it?): nothing saved."; return 1; }
         done
     fi
     [[ -f $HOME/.claude.json ]] && { cp -p "$HOME/.claude.json" "$staged/"; onstage+=(.claude.json); }
@@ -183,6 +188,7 @@ EOF
         return 1
     fi
     rm -rf "$staged"
+    trap - EXIT
     echo "Saved ($(du -h "$drive/$PERSONAL_FILE" | cut -f1)). agros-personal brings it back with the drive plugged in."
 }
 
