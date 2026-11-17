@@ -1302,6 +1302,7 @@ local open, getenv = io.open, os.getenv
 local function run(vendor, shim, env)
     local v = open(getenv("SYSFS") .. "/class/drm/card0/device/vendor", "w"); v:write(vendor .. "\n"); v:close()
     io.open = function(p, ...)
+        if p == "/proc/self/maps" then MAPS_READ = true end
         if p == "/proc/self/maps" and shim then
             return { read = function() return "7f00 r-xp /usr/lib/agros/vmw-dmabuf.so\n" end, close = function() end }
         end
@@ -1322,8 +1323,11 @@ check("VMware without the shim: not in the session's environment as the config l
 check("VMware without the shim: not for Hyprland's children", apps)
 loaded, apps = run("0x15ad", true, {})
 check("VMware with the shim: set", loaded == 0 and not apps)
+MAPS_READ = false
 loaded, apps = run("0x10de", false, {})
 check("another GPU: set", loaded == 0 and not apps)
+-- (nor Hyprland's maps read there: the config loads again at every reload)
+check("another GPU: Hyprland's maps read", not MAPS_READ)
 loaded = run("0x15ad", false, { DOTS_VERIFY_CONFIG = "1" })
 check("a check of the config: put in the session's environment", loaded == 0)
 loaded, apps = run("0x15ad", false, { LIBGL_ALWAYS_SOFTWARE = "1" })

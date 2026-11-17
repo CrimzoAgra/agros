@@ -61,7 +61,8 @@ if table.concat(kept, ":") ~= preload then hl.env("LD_PRELOAD", table.concat(kep
 local f = io.open((os.getenv("SYSFS") or "/sys") .. "/class/drm/card0/device/vendor")
 local vendor = f and f:read("l")
 if f then f:close() end
-local maps = io.open("/proc/self/maps")
+-- (Hyprland's maps read in VMware alone: this file runs again at every reload, on every machine)
+local maps = vendor == "0x15ad" and io.open("/proc/self/maps")
 local shim = maps and maps:read("a"):find("vmw-dmabuf", 1, true)
 if maps then maps:close() end
 local cpu_apps = vendor == "0x15ad" and not shim
