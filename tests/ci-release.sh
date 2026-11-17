@@ -82,10 +82,12 @@ out=$(MISSING=${gated[1]} gate) && fail "a gated package Arch doesn't have passe
 
 # The test job's approved versions, after the tests
 step test "Approved upstream versions" "$t/approve"
-approve() { (cd "$here" && PATH=$t/bin:$PATH bash -eo pipefail "$t/approve" 2>&1); }
+approve() { : >"$t/gh-approved" && (cd "$here" && GITHUB_OUTPUT=$t/gh-approved PATH=$t/bin:$PATH bash -eo pipefail "$t/approve" 2>&1); }
 out=$(RESULT=ok approve) || fail "the approved versions not made: $out"
 [[ $(cat "$t/approved") == "$(printf '%s 0.58.0\n' "${gated[@]}")" ]] ||
     fail "not every gated package approved at its version, without its pkgrel: $(paste -sd, "$t/approved")"
+[[ $(cat "$t/gh-approved") == "$(echo 'approved<<EOF'; cat "$t/approved"; echo EOF)" ]] ||
+    fail "the approved versions not the job's output, which the release reads: $(paste -sd, "$t/gh-approved")"
 out=$(RESULT=hold-agros V=1:2.0-1.1 approve) && grep -qx "${gated[0]} 1:2.0" "$t/approved" ||
     fail "a hold of AgrOS's builds (today's Arch passed) approved nothing, or an epoch lost: $out / $(paste -sd, "$t/approved")"
 out=$(RESULT=hold-upstream approve) && [[ -e $t/approved && ! -s $t/approved ]] ||
