@@ -867,7 +867,8 @@ brings each change; nothing to run by hand).
     package goes to an approved version (or only a rebuild of the same one, as for a library's new soname), else as it
     is (held together, and said: "waits for AgrOS's check"); a library whose update would break a held one held with it,
     and a package whose update needs one held (one rebuilt for a held library's new version; pacman's
-    own dry run says which). Held, it's held by the gate's Include even when `pacman.conf` lost its own (a merged
+    own dry run says which); and the set, approved too, whose update would break a package not held (`agros-hyprbars`
+    built for the last Hyprland series): it waits for that one's rebuild, rather than the whole update failing). Held, it's held by the gate's Include even when `pacman.conf` lost its own (a merged
     `.pacnew`). Every place that works out what to update goes through it, on the lists it uses: the boot's download
     and AUR builds (one needing a held package, or a newer version of one, isn't built: said; one `pacman.conf` itself
     holds back, `IgnorePkg`, isn't built either, nor the others of its build, and isn't counted as waiting; one a new Qt
@@ -897,14 +898,17 @@ brings each change; nothing to run by hand).
 - **`.local/bin/update-apps`**: updates everything (system and AUR apps with `paru` through the upstream gate, then each kind
   `update-kinds` runs: firmware with fwupd, Flatpaks, AppImages, Capri, Proton builds, developer tools), like at boot.
   `--list` is what the Updates app shows (`update-kinds --list`); every 6 hours (`update-check.timer`) it checks, and when
-  updates are waiting a notification's "Update now" opens the Updates app and starts. With no terminal (the Updates
+  updates are waiting a notification's "Update now" opens the Updates app and starts (an admin's, in `wheel`: an
+  account that can't sudo isn't offered it, nor `agros-welcome`'s system part; the boot's update covers it). With no terminal (the Updates
   app), sudo asks for the password in a dialog (`.local/bin/askpass`, zenity, as `SUDO_ASKPASS`). VSCodium's own
   updater (which only opens the website) is off
 - **The boot update** (`agros-system`: `packages/agros-system/auto-update`, for every account): updates everything at
   every boot. Then: Flatpaks (system-wide and yours), AppImages, Proton builds and developer tools (`update-kinds
   --boot`, as each user; Capri's new release only looked for: `capri-update --check`). Downloaded then and installed at
   shutdown, after a Snapper snapshot (installed under the running session, a new NVIDIA driver or kernel broke games and
-  USB devices until a reboot): the system, kernel and CachyOS gaming packages, the AUR apps, and firmware.
+  USB devices until a reboot): the system, kernel and CachyOS gaming packages, the AUR apps, and firmware. The keyrings
+  (Arch's, CachyOS's, AgrOS's) are downloaded alone first and installed first: a key expired on the machine doesn't stop
+  the rest's download for good.
   - **AUR apps** (`packages/agros-system/auto-update-aur`, after the download): those with a newer AUR version (not in
     a repo: `paru -Qua`'s), and, when the download brings a new version of a runtime that breaks what's built on it,
     those built on it (from the AUR or `[agros]`, not a `-bin`, not rebuilt by their repo in the same download). The
@@ -1038,12 +1042,16 @@ brings each change; nothing to run by hand).
   `dotfiles-check` says an install at shutdown that failed or was held back (until one goes through), AUR builds, AUR
   apps the install left out, or a firmware update that failed, and 3 shutdowns in a row with nothing installed, with the last one's reason (the boot's
   download didn't finish: only a finished one is installed; something else using pacman still held its lock; a soft
-  reboot, which keeps the kernel running; on battery, nearly empty: below 15%, discharging; pacman's lists couldn't be
+  reboot, which keeps the kernel running; with pacman's error when the download failed; on battery, nearly empty: below 15%, discharging; pacman's lists couldn't be
   kept aside, a full disk). An install cut off has pacman's lists put back, and its lock removed, at the
   next boot or install. The boot's run (download, Flatpaks, AUR builds and all, everything it started: nothing it runs
   as a user leaves its unit) stops after 4 h; a Flatpak from a file isn't reinstalled with less than 35 min of that
   left (cut off between its removal and install, the app would be gone). The Updates app waits only for its downloads. The install has 60 min (shutdown's own limit is made 75 min for it); `paccache.timer` keeps pacman's
   cache from growing for good
+- **`agros-boot`** also: a snapshot booted from the menu is made writable in RAM (`agros-snapshot-overlay`, a
+  systemd boot image's hook, added by `/etc/mkinitcpio.conf.d/91-agros-snapshot-overlay.conf` on a Btrfs root;
+  CachyOS's installer rewrites `HOOKS` without grub-btrfs's, which only busybox images run): read-only, the desktop
+  couldn't log in on it. Limine's own (`sd-btrfs-overlayfs`) counts, and nothing's added twice
 - **`agros-boot`**: hidden boot menu (GRUB or Limine): straight into CachyOS, Esc in the first second shows
   the menu (Windows and snapshots listed). No motherboard wait before the boot loader (`efibootmgr -t 0`; F11 still
   opens its boot menu). An update that changes `boot-menu` applies its settings again, over any of yours (one that

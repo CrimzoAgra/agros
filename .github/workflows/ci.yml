@@ -111,7 +111,7 @@ jobs:
           # The tests (their own .shellcheckrc: what they source followed)
           shellcheck -S warning tests/*.sh tests/fixtures/*.sh
           # (pacman's install scriptlets, mkinitcpio's install hook and drop-in: bash, with no shebang to go by)
-          shellcheck -S warning -s bash packages/*/*.install packages/agros-boot/{plymouth-title-font,mkinitcpio-plymouth.conf}
+          shellcheck -S warning -s bash packages/*/*.install packages/agros-boot/{plymouth-title-font,mkinitcpio-plymouth.conf,mkinitcpio-snapshot-overlay.conf}
           # The PKGBUILDs (bash, sourced by makepkg: its variables set or read by it, its functions run in $srcdir)
           shellcheck -S warning -s bash -e SC2034,SC2154,SC2164 packages/*/PKGBUILD
       - uses: actions/download-artifact@v8
