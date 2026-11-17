@@ -361,7 +361,10 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
     stays while the pointer is over it (`edge_triggers`)
   - Notifications:
     - The sidebar slides down from the top when you hover the top edge above it, with notifications only (no
-      divider, ending above the bottom-right panel); Super+K opens it too, merged with the bottom-right panel
+      divider, ending above the bottom-right panel); Super+N (the letter) opens it alone, and Super+K (Caelestia's
+      "show all": the launcher, dashboard, volume slider and bottom-right panel) opens it too, merged with the
+      bottom-right panel. The launcher closing (Esc) closes them all unless hovered (Caelestia's left the bottom-right
+      panel open)
       (a Caelestia with its own shortcut mode for the sidebar, as main has, keeps it: its choice of which opening counts
       as by the key is replaced, as its own counts the top edge's, and as on v2.5.0 the pointer on the sidebar puts it
       back under hover control and the launcher closing closes it unless hovered)

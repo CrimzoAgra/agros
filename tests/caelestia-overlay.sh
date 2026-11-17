@@ -114,6 +114,9 @@ fi
 # The sidebar's shortcut mode: added once on a Caelestia without its own (2.5.0)
 grep -q 'property bool sidebarShortcutActive' /etc/xdg/quickshell/caelestia/modules/drawers/Interactions.qml ||
     [[ $(grep -c 'property bool sidebarShortcutActive' "$i") == 1 ]] || fail "the sidebar's shortcut mode not patched in"
+# Esc (the launcher closing) closes the utilities panel Super+K opened with it, unless hovered: Caelestia's stayed open
+launcher_closed=$(sed -n '/^        function onLauncherChanged() {$/,/^        }$/p' "$i")
+grep -q 'root.screenState.utilities = false' <<<"$launcher_closed" || fail "the launcher closing leaves the utilities panel open"
 # Its grey card hangs from the top border when it slides down from the top: flush with it, top corners square
 c=$dst/modules/sidebar/Content.qml
 { grep -q 'topLeftRadius: 0' "$c" && grep -q 'topRightRadius: 0' "$c" && grep -q 'anchors.topMargin: 0' "$w"; } ||

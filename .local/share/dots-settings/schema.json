@@ -326,7 +326,7 @@
               "type": "choice",
               "open": true,
               "get": "jq -r .variant ~/.local/state/caelestia/scheme.json 2>/dev/null",
-              "options_cmd": "caelestia scheme list -v | awk '{print $0 \"\\t\" toupper(substr($0,1,1)) substr($0,2)}'",
+              "options_cmd": "caelestia scheme list -v | awk 'BEGIN {n[\"tonalspot\"] = \"Tonal spot\"; n[\"fruitsalad\"] = \"Fruit salad\"} {print $0 \"\\t\" ($0 in n ? n[$0] : toupper(substr($0,1,1)) substr($0,2))}'",
               "set": "caelestia scheme set -v \"$VALUE\""
             },
             {
@@ -692,7 +692,7 @@
             {
               "key": "caelestia-shell.utilities.enabled",
               "label": "Quick settings",
-              "description": "Super+K."
+              "description": "The screen's bottom-right corner, or Super+K with the other panels."
             },
             {
               "key": "caelestia-shell.utilities.cards.quickToggles",
@@ -1272,7 +1272,7 @@
       "note": "AgrOS's logo (agros-logo)."
     },
     "caelestia-shell.services.weatherLocation": {
-      "note": "Also set by the place picker (Caelestia's Settings, Language & region), and the time zone can follow it."
+      "note": "Also set by the place picker in Caelestia's own Settings app (its Language & region page, not this app), and the time zone can follow it."
     },
     "caelestia-shell.general.idle.timeouts": {
       "note": "AgrOS's: screen off after 10 minutes, sleep after 30 (5 and 15 on battery)."
