@@ -14,11 +14,14 @@ echo built >>"$HOME/overlay-runs"
 mkdir -p "$HOME/.config/quickshell/caelestia" && touch "$HOME/.config/quickshell/caelestia/shell.qml"
 exit "${FAIL:-0}"
 S
-printf '#!/usr/bin/env bash\necho "caelestia $*" >>"$HOME/started"\n' >"$t/bin/caelestia"
+# (the wallpaper and the scheme each recolour the folder icons, as Caelestia's CLI does: sudo -n papirus-folders)
+# shellcheck disable=SC2016  # (expanded by the stand-ins)
+printf '#!/usr/bin/env bash\necho "caelestia $*" >>"$HOME/started"\ncase $1 in wallpaper | scheme) sudo -n papirus-folders -C "$1" -u ;; esac\n' >"$t/bin/caelestia"
+printf '#!/bin/sh\necho "$*" >>"$HOME/folders"\n' >"$t/bin/sudo"
 # (the shell up at once: not the live one looked for, nor 30 s waited where there's none, CI)
 printf '#!/bin/sh\necho "Config path: /x/quickshell/caelestia/shell.qml"\n' >"$t/bin/qs"
 printf '#!/bin/sh\necho greeter-theme-sync >>"$HOME/started"\n' >"$t/home/.local/bin/greeter-theme-sync"
-chmod +x "$t/home/.local/bin/caelestia-overlay" "$t/bin/caelestia" "$t/bin/qs" "$t/home/.local/bin/greeter-theme-sync"
+chmod +x "$t/home/.local/bin/caelestia-overlay" "$t/bin/caelestia" "$t/bin/sudo" "$t/bin/qs" "$t/home/.local/bin/greeter-theme-sync"
 run() { HOME=$t/home PATH=$t/bin:$PATH "$t/home/.local/bin/caelestia-start"; }
 log=$t/home/.local/state/agros/caelestia-start.log
 
@@ -31,6 +34,10 @@ grep -q '^caelestia scheme set -n dynamic$' "$t/home/started" || fail "first log
 [[ $(grep -A1 '^caelestia scheme set' "$t/home/started" | tail -1) == greeter-theme-sync ]] ||
     fail "first login: the login screen not given the wallpaper and colours once set: $(cat "$t/home/started")"
 grep -q 'overlay checked: exit 0' "$log" || fail "first login: the build isn't logged"
+# (the folder icons recoloured once, by the scheme's run: the wallpaper's, run at the same time, raced it)
+[[ $(cat "$t/home/folders") == "-n papirus-folders -C scheme -u" ]] ||
+    fail "first login: the folder icons not recoloured once, with the scheme: $(cat "$t/home/folders")"
+[[ ! -e $t/home/.local/state/agros/scheme-again ]] || fail "first login: the colours to be set again, though Hyprland was there"
 
 # (with the overlay there too: a rebuild left waiting for a game, lost with the session, made at the next login)
 run
@@ -74,8 +81,13 @@ printf '#!/bin/sh
 exit 0
 ' >"$t/bin/qs"
 cp "$here/.local/bin/caelestia-start" "$t/home/.local/bin/"
-rm -rf "$t/home/.local/state" "$t/home/.config/quickshell/caelestia" "$t/home/overlay-runs"; : >"$t/home/started"
+rm -rf "$t/home/.local/state" "$t/home/.config/quickshell/caelestia" "$t/home/overlay-runs" "$t/home/folders"; : >"$t/home/started"
 HOME=$t/home PATH=$t/bin:$PATH "$t/home/.local/bin/caelestia-start" --prepare
+# (the folder icons not recoloured there: the unit's end killed that half-way. The colours to be set again at
+# Hyprland's start: with no Hyprland to ask, Caelestia's CLI wrote the window borders' to the file the Lua config
+# doesn't read)
+[[ ! -e $t/home/folders ]] || fail "--prepare: the folder icons recoloured, where the unit's end cuts it off: $(cat "$t/home/folders")"
+[[ -e $t/home/.local/state/agros/scheme-again ]] || fail "--prepare: the colours not marked to be set again with Hyprland there"
 [[ $(cat "$t/home/overlay-runs") == built ]] || fail "--prepare: the overlay wasn't built"
 grep -q '^caelestia scheme set -n dynamic$' "$t/home/started" || fail "--prepare: the colours weren't set"
 grep -q 'shell -d' "$t/home/started" && fail "--prepare: the shell was started: $(cat "$t/home/started")"
@@ -85,6 +97,12 @@ echo "Config path: /x/quickshell/caelestia/shell.qml"
 ' >"$t/bin/qs"
 run
 [[ $(grep -c '^caelestia wallpaper' "$t/home/started") -eq 1 ]] || fail "after --prepare: the wallpaper was set again"
+# (the colours set again, now Hyprland is there, beside the shell's start: waited for here; sleep's a stand-in)
+for _ in $(seq 50); do [[ -e $t/home/.local/state/agros/scheme-again ]] || break; /usr/bin/sleep 0.1; done
+[[ $(grep -c '^caelestia scheme set -n dynamic$' "$t/home/started") -eq 2 && ! -e $t/home/.local/state/agros/scheme-again ]] ||
+    fail "after --prepare: the colours not set again with Hyprland there: $(cat "$t/home/started")"
+[[ $(cat "$t/home/folders") == "-n papirus-folders -C scheme -u" ]] ||
+    fail "after --prepare: the folder icons not recoloured once, with the colours: $(cat "$t/home/folders" 2>/dev/null)"
 # (a shell already up from that folder: --prepare builds nothing under it)
 HOME=$t/home PATH=$t/bin:$PATH "$t/home/.local/bin/caelestia-start" --prepare
 [[ $(wc -l <"$t/home/overlay-runs") -eq 2 ]] || fail "--prepare with the shell up: built under it"
