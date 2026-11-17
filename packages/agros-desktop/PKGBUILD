@@ -4,7 +4,7 @@
 # (agros-welcome --system installs the ones for what's plugged in), as is VMware Workstation (its license forbids
 # passing it on: built from the AUR on your machine by agros-welcome --system).
 pkgname=agros-desktop
-pkgver=16
+pkgver=17
 pkgrel=1
 pkgdesc='AgrOS: Hyprland + Caelestia desktop with its apps (meta package)'
 arch=('any')
@@ -34,6 +34,7 @@ depends=(
     inotify-tools                       # grub-btrfsd (CachyOS's grub-btrfs-support turns it on without it)
     # Desktop tools the configs and scripts use
     thunar thunar-archive-plugin file-roller 7zip gnome-text-editor qview mpv zenity libnotify wl-clipboard cliphist
+    mpv-mpris                           # mpv in the Now Playing widget, the dashboard and the media keys (its MPRIS)
     agros-thunar-usage                  # Thunar's status bar: a bar of how full the folder's drive is
     gvfs gvfs-mtp                       # Thunar's drives (USB drives, phones) in its side bar, and its Trash
     squashfs-tools                      # an AppImage's name and icon read without running it (appimage-open)

@@ -165,7 +165,8 @@ With the Windows ones they replace in brackets:
 - File Roller + 7-Zip (WinRAR, 7-Zip; Extract/Compress in Thunar's right-click menu)
 - VSCodium, VS Code's open-source build (with your extensions), LibreOffice (Microsoft Office), qBittorrent, AntiMicroX
   (JoyToKey)
-- Text Editor (Notepad), qView (Photos), mpv (Media Player)
+- Text Editor (Notepad), qView (Photos), mpv (Media Player; with mpv-mpris, so the Now Playing widget, the dashboard
+  and the media keys see it)
 - VMware Workstation (`agros-welcome --system`: the AUR package, its installer from a copy on archive.org, as Broadcom
   gives it only to signed-in users; checked against the package's checksum)
 - HP Deskjet 1050 J410: HP's Linux driver (HPLIP), printing and scanning; add the printer in Print Settings once it's
@@ -209,7 +210,7 @@ The default wallpaper is Caelestia's own (`assets/wallpaper.webp` in its shell).
 |---|---|
 | `packages/` | The PKGBUILDs of AgrOS's packages (and their system files: units, hooks, the boot update) |
 | `aur/packages.txt`, `ci/` | The AUR packages built into `[agros]`, and the script that builds the repo |
-| `system/` | Files the system packages install (Bluetooth after sleep, the screens on after sleep, the boot video mode, the ananicy rule, the night light's location (geoclue), the time zone's permission (polkit), resolved's settings, the `papirus-folders` sudoers rule) |
+| `system/` | Files the system packages install (Bluetooth after sleep, the screens on after sleep, the boot video mode, the ananicy rule, the night light's location (geoclue), the time zone's permission (polkit), resolved's settings, the `papirus-folders` sudoers rule, qView's defaults: no first-run Welcome dialog, at `/etc/xdg/qView/qView.conf`) |
 | `.config/caelestia/` | Hyprland settings (`hypr-user.lua`, `hypr-vars.lua`, `user/`) and Caelestia settings (`shell.json`) |
 | `.config/quickshell/` | The switcher, desktop widgets, Updates and Desktop Settings apps, their shared colours (`common/`), and the dock's pins |
 | `.local/share/caelestia-overlay/` | My changes to Caelestia's own code, patched in by `caelestia-overlay` |
@@ -346,7 +347,8 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
     - The clock's hour and minute digits line up in columns: each digit, drawn as normal, centred in a slot as wide as
       the widest (not Caelestia's per-line stretching, nor the font's same-width digits, whose 1 is drawn wider)
     - Workspaces and the tray arrow light up under the mouse like the power button; clicking the workspace you're
-      on does nothing (Caelestia opened a special workspace)
+      on does nothing (Caelestia opened a special workspace); a window's icon there no longer throws "Value is
+      undefined" as the window opens, before Hyprland has given its details
     - A collapsed tray that opens on a click (not hover) and closes on a click elsewhere on the bar or when the pointer
       leaves the bar for a window (no input grab: windows still scroll while it is open); tray icons A-Z;
       Spotify's tray icon shown; Steam's tray menu shows installed games only; right-clicking a tray icon with no
@@ -461,8 +463,8 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
   they are on Caelestia's (the default now)
   - Comic panels with halftone dots and the film's red/cyan misprint glitch, laid out where the sky was around the
     falling Miles
-  - A clock, weather with a 3-day forecast, a calendar, "Sixth sense" CPU/RAM/GPU/SSD meters (they shake when the
-    PC runs hot), and a now-playing card with controls
+  - A clock, weather with a 3-day forecast (each day's low, then high, as Caelestia's dashboard), a calendar, "Sixth
+    sense" CPU/RAM/GPU/SSD meters (they shake when the PC runs hot), and a now-playing card with controls
   - Weather follows Caelestia's `services.weatherLocation` in `shell.json` (a city, or `lat,lon`; empty finds you by
     IP, as on a fresh install). The pencil by the weather panel's tab (with the mouse over it) types it there, as does
     Settings > Language & region (one picker for both, `.config/quickshell/common/PlacePicker.qml`); it's
@@ -533,13 +535,17 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
     close key), Super+Tab's moves that workspace's windows, silently, to the nearest other workspace with windows, the
     previous one on a tie (`dots.clean_workspace`); none where there's nothing to move or nowhere to move it. The
     switcher stays open
+- **See-through windows**: Caelestia's window opacity (`windowOpacity`), except where you read or watch a file:
+  LibreWolf, Text Editor, qView, mpv, File Roller, LibreOffice and VSCodium are opaque (`user/apps.lua`); the
+  terminal stays see-through (its own colours)
 - **Windows like on Windows** (`user/windows.lua`):
   - Floating by default, with a floating/tiling switch in the bar's right-click menu (remembered in
     `~/.local/state/window-mode`), also on Super+Alt+Space, for every workspace. Switching to floating places windows
     like new ones: maximised windows stay maximised, the rest cascade from the middle at the standard size
   - New windows open in the middle at one standard size: 60% of the screen's height, in a maximised window's shape
-    (dialogs and pop-ups keep their own size); several opened in a row cascade down and right from there, one title bar
-    apart, as on Windows
+    (dialogs and pop-ups keep their own size: Hyprland floats those with a parent window, `user/windows.lua` every
+    modal one, by a rule, as one shown before its parent window has appeared has none); several opened in a row
+    cascade down and right from there, one title bar apart, as on Windows
   - A Steam game shows in the dock under its own name and icon (Steam's shortcut for it), as in the switchers
   - Super+M minimises: the window stays in the dock, dimmed; clicking it, Alt+Tab or Super+Alt+M brings it back.
     Alt+Tab away from a fullscreen window (a game) minimises it, as on Windows; it comes back fullscreen

@@ -3,7 +3,8 @@
 # each user's Caelestia overlay, hyprbars and Hyprland config check in step with updates, Bluetooth and the screens back on after sleep,
 # the desktop shell at normal CPU priority, the keyring unlocked with the login password, a VMware VM's screen
 # following its window, the night light's location (geoclue), the automatic time zone without a password (polkit),
-# Hyprland's updates held until AgrOS's CI has checked them (the upstream gate), folder icons in the colour scheme's colour (papirus-folders, sudoers), mDNS from Avahi alone, UFW's logging off
+# Hyprland's updates held until AgrOS's CI has checked them (the upstream gate), folder icons in the colour scheme's colour (papirus-folders, sudoers), mDNS from Avahi alone, UFW's logging off,
+# qView's first-run dialog off
 pkgname=agros-system
 pkgver=0
 pkgrel=1
@@ -51,4 +52,8 @@ package() {
     install -dm750 "$pkgdir/etc/sudoers.d"  # (as sudo has it: 755 made pacman warn at every install)
     install -Dm440 "$_root/system/sudoers/agros-papirus-folders" "$pkgdir/etc/sudoers.d/50-agros-papirus-folders"
     install -Dm644 "$_root/system/resolved/agros.conf" "$pkgdir/usr/lib/systemd/resolved.conf.d/50-agros.conf"
+    # qView without its first-run Welcome dialog (or update checks), for every account, also one made before: Qt reads a
+    # setting missing from yours here. Not in /etc/skel: qView writes its window size and recent files into yours, which
+    # dotfiles-sync would then push to the repo
+    install -Dm644 "$_root/system/qview/qView.conf" "$pkgdir/etc/xdg/qView/qView.conf"
 }
