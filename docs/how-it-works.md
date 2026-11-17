@@ -935,7 +935,8 @@ brings each change; nothing to run by hand).
   `--list` is what the Updates app shows (`update-kinds --list`); every 6 hours (`update-check.timer`) it checks, and when
   updates are waiting a notification's "Update now" opens the Updates app and starts (an admin's, in `wheel`: an
   account that can't sudo isn't offered it, nor `agros-welcome`'s system part, and `update-apps` itself refuses it;
-  the boot's update covers it). Not on a battery nearly empty (`battery-low`, the boot update's check too: below 15%,
+  the boot's update covers it). Not on a snapshot booted from the menu, nor the live USB (said; the check offers
+  nothing there). Not on a battery nearly empty (`battery-low`, the boot update's check too: below 15%,
   discharging). The keyrings first, on their own, when a newer one waits (as the boot's: a package signed with a key
   the keyring lacks failed the whole update). Power off, sleep and the lid held off while it installs
   (`systemd-inhibit --what=sleep:shutdown:handle-lid-switch`: logind suspends on the lid whatever sleep lock is held,
