@@ -120,20 +120,38 @@ python3 -Ic 'import sqlite3, sys; c = sqlite3.connect(sys.argv[1]); c.execute("U
 PATH=$t/flat run
 python3 -Ic 'import sqlite3, sys; sys.exit(sqlite3.connect(sys.argv[1]).execute("SELECT count(*) FROM games WHERE service = '"'steam'"' AND service_id = '"'42'"' AND installed = 1 AND runner = '"'steam'"'").fetchone()[0] != 1)' "$t/.local/share/lutris/pga.db" ||
     { echo "FAIL: a Steam game back from an unmounted drive is still not installed"; exit 1; }
-# Epic: a game joins, its add-ons (a DLC, a map) don't, and an add-on added by an older run is taken out
+# Epic: a game joins, its add-ons (a DLC, a map) don't, and an add-on added by an older run is hidden. Lutris's library
+# sync's entries (your lutris.net account's, no store id): given their id back, not added again beside it; the one this
+# script had added gives way; an add-on among them hidden
 python3 -I - "$t/.local/share/lutris/pga.db" <<'P2'
 import json, sqlite3, sys
 c = sqlite3.connect(sys.argv[1])
 c.executemany("INSERT INTO service_games (service, appid, name, slug, details) VALUES ('egs', ?, ?, ?, ?)", [
     ("game", "Epic Game", "epic-game", json.dumps({"categories": [{"path": "games"}]})),
     ("dlc", "Some DLC", "some-dlc", json.dumps({"mainGameItem": {"id": "x"}, "categories": [{"path": "dlc"}]})),
-    ("map", "Berlin", "berlin", json.dumps({"categories": [{"path": "addons"}]}))])
+    ("map", "Berlin", "berlin", json.dumps({"categories": [{"path": "addons"}]})),
+    ("synced", "Synced Game", "synced-game", json.dumps({"categories": [{"path": "games"}]})),
+    ("route", "Dubai", "dubai", json.dumps({"categories": [{"path": "addons"}]})),
+    # (named apart by Epic and by Lutris's slug of its name, your other PC's: k-ln for Köln)
+    ("koln", "Schnellfahrstrecke Köln-Aachen", "schnellfahrstrecke-koln-aachen",
+     json.dumps({"categories": [{"path": "addons"}]}))])
 c.execute("INSERT INTO games (name, slug, installed, service, service_id) VALUES ('Berlin', 'berlin', 0, 'egs', 'map')")
+c.execute("INSERT INTO games (name, slug, installed, service, service_id) VALUES ('Synced Game', 'synced-game', 0, 'egs', 'synced')")
+c.executemany("INSERT INTO games (name, slug, installed, service, playtime) VALUES (?, ?, 0, 'egs', ?)",
+              [("Synced Game", "synced-game", 5.0), ("Dubai", "dubai", 0),
+               ("Schnellfahrstrecke Köln-Aachen", "schnellfahrstrecke-k-ln-aachen", 0)])
 c.commit()
 P2
 run
-[[ $(python3 -Ic 'import sqlite3, sys; print(",".join(sorted(r[0] for r in sqlite3.connect(sys.argv[1]).execute("SELECT service_id FROM games WHERE service = '"'egs'"'"))))' "$t/.local/share/lutris/pga.db") == game ]] ||
-    { echo "FAIL: Epic add-ons are in the library (or its game isn't)"; exit 1; }
+python3 -I - "$t/.local/share/lutris/pga.db" <<'P2' || { echo "FAIL: Epic's games and add-ons (synced ones too) not as they should be"; exit 1; }
+import sqlite3, sys
+c = sqlite3.connect(sys.argv[1])
+hidden = {i for (i,) in c.execute("SELECT game_id FROM games_categories gc JOIN categories k ON k.id = gc.category_id "
+                                   "WHERE k.name = '.hidden'")}
+rows = {(sid, pt, gid in hidden) for gid, sid, pt in c.execute("SELECT id, service_id, playtime FROM games WHERE service = 'egs'")}
+want = {("game", 0.0, False), ("map", 0.0, True), ("synced", 5.0, False), ("route", 0.0, True), ("koln", 0.0, True)}
+assert {(s, p or 0.0, h) for s, p, h in rows} == want, rows
+P2
 # One run at a time (agros-welcome's and lutris-library.path's overlapped): another holding its lock, this one waits
 flock "$XDG_RUNTIME_DIR/lutris-library.lock" sleep 3 &
 sleep 0.5

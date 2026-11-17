@@ -167,13 +167,47 @@ def epic_addon(details):
     return "mainGameItem" in item or any(c.get("path") == "addons" for c in item.get("categories") or [])
 
 
-# Epic add-ons this script added before it knew them: taken out (one installed is Lutris's own, kept)
+# Lutris's library sync (your lutris.net account) brings back your other PCs' games without their store ids: each given
+# its id back from its store's list, by the slug this script and the store syncs give it, else by its name (lutris.net
+# made their slugs its own way: alan-wake-s-... and k-ln for Köln, where Epic's are alan-wakes-, koln), else this
+# script added it
+# again beside it and an Epic add-on among them wasn't told as one. This script's own entry for the same game gives way
+# (the synced one has your playtime and categories). (Lutris's sync matches by slug, runner, platform and store: the
+# id given back doesn't make it add the game again)
+ids = {}
+for service, appid, name, lutris_slug, slug in db.execute(
+        "SELECT service, appid, name, lutris_slug, slug FROM service_games"):
+    for s in (lutris_slug, slug, f"{service}-{appid}"):
+        if s:
+            ids.setdefault((service, s), appid)
+    if name:
+        ids.setdefault((service, "name:" + name.casefold()), appid)
+with db:
+    placeholder = ("SELECT id FROM games WHERE service = ? AND service_id = ? AND installed = 0 AND runner IS NULL "
+                   "AND configpath IS NULL")
+    for game_id, service, slug, name in db.execute(
+            f"SELECT id, service, slug, name FROM games WHERE service_id IS NULL AND service IN ({','.join('?' * len(STORES))})",
+            STORES).fetchall():
+        appid = ids.get((service, slug)) or ids.get((service, "name:" + (name or "").casefold()))
+        if not appid:  # (its store not synced yet, or no longer listing it)
+            continue
+        db.execute(f"DELETE FROM games_categories WHERE game_id IN ({placeholder})", (service, appid))
+        db.execute(f"DELETE FROM games WHERE id IN ({placeholder})", (service, appid))
+        if not db.execute("SELECT 1 FROM games WHERE service = ? AND service_id = ?", (service, appid)).fetchone():
+            db.execute("UPDATE games SET service_id = ? WHERE id = ?", (appid, game_id))
+
+# Epic add-ons not installed (one installed is Lutris's own, left): hidden, not games of their own. Hidden, not taken
+# out: one Lutris's library sync brought back came again with its next sync (and, its categories taken from your
+# account's, one it unhid is hidden again by the next run of this)
 addons = [(appid,) for appid, details in db.execute("SELECT appid, details FROM service_games WHERE service = 'egs'")
           if epic_addon(details)]
 with db:
-    placeholder = "SELECT id FROM games WHERE service = 'egs' AND service_id = ? AND installed = 0 AND runner IS NULL"
-    db.executemany(f"DELETE FROM games_categories WHERE game_id IN ({placeholder})", addons)
-    db.executemany(f"DELETE FROM games WHERE id IN ({placeholder})", addons)
+    db.execute("INSERT OR IGNORE INTO categories (name) VALUES ('.hidden')")
+    (hidden_category,) = db.execute("SELECT id FROM categories WHERE name = '.hidden'").fetchone()
+    db.executemany("INSERT INTO games_categories (game_id, category_id) SELECT id, ? FROM games WHERE service = 'egs' "
+                   "AND service_id = ? AND installed = 0 AND id NOT IN "
+                   "(SELECT game_id FROM games_categories WHERE category_id = ?)",
+                   [(hidden_category, a, hidden_category) for (a,) in addons])
 known = {(s, i) for s, i in db.execute("SELECT service, service_id FROM games")}
 # (Lutris's own slug for it, else the one its store sync made: lutris.net covers are found by it)
 new = [(name, lutris_slug or slug or f"{service}-{appid}", "steam" if service == "steam" else None, service, appid)
