@@ -2,8 +2,10 @@
 # Runs a command as each AgrOS user: regular accounts (UID 1000 and up, with a home and a login shell) whose home has
 # that command linked in ~/.local/bin (AgrOS gives every new account those links). For pacman's hooks and the boot's
 # update, which run as root and serve every user. Both run it in a session of its own, nothing on its input, its output
-# through pipes, the caller's stop passed on to it and then taken here too (as(), below).
-#   agros-each-user <command> [args...]    the command's name in ~/.local/bin
+# through pipes (its control characters left out), the caller's stop passed on to it and then taken here too (as(),
+# below).
+#   agros-each-user <command> [args...]    the command's name in ~/.local/bin: AgrOS's own, where that's a link to it
+#                                          (run from /usr/lib/agros/bin; AGROS_LIB: the tests'), for 10 min at most
 #   agros-each-user --list                 the users, one per line
 #   agros-each-user --as <user> [--fd <n>]... <command...>   a command as that user (or account: the boot's AUR
 #                                          builds' agros-aur), given only its own descriptors and those --fd names
@@ -37,10 +39,18 @@ users() {
 # group of its own), then taken by the caller itself (a loop over the users stops too, not on to the next one).
 # Waited for in the background: a trap runs only between commands)
 stop_run() { pkill -TERM -s "$1" 2>/dev/null || kill -TERM "$1" 2>/dev/null; }  # (its session; before setsid, itself)
+# (its output with no control characters but tabs and newlines: a user's command writing escapes to the admin's
+# terminal (a pacman hook's) could rewrite what's on it, or its title. Line by line, as it comes. Exec'd, the reader
+# itself the pipe's process: stopped below, nothing of it left holding the caller's output)
+clean=(stdbuf -oL tr -d '\000-\010\013-\037\177')
+# (--limit <s>: stopped after that long, its whole session, killed 10 s later if it's still there)
 as() {
-    local u=$1 p='' sig='' rc o e s f n w keep=' ' outs=(); shift
-    while [[ ${1:-} == --fd ]]; do keep+="$2 "; shift 2; done
-    exec {o}> >(cat) && outs+=($!)
+    local u=$1 p='' sig='' rc o e s f n w keep=' ' limit='' outs=(); shift
+    while [[ ${1:-} == --fd || ${1:-} == --limit ]]; do
+        if [[ $1 == --fd ]]; then keep+="$2 "; else limit=$2; fi
+        shift 2
+    done
+    exec {o}> >(exec "${clean[@]}") && outs+=($!)
     # (one pipe for both when they go to the same place (a terminal, the log): its lines in the order it wrote them,
     # not a stderr line cut into a stdout one by two readers)
     local f1 f2 fds=/proc/$BASHPID/fd  # (this shell's: $BASHPID in a $(...) is that subshell's)
@@ -48,7 +58,7 @@ as() {
     if [[ $f1 == "$f2" ]]; then
         exec {e}>&"$o"
     else
-        exec {e}> >(cat >&2) && outs+=($!)
+        exec {e}> >(exec "${clean[@]}" >&2) && outs+=($!)
     fi
     # (set before it starts: a stop in between not missed)
     for s in TERM INT HUP; do
@@ -66,11 +76,31 @@ as() {
     p=$!
     # (a stop between the start and p set: its trap had no process to pass it on to)
     [[ -z $sig ]] || stop_run "$p"
+    # (its time: a sleep of its own, waited for beside it, holding none of its output's pipes; out, its session stopped,
+    # then 10 s on, killed)
+    local timer='' done_pid late=''
+    [[ -z $limit ]] || { ( exec {o}>&- {e}>&-; exec sleep "$limit" ) & timer=$!; }
     # (again while a stop interrupted the wait and it's still this shell's running job: a pid, reused, never waited on)
     while :; do
-        wait "$p"; rc=$?
+        done_pid=
+        if [[ -n $timer ]]; then wait -n -p done_pid "$p" "$timer"; rc=$?; else wait "$p"; rc=$?; fi
+        if [[ -n $timer && ${done_pid:-} == "$timer" ]]; then
+            if [[ -z $late ]]; then
+                echo "agros-each-user: ${cmd:-$1} as $u still ran after $limit s: stopped" >&2
+                late=1
+                stop_run "$p"
+                ( exec {o}>&- {e}>&-; exec sleep 10 ) & timer=$!
+            else
+                pkill -KILL -s "$p" 2>/dev/null
+                timer=''
+            fi
+            continue
+        fi
         [[ -n $sig ]] && grep -qx "$p" <<<"$(jobs -pr)" || break
     done
+    [[ -z $timer ]] || kill "$timer" 2>/dev/null
+    # (stopped for its time: what it left in its session too, not left running on)
+    [[ -z $late ]] || pkill -KILL -s "$p" 2>/dev/null
     trap - TERM INT HUP
     exec {o}>&- {e}>&-
     # (its output's end: all of it, however long a slow terminal takes to read it, but not for as long as something
@@ -134,10 +164,19 @@ shift
 rc=0
 # (the list read whole first: none of it left open for a command, a user's, to read the next users away)
 mapfile -t list < <(users)
+# Only AgrOS's own program (the user's link to it), run from where it's installed: a user's file of their own there is
+# theirs to run, not root's pacman's to wait on (another account's endless one held its lock, and every update). Each
+# under a time limit (AGROS_EACH_USER_LIMIT, seconds: the tests'), then stopped
+ours=$(readlink -f "${AGROS_LIB:-/usr/lib/agros}/bin/$cmd")
 for entry in "${list[@]}"; do
     u=${entry%%:*} h=${entry#*:}
     [[ -x $h/.local/bin/$cmd ]] || continue
+    if [[ $(readlink -f "$h/.local/bin/$cmd") != "$ours" || ! -x $ours ]]; then
+        echo "agros-each-user: $u's ~/.local/bin/$cmd isn't AgrOS's: not run for them" >&2
+        continue
+    fi
     run=${AGROS_RUN_USER:-/run/user}/$(id -u "$u")
-    as "$u" env XDG_RUNTIME_DIR="$run" DBUS_SESSION_BUS_ADDRESS="unix:path=$run/bus" "$h/.local/bin/$cmd" "$@" || rc=1
+    as "$u" --limit "${AGROS_EACH_USER_LIMIT:-600}" \
+        env XDG_RUNTIME_DIR="$run" DBUS_SESSION_BUS_ADDRESS="unix:path=$run/bus" "$ours" "$@" || rc=1
 done
 exit $rc

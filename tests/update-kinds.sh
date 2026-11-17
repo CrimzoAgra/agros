@@ -7,7 +7,6 @@ set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 mkdir -p "$t/bin" "$t/home" "$t/srv"
-stub() { printf '#!/bin/bash\n%s\n' "$2" >"$t/bin/$1"; chmod +x "$t/bin/$1"; }
 # The programs update-kinds may use, alone on PATH (with the stand-ins): a tool on this machine (npm, uv...) isn't taken
 # for one the test has
 mkdir "$t/sys"

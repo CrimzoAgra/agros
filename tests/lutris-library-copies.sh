@@ -6,7 +6,6 @@ set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 export HOME=$t XDG_DATA_HOME=$t/.local/share XDG_CACHE_HOME=$t/.cache XDG_CONFIG_HOME=$t/.config
-export DBUS_SESSION_BUS_ADDRESS=unix:path=$t/no-bus
 mkdir -p "$t/.local/share/lutris" "$t/.cache/lutris" "$t/.config/lutris"
 db=$t/.local/share/lutris/pga.db
 python3 -I - <<'P'

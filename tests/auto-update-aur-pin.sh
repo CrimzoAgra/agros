@@ -13,7 +13,6 @@ sed -e "s|/usr/lib/agros/auto-update-aur|$t/auto-update-aur|g" "$here/packages/a
 chmod +x "$t/auto-update-aur"
 # (AgrOS's fixes for AUR packages beside it, as installed: aur-agros-patch, aur-patches/)
 cp -r "$here/packages/agros-system/aur-agros-patch" "$here/packages/agros-system/aur-patches" "$t/"
-stub() { printf '#!/bin/bash\n%s\n' "$2" >"$t/bin/$1"; chmod +x "$t/bin/$1"; }
 stub gpg 'true'
 # makepkg: the source array as it reads it (--printsrcinfo), and the version and sources it fetches (--verifysource,
 # noted)

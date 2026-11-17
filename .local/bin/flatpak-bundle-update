@@ -10,7 +10,10 @@
 #   flatpak-bundle-update --install-fetched <dir>    reinstall from those (the boot's update: it holds sleep and power
 #                                                    off as root around this step alone, logind refusing it to a user
 #                                                    outside a session)
-# Takes the latest release's Linux x86_64 .flatpak, checked against the release's SHA256SUMS when it has one.
+# Takes the latest release's Linux x86_64 .flatpak, checked against the release's SHA256SUMS when it has one (a
+# system-wide one only when it has one), and only when the file is that app (its ref). Each app's repo is the one it was
+# installed from (--install), else its metainfo's own link to it the first time it's looked for (repo_of), written down
+# (AGROS_FLATPAK_BUNDLES: the tests' list) and kept: a later version's metainfo can't point its updates elsewhere.
 set -uo pipefail
 check=false fetch=
 [[ ${1:-} == --check ]] && check=true
@@ -30,13 +33,27 @@ newer() {
     [[ $(printf '%s\n' "$1" "$2" | sort -V | tail -1) == "$1" ]]
 }
 
-# fetch_from <release JSON> <dir>: download its Linux x86_64 .flatpak into dir, verified; prints its path
+# bundle_app <file> <dir>: the app a .flatpak file installs (its ref, read by flatpak itself into a repo of its own in
+# dir, nothing installed)
+bundle_app() {
+    local repo ref
+    repo=$(mktemp -d "$2/.ref.XXXXXX") && ostree init --repo="$repo" --mode=archive >/dev/null 2>&1 &&
+        flatpak build-import-bundle "$repo" "$1" >/dev/null 2>&1 && ref=$(ostree refs --repo="$repo" 2>/dev/null) || return 1
+    ref=$(grep -m1 '^app/' <<<"$ref") && ref=${ref#app/} && [[ -n ${ref%%/*} ]] && echo "${ref%%/*}"
+}
+
+# fetch_from <release JSON> <dir> <user|system> [app id]: download its Linux x86_64 .flatpak into dir, verified (by
+# the release's checksums, required for a system-wide one; and that it's the app given); prints "<app id>\t<path>"
 fetch_from() {
-    local url want
+    local url want file got need=()
     url=$(asset_url "$1" flatpak)
     [[ -n $url ]] || { echo "no Linux .flatpak in the latest release" >&2; return 1; }
-    want=$(checksum "$1" "${url##*/}" "$2") && download "$url" "$2" "$want" >&2 || return 1
-    echo "$2/${url##*/}"
+    [[ $3 != system ]] || need=(required)
+    want=$(checksum "$1" "${url##*/}" "$2" "${need[@]}") && download "$url" "$2" "$want" >&2 || return 1
+    file=$2/${url##*/}
+    got=$(bundle_app "$file" "$2") || { echo "${url##*/}: which app it is couldn't be read, not installed" >&2; return 1; }
+    [[ -z ${4:-} || $got == "$4" ]] || { echo "${url##*/} is $got, not $4: not installed" >&2; return 1; }
+    printf '%s\t%s\n' "$got" "$file"
 }
 
 # reinstall <user|system> <file>: the app reinstalled from that file: the app's own data (~/.var/app) stays. The old one
@@ -56,29 +73,45 @@ reinstall() {
     "${hold[@]}" flatpak install --"$1" -y --noninteractive --reinstall --bundle "$2" </dev/null
 }
 
-# install_from <release JSON> <user|system>: download its Linux x86_64 .flatpak, verify it, install it (over an older one)
+# install_from <release JSON> <user|system> [app id]: download its Linux x86_64 .flatpak, verify it, install it (over an
+# older one); prints the app id
 install_from() {
-    local tmp file ok=0
+    local tmp got ok=0
     tmp=$(mktemp -d)
-    file=$(fetch_from "$1" "$tmp") && reinstall "$2" "$file" || ok=1
+    got=$(fetch_from "$1" "$tmp" "$2" "${3:-}") && reinstall "$2" "${got#*$'\t'}" >&2 && echo "${got%%$'\t'*}" || ok=1
     rm -rf "${tmp:?}"
     return $ok
 }
 
-# repo_of <app id> <user|system>: the GitHub owner/repo of an app installed from a file. The app's own metainfo
-# (<id>.metainfo.xml, else any), its source or home page link first; any other github.com link (a library's, a
-# translator's) only when it has neither
+# The repo each app was installed or first updated from: "<user|system>\t<app id>\t<owner/repo>" lines
+if ((EUID)); then bundles=${XDG_STATE_HOME:-$HOME/.local/state}/agros/flatpak-bundles; else bundles=/var/lib/agros/flatpak-bundles; fi
+bundles=${AGROS_FLATPAK_BUNDLES:-$bundles}
+# remember <user|system> <app id> <owner/repo> (failing, a read-only disk: looked up from the metainfo again next time)
+remember() {
+    mkdir -p "${bundles%/*}" 2>/dev/null &&
+        { awk -F'\t' -v i="$1" -v a="$2" '!($1 == i && $2 == a)' "$bundles" 2>/dev/null; printf '%s\t%s\t%s\n' "$@"; } >"$bundles.new" &&
+        mv -f "$bundles.new" "$bundles" || rm -f "$bundles.new" 2>/dev/null
+    return 0
+}
+# repo_of <app id> <user|system>: the GitHub owner/repo of an app installed from a file: as written down, else from
+# the app's own metainfo (<id>.metainfo.xml, else any), its own links only: source, home page, then bug tracker or help
+# (ArtCraft's names its repo only there: its home page is its website), never another github.com link in it (a
+# library's, a translator's); written down then
 repo_of() {
-    local loc meta type repo=
+    local loc meta type repo
+    repo=$(awk -F'\t' -v i="$2" -v a="$1" '$1 == i && $2 == a { print $3; exit }' "$bundles" 2>/dev/null)
+    [[ -z $repo ]] || { echo "$repo"; return 0; }
     loc=$(flatpak info --"$2" --show-location "$1" 2>/dev/null) || return 1
     meta=("$loc"/files/share/metainfo/"$1".{metainfo,appdata}.xml)
     [[ -e ${meta[0]} || -e ${meta[1]} ]] || meta=("$loc"/files/share/metainfo/*.xml)
-    for type in vcs-browser homepage ''; do
-        repo=$(grep -ohE "${type:+<url type=\"$type\">https?://}github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+" "${meta[@]}" \
-            2>/dev/null | head -1 | sed -E 's|.*github\.com/||; s|\.git$||')
+    for type in vcs-browser homepage bugtracker help; do
+        repo=$(grep -ohE "<url type=\"$type\">https?://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+" "${meta[@]}" 2>/dev/null |
+            sed -E 's|.*github\.com/||; s|\.git$||; q')
         [[ -n $repo ]] && break
     done
-    [[ -n $repo ]] && echo "$repo"
+    [[ -n $repo ]] || return 1
+    remember "$2" "$1" "$repo"
+    echo "$repo"
 }
 
 if [[ ${1:-} == --install-fetched ]]; then
@@ -100,7 +133,10 @@ if [[ ${1:-} == --install ]]; then
         [[ ${repo,,} == "${2,,}" ]] && { echo "$2: already installed"; exit 0; }
     done < <(flatpak list --app --columns=application,origin,installation)
     api=$(latest_release "$2") || { echo "$2: can't reach GitHub"; exit 1; }
-    install_from "$api" user && echo "$2: installed $(jq -r .tag_name <<<"$api")"
+    # (the repo it came from written down for its updates)
+    app=$(install_from "$api" user) || exit 1
+    remember user "$app" "${2%.git}"
+    echo "$2: installed $(jq -r .tag_name <<<"$api")"
     exit
 fi
 
@@ -109,7 +145,7 @@ while IFS=$'\t' read -r app origin inst; do
     # (the boot's per-user downloads: a system-wide one is root's, reinstalled once by the boot's own run, as root;
     # as each user it was downloaded per user and refused at the reinstall, every boot)
     [[ -n $fetch && $inst == system && $EUID -ne 0 ]] && continue
-    repo=$(repo_of "$app" "$inst") || continue
+    repo=$(repo_of "$app" "$inst") || { echo "$app: no GitHub repo among its metainfo's own links, skipped"; continue; }
     old=$(LC_ALL=C flatpak info --"$inst" "$app" | sed -n 's/^ *Version: //p')
     # No version to compare: any release would look newer, reinstalled on every run
     [[ -n $old ]] || { echo "$app: no version, skipped"; continue; }
@@ -128,13 +164,13 @@ while IFS=$'\t' read -r app origin inst; do
     fi
     if [[ -n $fetch ]]; then
         mkdir -p "$fetch/$app"
-        if file=$(fetch_from "$api" "$fetch/$app"); then
-            printf '%s\t%s\t%s\t%s\n' "$inst" "$file" "$app" "$new" >>"$fetch/fetched"
+        if got=$(fetch_from "$api" "$fetch/$app" "$inst" "$app"); then
+            printf '%s\t%s\t%s\t%s\n' "$inst" "${got#*$'\t'}" "$app" "$new" >>"$fetch/fetched"
             echo "$app: $new downloaded"
         else
             status=1
         fi
-    elif install_from "$api" "$inst"; then
+    elif install_from "$api" "$inst" "$app" >/dev/null; then
         echo "$app: updated to $new"
     else
         status=1

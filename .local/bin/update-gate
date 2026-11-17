@@ -43,11 +43,15 @@ tmp=
 ((offline)) || tmp=$(mktemp "$cache.XXXXXX" 2>/dev/null) || tmp=
 # (none, --offline: nothing to remove, not a .sig in the folder this runs from)
 trap '[[ -z $tmp ]] || rm -f "$tmp" "$tmp.sig"' EXIT
+# (a stamp on the address: GitHub Pages' cache served a list from before the last publish for minutes; a passing
+# network error tried again, as agros-iso's copies of this fetch do)
+stamp=$(date +%s)
+get() { curl -fsS --connect-timeout 10 -m 30 --retry 3 --retry-all-errors -o "$1" "$2?t=$stamp" 2>/dev/null; }
 for server in "${servers[@]}"; do
     [[ -n $server && -n $tmp ]] || break
-    curl -fsS --connect-timeout 10 -m 30 -o "$tmp" "$server/agros-approved" 2>/dev/null &&
+    get "$tmp" "$server/agros-approved" &&
         grep -qE '^[a-z0-9@._+-]+ [A-Za-z0-9.:_+~]+$' "$tmp" || continue
-    if curl -fsS --connect-timeout 10 -m 30 -o "$tmp.sig" "$server/agros-approved.sig" 2>/dev/null &&
+    if get "$tmp.sig" "$server/agros-approved.sig" &&
         gpgv --keyring "$keyring" "$tmp.sig" "$tmp" >/dev/null 2>&1; then
         chmod 644 "$tmp"
         mv -f "$tmp" "$cache"

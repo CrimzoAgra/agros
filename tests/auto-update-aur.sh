@@ -19,7 +19,6 @@ sed -e "s|/var/lib/auto-update|$t/au|g" -e "s|/usr/lib/agros/auto-update-aur|$t/
 chmod +x "$t/auto-update-aur"
 # (AgrOS's fixes for AUR packages beside it, as installed: aur-agros-patch, aur-patches/)
 cp -r "$here/packages/agros-system/aur-agros-patch" "$here/packages/agros-system/aur-patches" "$t/"
-stub() { printf '#!/bin/bash\n%s\n' "$2" >"$t/bin/$1"; chmod +x "$t/bin/$1"; }
 # agros-each-user: --as runs the command (noted); the build account: this user here (agros-aur on the system; the
 # users agros-each-user lists aren't asked for)
 # shellcheck disable=SC2016  # (expanded by the stand-ins)

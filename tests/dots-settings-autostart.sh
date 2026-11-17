@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # dots-settings' autostart entries: turning one off and on again starts it again, also when your copy only hid the
-# system's (the repo's cachyos-hello.desktop: Hidden=true and no Exec=, which still replaces the system's entry)
+# system's (Hidden=true and no Exec=, which still replaces the system's entry)
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
