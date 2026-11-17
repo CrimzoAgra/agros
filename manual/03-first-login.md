@@ -21,7 +21,8 @@ When it's done, a notification offers two things:
 - **Install hardware apps and VMware**: installs the apps for the devices you have plugged in: Razer, Logitech, Moza
   wheels, drawing tablets. It also installs VMware Workstation. Only an administrator's account is offered it.
 
-Missed the notification? Run `agros-personal` (accounts) or `agros-welcome --system` (hardware apps) in a terminal.
+Missed the notification? Left unanswered, it comes back at your next login; or run `agros-personal` (accounts) or
+`agros-welcome --system` (hardware apps) in a terminal.
 
 ## Finding your way around
 
