@@ -74,8 +74,8 @@ current set is kept (R2's free 10 GB; the repo is about 190 MB). It needs the sa
 upload, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` and `R2_BUCKET`; without them it says so (a
 warning) and does nothing. agros-iso's `pacman.conf` files list the mirror, and `agros-system`'s install adds it after
 `[agros]`'s other servers where it's missing (a `#Server =` line of yours for it counts: not added again), its removal
-taking it out. What reads `[agros]`'s server (`update-gate`'s approved list, agros-iso's gate) takes the first, Pages;
-the boot's copy of `agros-arch-ok` tries each in turn.
+taking it out. `update-gate`'s approved list and the boot's copy of `agros-arch-ok` try each of `[agros]`'s servers in
+turn (Pages down: the mirror's); agros-iso's gate takes the first, Pages.
 
 | Package | What it is |
 |---|---|
@@ -816,12 +816,13 @@ brings each change; nothing to run by hand).
     (deciding again, the Updates app may have synced newer lists since, but from the approved list kept at the boot,
     `--offline`: nothing let through that the boot didn't download), the Updates app's list and its update. A held
     update isn't listed in the Updates app; the update log says what waits ("waits for AgrOS's check"). A version older
-    in the repo than installed (a rollback) doesn't count: pacman keeps the newer one. The list is kept for when the
-    repo can't be reached; never fetched, nothing new. It's taken only with a good signature by AgrOS's key beside it
+    in the repo than installed (a rollback) doesn't count: pacman keeps the newer one. The list is fetched from each of
+    `[agros]`'s servers in turn (Pages, then the mirror) and kept for when none can be reached; never fetched, nothing
+    new. It's taken only with a good signature by AgrOS's key beside it
     (`agros-approved.sig`, CI's release job signs it; checked with `gpgv` against `agros-keyring`'s key file alone,
     `/usr/share/pacman/keyrings/agros.gpg`): with none, or a bad one (a mirror or a network in between that changed it),
-    it's as if the repo couldn't be reached, said ("no good signature by AgrOS's key"): the kept list, nothing new let
-    through. agros-iso's build and installer check it the same way
+    that server's is as if it couldn't be reached, said ("no good signature by AgrOS's key"), and the next one is tried:
+    none good, the kept list, nothing new let through. agros-iso's build and installer check it the same way
   - Checks that stop passing are said on the machine too: the boot's update keeps the day they last passed on Arch
     (`agros-arch-ok`, beside the repo; `/var/lib/agros/agros-arch-ok`, from the first of `[agros]`'s servers that
     answers), and `dotfiles-check` says after login, once it was over 10 days old when fetched: "AgrOS's checks haven't

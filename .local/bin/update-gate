@@ -34,22 +34,26 @@ mkdir -p "${cache%/*}" 2>/dev/null
 cp -- "$base" "$out" || exit 1
 read -ra gated < <(sed -n 's/^[[:space:]]*IgnorePkg[[:space:]]*=[[:space:]]*//p' "$gate" 2>/dev/null | tr '\n' ' ')
 ((${#gated[@]})) || exit 0
-# (the approved list from the [agros] repo's own server: fetched beside its database)
-server=$(pacman-conf --config "$base" --repo agros Server 2>/dev/null | head -1)
+# (the approved list from the [agros] repo's own servers, fetched beside its database: each in turn, as the boot's copy
+# of agros-arch-ok, so a GitHub Pages outage doesn't hold Hyprland's updates while the R2 mirror has the list. One
+# unreachable, or whose list has no good signature, gives way to the next)
+mapfile -t servers < <(pacman-conf --config "$base" --repo agros Server 2>/dev/null)
 # (fetched into a file of its own: two runs at once, the Updates app's and its list's, don't mix theirs)
 tmp=
 ((offline)) || tmp=$(mktemp "$cache.XXXXXX" 2>/dev/null) || tmp=
 trap 'rm -f "$tmp" "$tmp.sig"' EXIT
-if [[ -n $server && -n $tmp ]] && curl -fsS --connect-timeout 10 -m 30 -o "$tmp" "$server/agros-approved" 2>/dev/null &&
-    grep -qE '^[a-z0-9@._+-]+ [A-Za-z0-9.:_+~]+$' "$tmp"; then
+for server in "${servers[@]}"; do
+    [[ -n $server && -n $tmp ]] || break
+    curl -fsS --connect-timeout 10 -m 30 -o "$tmp" "$server/agros-approved" 2>/dev/null &&
+        grep -qE '^[a-z0-9@._+-]+ [A-Za-z0-9.:_+~]+$' "$tmp" || continue
     if curl -fsS --connect-timeout 10 -m 30 -o "$tmp.sig" "$server/agros-approved.sig" 2>/dev/null &&
         gpgv --keyring "$keyring" "$tmp.sig" "$tmp" >/dev/null 2>&1; then
         chmod 644 "$tmp"
         mv -f "$tmp" "$cache"
-    else
-        echo "update-gate: AgrOS's approved list has no good signature by AgrOS's key ($server/agros-approved.sig): not taken, as if unreachable (the list kept from before, nothing new let through)" >&2
+        break
     fi
-fi
+    echo "update-gate: AgrOS's approved list has no good signature by AgrOS's key ($server/agros-approved.sig): not taken, as if unreachable (the list kept from before, nothing new let through)" >&2
+done
 rm -f "$tmp" "$tmp.sig"
 waits=()
 for name in "${gated[@]}"; do

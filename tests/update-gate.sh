@@ -50,9 +50,13 @@ cat >"$t/bin/curl" <<'C'
 echo "curl $*" >>"$CALLS"
 [[ -z $OFFLINE ]] || exit 7
 url=${*: -1}
+# ($DOWN: that server unreachable; $SIG_AT: $SIG for that server's list alone, the others' signed well)
+[[ -z ${DOWN:-} || $url != "$DOWN"/* ]] || exit 7
+sig=${SIG:-}
+[[ -z ${SIG_AT:-} || $url == "$SIG_AT"/* ]] || sig=
 while [[ $1 != -o ]]; do shift; done
 if [[ $url != *.sig ]]; then printf '%s\n' "$APPROVED" >"$2"; exit 0; fi
-case ${SIG:-} in
+case $sig in
     none) exit 22 ;;
     bad) printf '%s\n' "$APPROVED" "hyprland 9.9.9" | gpg --batch --yes -u agros@agros.invalid --detach-sign -o "$2" 2>/dev/null ;;
     other) printf '%s\n' "$APPROVED" | gpg --batch --yes -u other@agros.invalid --detach-sign -o "$2" 2>/dev/null ;;
@@ -129,4 +133,16 @@ grep -v agros-gate "$t/pacman.conf" >"$t/bare.conf"
 out=$(PATH=$t/bin:$PATH HAVE_hyprland=0.57.2-1 NEW_hyprland=0.60.0-1 OFFLINE=1 "$here/.local/bin/update-gate" "$t/bare.conf" "$t/out.conf")
 [[ -n $out ]] && [[ $(sed -n '/^\[options\]/{n;p}' "$t/out.conf") == "Include = $AGROS_GATE" ]] ||
     fail "held, but not by the gate, with pacman.conf's Include gone: $out / $(cat "$t/out.conf")"
+# [agros] with a second server (the R2 mirror): its first (GitHub Pages) unreachable, or its list without a good
+# signature, and the list comes from the next, not every Hyprland update held while Pages is down
+printf '%s\n' 'Server = https://mirror.invalid/repo/x86_64' >>"$t/pacman.conf"
+for case in DOWN SIG_AT; do
+    rm -f "$AGROS_GATE_CACHE"
+    # (in the command substitution's own shell: gate is a function)
+    out=$(export "$case=https://agros.invalid/x86_64" HAVE_hyprland=0.57.2-1 NEW_hyprland=0.58.0-1 APPROVED='hyprland 0.58.0'
+        [[ $case == DOWN ]] || export SIG=bad
+        gate 2>/dev/null)
+    [[ -z $out ]] && open && grep -qx 'hyprland 0.58.0' "$AGROS_GATE_CACHE" ||
+        fail "the approved list not taken from [agros]'s next server with the first's $case: $out"
+done
 echo "ok update-gate"
