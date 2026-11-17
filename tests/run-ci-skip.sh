@@ -28,6 +28,14 @@ done
 chmod +x "$t/tests/"*.sh
 out=$(CI=1 AGROS_TEST_JOBS=3 bash "$t/tests/run.sh" clash-a plain clash-b) && [[ $out == $'ok clash-a\nok plain\nok clash-b' ]] ||
     fail "tests run together: not each passed, in order: $out"
+# One that failed among the others and passed alone passes, said on stderr (a flaky test, seen in CI's log)
+printf '#!/bin/sh\nif [ ! -e %q/once ]; then touch %q/once; echo "FAIL: first time"; exit 1; fi\necho "ok flaky"\n' \
+    "$t" "$t" >"$t/tests/flaky.sh"
+chmod +x "$t/tests/flaky.sh"
+out=$(AGROS_TEST_JOBS=3 bash "$t/tests/run.sh" plain flaky 2>"$t/err") && [[ $out == $'ok plain\nok flaky' ]] ||
+    fail "a test that passed alone didn't pass: $out"
+grep -xF '!! flaky failed among the others, passed alone: first time' "$t/err" >/dev/null ||
+    fail "a test that failed among the others not said: $(cat "$t/err")"
 out=$(CI=1 AGROS_TEST_JOBS=3 bash "$t/tests/run.sh" plain whole) && fail "a real failure among others passed: $out"
 [[ $out == $'ok plain\nFAIL whole: '* ]] || fail "a real failure among others not said in order: $out"
 # Ended with exit 0 before its ok line: something said last, another test's line last, nothing at all

@@ -51,8 +51,10 @@ if ((jobs > 1 && ${#tests[@]} > 1)); then
 fi
 # (in order, as one at a time printed them)
 for t in "${tests[@]}"; do
-    line=$(cat "$res/$t" 2>/dev/null)
+    first=$(cat "$res/$t" 2>/dev/null) line=$first
     [[ -n $line && $line != FAIL\ * ]] || line=$(one "$t")
+    # (one that failed among the others and passed alone said on stderr, out of the results: a flaky test showed nowhere)
+    [[ $first != FAIL\ * || $line == FAIL\ * ]] || echo "!! $t failed among the others, passed alone: ${first#"FAIL $t: "}" >&2
     [[ $line != FAIL\ * ]] || failed=1
     echo "$line"
 done

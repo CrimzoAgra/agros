@@ -59,7 +59,7 @@ jobs:
       - name: The tools
         if: steps.secrets.outputs.ok == 'true'
         run: pacman -Syu --noconfirm --needed gnupg rclone
-      # (a few tries: Pages' CDN can serve an older database for minutes after a deploy, its packages gone)
+      # (a few tries: a download Pages dropped. Its CDN's older copies aren't read: mirror.sh asks for the current ones)
       - name: The published repo, its signatures checked
         if: steps.secrets.outputs.ok == 'true'
         env:

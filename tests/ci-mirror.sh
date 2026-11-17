@@ -13,10 +13,11 @@ gpg --batch --quiet --passphrase '' --quick-gen-key 'AgrOS test <test@agros.inva
 gpg --batch --quiet --armor --export >"$t/key.asc"
 site=$t/site
 mkdir -p "$site" "$t/bin"
-# (curl: -o's file from $site, its HTTP code on stdout; 404 when $site hasn't it)
+# (curl: -o's file from $site, its HTTP code on stdout; 404 when $site hasn't it. Only the current copy asked for, a
+# ?t= query past the CDN's: without one, nothing served)
 # shellcheck disable=SC2016  # (expanded by the stand-in)
 printf '#!/bin/bash\nwhile (($#)); do case $1 in -o) o=$2; shift ;; -w|-m|--retry|--connect-timeout) shift ;; https://*) u=$1 ;; esac; shift; done
-f=%s/${u#https://site/}\nif [[ -f $f ]]; then cp "$f" "$o"; printf 200; else printf 404; fi\n' "$site" >"$t/bin/curl"
+[[ $u == *"?t="[0-9]* ]] || { printf 000; exit 7; }\nu=${u%%%%\\?*}\nf=%s/${u#https://site/}\nif [[ -f $f ]]; then cp "$f" "$o"; printf 200; else printf 404; fi\n' "$site" >"$t/bin/curl"
 # (rclone: its calls written down)
 printf '#!/bin/sh\necho "$*" >>%s/rclone\n' "$t" >"$t/bin/rclone"
 chmod +x "$t/bin/"*

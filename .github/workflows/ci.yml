@@ -2,11 +2,13 @@ name: CI
 
 on:
   push:
-    # (not for a change to the docs alone: no package holds them, the daily run below still checks all. But the Lua
-    # API table, docs/how-it-works.md, which hypr-config's test reads. The last match wins, as agros-iso's iso.yml)
+    # (not for a change to the docs alone, their images too: no package holds them, the daily run below still checks
+    # all. But the Lua API table, docs/how-it-works.md, which hypr-config's test reads. The last match wins, as
+    # agros-iso's iso.yml)
     paths:
       - '**'
       - '!**.md'
+      - '!docs/images/**'
       - 'docs/how-it-works.md'
   pull_request:
   # Daily: the AUR packages AgrOS carries rebuilt when they've moved on (and against the latest Arch libraries)
@@ -52,10 +54,11 @@ jobs:
           # Thunar's headers with a compiler (hyprbars and the Thunar plugin built), mkinitcpio, bubblewrap and passt
           # (the boot's AUR sandbox and its network, checked for real: the host's loopback out of its reach), uwsm (its
           # Hyprland unit, agros-vmware's drop-in checked beside it), squashfs-tools (appimage-open reads an AppImage with
-          # it): the tests that check against them
+          # it), dash (nvidia-vaapi runs its sh file in a strict POSIX shell too) and desktop-file-utils (desktop-entries
+          # validates the launchers; both only when there, said nowhere): the tests that check against them
           pkgs=(git jq python python-yaml python-gobject python-xlib python-secretstorage gnupg shellcheck sudo libnotify fish
             procps-ng util-linux which diffutils pacman-contrib file gtk3 thunar lua lutris nodejs qt6-declarative hyprland
-            base-devel mkinitcpio bubblewrap passt xdg-desktop-portal-hyprland uwsm squashfs-tools)
+            base-devel mkinitcpio bubblewrap passt xdg-desktop-portal-hyprland uwsm squashfs-tools dash desktop-file-utils)
           # (a machine id: without one systemd's install hooks warn that /etc isn't set up; and its hook that loads a
           # package's kernel modules off: no systemd running here, it fails)
           systemd-machine-id-setup >/dev/null
@@ -86,7 +89,10 @@ jobs:
           fi
           [ -c /dev/net/tun ] || { mkdir -p /dev/net && mknod /dev/net/tun c 10 200; }
           chmod 666 /dev/net/tun
+      # (no token left in .git/config: the checkout is the ci user's, and this job runs what the repo job built)
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - name: Caelestia (from the published [agros] repo) and its dots' shortcuts, for the tests that check against it
         run: |
           pacman-key --init
@@ -190,18 +196,22 @@ jobs:
           # (as in the test job: a machine id, and no kernel-modules hook with no systemd running)
           systemd-machine-id-setup >/dev/null
           mkdir -p /etc/pacman.d/hooks && ln -sf /dev/null /etc/pacman.d/hooks/36-systemd-modules-load.hook
+          # (nor DKMS's: an AUR build's dependency pulls in a driver, and with no kernel here its hook's "error:" misled)
+          ln -sf /dev/null /etc/pacman.d/hooks/70-dkms-install.hook
           pacman-key --init
           pacman -Sy
           pacman -Su --noconfirm --needed $(pacman -T base-devel git sudo)
           git config --system init.defaultBranch main
           m=https://mirror.cachyos.org/repo/x86_64/cachyos
           curl -fsSL -o /tmp/keyring.pkg "$m/$(curl -fsSL "$m/" | grep -o 'cachyos-keyring-[^"]*\.pkg\.tar\.zst' | sort -V | tail -1)"
-          curl -fsSL -o /tmp/mirrorlist.pkg "$m/$(curl -fsSL "$m/" | grep -o 'cachyos-mirrorlist-[^"]*\.pkg\.tar\.zst' | sort -V | tail -1)"
           mkdir /tmp/k && bsdtar -xf /tmp/keyring.pkg -C /tmp/k
           pacman-key --add /tmp/k/usr/share/pacman/keyrings/cachyos.gpg
           pacman-key --lsign-key 882DCFE48E2051D48E2562ABF3B607488DB35A47
-          pacman -U --noconfirm /tmp/keyring.pkg /tmp/mirrorlist.pkg
-          sed -i '/^\[core\]/i [cachyos]\nInclude = /etc/pacman.d/cachyos-mirrorlist\n' /etc/pacman.conf
+          # (the keyring and the mirror list then installed from [cachyos] itself, their signatures by that key required:
+          # pacman -U of a downloaded file checked none, and ran its install script as root)
+          sed -i '/^\[core\]/i [cachyos]\nServer = '"$m"'\n' /etc/pacman.conf
+          pacman -Sy --noconfirm cachyos-keyring cachyos-mirrorlist
+          sed -i "s|^Server = $m\$|Include = /etc/pacman.d/cachyos-mirrorlist|" /etc/pacman.conf
           pacman -Sy --noconfirm
       - uses: actions/checkout@v7
         with:
@@ -302,10 +312,12 @@ jobs:
         with:
           name: approved
           path: /tmp/approved-now
-      # AgrOS's own packages as the agros job built them, none changed or added by the repo job's AUR build scripts
+      # AgrOS's own packages as the agros job built them, none changed or added by the repo job's AUR build scripts; the
+      # rest only ones this run builds, none replacing another package or shipping pacman's keyrings
       - name: AgrOS's own packages checked
         env:
           AGROS_OWN_SUMS: ${{ needs.agros.outputs.sums }}
+          AGROS_PUBLISHED: ${{ vars.AGROS_PUBLISHED || 'https://crimzoagra.github.io/agros/x86_64' }}
         run: ci/own-check.sh out/x86_64
       - name: Held back (what broke the tests)
         if: needs.test.outputs.result != 'ok'
@@ -363,12 +375,14 @@ jobs:
         run: |
           m=https://mirror.cachyos.org/repo/x86_64/cachyos
           curl -fsSL -o /tmp/keyring.pkg "$m/$(curl -fsSL "$m/" | grep -o 'cachyos-keyring-[^"]*\.pkg\.tar\.zst' | sort -V | tail -1)"
-          curl -fsSL -o /tmp/mirrorlist.pkg "$m/$(curl -fsSL "$m/" | grep -o 'cachyos-mirrorlist-[^"]*\.pkg\.tar\.zst' | sort -V | tail -1)"
           mkdir /tmp/k && bsdtar -xf /tmp/keyring.pkg -C /tmp/k
           pacman-key --add /tmp/k/usr/share/pacman/keyrings/cachyos.gpg
           pacman-key --lsign-key 882DCFE48E2051D48E2562ABF3B607488DB35A47
-          pacman -U --noconfirm /tmp/keyring.pkg /tmp/mirrorlist.pkg
-          sed -i '/^\[core\]/i [cachyos]\nInclude = /etc/pacman.d/cachyos-mirrorlist\n' /etc/pacman.conf
+          # (the keyring and the mirror list then installed from [cachyos] itself, their signatures by that key required:
+          # pacman -U of a downloaded file checked none, and ran its install script as root)
+          sed -i '/^\[core\]/i [cachyos]\nServer = '"$m"'\n' /etc/pacman.conf
+          pacman -Sy --noconfirm cachyos-keyring cachyos-mirrorlist
+          sed -i "s|^Server = $m\$|Include = /etc/pacman.d/cachyos-mirrorlist|" /etc/pacman.conf
           pacman -Sy --noconfirm
       - name: Install check (agros-desktop resolves in one transaction, none of what AgrOS leaves out; with CachyOS's CPU-optimised repos too)
         run: |
@@ -401,13 +415,19 @@ jobs:
     permissions:
       issues: write
     steps:
+      # (gh has the token from GH_TOKEN: none needed in .git/config, beside the artifacts the build made)
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      # (each only from a job that ran: a skipped one made none, and the missing artifact showed as an error on the run)
       - uses: actions/download-artifact@v8
+        if: needs.release.result != 'skipped'
         continue-on-error: true
         with:
           name: held
           path: /tmp/held
       - uses: actions/download-artifact@v8
+        if: needs.test.result != 'skipped'
         continue-on-error: true
         with:
           name: report
