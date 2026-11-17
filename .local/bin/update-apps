@@ -198,6 +198,15 @@ gated=$(mktemp --tmpdir agros-pacman.XXXXXX.conf)
 if "${paru[@]}" -Sy --noconfirm; then
     waits=$("$helpers/update-gate" /etc/pacman.conf "$gated") || cp /etc/pacman.conf "$gated"
     [[ -z $waits ]] || printf "Waits for AgrOS's check (comes with a later update): %s\n" "$waits"
+    # The keyrings first, on their own, where there's a newer one (as the boot's update does, auto-update): a package
+    # signed by a key the keyring here doesn't have yet (weeks offline, a new packager's) failed the whole update
+    mapfile -t keys < <(LC_ALL=C pacman -Qu --config "$gated" 2>/dev/null | "$helpers/updates-pending" |
+        awk '$1 ~ /^(archlinux|cachyos|agros)-keyring$/ { print $1 }')
+    if ((${#keys[@]})); then
+        echo "The keyrings first: ${keys[*]}"
+        "${paru[@]}" --config "$gated" -S --needed --noconfirm "${keys[@]}" ||
+            { echo "!! The keyrings couldn't be installed first: the rest tried with the keys as they are"; status=1; }
+    fi
     "${paru[@]}" --config "$gated" -Su --noconfirm || status=1
 else
     status=1

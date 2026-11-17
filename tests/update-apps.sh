@@ -157,6 +157,15 @@ wait || true
 { grep -q -- " -Sy --noconfirm$" "$t/paru" && grep -qE -- " --config [^ ]+ -Su --noconfirm$" "$t/paru"; } ||
     fail "paru not run once the boot's download was done, through the gate: $(cat "$t/paru" 2>/dev/null)"
 rm "$t/bin/sleep"
+# A newer keyring waiting (weeks offline): installed first, on its own, then the rest (a package signed with a key the
+# keyring here lacks failed the whole update); one pacman.conf holds back ("[ignored]") left out
+rm -f "$t/paru"; stub systemctl 'exit 1'
+stub pacman 'case "$1" in -Qu) printf "%s\n" "linux 6.1-1 -> 6.2-1" "archlinux-keyring 1-1 -> 2-1" "cachyos-keyring 1-1 -> 2-1 [ignored]" ;; esac; true'
+HOME=$t/home XDG_STATE_HOME=$t/state XDG_CACHE_HOME=$t/home/.cache PATH=$t/bin:$PATH "$here/.local/bin/update-apps" \
+    </dev/null >/dev/null 2>&1 || true
+keys=$(grep -n -- " --config [^ ]* -S --needed --noconfirm archlinux-keyring$" "$t/paru" | cut -d: -f1)
+su=$(grep -n -- " -Su --noconfirm$" "$t/paru" | cut -d: -f1)
+[[ -n $keys && -n $su ]] && ((keys < su)) || fail "the newer keyring not installed first, on its own: $(cat "$t/paru")"
 # A booted snapshot (its root an overlay in RAM) or the live USB: nothing updated (gone at the next boot; with Limine a
 # new kernel on the ESP without its modules), said, a failure for the Updates app; and no update offered by --check
 stub findmnt 'echo overlay'; rm -f "$t/paru" "$t/sent"
