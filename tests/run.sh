@@ -42,7 +42,7 @@ one() {
     echo "$out" | tail -1
 }
 jobs=${AGROS_TEST_JOBS:-$(nproc 2>/dev/null || echo 1)}
-limit=${AGROS_TEST_TIMEOUT:-900}
+limit=${AGROS_TEST_TIMEOUT:-600}
 res=$(mktemp -d) && trap 'rm -rf "$res"' EXIT
 if ((jobs > 1 && ${#tests[@]} > 1)); then
     export -f one && export here limit

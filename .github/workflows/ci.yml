@@ -39,7 +39,8 @@ jobs:
     outputs:
       result: ${{ steps.tests.outputs.result }}
     runs-on: ubuntu-26.04
-    timeout-minutes: 60
+    # (three passes of the tests at most, ci/test-passes.sh, each test within run.sh's own time limit)
+    timeout-minutes: 90
     # (privileged: game-focus-audio's user namespaces)
     container:
       image: archlinux:latest
