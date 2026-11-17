@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# agros-welcome's offer (restore your accounts, the system's part): marked offered on Later, or once the part picked has
+# worked. A system part whose sudo was cancelled (the password prompt closed) or failed is offered again at the next
+# login, and its terminal says why AgrOS asks for the password before sudo does
+set -euo pipefail
+# shellcheck source=lib.sh source-path=SCRIPTDIR
+. "$(dirname "$0")/lib.sh"
+((EUID)) || fail "run as root: agros-welcome --system would run for real"
+h=$t/home sb=$t/bin; mkdir -p "$h/.local/bin" "$sb"
+for c in qs caelestia hyprctl gsettings systemctl pacman flatpak codium librewolf spicetify; do
+    printf '#!/bin/sh\n[ "$1 $2" = "list --all" ] && echo /x/quickshell/caelestia/shell.qml\nexit 0\n' >"$sb/$c"
+done
+cp -r "$here/.local/bin/." "$h/.local/bin/"
+for c in flatpak-bundle-update lutris-library caelestia-overlay caelestia-restart agros-personal; do
+    printf '#!/bin/sh\nexit 0\n' >"$h/.local/bin/$c"
+done
+# (the button picked: $t/pick; sudo's answer: $t/sudo-rc; the terminal runs its command, its output kept, then "end")
+printf '#!/bin/sh\ncat "%s/pick"\n' "$t" >"$sb/notify-send"
+printf '#!/bin/sh\nexit "$(cat "%s/sudo-rc")"\n' "$t" >"$sb/sudo"
+printf '#!/bin/sh\nshift 2\n"$@" >>"%s/term" 2>&1 </dev/null\necho end >>"%s/term"\n' "$t" "$t" >"$sb/foot"
+chmod +x "$sb"/* "$h"/.local/bin/*
+st=$h/.local/state/agros
+# login <button> [sudo's status]: a login with that button picked, waited for until its terminal is done (Later: until
+# it's marked), so none of it is left running into the next one
+login() {
+    echo "$1" >"$t/pick"; echo "${2:-0}" >"$t/sudo-rc"; rm -f "$t/term" "$st/offered"
+    env -i HOME="$h" PATH="$sb:/usr/bin:/bin" bash "$h/.local/bin/agros-welcome" >/dev/null 2>&1 </dev/null || true
+    for _ in $(seq 100); do
+        if [[ $1 == later ]]; then [[ -e $st/offered ]] && break; else [[ $(cat "$t/term" 2>/dev/null) == *end ]] && break; fi
+        sleep 0.1
+    done
+}
+login system 1
+[[ $(cat "$t/term" 2>/dev/null) == *end ]] || fail "the system part's terminal never ran"
+[[ -e $st/offered ]] && fail "sudo cancelled, yet marked offered: the hardware apps never offered again"
+grep -q "password" "$t/term" || fail "the terminal doesn't say why AgrOS asks for the password: $(cat "$t/term")"
+login system 0
+[[ -e $st/offered ]] || fail "the system part worked, but not marked offered"
+login restore
+[[ -e $st/offered ]] || fail "the accounts restored, but not marked offered"
+printf '#!/bin/sh\nexit 1\n' >"$h/.local/bin/agros-personal"
+login restore
+[[ -e $st/offered ]] && fail "the restore failed, yet marked offered"
+login later
+[[ -e $st/offered ]] || fail "Later picked, but not marked offered"
+echo "ok welcome-offer"
