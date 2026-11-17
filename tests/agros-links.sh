@@ -35,6 +35,13 @@ rm "$t/home/.local/share/applications/new.desktop"
 rm -rf "$h/fetch"; run
 [[ ! -e $h/fetch ]] || fail "a config the user deleted came back"
 [[ ! -e $t/home/.local/share/applications/new.desktop ]] || fail "a launcher entry the user deleted came back"
+
+# A copy that failed (its folder couldn't be made: a file in its place, as a full disk fails it) isn't marked as
+# offered: it comes at the next login, once it can
+mkdir -p "$s/blocked"; echo agros >"$s/blocked/x.conf"; echo file >"$h/blocked"
+run 2>/dev/null
+rm "$h/blocked"; run
+[[ $(cat "$h/blocked/x.conf" 2>/dev/null) == agros ]] || fail "a config whose copy failed never offered again"
 [[ ! -L $t/home/.local/share/'*' ]] || fail "an empty share folder linked as a folder named '*'"
 
 # Updates: "old" and "agros" shipped before; the user edited mine.lua; shell.json is the user's (left out of the list)

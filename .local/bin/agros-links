@@ -35,8 +35,8 @@ for part in .config .local/share/applications; do
         to=$HOME/$part/${f#"$skel"/} n=${f#"$root"/}
         [[ $part == .config ]] && n=${f#"$skel"/}
         [[ ${had[$n]-} ]] && continue
-        [[ -e $to || -L $to ]] || { mkdir -p "$(dirname "$to")" && cp -P "$f" "$to"; }
-        echo "$n" >>"$seen"
+        # (marked seen only once it's there: a copy that failed, a full disk, is tried again at the next login)
+        { [[ -e $to || -L $to ]] || { mkdir -p "$(dirname "$to")" && cp -P "$f" "$to"; }; } && echo "$n" >>"$seen"
     done < <(find "$skel" \( -type f -o -type l \) -print0 2>/dev/null)
 done
 # Settings an update changed (/usr/share/agros/skel-versions: every version each has had, all but those yours to
