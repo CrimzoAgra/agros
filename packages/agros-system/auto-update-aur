@@ -2,14 +2,15 @@
 # The boot's AUR builds (agros-system: /usr/lib/agros/auto-update-aur, run by auto-update once its download finished):
 # the AUR apps with a newer version (not in a repo: paru -Qua's), and those built on a runtime the download brings a new
 # version of (update-kinds' runtimes: Qt's Quickshell, Caelestia, qtengine...; Python's modules), from the AUR or
-# [agros] (which builds them from it). Built as an account of their own (agros-aur: never root, nor a person's), in a
-# sandbox that sees the system as the download leaves it (its packages unpacked over /usr), so they fit the new runtime
-# before it's installed; installed at shutdown in auto-update's own pacman transaction (from a local repo, agros-aur).
-# Each base on its own: one that fails keeps its version (dotfiles-check names it), the others go on; only a new
-# runtime's own rebuilds hold it back.
+# [agros] (which builds them from it: those rebuilt at the version installed, the one CI built and tested, not the
+# AUR's newest). Built as an account of their own (agros-aur: never root, nor a person's), in a sandbox that sees the
+# system as the download leaves it (its packages unpacked over /usr), so they fit the new runtime before it's installed;
+# installed at shutdown in auto-update's own pacman transaction (from a local repo, agros-aur). Each base on its own:
+# one that fails keeps its version (dotfiles-check names it), the others go on; only a new runtime's own rebuilds hold
+# it back.
 #   auto-update-aur <dbpath>             as root: plan, build (as agros-aur), collect. Writes /var/lib/auto-update/aur/:
 #                                        planned (it ran to the end), rebuild (those a new runtime needs rebuilt),
-#                                        runtime-target (the new runtimes), wanted ("<name> <AUR version>" each one
+#                                        runtime-target (the new runtimes), wanted ("<name> <version>" each one
 #                                        planned), failed ("<base>: <why>" each one that failed, its own name for one
 #                                        the AUR doesn't know; or why none was built), log/ (each step's), repo/ and
 #                                        built ("<name> <version>" each built)
@@ -115,16 +116,53 @@ if [[ ${1:-} == --jail ]]; then
     shift
     exec "$@"
 fi
+# pin <base> <version>: in its build files' clone, the version installed made, not the AUR's newest (a rebuild of one
+# [agros] publishes: CI built and tested that one, the AUR's newest may be untested or one CI held back). A git package
+# (its version ends .r<count>.g<commit>): its one git source pinned at that commit, the build files as they are. Any
+# other: the AUR's newest commit of its build files whose .SRCINFO has that version. Neither found: 1, nothing built
+pin() {
+    local base=$1 v=$2 epoch='' ver rel c s hash
+    [[ $v == *:* ]] && epoch=${v%%:*} v=${v#*:}
+    ver=${v%-*} rel=${v##*-}
+    # (AgrOS's fix puts a .<n> after the AUR's pkgrel: aur-agros-patch)
+    [[ ! -f $(dirname "$self")/aur-patches/$base.patch ]] || rel=${rel%.*}
+    if [[ $ver =~ \.r[0-9]+\.g([0-9a-f]{7,40})$ ]]; then
+        hash=${BASH_REMATCH[1]}
+        [[ $(grep -cE '^[[:space:]]*source(_x86_64)? = ([^:]*::)?git\+' .SRCINFO) == 1 ]] ||
+            { echo "$base: not one git source to pin at $hash"; return 1; }
+        # (the quoted git+ URL in its source array, any #branch= or #tag= after it replaced; checked as makepkg reads it)
+        sed -i "/^[[:space:]]*source\(_x86_64\)\{0,1\}=(/,/)/ s|\(\"[^\"]*git+[^\"#]*\)\(#[^\"]*\)\{0,1\}\"|\1#commit=$hash\"|" PKGBUILD
+        makepkg --printsrcinfo 2>/dev/null | grep -qE "^[[:space:]]*source(_x86_64)? = ([^:]*::)?git\+[^#]*#commit=$hash\$" ||
+            { echo "$base: its git source couldn't be pinned at $hash"; return 1; }
+        return 0
+    fi
+    while read -r c; do
+        s=$(git show "$c:.SRCINFO" 2>/dev/null) || continue
+        [[ $(sed -n 's/^[[:space:]]*pkgver = //p' <<<"$s" | head -1) == "$ver" &&
+            $(sed -n 's/^[[:space:]]*pkgrel = //p' <<<"$s" | head -1) == "$rel" &&
+            $(sed -n 's/^[[:space:]]*epoch = //p' <<<"$s" | head -1) == "$epoch" ]] || continue
+        git checkout -q "$c" && return 0
+        break
+    done < <(git log --format=%H -- .SRCINFO 2>/dev/null)
+    echo "$base: the AUR has no build files of the version installed, $2"
+    return 1
+}
 # In the sandbox (fetch): each package's build files, fresh from the AUR, the keys its signed sources name (by
-# fingerprint, as paru fetches them; from a keyserver that keeps their names), and its sources, downloaded and checked
+# fingerprint, as paru fetches them; from a keyserver that keeps their names), and its sources, downloaded and checked.
+# <base>=<version>: that version's (pin); its build files' whole history fetched to find it. Exit 3: no such version
 if [[ ${1:-} == --fetch ]]; then
     dir=$2
     shift 2
     mkdir -p "$dir/work" "$HOME/.gnupg" && chmod 700 "$HOME/.gnupg"
-    for base; do
+    for arg; do
+        base=${arg%%=*} version=''
+        [[ $arg != *=* ]] || version=${arg#*=}
+        depth=(--depth 1)
+        [[ -z $version ]] || depth=()
         echo "== $base"
-        timeout 5m git clone -q --depth 1 "https://aur.archlinux.org/$base.git" "$dir/$base" &&
+        timeout 5m git clone -q "${depth[@]}" "https://aur.archlinux.org/$base.git" "$dir/$base" &&
             cd "$dir/$base" || { echo "$base: its build files couldn't be fetched"; exit 1; }
+        [[ -z $version ]] || pin "$base" "$version" || exit 3
         # (AgrOS's fix for it, as [agros]'s build has it: Quickshell's)
         "$(dirname "$self")/aur-agros-patch" "$dir/$base" "$base" || exit 1
         for k in $(sed -n 's/^[[:space:]]*validpgpkeys = //p' .SRCINFO); do
@@ -200,7 +238,9 @@ for p in "${foreign[@]}" "${rebuild[@]}"; do args+=(--data-urlencode "arg[]=$p")
 info=$(curl -fsS --connect-timeout 10 -m 120 -G "https://aur.archlinux.org/rpc/v5/info" "${args[@]}" |
     jq -r '.results[] | [.Name, .PackageBase, .Version] | @tsv') || fail "the AUR couldn't be reached"
 mapfile -t ignored < <(pacman-conf --config "$conf" IgnorePkg 2>/dev/null)
-declare -A bases=() held_bases=()
+# (pins: a rebuild of one [agros] publishes, at the version installed: what CI built and tested, never the AUR's newest,
+# which may be untested or one CI held back. --fetch's <base>=<version>)
+declare -A bases=() held_bases=() pins=()
 while IFS=$'\t' read -r name base ver; do
     [[ -n $name ]] || continue
     [[ $name =~ $name_re && $base =~ $name_re && $ver =~ ^[A-Za-z0-9.:_+~-]+$ ]] || fail "the AUR named a package oddly"
@@ -222,7 +262,12 @@ while IFS=$'\t' read -r name base ver; do
     done
     if grep -qxF -- "$name" <<<"$(printf '%s\n' "${rebuild[@]}")" || { [[ -n $have ]] && (($(vercmp "$ver" "$have") > 0)); }; then
         bases[$base]+=" $name"
-        echo "$name $ver" >>"$aur/wanted"
+        if [[ -n $have ]] && grep -qxF -- "$name" <<<"$agros" && grep -qxF -- "$name" <<<"$(printf '%s\n' "${rebuild[@]}")"; then
+            pins[$base]=${pins[$base]:-$have}
+            echo "$name $have" >>"$aur/wanted"
+        else
+            echo "$name $ver" >>"$aur/wanted"
+        fi
     fi
 done <<<"$info"
 for b in "${!held_bases[@]}"; do
@@ -258,9 +303,15 @@ trap 'rm -rf "$dir"' EXIT
 mkdir -p "$aur/info"
 order=()
 while read -r b _; do
-    if ! box fetch -- "$self" --fetch "$dir" "$b" >>"$aur/log/fetch.log" 2>&1; then
+    rc=0
+    box fetch -- "$self" --fetch "$dir" "$b${pins[$b]:+=${pins[$b]}}" >>"$aur/log/fetch.log" 2>&1 || rc=$?
+    if ((rc)); then
         tail -n 10 "$aur/log/fetch.log" | cat -v  # (the build's own text: no terminal escapes into root's log)
-        drop "$b" "its build files or sources couldn't be fetched (its log: $aur/log/fetch.log)"
+        if ((rc == 3)); then
+            drop "$b" "its version installed, ${pins[$b]}, couldn't be found on the AUR: not rebuilt for the new $said_target"
+        else
+            drop "$b" "its build files or sources couldn't be fetched (its log: $aur/log/fetch.log)"
+        fi
     elif ! get "$dir/$b/.SRCINFO" 1000000 >"$aur/info/$b"; then
         drop "$b" "it has no .SRCINFO"
     else
