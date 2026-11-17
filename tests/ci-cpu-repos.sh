@@ -89,10 +89,10 @@ grep -qx -- '-- v3: agros-desktop resolves (5 packages, 3 from CachyOS'"'"'s v3 
 # Not resolving, or the repos not read: a failure, said
 touch "$t/noresolve"
 out=$(go v3) && fail "agros-desktop not resolving passed"
-grep -q "^::error::agros-desktop doesn't resolve on a v3 machine" <<<"$out" && grep -q 'agros-foo' <<<"$out" || fail "not resolving not said: $out"
+grep -q "^!! agros-desktop doesn't resolve on a v3 machine" <<<"$out" && grep -q 'agros-foo' <<<"$out" || fail "not resolving not said: $out"
 rm "$t/noresolve"; touch "$t/nosync"
 out=$(go znver4) && fail "the repos not read passed"
-grep -q "^::error::CachyOS's znver4 repos couldn't be read" <<<"$out" || fail "the repos not read not said: $out"
+grep -q "^!! CachyOS's znver4 repos couldn't be read" <<<"$out" || fail "the repos not read not said: $out"
 rm "$t/nosync"
 out=$(go v4) && fail "a level that doesn't exist passed"
 echo "ok ci-cpu-repos"

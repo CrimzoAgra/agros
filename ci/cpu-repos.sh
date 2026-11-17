@@ -4,7 +4,8 @@
 # detect-architecture) puts CachyOS's optimised repos above [cachyos] and Arch's: v3 ([cachyos-v3], [cachyos-core-v3],
 # [cachyos-extra-v3]) or znver4 (the same with -znver4, x86_64_v4 packages). Each level's pacman.conf is the system's
 # with those repos before [cachyos] and their architecture allowed, its databases in a folder of their own (the
-# system's untouched); no CPU of that level needed, nothing installed. agros-desktop not resolving there fails this.
+# system's untouched); no CPU of that level needed, nothing installed. agros-desktop not resolving there fails this,
+# said in plain lines: its caller decides whether that's an error (CI's release job: a warning).
 # A library those repos build at another soname than the repo below them still resolves, and breaks at run time
 # (cachyos-extra-v3's old libplacebo once Arch's ffmpeg needed libplacebo.so=387, November 2026: mpv broke on v3
 # machines): said as a warning (and in the run's summary), not a failure, as it isn't AgrOS's to fix
@@ -39,14 +40,14 @@ for level in "$@"; do
         }
         { print }
         $0 == "[options]" { print "Architecture = " arches }' "$conf" >"$c"
-    grep -qx "\[${repos[0]}\]" "$c" || { echo "::error::$conf has no [cachyos] to put the $level repos above"; failed=1; continue; }
+    grep -qx "\[${repos[0]}\]" "$c" || { echo "!! $conf has no [cachyos] to put the $level repos above"; failed=1; continue; }
     if ! out=$(pacman --config "$c" --dbpath "$db" -Sy 2>&1); then
-        echo "::error::CachyOS's $level repos couldn't be read: $(tail -n3 <<<"$out")"
+        echo "!! CachyOS's $level repos couldn't be read: $(tail -n3 <<<"$out")"
         failed=1
         continue
     fi
     if ! plan=$(pacman --config "$c" --dbpath "$db" -Sp --print-format '%r %n' agros-desktop 2>&1); then
-        echo "::error::agros-desktop doesn't resolve on a $level machine (${repos[*]} above [cachyos]):"
+        echo "!! agros-desktop doesn't resolve on a $level machine (${repos[*]} above [cachyos]):"
         echo "$plan"
         failed=1
         continue

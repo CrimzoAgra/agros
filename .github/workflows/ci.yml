@@ -386,7 +386,7 @@ jobs:
           # cachyos-v3 didn't have yet, 2026-11-17), which machines meet whether this publishes or not, and stopping
           # held every AgrOS fix back until CachyOS caught up
           ci/cpu-repos.sh v3 znver4 ||
-            echo "::warning::agros-desktop doesn't resolve with CachyOS's CPU repos above (their lag behind Arch's): published anyway"
+            echo "::warning::agros-desktop doesn't resolve with CachyOS's CPU repos above (their lag behind Arch's; this step's log says what): published anyway"
       - uses: actions/upload-pages-artifact@v5
         with:
           path: out
