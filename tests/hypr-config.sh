@@ -249,7 +249,7 @@ for _, w in ipairs(WINDOWS) do
 end
 for _, k in ipairs({ 133, 64, 78, 30 }) do fire("input.keyboard.key", k, 0, 1); fire("input.keyboard.key", k, 0, 0) end
 fire("monitor.added", SCREENS[2]); fire("monitor.layout_changed")
--- What scripts call through hyprctl eval (README's Lua API), with the arguments they pass
+-- What scripts call through hyprctl eval (how-it-works' Lua API), with the arguments they pass
 dots.focus_window("0x3", true); dots.focus_window("0xdead")
 dots.focus_app("org.gnome.Nautilus", "Files", true); dots.focus_app(nil, nil, false)
 dots.maximise_window(); dots.minimise_window(); dots.refit_maximised(); dots.toggle_window_mode(); dots.toggle_window_mode()
@@ -404,7 +404,7 @@ out=$(run_config "$good" 1 1) || fail "the config failed to load on one screen: 
 grep -q '^config error' <<<"$out" && fail "config errors on one screen: $(grep '^config error' <<<"$out")"
 # Every function of the Lua API table (docs/how-it-works.md) is there once the config has loaded
 for f in $(grep -E '^\| `[a-z_]+\(' "$here/docs/how-it-works.md" | cut -d'|' -f2 | grep -oE '`[a-z_]+\(' | tr -d '`('); do
-    grep -qx "function $f" <<<"$out" || fail "dots.$f (README's Lua API) isn't defined"
+    grep -qx "function $f" <<<"$out" || fail "dots.$f (how-it-works' Lua API) isn't defined"
 done
 # The installer's rule (apps.lua) matches its main window's whole title, as Hyprland matches (RE2 FullMatch), in the
 # languages it starts in; not its dialogs
