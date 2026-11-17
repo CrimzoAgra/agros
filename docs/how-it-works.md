@@ -353,14 +353,15 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
       the result (also if the menu was closed meanwhile) and opens the Updates app
     - Opens over fullscreen games and videos too (`general.showOverFullscreen` in `shell.json`; notifications and
       toasts stay off fullscreen windows)
-  - Panels that open on hover (dashboard, Super menu, sidebar, volume, utilities) open only from the screen's last 3
+  - Panels that open on hover (dashboard, Super menu, sidebar, volume, the bottom-right
+    panel) open only from the screen's last 3
     pixels (not the last alone: Caelestia's dots' `cursor:hotspot_padding` keeps the pointer a pixel short of every
     edge), not the border's whole width, and not while a mouse button is held or a window is dragged; once open, one
     stays while the pointer is over it (`edge_triggers`)
   - Notifications:
     - The sidebar slides down from the top when you hover the top edge above it, with notifications only (no
       divider, ending above the bottom-right panel); Super+N (the letter) opens it alone, and Super+K (Caelestia's
-      "show all": the launcher, dashboard, volume slider and bottom-right panel) opens it too, merged with the
+      "show all": the launcher, dashboard, volume slider and bottom-right panel, Caelestia's utilities: quick settings) opens it too, merged with the
       bottom-right panel. The launcher closing (Esc) closes them all unless hovered (Caelestia's left the bottom-right
       panel open)
       (a Caelestia with its own shortcut mode for the sidebar, as main has, keeps it: its choice of which opening counts

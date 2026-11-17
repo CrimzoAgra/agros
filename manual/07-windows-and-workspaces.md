@@ -16,8 +16,8 @@ Windows behave the way they do on Windows:
   between them to resize both at once. When the gaps between windows change (Game mode, or the Settings app), snapped
   and maximised windows move to fit the new gaps and stay side by side.
 - A window can always be dragged back: its title bar never ends up out of reach.
-- The panels on the screen's edges (dashboard, Super menu, notifications, volume, utilities) open when the pointer touches the
-  very edge (on a side with another screen beyond, near it: the pointer goes on across there), and not while you drag
+- The panels on the screen's edges (dashboard, Super menu, notifications, volume, quick settings) open when the
+  pointer touches the very edge (on a side with another screen beyond, near it: the pointer goes on across there), and not while you drag
   something.
 - Minimised windows stay in the dock, dimmed. Click them, or press Alt+Tab, to bring them back.
 - In the Alt+Tab switcher, the **×** in a window's corner closes it (as its own close button would), and the switcher
