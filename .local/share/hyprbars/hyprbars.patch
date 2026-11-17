@@ -1,5 +1,5 @@
 diff --git a/hyprbars/barDeco.cpp b/hyprbars/barDeco.cpp
-index e57f77b..2f1f999 100644
+index e57f77b..da8f1fe 100644
 --- a/hyprbars/barDeco.cpp
 +++ b/hyprbars/barDeco.cpp
 @@ -26,2 +26,4 @@
@@ -12,20 +12,32 @@ index e57f77b..2f1f999 100644
 +    if (m_bEdgeCursor)
 +        Pointer::Cursor::overrideController->unsetOverride(Pointer::Cursor::CURSOR_OVERRIDE_DND);
  }
-@@ -127,3 +131,11 @@ bool CHyprBar::inputIsValid() {
+@@ -112,2 +116,6 @@ bool CHyprBar::inputIsValid() {
+     Vector2D surfaceCoords;
++    // (the focused window's bar under another window: a press there is that window's. Upstream's #722, on main only,
++    // where the check above says it already)
++    if (WINDOWATCURSOR && WINDOWATCURSOR != m_pWindow)
++        return false;
+ 
+@@ -127,3 +135,16 @@ bool CHyprBar::inputIsValid() {
  void CHyprBar::onMouseButton(Event::SCallbackInfo& info, IPointer::SButtonEvent e) {
 -    if (!inputIsValid())
 +    // The release of a press this bar took is its own wherever the pointer is by then (its window minimised by the
 +    // press, a resize let go over the shell or another window): kept from the app as the press was, its drag ended.
-+    // Left to inputIsValid, the flag stayed set and swallowed the release of the next click in the window
++    // Left to inputIsValid, the flag stayed set and swallowed the release of the next click in the window. Not through
++    // handleUpEvent: on v0.57.0 it still returns early for a window no longer focused (upstream's #722 is on main only)
 +    if (e.state != WL_POINTER_BUTTON_STATE_PRESSED && !m_bTouchEv && (m_bCancelledDown || m_bDraggingThis)) {
-+        handleUpEvent(info);
++        if (m_bCancelledDown)
++            info.cancelled = true;
++        if (m_bDraggingThis)
++            g_layoutManager->endDragTarget();
++        m_bCancelledDown = m_bDraggingThis = m_bDragPending = false;
 +        return;
 +    }
 +    // (a press already taken: the seam's between snapped windows, main.cpp)
 +    if (!inputIsValid() || (info.cancelled && e.state == WL_POINTER_BUTTON_STATE_PRESSED))
          return;
-@@ -154,5 +166,22 @@ void CHyprBar::onTouchUp(Event::SCallbackInfo& info, ITouch::SUpEvent e) {
+@@ -154,5 +175,22 @@ void CHyprBar::onTouchUp(Event::SCallbackInfo& info, ITouch::SUpEvent e) {
  void CHyprBar::onMouseMove(Vector2D coords) {
 -    // ensure proper redraws of button icons on hover when using hardware cursors
 -    if (g_pGlobalState->config.iconOnHover->value())
@@ -51,21 +63,21 @@ index e57f77b..2f1f999 100644
 +        m_bEdgeCursor = false;
 +    }
  
-@@ -173,2 +202,6 @@ void CHyprBar::onMouseMove(Vector2D coords) {
+@@ -173,2 +211,6 @@ void CHyprBar::onMouseMove(Vector2D coords) {
  
 +    // A click that wobbles a pixel isn't a drag (on a maximised window a drag un-maximises it)
 +    if ((cursorRelativeToBar() - m_vDragStart).size() < 5)
 +        return;
 +
      m_bDragPending = false;
-@@ -182,2 +215,6 @@ void CHyprBar::onTouchMove(Event::SCallbackInfo& info, ITouch::SMotionEvent e) {
+@@ -182,2 +224,6 @@ void CHyprBar::onTouchMove(Event::SCallbackInfo& info, ITouch::SMotionEvent e) {
      if (!m_bDraggingThis) {
 +        // Floated and pinned only for the drag (undone by endTouchDrag): a floating window, the only kind with a bar
 +        // here, was tiled when the finger lifted
 +        m_bTouchFloated = !m_pWindow->isFloating();
 +        m_bTouchPinned  = !(m_pWindow->m_state & Desktop::View::WINDOW_STATE_PINNED);
          // Initial setup for dragging a window.
-@@ -187,3 +224,8 @@ void CHyprBar::onTouchMove(Event::SCallbackInfo& info, ITouch::SMotionEvent e) {
+@@ -187,3 +233,8 @@ void CHyprBar::onTouchMove(Event::SCallbackInfo& info, ITouch::SMotionEvent e) {
  
 +        // (the bar's own drag: main.cpp's hook not to wait for a mouse move, which a finger's never makes. The config not
 +        // told (titlebar_drag_start: its snapping and un-maximising go by the pointer, which a finger doesn't move: they
@@ -74,7 +86,12 @@ index e57f77b..2f1f999 100644
          g_layoutManager->beginDragTarget(m_pWindow.lock()->layoutTarget(), MBIND_MOVE);
 +        g_barMove       = false;
          m_bDraggingThis = true;
-@@ -213,2 +255,15 @@ void CHyprBar::handleDownEvent(Event::SCallbackInfo& info, std::optional<ITouch:
+@@ -194,2 +245,4 @@ void CHyprBar::handleDownEvent(Event::SCallbackInfo& info, std::optional<ITouch:
+     m_bTouchEv = touchEvent.has_value();
++    // A new press: an earlier one's release is past (a tap on a button, which v0.57.0's onTouchUp leaves armed)
++    m_bCancelledDown = false;
+     if (m_bTouchEv)
+@@ -213,2 +266,15 @@ void CHyprBar::handleDownEvent(Event::SCallbackInfo& info, std::optional<ITouch:
  
 +    if (const int SIDES = m_bTouchEv ? 0 : resizeEdgeAt(COORDS)) {
 +        info.cancelled   = true;
@@ -90,7 +107,7 @@ index e57f77b..2f1f999 100644
 +    [[maybe_unused]] const auto startTopEdgeResize = [](auto&&...) { return false; };
 +
      const auto HEIGHT           = g_pGlobalState->config.barHeight->value();
-@@ -221,7 +276,7 @@ void CHyprBar::handleDownEvent(Event::SCallbackInfo& info, std::optional<ITouch:
+@@ -221,7 +287,7 @@ void CHyprBar::handleDownEvent(Event::SCallbackInfo& info, std::optional<ITouch:
  
 -    if (!VECINRECT(COORDS, 0, 0, assignedBoxGlobal().w, HEIGHT - 1)) {
 +    // (its bottom row too, which upstream leaves to Hyprland: a top resize edge between the bar and the app)
@@ -101,22 +118,22 @@ index e57f77b..2f1f999 100644
 -                (void)Config::Actions::floatWindow(Config::Actions::eTogglableAction::TOGGLE_ACTION_DISABLE);
 +            endTouchDrag();
              g_layoutManager->endDragTarget();
-@@ -254,3 +309,3 @@ void CHyprBar::handleDownEvent(Event::SCallbackInfo& info, std::optional<ITouch:
+@@ -254,3 +320,3 @@ void CHyprBar::handleDownEvent(Event::SCallbackInfo& info, std::optional<ITouch:
          std::chrono::duration_cast<std::chrono::milliseconds>(Time::steadyNow() - m_lastMouseDown).count() < 400 /* Arbitrary delay I found suitable */) {
 -        Config::Supplementary::executor()->spawn(ON_DOUBLE_CLICK);
 +        Config::Supplementary::executor()->spawn(withAddress(ON_DOUBLE_CLICK));
          m_bDragPending = false;
-@@ -259,2 +314,3 @@ void CHyprBar::handleDownEvent(Event::SCallbackInfo& info, std::optional<ITouch:
+@@ -259,2 +325,3 @@ void CHyprBar::handleDownEvent(Event::SCallbackInfo& info, std::optional<ITouch:
          m_bDragPending  = true;
 +        m_vDragStart    = COORDS;
      }
-@@ -274,4 +330,3 @@ void CHyprBar::handleUpEvent(Event::SCallbackInfo& info) {
+@@ -274,4 +341,3 @@ void CHyprBar::handleUpEvent(Event::SCallbackInfo& info) {
          m_bDraggingThis = false;
 -        if (m_bTouchEv)
 -            (void)Config::Actions::floatWindow(Config::Actions::eTogglableAction::TOGGLE_ACTION_DISABLE);
 +        endTouchDrag();
  
-@@ -286,3 +341,18 @@ void CHyprBar::handleUpEvent(Event::SCallbackInfo& info) {
+@@ -286,3 +352,18 @@ void CHyprBar::handleUpEvent(Event::SCallbackInfo& info) {
  void CHyprBar::handleMovement() {
 +    if (!m_pWindow.lock())
 +        return;
@@ -135,7 +152,7 @@ index e57f77b..2f1f999 100644
 +    g_barMove = false;
 +    HOOK("after");
      m_bDraggingThis = true;
-@@ -292,2 +362,59 @@ void CHyprBar::handleMovement() {
+@@ -292,2 +373,59 @@ void CHyprBar::handleMovement() {
  
 +// With general:resize_on_border, the bar's top is the window's top edge: a press on its top 4 px or just above it
 +// (Hyprland's grab area: border_size + extend_border_grab_area) resizes upwards, and one just beside the bar resizes
@@ -195,7 +212,7 @@ index e57f77b..2f1f999 100644
 +}
 +
  bool CHyprBar::doButtonPress(Config::INTEGER barPadding, Config::INTEGER barButtonPadding, Config::INTEGER barHeight, Vector2D COORDS, const bool BUTTONSRIGHT) {
-@@ -298,7 +425,8 @@ bool CHyprBar::doButtonPress(Config::INTEGER barPadding, Config::INTEGER barButt
+@@ -298,7 +436,8 @@ bool CHyprBar::doButtonPress(Config::INTEGER barPadding, Config::INTEGER barButt
          const auto BARBUF     = Vector2D{assignedBoxGlobal().w, sc<double>(barHeight)};
 -        Vector2D   currentPos = Vector2D{(BUTTONSRIGHT ? BARBUF.x - barButtonPadding - b.size - offset : offset), (BARBUF.y - b.size) / 2.0}.floor();
 +        const double buttonH    = std::min<double>(b.size, BARBUF.y); // as drawn: no taller than the bar
@@ -207,12 +224,12 @@ index e57f77b..2f1f999 100644
 -            Config::Supplementary::executor()->spawn(b.cmd);
 +            Config::Supplementary::executor()->spawn(withAddress(b.cmd));
              return true;
-@@ -328,3 +456,3 @@ void CHyprBar::renderBarTitle(const Vector2D& bufferSize, const float scale) {
+@@ -328,3 +467,3 @@ void CHyprBar::renderBarTitle(const Vector2D& bufferSize, const float scale) {
      const auto scaledBarPadding  = BARPADDING * scale;
 -    const int  paddingTotal      = scaledBarPadding * 2 + scaledButtonsSize + (ALIGN != "left" ? scaledButtonsSize : 0);
 +    const int  paddingTotal      = scaledBarPadding * 2 + scaledButtonsSize + (ALIGN != "left" ? scaledButtonsSize : 0) + (bufferSize.y - scaledSize) / 2.0;
      const int  maxWidth          = std::clamp(sc<int>(bufferSize.x - paddingTotal), 0, INT_MAX);
-@@ -377,15 +505,51 @@ void CHyprBar::renderBarButtons(Render::CRenderContext& ctx, CBox* barBox, const
+@@ -377,15 +516,51 @@ void CHyprBar::renderBarButtons(Render::CRenderContext& ctx, CBox* barBox, const
  
 -        if (INACTIVECOLOR > 0) {
 +        // A see-through button (no background) stays so on unfocused windows
@@ -270,7 +287,7 @@ index e57f77b..2f1f999 100644
 +            }
 +        }
  
-@@ -419,23 +583,32 @@ void CHyprBar::renderBarButtonsText(Render::CRenderContext& ctx, CBox* barBox, c
+@@ -419,23 +594,32 @@ void CHyprBar::renderBarButtonsText(Render::CRenderContext& ctx, CBox* barBox, c
          const auto BARBUF     = Vector2D{assignedBoxGlobal().w, sc<double>(HEIGHT)};
 -        Vector2D   currentPos = Vector2D{(BUTTONSRIGHT ? BARBUF.x - BARBUTTONPADDING - button.size - noScaleOffset : noScaleOffset), (BARBUF.y - button.size) / 2.0}.floor();
 -        bool       hovering   = VECINRECT(COORDS, currentPos.x, currentPos.y, currentPos.x + button.size + BARBUTTONPADDING, currentPos.y + button.size);
@@ -315,24 +332,28 @@ index e57f77b..2f1f999 100644
 +        const auto iconY = barBox->y + barBox->height / 2.0 - iconTex->m_size.y / 2.0;
 +        CBox       pos   = {iconX, iconY, iconTex->m_size.x, iconTex->m_size.y};
          pos.round(); // snap to whole pixels, otherwise the icon is sampled at a half-pixel offset and blurs
-@@ -443,3 +616,3 @@ void CHyprBar::renderBarButtonsText(Render::CRenderContext& ctx, CBox* barBox, c
+@@ -443,3 +627,3 @@ void CHyprBar::renderBarButtonsText(Render::CRenderContext& ctx, CBox* barBox, c
          if (!ICONONHOVER || (ICONONHOVER && m_iButtonHoverState > 0))
 -            g_pHyprOpenGL->renderTexture(ctx, button.iconTex, pos, {.a = a});
 +            g_pHyprOpenGL->renderTexture(ctx, iconTex, pos, {.a = a});
          offset += scaledButtonsPad + scaledButtonSize;
-@@ -602,3 +775,4 @@ void CHyprBar::renderPass(Render::CRenderContext& ctx, PHLMONITOR pMonitor, cons
+@@ -543,2 +727,5 @@ void CHyprBar::renderPass(Render::CRenderContext& ctx, PHLMONITOR pMonitor, cons
+         glClearStencil(0);
++        // (an earlier pass, blur, can leave the write mask at 0: the clear and the cutout did nothing, the bar flickered.
++        // Upstream's #717 on main only, there before glClearStencil: set again here it's harmless)
++        glStencilMask(0xFF);
+         glClear(GL_STENCIL_BUFFER_BIT);
+@@ -602,3 +789,4 @@ void CHyprBar::renderPass(Render::CRenderContext& ctx, PHLMONITOR pMonitor, cons
          const auto scaledBarPadding  = BARPADDING * pMonitor->m_scale;
 -        const auto xOffset           = ALIGN == "left" ? std::round(scaledBarPadding + (BUTTONSRIGHT ? 0 : scaledButtonsSize)) :
 +        // Left of the title, the same gap as above it (bar_padding is also the gap right of the buttons, which may be 0)
 +        const auto xOffset           = ALIGN == "left" ? std::round(scaledBarPadding + (BARBUF.y - m_pTextTex->m_size.y) / 2.0 + (BUTTONSRIGHT ? 0 : scaledButtonsSize)) :
                                                           std::round(((BARBUF.x - scaledBorderSize) / 2.0 - m_pTextTex->m_size.x / 2.0));
-@@ -715,12 +889,12 @@ void CHyprBar::damageOnButtonHover() {
+@@ -715,12 +903,12 @@ void CHyprBar::damageOnButtonHover() {
  
 -    for (auto& b : g_pGlobalState->buttons) {
 -        const auto BARBUF     = Vector2D{assignedBoxGlobal().w, sc<double>(HEIGHT)};
 -        Vector2D   currentPos = Vector2D{(BUTTONSRIGHT ? BARBUF.x - BARBUTTONPADDING - b.size - offset : offset), (BARBUF.y - b.size) / 2.0}.floor();
--
--        bool       hover = VECINRECT(COORDS, currentPos.x, currentPos.y, currentPos.x + b.size + BARBUTTONPADDING, currentPos.y + b.size);
 +    // Which buttons the cursor is over, as the bitfield the renderers read; redraw when it changes
 +    unsigned int state = 0;
 +    for (size_t i = 0; i < g_pGlobalState->buttons.size(); ++i) {
@@ -341,6 +362,8 @@ index e57f77b..2f1f999 100644
 +        const double hitH       = std::min<double>(b.size, BARBUF.y); // the same box as the click and the drawing
 +        Vector2D     currentPos = Vector2D{(BUTTONSRIGHT ? BARBUF.x - BARBUTTONPADDING - b.size - offset : offset), (BARBUF.y - hitH) / 2.0}.floor();
  
+-        bool       hover = VECINRECT(COORDS, currentPos.x, currentPos.y, currentPos.x + b.size + BARBUTTONPADDING, currentPos.y + b.size);
+-
 -        if (hover != m_bButtonHovered) {
 -            m_bButtonHovered = hover;
 -            damageEntire();
@@ -348,7 +371,7 @@ index e57f77b..2f1f999 100644
 +        if (VECINRECT(COORDS, currentPos.x, currentPos.y, currentPos.x + b.size + BARBUTTONPADDING, currentPos.y + hitH))
 +            state |= 1 << i;
  
-@@ -728,2 +902,7 @@ void CHyprBar::damageOnButtonHover() {
+@@ -728,2 +916,7 @@ void CHyprBar::damageOnButtonHover() {
      }
 +
 +    if (state != m_iButtonHoverState) {
