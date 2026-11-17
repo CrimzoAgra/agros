@@ -88,7 +88,10 @@ jobs:
           fi
           [ -c /dev/net/tun ] || { mkdir -p /dev/net && mknod /dev/net/tun c 10 200; }
           chmod 666 /dev/net/tun
+      # (no token left in .git/config: the checkout is the ci user's, and this job runs what the repo job built)
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - name: Caelestia (from the published [agros] repo) and its dots' shortcuts, for the tests that check against it
         run: |
           pacman-key --init
@@ -409,7 +412,10 @@ jobs:
     permissions:
       issues: write
     steps:
+      # (gh has the token from GH_TOKEN: none needed in .git/config, beside the artifacts the build made)
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       # (each only from a job that ran: a skipped one made none, and the missing artifact showed as an error on the run)
       - uses: actions/download-artifact@v8
         if: needs.release.result != 'skipped'
