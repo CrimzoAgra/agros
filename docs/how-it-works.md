@@ -260,9 +260,10 @@ Changes apply right away.
     off while typing, scrolling speed), key repeat (`hypr-user.lua` sets them), and the keyboard layout, variant and
     options: the system's, as the installer set it, through `localectl` (it asks for the password; the login screen and
     Scroll Lock's keymap follow it, from the Hyprland reload)
-  - **Screens**: each connected screen (Hyprland's list) by its full description: on or off, resolution and refresh
-    rate, scale (only those giving the mode a whole size in pixels, as Hyprland needs), position, and the main screen.
-    Empty is AgrOS's own choice (the host file's rule, the fastest rate)
+  - **Screens**: each connected screen (Hyprland's list) by its full description (by its connector's name for one
+    with none: a VM's screen has no EDID, so VMware's Virtual-1 has no make, model or serial): on or off, resolution
+    and refresh rate, scale (only those giving the mode a whole size in pixels, as Hyprland needs), position, and the
+    main screen. Empty is AgrOS's own choice (the host file's rule, the fastest rate)
   - **Look**: the wallpaper (pictures in `~/Pictures/Wallpapers`, `caelestia wallpaper -f`), the colour scheme, light
     or dark and its style (`caelestia scheme set`), the shell's fonts and text size, window gaps, border, rounded
     corners, blur and shadows (Caelestia's Hyprland variables), the shell's transparency, rounding and screen frame
@@ -625,7 +626,8 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
   screens, loaded on that machine only (`LegionCachy.lua`: the laptop's OLED and a Samsung LF27T450F; `TerraCachy.lua`:
   the desktop's Samsung C24F390 at its fastest mode). Copy it under your machine's hostname to fix a
   screen's mode or position by hand. The Settings app's Screens page goes over both (`screens.*` settings, by the
-  screen's full description, serial included: two of one model each keep theirs): what's set there is applied on top
+  screen's full description, serial included: two of one model each keep theirs; by its connector's name when it has
+  none, a VM's): what's set there is applied on top
   of the rule that applied to that screen, so a field left empty keeps it. The main screen goes to 0x0 (the first
   screen: workspaces 1-10, and the windows of a screen unplugged) and the others to its right unless given a position
   (there, or by the host file); the last screen on can't be turned off (all set off: the main one stays on, else the

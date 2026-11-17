@@ -71,13 +71,14 @@ mkdir -p "$t/sys/class/drm/card0-Virtual-1"; printf '1594x884\n4096x2160\n' >"$t
 # The Settings app's Screens page (screens.<description>.<field>): over the rule that applied, what's left empty kept
 # (the fastest rate here, also over a mode the screen doesn't have); the main screen at 0x0 and the others to its right;
 # never every screen off. EXTRA: more screens: one off but listed (with all), one the host file places, one with no
-# description
+# description (its settings by its name)
 settings() { cd "$here" && HOME=$t EXTRA=${1:-} lua -e '
 package.path = os.getenv("HOME") .. "/.config/caelestia/?.lua;" .. package.path
 local mine = { ["screens.Fast One.scale"] = "1.5", ["screens.Fast One.enabled"] = false, ["screens.main"] = "Other One",
                ["screens.Other One.enabled"] = false, ["screens.Other One.mode"] = 7,
                ["screens.Fast One.mode"] = "3840x2160@60.00", ["screens.Off One.mode"] = "1920x1080@60.00",
-               ["screens.Off One.scale"] = "0", ["screens.Off One.position"] = "left of it" }
+               ["screens.Off One.scale"] = "0", ["screens.Off One.position"] = "left of it",
+               ["screens.DP-5.scale"] = "1.25", ["screens.DP-5.enabled"] = false }
 local list = { { name = "DP-1", description = "Fast One", available_modes = {
                    { width = 1920, height = 1080, refresh_rate = 60.0, preferred = true },
                    { width = 1920, height = 1080, refresh_rate = 143.98 } } },
@@ -109,6 +110,8 @@ out=$(settings 1)
 grep -qx "desc:Off One 1920x1080@60.00 auto auto-right nil" <<<"$out" ||
     fail "a screen that's off but listed lost its settings, or got a scale or position that isn't one: $out"
 grep -qE "^desc:( |$)" <<<"$out" && fail "a screen with no description got a desc: rule matching every screen: $out"
+# (one with no description, a VM's: its settings by its connector's name, as the Settings app keys them)
+grep -qx "DP-5 preferred 1.25 auto-right true" <<<"$out" || fail "a screen with no description lost its settings: $out"
 # (the host file's position kept, not moved to the main one's right)
 grep -q "^desc:Named One .* auto-right" <<<"$out" && fail "the host file's position dropped for the main one's right: $out"
 # The lid and the Settings app's "On" agree (one place decides): docked, lid shut, the other screen turned off stays on

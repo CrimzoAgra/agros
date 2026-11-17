@@ -77,12 +77,16 @@ for _, m in ipairs(hl.get_monitors({ all = true }) or {}) do
     end
 end
 
--- Screens set in the Settings app (Screens page), by their full description (make, model and serial):
--- screens.<description>.mode ("1920x1080@143.98"), .scale ("1.5"), .position ("1920x0"), .enabled; each one left
+-- Screens set in the Settings app (Screens page), by their full description (make, model and serial), or by their
+-- connector's name for a screen with none (a VM's, with no EDID: Virtual-1), as the Settings app and workspaces.lua name
+-- them: screens.<description>.mode ("1920x1080@143.98"), .scale ("1.5"), .position ("1920x0"), .enabled; each one left
 -- empty keeps the rule above (the host file's, the fastest refresh rate). screens.main: that one at 0x0 (the first
 -- screen: workspaces 1-10), the others to its right unless given a position (here, or by the host file). After the
 -- rules above, so these win, and before the lid's, which starts from them
 local mine, main = {}, dots.setting("screens.main") or ""
+local function id(m) return (m.description or "") ~= "" and m.description or m.name end
+-- (its rule's output: by description where it has one, so it follows the screen to another connector)
+local function rule_output(m) return (m.description or "") ~= "" and "desc:" .. m.description or m.name end
 for key, value in pairs(dots.settings("screens.")) do
     local desc, field = key:match("^screens%.(.+)%.(%a+)$")
     if desc then
@@ -124,7 +128,7 @@ local function screens_off(closed, output)
             lid[m.name] = true
         else
             left[#left + 1] = m
-            if (mine[m.description or ""] or {}).enabled == false then wanted = wanted + 1 end
+            if (mine[id(m)] or {}).enabled == false then wanted = wanted + 1 end
         end
     end
     -- Every one left set off: one stays on, the same one whatever order Hyprland lists them in: the main screen, else
@@ -133,23 +137,23 @@ local function screens_off(closed, output)
     if wanted > 0 and wanted == #left then
         table.sort(left, function(a, b) return a.name < b.name end)
         for _, m in ipairs(left) do
-            if main ~= "" and m.description == main then keep = m; break end
+            if main ~= "" and id(m) == main then keep = m; break end
             if not keep and is_panel(m) then keep = m end
         end
         keep = keep or left[1]
     end
     for _, m in ipairs(left) do
-        if m ~= keep and (mine[m.description or ""] or {}).enabled == false then set[m.name] = true end
+        if m ~= keep and (mine[id(m)] or {}).enabled == false then set[m.name] = true end
     end
     return lid, set
 end
 
-local off = {}  -- (the screens this load or the lid turned off: name to its desc: rule, or false)
+local off = {}  -- (the screens this load or the lid turned off: name to its rule's output (desc: or its name), or false)
 local _, set_off = screens_off(lid_closed())
 for _, m in ipairs(hl.get_monitors({ all = true }) or {}) do
-    -- (no description: nothing to name it by, a desc: rule with none would match every screen)
-    local s = (m.description or "") ~= "" and mine[m.description] or {}
-    local applied = (m.description or "") ~= "" and (named["desc:" .. m.description] or named[m.name]) or {}
+    -- (no description: by its name, never a desc: rule with none, which would match every screen)
+    local s = mine[id(m)] or {}
+    local applied = named[rule_output(m)] or named[m.name] or {}
     -- (text, or not set: anything else, from a hand edit of settings.json, is left out; a mode the screen doesn't
     -- have, gone with a firmware or cable change, too: the rule that applied stays)
     local mode = type(s.mode) == "string" and s.mode ~= "" and s.mode or nil
@@ -169,14 +173,14 @@ for _, m in ipairs(hl.get_monitors({ all = true }) or {}) do
     -- A main screen: it at 0x0, the others where the host file puts them (not at 0x0: that's the main's now), else to
     -- its right
     local placed = applied.position ~= nil and applied.position ~= "auto" and applied.position ~= "0x0"
-    if main ~= "" and not position and not (placed and m.description ~= main) then
-        position = m.description == main and "0x0" or "auto-right"
+    if main ~= "" and not position and not (placed and id(m) ~= main) then
+        position = id(m) == main and "0x0" or "auto-right"
     end
-    if (m.description or "") ~= "" and (next(s) or position) then
+    if next(s) or position then
         -- (from the rule that applied to it, so what's left empty here stays as it was)
         local rule = {}
         for k, v in pairs(applied) do rule[k] = v end
-        rule.output = "desc:" .. m.description
+        rule.output = rule_output(m)
         rule.mode = mode or rule.mode or "preferred"
         rule.scale = scale or rule.scale or "auto"
         rule.position = position or rule.position or "auto"

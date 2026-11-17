@@ -258,7 +258,7 @@
               "type": "choice",
               "default": "",
               "apply": "hypr",
-              "options_cmd": "printf '\\tAutomatic\\n'; hyprctl -j monitors all 2>/dev/null | jq -r '.[] | select(.name != \"FALLBACK\") | \"\\(.description)\\t\\(.name): \\(.model)\"'",
+              "options_cmd": "printf '\\tAutomatic\\n'; hyprctl -j monitors all 2>/dev/null | jq -r '.[] | select(.name != \"FALLBACK\") | \"\\(if .description != \"\" then .description else .name end)\\t\\(.name)\\(if .model != \"\" then \": \" + .model else \"\" end)\"'",
               "open": true
             }
           ]

@@ -36,7 +36,8 @@ shown; "from": "caelestia-options" lists every one of them, by area. Saved in Ca
 which Caelestia watches: they apply at once. The default is AgrOS's own value where it ships one (/etc/skel), else
 Caelestia's. caelestia-vars.<variable>: one of Caelestia's Hyprland variables (gaps, borders...), through
 hypr-vars.lua like its shortcuts. "from": "screens" lists the connected screens' settings (screens.<description>.mode,
-scale, position, enabled; screens.main), read by user/monitors.lua; "from": "binds" the shortcuts no setting changes
+scale, position, enabled, by its connector's name for a screen with no description: screens.Virtual-1.mode;
+screens.main), read by user/monitors.lua; "from": "binds" the shortcuts no setting changes
 (Hyprland's list of binds), to show and to find clashes with."""
 import fcntl
 import hashlib
@@ -441,19 +442,28 @@ def scales(width, height, keep=None):
     return fits
 
 
+def screen_id(m):
+    """A screen's name in its settings: its full description (make, model and serial), or its connector's name
+    (Virtual-1) for one with none, as a VM's screen has no EDID. user/monitors.lua and workspaces.lua name it so too"""
+    return m.get("description") or m.get("name") or ""
+
+
 def screens_groups():
-    """The connected screens' settings (on or off ones), by their full description: one machine's own screens, so its
-    serial too (two of one model each have theirs). Read by user/monitors.lua; empty means as AgrOS sets it"""
-    monitors = [m for m in hyprctl("monitors", "all") or [] if m.get("description") and m.get("name") != "FALLBACK"]
+    """The connected screens' settings (on or off ones), by screen_id: one machine's own screens, so its serial too (two
+    of one model each have theirs). Read by user/monitors.lua; empty means as AgrOS sets it"""
+    listed = hyprctl("monitors", "all")
+    monitors = [m for m in listed or [] if screen_id(m) and m.get("name") != "FALLBACK"]
     if not monitors:
-        return [{"title": "Screens", "settings": [], "empty": "No screens found (not in a Hyprland session)"}]
+        why = "not in a Hyprland session" if listed is None else "Hyprland reported none"
+        return [{"title": "Screens", "settings": [], "empty": f"No screens found ({why})"}]
     groups, saved = [], stored()
     for m in monitors:
-        d = m["description"]
+        d = screen_id(m)
         modes = list(dict.fromkeys(x.removesuffix("Hz") for x in m.get("availableModes", [])))
         now = f"{m['width']}x{m['height']} at {m['refreshRate']:.0f} Hz, scale {m['scale']:g}" if not m.get("disabled") \
             else "off"
-        groups.append({"title": f"{m['name']}: {m['make']} {m['model']} (now {now})", "settings": [
+        what = " ".join(x for x in (m.get("make"), m.get("model")) if x)  # (a VM's screen: neither)
+        groups.append({"title": f"{m['name']}{': ' + what if what else ''} (now {now})", "settings": [
             {"key": f"screens.{d}.enabled", "label": "On", "type": "bool", "default": True, "apply": "hypr",
              "description": "Off: nothing is shown on it (the last screen showing stays on: a laptop's panel under its"
                             " closed lid doesn't count)."},

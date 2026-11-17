@@ -83,6 +83,19 @@ saved[scale] = "1.75"
 json.dump(saved, open(ds.SETTINGS, "w"))
 assert offered() == ["", "1", "1.25", "1.5", "1.6", "1.75", "2"], f"the scale set no longer offered: {offered()}"
 assert json.loads(run("get", scale)) == "1.75", "the scale set read as the default"
+# A screen with no description (a VM's, with no EDID): listed all the same, its settings by its connector's name, as
+# user/monitors.lua reads them. None from Hyprland said as that, not as no Hyprland session
+ds.hyprctl = lambda *a: [{"description": "", "name": "Virtual-1", "make": "", "model": "", "serial": "", "width": 2258,
+                          "height": 1359, "refreshRate": 60.0, "scale": 1.0}] if a[0] == "monitors" else []
+vm = ds.screens_groups()
+assert len(vm) == 1 and vm[0]["title"] == "Virtual-1 (now 2258x1359 at 60 Hz, scale 1)", vm
+assert vm[0]["settings"][0]["key"] == "screens.Virtual-1.enabled", vm[0]["settings"][0]
+assert run("set", "screens.Virtual-1.scale", '"1"', "--later") == "hypr\n", "a screen with no description not set"
+assert '["screens.Virtual-1.scale"] = "1"' in open(f"{t}/dots/settings.lua").read(), "its setting not in settings.lua"
+ds.hyprctl = lambda *a: []
+assert ds.screens_groups()[0]["empty"] == "No screens found (Hyprland reported none)", ds.screens_groups()
+ds.hyprctl = lambda *a: None
+assert ds.screens_groups()[0]["empty"] == "No screens found (not in a Hyprland session)", ds.screens_groups()
 ds.hyprctl = real_hyprctl
 
 options = ds.caelestia_options()
