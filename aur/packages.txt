@@ -5,6 +5,11 @@
 # (no hyprland-plugin-hyprbars: AgrOS's own agros-hyprbars, with its patch, takes its place)
 caelestia-cli
 caelestia-shell
+# (Caelestia's AUR dependencies, which paru and ci/build-repo.sh build anyway: listed so ci/own-check.sh takes them
+# on a first build too, with no published database to find them in)
+python-materialyoucolor
+libcava
+qt6-m3shapes-git
 ttf-rubik-vf
 qtengine
 darkly-bin
