@@ -37,7 +37,7 @@ The manual lives in [`manual/`](manual/).
 
 **Getting started**
 
-- [Installing](manual/02-installing.md)
+- [Installing](manual/02-installing.md), and [beside Windows](manual/02-installing.md#keeping-windows)
 - [Your first login](manual/03-first-login.md)
 - [Coming from Windows](manual/04-coming-from-windows.md)
 
@@ -53,8 +53,10 @@ The manual lives in [`manual/`](manual/).
 **Looking after it**
 
 - [Settings](manual/11-settings.md)
-- [Updates](manual/12-updates.md), and [how they stay safe](manual/12-updates.md#how-updates-stay-safe)
-- [Your accounts and the pen drive](manual/13-accounts.md)
+- [Updates](manual/12-updates.md), [how they stay safe](manual/12-updates.md#how-updates-stay-safe) and
+  [if one goes wrong](manual/12-updates.md#if-an-update-goes-wrong)
+- [Your accounts and the pen drive](manual/13-accounts.md), and
+  [another person on this PC](manual/13-accounts.md#another-person-on-this-pc)
 - [Troubleshooting](manual/14-troubleshooting.md)
 
 **For developers**
