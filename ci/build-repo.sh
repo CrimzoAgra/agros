@@ -273,10 +273,11 @@ fi
 # version would keep the old installer published, so the build fails when the swaps' checksum isn't the one recorded
 # for this calamares_rel (each rel's line kept as it is: a new checksum under an old rel fails just the same)
 if [[ -z ${AGROS_SKIP_AUR:-} ]]; then
-    calamares_rel=6
+    calamares_rel=7
     case $calamares_rel in
         5) calamares_sum=2db12fafcbd8 ;;
         6) calamares_sum=025bcfdf8226 ;;
+        7) calamares_sum=720cf57ae6f7 ;;
     esac
     # CachyOS's recipe as AgrOS last checked it (a commit of CachyOS-PKGBUILDS), not its newest: a change of theirs
     # reaches AgrOS's installer only once looked at, with this moved on and calamares_rel raised. (Their 5c2ef554, a
@@ -299,6 +300,14 @@ if [[ -z ${AGROS_SKIP_AUR:-} ]]; then
     sed -i 's/gs->value( "packagechooser_bootloader" ).toString()/QStringLiteral( "grub" )/' \
         src/modules/zfs/ZfsJob.cpp src/modules/partition/Config.cpp src/modules/partition/PartitionViewStep.cpp \
         src/modules/partition/core/PartitionActions.cpp
+    # Installed beside Windows (or replacing a partition): an EFI partition already there is used if it's at least the
+    # minimum size (partition.conf's efi.minimumSize, agros-iso's agros-calamares-config), not refused below the size a
+    # new one is made (512 MB): Windows makes its own 100 MB, and "Install alongside" stayed greyed out. GRUB needs a few
+    # MB there (the kernels are on the system's partition)
+    sed -i -e 's/PartUtils::isEfiFilesystemRecommendedSize( efiPartition )/PartUtils::isEfiFilesystemMinimumSize( efiPartition )/' \
+        -e 's/Calamares::BytesToMiB( PartUtils::efiFilesystemRecommendedSize() )/Calamares::BytesToMiB( PartUtils::efiFilesystemMinimumSize() )/' \
+        -e 's/is too small (recommended %1 MiB), please use manual partition/is too small (at least %1 MiB), please use manual partition/' \
+        src/modules/partition/gui/ChoicePage.cpp
     # (each one checked: a CachyOS or Calamares change that moves a line fails the build, not a silent unchanged installer)
     grep -q 'palette().windowText().color()' src/modules/partition/gui/PartitionLabelsView.cpp &&
         grep -q 'palette().placeholderText().color()' src/modules/partition/gui/PartitionLabelsView.cpp &&
@@ -306,6 +315,8 @@ if [[ -z ${AGROS_SKIP_AUR:-} ]]; then
         grep -q 'QPalette::HighlightedText : QPalette::NoRole' src/modules/welcome/WelcomePage.cpp &&
         grep -q 'bootloader = QStringLiteral( "grub" )' src/modules/zfs/ZfsJob.cpp &&
         grep -q 'AgrOS: the map scaled to fit' src/modules/locale/timezonewidget/timezonewidget.cpp &&
+        [[ $(grep -c 'PartUtils::isEfiFilesystemMinimumSize( efiPartition )' src/modules/partition/gui/ChoicePage.cpp) == 3 ]] &&
+        ! grep -q 'efiFilesystemRecommendedSize' src/modules/partition/gui/ChoicePage.cpp &&
         ! grep -rq 'packagechooser_bootloader' src/modules --include=*.cpp ||
         { echo "AgrOS's changes to Calamares no longer fit (ci/build-repo.sh)"; return 1; }
 SH

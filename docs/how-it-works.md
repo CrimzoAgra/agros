@@ -98,7 +98,8 @@ AUR's). Without it, a window that closed while Quickshell was asking Hyprland fo
 late answer and stayed listed for good (a game quit, its icon left in the dock). The boot's rebuild on a new Qt
 (`auto-update-aur`) adds the same fix, and a patch that no longer applies fails the build rather than going out without
 it. CachyOS's installer is built there too: `cachyos-calamares-next` rebuilt with AgrOS's changes (the live ISO
-installs it from `[agros]`): its version is CachyOS's with a `.N` after the pkgrel (`calamares_rel` in
+installs it from `[agros]`; among them, an EFI partition already on the disk checked against the minimum size,
+agros-iso's 64 MB, not the 512 MB a new one gets, so it installs beside Windows' 100 MB one): its version is CachyOS's with a `.N` after the pkgrel (`calamares_rel` in
 `ci/build-repo.sh`), raised with any change to AgrOS's changes, beside their new checksum (`calamares_sum`), or CI
 fails. CachyOS's recipe for it is taken at a fixed commit of CachyOS-PKGBUILDS (`calamares_pkgbuild`), not their
 newest: their own changes (on 2026-11-17 a new name, `cachyos-calamares`, and another branch, whose installer has no

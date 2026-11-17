@@ -21,8 +21,9 @@ On the live desktop, click **Launch installer**. It needs an internet connection
 during the install, so you get the latest versions.
 
 1. Pick your language, location and keyboard.
-2. Pick the drive. **Erase disk** takes over the whole drive; to keep Windows, choose **Install alongside** or
-   **Manual partitioning**.
+2. Pick the drive. **Erase disk** takes over the whole drive; to keep Windows, choose **Install alongside** (drag
+   the divider to share the drive between them) or **Manual partitioning**. AgrOS uses the small boot partition
+   Windows already has.
 3. Create your user and password.
 4. Click **Install**. There's no desktop to choose: AgrOS is the desktop.
 
