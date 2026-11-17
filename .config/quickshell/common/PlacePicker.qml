@@ -73,14 +73,21 @@ Scope {
             try {
                 root.placeNames = JSON.parse(text()) ?? {};
             } catch (e) {}
+            makeNames.tried = false;
             root.changed();
         }
         // (none yet: made empty and read again, so it's watched; a place picked in the other one then shows here by its
-        // name too, not its coordinates)
-        onLoadFailed: makeNames.running = true
+        // name too, not its coordinates. Once until it next loads: one that still can't be read (a full disk, a file
+        // that can't be made or read) made and read again forever, a busy loop in the widgets and in Caelestia)
+        onLoadFailed: if (!makeNames.tried) {
+            makeNames.tried = true;
+            makeNames.running = true;
+        }
     }
     Process {
         id: makeNames
+
+        property bool tried
 
         command: ["sh", "-c", '[ -e "$1" ] || { mkdir -p "${1%/*}" && echo "{}" >"$1"; }', "sh", placeNamesFile.path]
         onExited: placeNamesFile.reload()

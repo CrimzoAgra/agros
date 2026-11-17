@@ -18,7 +18,12 @@ fi
 # No colours yet (Caelestia hasn't written them): the login screen's own defaults, but still for this user
 colours=$(jq -c '.colours // {}' "$scheme" 2>/dev/null) || true
 [[ -n $colours ]] || colours='{}'  # an empty file prints nothing
+# A new file of its own, then renamed over theme.json: whole or not at all (an empty one would leave the login screen
+# with no user). Not a fixed name: the theme folder is every admin's (wheel, no sticky bit), so two logins at once wrote
+# into one file, and a link left at that name by another account was written through
+tmp=$(mktemp "$dir/theme.json.XXXXXX")
+trap 'rm -f "$tmp"' EXIT
 jq -n --arg user "$user" --arg wall "$dir/wallpaper" --argjson colours "$colours" \
-    '{user: $user, wallpaper: $wall, colours: $colours}' >"$dir/theme.json.tmp"
-mv "$dir/theme.json.tmp" "$dir/theme.json"  # whole or not at all: an empty one would leave the login screen with no user
-chmod 644 "$dir/theme.json"
+    '{user: $user, wallpaper: $wall, colours: $colours}' >"$tmp"
+chmod 644 "$tmp"
+mv "$tmp" "$dir/theme.json"
