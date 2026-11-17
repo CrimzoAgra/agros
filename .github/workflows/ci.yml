@@ -53,6 +53,18 @@ jobs:
       image: archlinux:latest
       options: --privileged
     steps:
+      # A container, with no systemd or D-Bus running: pacman's hooks that only reload or restart running services off
+      # (each said "Skipped: Current root is not booted." at every install, about 40 a run), with the kernel modules'
+      # (with no systemd running it fails) and DKMS's (an AUR build's dependency pulls in a driver, and with no kernel
+      # here its hook's "error:" misled). The same step first in each job with a container
+      - &container-hooks
+        name: Pacman hooks for a container
+        run: |
+          mkdir -p /etc/pacman.d/hooks
+          for h in 25-systemd-sysctl 30-systemd-daemon-reload-system 30-systemd-daemon-reload-user \
+            35-systemd-udev-reload 35-systemd-enqueue-marked dbus-reload 36-systemd-modules-load 70-dkms-install; do
+            ln -sf /dev/null "/etc/pacman.d/hooks/$h.hook"
+          done
       - name: Tools the tests use
         run: |
           # (only what isn't there: pacman warns about each one asked for that is). Node, qmllint, Hyprland's and
@@ -64,10 +76,8 @@ jobs:
           pkgs=(git jq python python-yaml python-gobject python-xlib python-secretstorage gnupg shellcheck sudo libnotify fish
             procps-ng util-linux which diffutils pacman-contrib file gtk3 thunar lua lutris nodejs qt6-declarative hyprland
             base-devel mkinitcpio bubblewrap passt xdg-desktop-portal-hyprland uwsm squashfs-tools dash desktop-file-utils)
-          # (a machine id: without one systemd's install hooks warn that /etc isn't set up; and its hook that loads a
-          # package's kernel modules off: no systemd running here, it fails)
+          # (a machine id: without one systemd's install hooks warn that /etc isn't set up)
           systemd-machine-id-setup >/dev/null
-          mkdir -p /etc/pacman.d/hooks && ln -sf /dev/null /etc/pacman.d/hooks/36-systemd-modules-load.hook
           pacman -Sy
           pacman -Su --noconfirm --needed $(pacman -T "${pkgs[@]}")
           # A kernel's modules for nvidia-early, unpacked rather than installed: its install hook builds an initramfs,
@@ -107,7 +117,8 @@ jobs:
         shell: bash
         run: |
           read -ra gated < <(sed -n 's/^[[:space:]]*IgnorePkg[[:space:]]*=[[:space:]]*//p' packages/agros-system/agros-gate.conf | paste -sd' ')
-          pacman -S --needed --noconfirm "${gated[@]}" >/dev/null
+          # (most came with the setup above: pacman's "is up to date -- skipping" for each of them left out of the log)
+          pacman -S --needed --noconfirm "${gated[@]}" 2> >(grep -v ' is up to date -- skipping$' >&2) >/dev/null
           { echo 'gated<<EOF'
             for p in "${gated[@]}"; do v=$(pacman -Q "$p"); v=${v#* }; echo "$p ${v%-*}"; done
             echo EOF; } >>"$GITHUB_OUTPUT"
@@ -204,17 +215,15 @@ jobs:
     container:
       image: archlinux:latest
     steps:
+      - *container-hooks
       - &build-tools
         name: Build tools, and CachyOS's repo (what AgrOS installs on, and paru)
         run: |
           # [multilib] (Steam's 32-bit libraries), as CachyOS has it on
           grep -q '^\[multilib\]' /etc/pacman.conf || printf '\n[multilib]\nInclude = /etc/pacman.d/mirrorlist\n' >>/etc/pacman.conf
           sed -i 's/^#*DownloadUser.*/#DownloadUser = alpm/' /etc/pacman.conf
-          # (as in the test job: a machine id, and no kernel-modules hook with no systemd running)
+          # (as in the test job: a machine id)
           systemd-machine-id-setup >/dev/null
-          mkdir -p /etc/pacman.d/hooks && ln -sf /dev/null /etc/pacman.d/hooks/36-systemd-modules-load.hook
-          # (nor DKMS's: an AUR build's dependency pulls in a driver, and with no kernel here its hook's "error:" misled)
-          ln -sf /dev/null /etc/pacman.d/hooks/70-dkms-install.hook
           pacman-key --init
           pacman -Sy
           pacman -Su --noconfirm --needed $(pacman -T base-devel git sudo)
@@ -265,6 +274,7 @@ jobs:
       image: archlinux:latest
       options: --privileged
     steps:
+      - *container-hooks
       - *build-tools
       - uses: actions/checkout@v7
         with:
@@ -307,6 +317,7 @@ jobs:
     container:
       image: archlinux:latest
     steps:
+      - *container-hooks
       - name: Tools
         run: |
           grep -q '^\[multilib\]' /etc/pacman.conf || printf '\n[multilib]\nInclude = /etc/pacman.d/mirrorlist\n' >>/etc/pacman.conf
@@ -423,6 +434,7 @@ jobs:
           trap 'gpgconf --kill all; rm -rf "$(gpgconf --list-dirs homedir)"' EXIT
           echo "$AGROS_GPG_KEY" | gpg --batch --import
           ci/sign-repo.sh out/x86_64
+      - *container-hooks
       - name: Tools (the install check's)
         run: |
           grep -q '^\[multilib\]' /etc/pacman.conf || printf '\n[multilib]\nInclude = /etc/pacman.d/mirrorlist\n' >>/etc/pacman.conf
