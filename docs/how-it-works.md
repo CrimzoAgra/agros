@@ -851,8 +851,9 @@ helper a package update just brought works before `agros-links` has linked it), 
   updates it, after one click. One on a drive that won't run it (a USB stick's FAT, a noexec mount) is copied there
   first. A file you open is asked about first (it runs as you; an installed app's new version opened from that app as
   "Update <Name>?": its `APPIMAGE` is inherited by all it starts, a browser's downloads too, so never taken unasked),
-  and read without running it where it can be (`unsquashfs`, from `squashfs-tools` in `agros-desktop`); one whose
-  launcher entry is another app's isn't installed
+  and read without running it where it can be (`unsquashfs`, from `squashfs-tools` in `agros-desktop`), its launcher
+  entry (1 MB at most) and icon (4 MB) sized up first (`unsquashfs -lls`: /tmp is memory); one whose launcher entry
+  is another app's isn't installed
 - **`.local/bin/appimage-update`**: updates those AppImages from their GitHub releases, checked against the release's
   checksums when it has them (some, but none for the file: not installed)
 - **`.local/bin/flatpak-bundle-update`**: updates Flatpaks installed from a downloaded `.flatpak` file (no Flatpak repo,

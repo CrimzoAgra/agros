@@ -158,6 +158,20 @@ if command -v mksquashfs >/dev/null && command -v unsquashfs >/dev/null; then
         python3 "$here/.local/bin/appimage-open" "$t/real-new.AppImage" >/dev/null 2>&1 || fail "an app's own update not installed"
     [[ $(cat "$t/asked" 2>/dev/null) == *"--title=Update Demo?"* && ! -e $t/real-new.AppImage ]] ||
         fail "an app's own update not installed after a yes: $(cat "$t/asked" 2>/dev/null)"
+    # A launcher entry over 1 MB (one compressed to nearly nothing filled /tmp, which is memory, before you were
+    # asked): its size listed first (unsquashfs -lls), never extracted; so no launcher entry, not installed
+    mkdir -p "$t/sq-big"
+    { printf '[Desktop Entry]\nName=Big\nExec=big\nType=Application\n'; head -c 2097152 /dev/zero | tr '\0' '#'; } >"$t/sq-big/demo.desktop"
+    mksquashfs "$t/sq-big" "$t/sq-big.img" -quiet -noappend >/dev/null
+    cat "$(type -P true)" "$t/sq-big.img" >"$t/big.AppImage"; chmod +x "$t/big.AppImage"
+    # shellcheck disable=SC2016  # (expanded by the stand-in)
+    printf '#!/bin/sh\necho "unsquashfs $*" >>%s/unsquashfs\nexec %s "$@"\n' "$t" "$(type -P unsquashfs)" >"$t/bin/unsquashfs"
+    chmod +x "$t/bin/unsquashfs"
+    out=$(HOME=$t/big-home PATH=$t/bin:$PATH python3 "$here/.local/bin/appimage-open" --install "$t/big.AppImage" 2>&1) &&
+        fail "an AppImage with a launcher entry over 1 MB installed"
+    [[ $out == *"no launcher entry inside"* ]] && grep -q -- '-lls ' "$t/unsquashfs" && ! grep -q -- ' -d ' "$t/unsquashfs" ||
+        fail "a launcher entry over 1 MB extracted: $out / $(cat "$t/unsquashfs")"
+    rm "$t/bin/unsquashfs"
 else
     skipped "no squashfs-tools here: an AppImage read without running it not checked"
 fi
@@ -184,6 +198,21 @@ for icon in "$(printf '../%.0s' {1..20})${t#/}/secret" 'd?mo' 'dem[o]'; do
     [[ -z $(ls -A "$t/icon-home/.local/share/icons" 2>/dev/null) ]] && grep -qxF "Icon=$icon" "$t/icon-home/.local/share/applications/demo.desktop" ||
         fail "an icon taken by Icon=$icon: $(ls "$t/icon-home/.local/share/icons" 2>/dev/null)"
 done
+# Read up to a size alone where its own extract wrote it (no squashfs to list first): a launcher entry over 1 MB isn't
+# read (none, not installed), an icon over 4 MB isn't taken
+mkdir -p "$t/big-img"
+{ printf '[Desktop Entry]\nName=Demo\nExec=demo\nType=Application\n'; head -c 2097152 /dev/zero | tr '\0' '#'; } >"$t/big-img/demo.desktop"
+cp "$t/orig.AppImage" "$t/big.AppImage"
+out=$(IMG=$t/big-img HOME=$t/big-home PATH=$t/bin:$PATH python3 "$here/.local/bin/appimage-open" --install "$t/big.AppImage" 2>&1) &&
+    fail "an AppImage with a launcher entry over 1 MB installed"
+[[ $out == *"no launcher entry inside"* && $out != *Traceback* ]] || fail "a launcher entry over 1 MB read: $out"
+printf '[Desktop Entry]\nName=Demo\nExec=demo\nIcon=demo\nType=Application\n' >"$t/big-img/demo.desktop"
+head -c 5242880 /dev/zero >"$t/big-img/demo.png"
+cp "$t/orig.AppImage" "$t/big.AppImage"
+IMG=$t/big-img HOME=$t/big-home PATH=$t/bin:$PATH python3 "$here/.local/bin/appimage-open" --install "$t/big.AppImage" >/dev/null 2>&1 ||
+    fail "an AppImage with an icon over 4 MB not installed"
+[[ -z $(ls -A "$t/big-home/.local/share/icons" 2>/dev/null) ]] && grep -qx 'Icon=demo' "$t/big-home/.local/share/applications/demo.desktop" ||
+    fail "an icon over 4 MB taken: $(ls -l "$t/big-home/.local/share/icons" 2>/dev/null)"
 # An update (appimage-update: --install with the repo's APPIMAGE_WEBSITE, its AppImage installed already) only as the
 # same app: a release whose launcher entry is now firefox.desktop (an installed app's, its package's) not installed,
 # nothing asked to be removed; the same app's update installed, its package's copy not asked about again (a first

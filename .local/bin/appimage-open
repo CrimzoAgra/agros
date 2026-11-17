@@ -29,6 +29,10 @@ HOME = os.path.expanduser("~")
 APPS = f"{HOME}/Applications"
 ENTRIES = f"{HOME}/.local/share/applications"
 ICONS = f"{HOME}/.local/share/icons"
+# The most read out of an AppImage for its launcher entry (a few hundred bytes) and its icon: a huge one (compressed to
+# nearly nothing) filled /tmp, which is memory, before you were asked, and was read whole
+ENTRY_MAX = 1 << 20
+ICON_MAX = 4 << 20
 
 
 def squashfs_offset(appimage: str) -> int | None:
@@ -53,13 +57,30 @@ def squashfs_offset(appimage: str) -> int | None:
         return None
 
 
-def extract(appimage: str, pattern: str, into: str, run: bool = True) -> None:
+def fits(appimage: str, offset: int, pattern: str, limit: int) -> bool:
+    """What unsquashfs would extract for the pattern is at most limit bytes in all (its listing, -lls: sizes, nothing
+    written). One it can't list doesn't fit"""
+    try:
+        out = subprocess.run(["unsquashfs", "-lls", "-o", str(offset), appimage, pattern], capture_output=True, text=True,
+                             errors="replace", timeout=60)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    # ("-rw-r--r-- user/group 148 2024-05-01 10:00 squashfs-root/demo.desktop": a file's size; a link's is its target's
+    # name, a folder's its listing's: all counted)
+    sizes = [int(m.group(1)) for m in re.finditer(r"^[-dl]\S*\s+\S+\s+(\d+)\s", out.stdout, re.M)]
+    return out.returncode == 0 and sum(sizes) <= limit
+
+
+def extract(appimage: str, pattern: str, into: str, run: bool = True, limit: int = ENTRY_MAX) -> None:
     """Its files matching the pattern (one per path part) into <into>/squashfs-root, links as links. Read by unsquashfs,
     the AppImage never run for it; only where that can't be (no squashfs-tools, another kind of AppImage) by its own
     --appimage-extract, which runs it: by then you've said to run it (ask_to_run), or it's an install from the GitHub
-    release you picked (appimage-update). run=False: nothing then (ask_to_run's look before you're asked)"""
+    release you picked (appimage-update). run=False: nothing then (ask_to_run's look before you're asked). Through
+    unsquashfs only up to limit bytes, else nothing (its own extract can't say before: what's read of it is capped)"""
     offset = squashfs_offset(appimage)
     if offset is not None and shutil.which("unsquashfs"):
+        if not fits(appimage, offset, pattern, limit):
+            return
         cmd = ["unsquashfs", "-q", "-n", "-f", "-o", str(offset), "-d", f"{into}/squashfs-root", appimage, pattern]
     elif run:
         cmd = [appimage, "--appimage-extract", pattern]
@@ -155,7 +176,7 @@ def installed_ids(website: str) -> set[str]:
     return ids
 
 
-def resolve(appimage: str, tmp: str, name: str, run: bool = True) -> str:
+def resolve(appimage: str, tmp: str, name: str, run: bool = True, limit: int = ENTRY_MAX) -> str:
     """The extracted file <name> in tmp, with what it links to extracted too: linuxdeploy's AppImages have their launcher
     entry and icon at the top as links into usr/share, and extracting a link extracts only the link. "" when it ends
     outside what was extracted (a link to /home/... or ../.., itself or through a folder that's a link: read, then copied
@@ -168,7 +189,7 @@ def resolve(appimage: str, tmp: str, name: str, run: bool = True) -> str:
         name = os.path.normpath(os.path.join(os.path.dirname(name), os.readlink(path)))
         if name.startswith(("/", "..")) or GLOB.search(name):  # (outside the AppImage, or a pattern)
             return ""
-        extract(appimage, name, tmp, run)
+        extract(appimage, name, tmp, run, limit)
         path = f"{tmp}/squashfs-root/{name}"
     return path if os.path.realpath(path).startswith(root + "/") else ""
 
@@ -181,18 +202,19 @@ def entry_of(appimage: str, tmp: str, run: bool = True) -> tuple[str, str, str] 
     if not desktops:
         return None
     entry = resolve(appimage, tmp, desktops[0], run)
-    if not os.path.isfile(entry):
+    if not os.path.isfile(entry) or os.path.getsize(entry) > ENTRY_MAX:
         return None
-    text = open(entry).read()
+    with open(entry, errors="replace") as f:
+        text = f.read(ENTRY_MAX)
     app = desktops[0].removesuffix(".desktop")  # its own case: a package's entry and dock pins use it
     icon = ""
     name = re.search(r"^Icon=(.+)$", text, re.M)
     # (an icon's name only: a path or a pattern (Icon=../../.ssh/id_ed25519, Icon=*) read outside it, or all of it)
     if name and not re.search(r"/|\.\.", name.group(1)) and not GLOB.search(name.group(1)):
         for ext in ("png", "svg"):
-            extract(appimage, f"{name.group(1)}.{ext}", tmp, run)
-            found = resolve(appimage, tmp, f"{name.group(1)}.{ext}", run)
-            if os.path.isfile(found):
+            extract(appimage, f"{name.group(1)}.{ext}", tmp, run, ICON_MAX)
+            found = resolve(appimage, tmp, f"{name.group(1)}.{ext}", run, ICON_MAX)
+            if os.path.isfile(found) and os.path.getsize(found) <= ICON_MAX:
                 icon = found
                 break
     return app, text, icon
