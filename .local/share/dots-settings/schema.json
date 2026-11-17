@@ -326,7 +326,7 @@
               "type": "choice",
               "open": true,
               "get": "jq -r .variant ~/.local/state/caelestia/scheme.json 2>/dev/null",
-              "options_cmd": "caelestia scheme list -v | awk '{print $0 \"\\t\" toupper(substr($0,1,1)) substr($0,2)}'",
+              "options_cmd": "caelestia scheme list -v | awk 'BEGIN {n[\"tonalspot\"] = \"Tonal spot\"; n[\"fruitsalad\"] = \"Fruit salad\"} {print $0 \"\\t\" ($0 in n ? n[$0] : toupper(substr($0,1,1)) substr($0,2))}'",
               "set": "caelestia scheme set -v \"$VALUE\""
             },
             {
