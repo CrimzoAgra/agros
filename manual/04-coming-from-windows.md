@@ -23,7 +23,8 @@ Most things work the way you're used to. A few are different.
   where they fill the screen side by side, and again to switch back.
 - **Installing apps** goes through the package manager rather than downloading installers. Most apps you'll want are
   already installed (see [Apps](08-apps.md)). For others, use the terminal: `paru <name>` searches Arch's repos and the
-  AUR, `paru -S <name>` installs one. AppImages open with a double-click and install themselves.
+  AUR, `paru -S <name>` installs one. AppImages open with a double-click and, once you say yes,
+  install themselves.
 - **Windows programs and games** run too, through Proton: see [Gaming](09-gaming.md#playing-a-windows-game).
 - **Drives** have no letters: your files are in your home folder (`/home/<you>`), and USB drives appear in the file
   manager's sidebar.

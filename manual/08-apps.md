@@ -44,4 +44,5 @@ These install when you choose **Install hardware apps and VMware** after your fi
 - **From the repos**: `paru <name>` in a terminal searches Arch's packages and the AUR, Arch's community collection;
   `paru -S <name>` installs one.
 - **Flatpaks**: `flatpak install <name>`.
-- **AppImages**: double-click one. It installs itself, appears in the app menu, and keeps itself updated.
+- **AppImages**: double-click one. It asks before running it, then installs itself, appears in the app menu, and
+  keeps itself updated.
