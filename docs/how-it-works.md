@@ -534,6 +534,9 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
     close key), Super+Tab's moves that workspace's windows, silently, to the nearest other workspace with windows, the
     previous one on a tie (`dots.clean_workspace`); none where there's nothing to move or nowhere to move it. The
     switcher stays open
+- **See-through windows**: Caelestia's window opacity (`windowOpacity`), except where you read or watch a file:
+  LibreWolf, Text Editor, qView, mpv, File Roller, LibreOffice and VSCodium are opaque (`user/apps.lua`); the
+  terminal stays see-through (its own colours)
 - **Windows like on Windows** (`user/windows.lua`):
   - Floating by default, with a floating/tiling switch in the bar's right-click menu (remembered in
     `~/.local/state/window-mode`), also on Super+Alt+Space, for every workspace. Switching to floating places windows

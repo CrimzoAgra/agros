@@ -415,6 +415,17 @@ pat = re.search(r'initial_title = "([^"]*)"', line).group(1).replace("\\\\", "\\
 ok = all(re.fullmatch(pat, t) for t in ("AgrOS Installer", "Instalador AgrOS", "Instalador de AgrOS", "Программа установки AgrOS", "AgrOS"))
 sys.exit(0 if ok and not re.fullmatch(pat, "Error") else 1)
 PY
+# The apps your files open in drawn opaque (apps.lua: Caelestia's opacity left text and pictures see-through), by their
+# classes as Hyprland matches them (RE2 FullMatch); not the terminal or Thunar
+python3 -I - "$here/.config/caelestia/user/apps.lua" <<'PY' || fail "the apps your files open in aren't all opaque (apps.lua)"
+import re, sys
+text = re.sub(r'"\s*\.\.\s*"', '', open(sys.argv[1]).read())  # (a string split over lines: one)
+pats = [p.replace("\\\\", "\\") for p in re.findall(r'match = \{ class = "([^"]*)" \}, opaque = true', text)]
+opaque = lambda c: any(re.fullmatch(p, c) for p in pats)
+want = ("org.gnome.TextEditor", "com.interversehq.qView", "mpv", "org.gnome.FileRoller", "libreoffice-writer",
+        "libreoffice-calc", "codium", "librewolf")
+sys.exit(0 if all(map(opaque, want)) and not any(map(opaque, ("foot", "thunar", "orgxgnomexTextEditor"))) else 1)
+PY
 # ...and every one called from outside the config (scripts, the shell's overlay, the hyprbars patch) is in that table
 table=$(grep -E '^\| `[a-z_]+\(' "$here/docs/how-it-works.md" | cut -d'|' -f2 | grep -oE '`[a-z_]+\(' | tr -d '`(')
 for f in $(grep -rhoE 'dots\.[a-z_]+\(' "$here/.local" "$here/packages" "$here/system" 2>/dev/null | sort -u | sed 's/^dots\.//; s/($//'); do
