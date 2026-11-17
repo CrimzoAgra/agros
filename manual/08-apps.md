@@ -27,7 +27,7 @@ For WhatsApp, Outlook, Teams and OneDrive, use their web versions in LibreWolf.
 
 ## Hardware apps
 
-These install when you choose **Install hardware apps and VMware** after your first login, for whatever's plugged in:
+These install when you choose **Hardware apps** after your first login, for whatever's plugged in:
 
 | App | For |
 |---|---|

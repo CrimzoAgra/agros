@@ -101,6 +101,14 @@ system_part() {
     return $rc
 }
 
+# (run, not sourced by a test: an option this doesn't know refused, not taken for the first login's part)
+if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
+    case ${1:-} in
+        '' | --system) ;;
+        -h | --help) sed -n '2,${/^#/!q;s/^# \{0,1\}//p;}' "$0"; exit 0 ;;
+        *) echo "agros-welcome: unknown option $1 (agros-welcome --help)" >&2; exit 2 ;;
+    esac
+fi
 if [[ ${1:-} == --system && ${BASH_SOURCE[0]} == "$0" ]]; then
     if [[ $EUID -ne 0 ]]; then
         echo "Installing the apps for your hardware and VMware Workstation needs root: sudo asks for your password."
@@ -401,7 +409,9 @@ for s in "${steps[@]}"; do [[ -e $st/done-$s ]] || all_done=; done
 # notify-when-up once Caelestia (the notification server) takes it. Marked offered on Later or closed, or once the
 # button's restore or system part has worked: one sent to nobody, still unanswered when the session ended, or whose
 # part failed or was cancelled (sudo's password prompt closed) is offered again at the next login. Critical: it stays
-# on screen until it's answered (the first login's user may be away), and its buttons only open a terminal
+# on screen until it's answered (the first login's user may be away), and its buttons only open a terminal. Their
+# labels short, the text saying what they do: longer ones ("Restore my accounts") were cut off in the notification
+# centre, the others not shown at all
 if [[ ! -e $st/offered ]]; then
     touch "$st/offer-sent"
     if [[ -n $all_done ]]; then
@@ -412,11 +422,13 @@ if [[ ! -e $st/offered ]]; then
     # (the system's part offered to an admin (wheel) only: another account can't sudo, and its terminal only failed)
     admin=
     [[ " $(id -nG 2>/dev/null) " == *" wheel "* ]] && admin=1
-    text+=" Plug in your pen drive to restore your accounts (logins, keys, browser profile). Later: run agros-personal${admin:+, or agros-welcome --system for the hardware apps and VMware}."
+    text+=" Restore accounts: plug in your pen drive to bring back your logins, keys and browser profile."
+    [[ -z $admin ]] || text+=" Hardware apps: the apps for the devices plugged in (Razer, Logitech, Moza, tablets), and VMware."
+    text+=" Later: run agros-personal${admin:+, or agros-welcome --system for the hardware apps}."
     setsid -f bash -c '
         sys=()
-        [[ -z $4 ]] || sys=(-A system="Install hardware apps and VMware")
-        a=$("$1/notify-when-up" -a AgrOS -i system-software-install -u critical -A restore="Restore my accounts" \
+        [[ -z $4 ]] || sys=(-A system="Hardware apps")
+        a=$("$1/notify-when-up" -a AgrOS -i system-software-install -u critical -A restore="Restore accounts" \
             "${sys[@]}" -A later="Later" "Welcome to AgrOS" "$2") || exit 1
         case $a in
             restore) exec foot -T "AgrOS: your accounts" sh -c "\"\$1/agros-personal\" && touch \"\$2\"; echo; read -rp \"Enter closes this window \" _" sh "$1" "$3" ;;

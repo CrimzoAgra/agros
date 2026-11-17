@@ -311,9 +311,9 @@ ShellRoot {
     function isModifierKey(k: int): bool {
         return [Qt.Key_Meta, Qt.Key_Super_L, Qt.Key_Super_R, Qt.Key_Control, Qt.Key_Alt, Qt.Key_AltGr, Qt.Key_Shift].includes(k);
     }
-    // How a shortcut shows: "SUPER + SHIFT + Page_Down" -> "Super + Shift + Page Down"
+    // How a shortcut shows: "SUPER + SHIFT + Page_Down" -> "Super + Shift + Page Down", "mouse:272" -> "Left mouse button"
     function pretty(keys: string): string {
-        const names = { SUPER: "Super", CTRL: "Ctrl", ALT: "Alt", SHIFT: "Shift", SUPER_L: "Super", mouse_down: "Scroll down", mouse_up: "Scroll up", TAB: "Tab" };
+        const names = { SUPER: "Super", CTRL: "Ctrl", ALT: "Alt", SHIFT: "Shift", SUPER_L: "Super", mouse_down: "Scroll down", mouse_up: "Scroll up", TAB: "Tab", "mouse:272": "Left mouse button", "mouse:273": "Right mouse button", "mouse:274": "Middle mouse button" };
         return keys.split(/\s*\+\s*/).map(p => names[p] ?? p.replace(/_/g, " ")).join(" + ");
     }
     // Shortcuts used by more than one action: normalised shortcut -> the labels using it
@@ -1131,7 +1131,8 @@ ShellRoot {
                                                     readonly property string kind: modelData.type
                                                     // (JSON and pictures: under the label, the row's whole width)
                                                     readonly property bool wide: kind === "json" || kind === "image"
-                                                    readonly property bool changed: modelData.default !== undefined && !modelData.get && !modelData.readonly && JSON.stringify(value) !== JSON.stringify(modelData.default)
+                                                    readonly property bool resettable: modelData.default !== undefined && !modelData.get && !modelData.readonly
+                                                    readonly property bool changed: resettable && JSON.stringify(value) !== JSON.stringify(modelData.default)
                                                     readonly property var control: ({
                                                             bool: boolControl,
                                                             choice: (modelData.options?.length ?? 0) > 7 || modelData.open ? dropControl : choiceControl,
@@ -1281,9 +1282,13 @@ ShellRoot {
                                                             opacity: row.modelData.readonly && row.kind !== "keys" ? 0.5 : 1
                                                         }
 
-                                                        // Back to the default
+                                                        // Back to the default. Its place kept while there's nothing to
+                                                        // reset: shown only then, it pushed the control left under the
+                                                        // pointer, and a second click on + hit this instead
                                                         IconButton {
-                                                            visible: row.changed
+                                                            visible: row.resettable
+                                                            opacity: row.changed ? 1 : 0
+                                                            enabled: row.changed
                                                             icon: "restart_alt"
                                                             onClicked: root.set(row.modelData.key, row.modelData.default)
                                                         }

@@ -258,7 +258,7 @@
               "type": "choice",
               "default": "",
               "apply": "hypr",
-              "options_cmd": "printf '\\tAutomatic\\n'; hyprctl -j monitors all 2>/dev/null | jq -r '.[] | select(.name != \"FALLBACK\") | \"\\(.description)\\t\\(.name): \\(.model)\"'",
+              "options_cmd": "printf '\\tAutomatic\\n'; hyprctl -j monitors all 2>/dev/null | jq -r '.[] | select(.name != \"FALLBACK\") | \"\\(if .description != \"\" then .description else .name end)\\t\\(.name)\\(if .model != \"\" then \": \" + .model else \"\" end)\"'",
               "open": true
             }
           ]
@@ -1091,14 +1091,16 @@
               "label": "Solaar",
               "description": "In its tray (your mouse's battery): puts the mouse DPI back when the mouse reconnects.",
               "type": "bool",
-              "default": false
+              "default": false,
+              "needs": ["solaar"]
             },
             {
               "key": "startup.artcraft",
               "label": "ArtCraft Launcher",
               "description": "In its tray, no window (also when it restarts after updating itself).",
               "type": "bool",
-              "default": false
+              "default": false,
+              "needs": ["~/.local/share/flatpak/app/ai.storyteller.artcraft-launcher", "/var/lib/flatpak/app/ai.storyteller.artcraft-launcher"]
             },
             {
               "key": "startup.capri",

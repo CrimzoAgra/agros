@@ -30,14 +30,14 @@ Laptop settings and lighting are in a separate repo: **legion-control-linux**.
    both if that failed, and moves the shell onto the overlay). `agros-welcome` does the rest of
    what's per user: LibreWolf's settings, the Spotify, Nuvio and ArtCraft Flatpaks with Spicetify, VSCodium's
    extensions and Claude Code's plugins.
-3. **The one thing you run:** its notification offers *Restore my accounts*. Plug in your pen drive and click it, or
+3. **The one thing you run:** its notification offers *Restore accounts*. Plug in your pen drive and click it, or
    run `agros-personal` ([Your accounts](#your-accounts)). Capri installs right after that, since her fork is private
    and needs your GitHub login (at the next login when gh only gets it from the keyring brought back: `dotfiles-check`
    installs her then). The offer comes back at each login until it's answered (`~/.local/state/agros/offered`); an
    account set up before it did (its `done` there, without the `offer-sent` mark the offer leaves) isn't offered it
    again.
 
-The same notification offers *Install hardware apps and VMware* (`agros-welcome --system`). It installs the apps for
+The same notification offers *Hardware apps* (`agros-welcome --system`). It installs the apps for
 the hardware that's plugged in: Boxflat (Moza), OpenRazer + Polychromatic (Razer), Solaar (Logitech),
 OpenTabletDriver (tablets), the Legion's camera switch and, with an NVIDIA card, `agros-nvidia`. It also builds VMware
 Workstation from the AUR, because its license forbids passing it on.
@@ -211,7 +211,7 @@ The default wallpaper is Caelestia's own (`assets/wallpaper.webp` in its shell).
 | `packages/` | The PKGBUILDs of AgrOS's packages (and their system files: units, hooks, the boot update) |
 | `aur/packages.txt`, `ci/` | The AUR packages built into `[agros]`, and the script that builds the repo |
 | `system/` | Files the system packages install (Bluetooth after sleep, the screens on after sleep, the boot video mode, the ananicy rule, the night light's location (geoclue), the time zone's permission (polkit), resolved's settings, the `papirus-folders` sudoers rule, qView's defaults: no first-run Welcome dialog, at `/etc/xdg/qView/qView.conf`; File Roller's first window wide enough for its file names, a gschema override) |
-| `.config/caelestia/` | Hyprland settings (`hypr-user.lua`, `hypr-vars.lua`, `user/`) and Caelestia settings (`shell.json`) |
+| `.config/caelestia/` | Hyprland settings (`hypr-user.lua`, `hypr-vars.lua`, `user/`) and Caelestia settings (`shell.json`; `cli.json`: its command's, the screen recorder's) |
 | `.config/quickshell/` | The switcher, desktop widgets, Updates and Desktop Settings apps, their shared colours (`common/`), and the dock's pins |
 | `.local/share/caelestia-overlay/` | My changes to Caelestia's own code, patched in by `caelestia-overlay` |
 | `.local/share/caelestia-greeter/` | The login screen |
@@ -261,9 +261,10 @@ Changes apply right away.
     off while typing, scrolling speed), key repeat (`hypr-user.lua` sets them), and the keyboard layout, variant and
     options: the system's, as the installer set it, through `localectl` (it asks for the password; the login screen and
     Scroll Lock's keymap follow it, from the Hyprland reload)
-  - **Screens**: each connected screen (Hyprland's list) by its full description: on or off, resolution and refresh
-    rate, scale (only those giving the mode a whole size in pixels, as Hyprland needs), position, and the main screen.
-    Empty is AgrOS's own choice (the host file's rule, the fastest rate)
+  - **Screens**: each connected screen (Hyprland's list) by its full description (by its connector's name for one
+    with none: a VM's screen has no EDID, so VMware's Virtual-1 has no make, model or serial): on or off, resolution
+    and refresh rate, scale (only those giving the mode a whole size in pixels, as Hyprland needs), position, and the
+    main screen. Empty is AgrOS's own choice (the host file's rule, the fastest rate)
   - **Look**: the wallpaper (pictures in `~/Pictures/Wallpapers`, `caelestia wallpaper -f`), the colour scheme, light
     or dark and its style (`caelestia scheme set`), the shell's fonts and text size, window gaps, border, rounded
     corners, blur and shadows (Caelestia's Hyprland variables), the shell's transparency, rounding and screen frame
@@ -277,7 +278,8 @@ Changes apply right away.
     each change to Caelestia (listed from `caelestia-overlay`'s and the Lutris overlay's `patch.py --list`, so new ones
     show up by themselves). A Caelestia change turned off is left out of the rebuild (`Off:`, not a warning)
   - **Startup**: the apps `user/apps.lua` can start at login (Lutris and Capri on by default;
-    Proton VPN, Solaar and ArtCraft off), and every app with a standard
+    Proton VPN, Solaar and ArtCraft off; one not installed, named by its `needs` in the schema, shown as "(not
+    installed)" and not changed there, its value kept for when it is), and every app with a standard
     autostart entry (`/etc/xdg/autostart`, `~/.config/autostart`); turning one of those off writes your copy of it
     with `Hidden=true`, as GNOME's startup settings do
   - **Shortcuts**: my shortcuts (`dots.bind` in `user/keys.lua`, `user/windows.lua` and `user/apps.lua`; defaults in the
@@ -325,6 +327,12 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
     border, rounding, blur, the touchpad)
 - **`.config/caelestia/shell.json`**: Caelestia settings (AgrOS's; each account's copy changes from the Settings app,
   which puts AgrOS's value back as the default)
+- **`.config/caelestia/cli.json`**: the settings of Caelestia's command (`caelestia`). Its screen recorder
+  (`caelestia record`: Ctrl+Alt+R and the quick settings' recorder) runs gpu-screen-recorder with
+  `-fallback-cpu-encoding yes` (`record.extraArgs`): without a hardware video encoder (a VM's graphics card, VMware's)
+  it refused to start ("Recording failed"); with the option it encodes on the CPU there, and still on the graphics
+  card where it has one. A setting, not a wrapper around gpu-screen-recorder: `caelestia record` finds and stops the
+  recorder by its process name
 - **`.local/share/caelestia-overlay/`**: my changes to Caelestia, patched in by `patch.py`. A change whose code no
   longer fits a new Caelestia version is skipped, not broken; one that still fits but whose QML no longer loads (a
   renamed Caelestia component) is reported by `dotfiles-check`
@@ -609,7 +617,10 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
     other, a point release too, the plugin's own check refuses it with a red "Version mismatch" error on screen), and a
     notification if the build fails. On the live USB (no compiler) only that packaged build, when it matches
 - **Keys** (`user/keys.lua`):
-  - Ctrl+Shift+Esc opens btop (Task Manager; the open one if there is); Print selects an area to screenshot
+  - Ctrl+Shift+Esc opens btop (Task Manager; the open one if there is); Print selects an area to screenshot, opened
+    in swappy (`.config/swappy/config`): Save puts it in `~/Pictures/Screenshots` (swappy makes the folder), where
+    Caelestia's own screenshots go, not swappy's default `~/Desktop`, which nothing shows; Copy puts it on the
+    clipboard; either closes swappy (swappy has no copy on save)
   - Ctrl+Super+Alt+R restarts the shell
   - Scroll Lock as a real lock with its keyboard light, like Caps and Num Lock (`.local/bin/scroll-lock`: builds your
     layout's keymap with Scroll Lock on a free modifier, which Hyprland loads, and keeps the bar's icon in step with
@@ -625,7 +636,8 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
   screens, loaded on that machine only (`LegionCachy.lua`: the laptop's OLED and a Samsung LF27T450F; `TerraCachy.lua`:
   the desktop's Samsung C24F390 at its fastest mode). Copy it under your machine's hostname to fix a
   screen's mode or position by hand. The Settings app's Screens page goes over both (`screens.*` settings, by the
-  screen's full description, serial included: two of one model each keep theirs): what's set there is applied on top
+  screen's full description, serial included: two of one model each keep theirs; by its connector's name when it has
+  none, a VM's): what's set there is applied on top
   of the rule that applied to that screen, so a field left empty keeps it. The main screen goes to 0x0 (the first
   screen: workspaces 1-10, and the windows of a screen unplugged) and the others to its right unless given a position
   (there, or by the host file); the last screen on can't be turned off (all set off: the main one stays on, else the

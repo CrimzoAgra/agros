@@ -14,8 +14,9 @@ cp -r "$here/.local/bin/." "$h/.local/bin/"
 for c in flatpak-bundle-update lutris-library caelestia-overlay caelestia-restart agros-personal; do
     printf '#!/bin/sh\nexit 0\n' >"$h/.local/bin/$c"
 done
-# (the button picked: $t/pick; sudo's answer: $t/sudo-rc; the terminal runs its command, its output kept, then "end")
-printf '#!/bin/sh\ncat "%s/pick"\n' "$t" >"$sb/notify-send"
+# (the button picked: $t/pick; the buttons offered: $t/actions; sudo's answer: $t/sudo-rc; the terminal runs its
+# command, its output kept, then "end")
+printf '#!/bin/sh\nfor a; do case $a in *=*) echo "$a" ;; esac; done >"%s/actions"\ncat "%s/pick"\n' "$t" "$t" >"$sb/notify-send"
 printf '#!/bin/sh\nexit "$(cat "%s/sudo-rc")"\n' "$t" >"$sb/sudo"
 printf '#!/bin/sh\nshift 2\n"$@" >>"%s/term" 2>&1 </dev/null\necho end >>"%s/term"\n' "$t" "$t" >"$sb/foot"
 chmod +x "$sb"/* "$h"/.local/bin/*
@@ -43,4 +44,10 @@ login restore
 [[ -e $st/offered ]] && fail "the restore failed, yet marked offered"
 login later
 [[ -e $st/offered ]] || fail "Later picked, but not marked offered"
+# The buttons' labels short enough for the notification centre to show them all: "Restore my accounts" was cut off,
+# and the buttons after it not shown
+[[ $(grep -c . "$t/actions") -ge 2 ]] || fail "the buttons not read: $(cat "$t/actions")"
+while IFS= read -r a; do
+    ((${#a} <= 16)) || fail "a button's label too long to show: $a"
+done < <(sed 's/^[a-z]*=//' "$t/actions")
 echo "ok welcome-offer"

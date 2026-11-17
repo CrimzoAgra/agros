@@ -15,10 +15,10 @@ login.
 
 When it's done, a notification offers two things:
 
-- **Restore my accounts**: plug in your pen drive and click it to bring back your logins (Discord, Spotify, Steam,
+- **Restore accounts**: plug in your pen drive and click it to bring back your logins (Discord, Spotify, Steam,
   your browser profile...). No pen drive? It opens each app for you to sign in instead. See
   [Your accounts](13-accounts.md).
-- **Install hardware apps and VMware**: installs the apps for the devices you have plugged in: Razer, Logitech, Moza
+- **Hardware apps**: installs the apps for the devices you have plugged in: Razer, Logitech, Moza
   wheels, drawing tablets. It also installs VMware Workstation. Only an administrator's account is offered it.
 
 Missed the notification? Left unanswered, or if what you picked didn't finish (the password prompt closed, no

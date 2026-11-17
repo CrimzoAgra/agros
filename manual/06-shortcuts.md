@@ -58,6 +58,10 @@ another window, or press **Ctrl+Alt+Esc**, to have them back.
 | Super+V | Clipboard history |
 | Super+. | Emoji |
 
+A screenshot opens in an editor to draw on: **Save** puts it in `~/Pictures/Screenshots`, **Copy** (Ctrl+C) on the
+clipboard, and either closes it. Recordings go to `~/Videos/Recordings`; recording again stops it, and a notification
+offers to watch it or open its folder.
+
 ## Media and notifications
 
 | Shortcut | Does |

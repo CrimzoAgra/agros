@@ -5,6 +5,11 @@
 #                             Caelestia's Hyprland config having an update, printed with exit 0)
 #   dotfiles-check --notify   the same, as one notification (none when all is well)
 # (not on the live USB: it isn't set up as an install, so its "problems" would only be noise)
+case ${1:-} in
+    '' | --notify) ;;
+    -h | --help) sed -n '2,${/^#/!q;s/^# \{0,1\}//p;}' "$0"; exit 0 ;;
+    *) echo "dotfiles-check: unknown option $1 (dotfiles-check --help)" >&2; exit 2 ;;
+esac
 [[ -d /run/archiso ]] && exit 0
 problems=()
 helpers=$(dirname "$(readlink -f "$0")")  # (the shared helpers, beside this)

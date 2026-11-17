@@ -15,6 +15,9 @@
 | `agros-personal --save` | Save your accounts to the pen drive |
 | `dotfiles-check` | Check that everything is working (see [Troubleshooting](14-troubleshooting.md)) |
 
+AgrOS's own commands (`agros-personal`, `agros-welcome`, `agros-links`, `agros-each-user`, `dotfiles-check`) say what
+they do and what they take with `--help`.
+
 ## Tools that come with it
 
 `eza` (a better `ls`), `zoxide` (`z <folder>` jumps to folders you've visited), `bat` (a better `cat`), `ripgrep`

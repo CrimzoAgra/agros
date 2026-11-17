@@ -8,7 +8,8 @@
 # "All Caelestia options" keeps the page's range; now (the app's poll) the schema's values without its
 # option lists. The other new kinds:
 # numbers kept in their range, Caelestia's variables and the screens' settings in settings.lua only once changed (a
-# screen's kept while it's unplugged), a screen's position only as WxH, its scales only those that give whole pixels
+# screen's kept while it's unplugged), a screen's position only as WxH, its scales only those that give whole pixels,
+# a screen with no description by its connector's name; the fixed shortcuts' media keys by what they do
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
@@ -83,7 +84,49 @@ saved[scale] = "1.75"
 json.dump(saved, open(ds.SETTINGS, "w"))
 assert offered() == ["", "1", "1.25", "1.5", "1.6", "1.75", "2"], f"the scale set no longer offered: {offered()}"
 assert json.loads(run("get", scale)) == "1.75", "the scale set read as the default"
+# A screen with no description (a VM's, with no EDID): listed all the same, its settings by its connector's name, as
+# user/monitors.lua reads them. None from Hyprland said as that, not as no Hyprland session
+ds.hyprctl = lambda *a: [{"description": "", "name": "Virtual-1", "make": "", "model": "", "serial": "", "width": 2258,
+                          "height": 1359, "refreshRate": 60.0, "scale": 1.0}] if a[0] == "monitors" else []
+vm = ds.screens_groups()
+assert len(vm) == 1 and vm[0]["title"] == "Virtual-1 (now 2258x1359 at 60 Hz, scale 1)", vm
+assert vm[0]["settings"][0]["key"] == "screens.Virtual-1.enabled", vm[0]["settings"][0]
+assert run("set", "screens.Virtual-1.scale", '"1"', "--later") == "hypr\n", "a screen with no description not set"
+assert '["screens.Virtual-1.scale"] = "1"' in open(f"{t}/dots/settings.lua").read(), "its setting not in settings.lua"
+ds.hyprctl = lambda *a: []
+assert ds.screens_groups()[0]["empty"] == "No screens found (Hyprland reported none)", ds.screens_groups()
+ds.hyprctl = lambda *a: None
+assert ds.screens_groups()[0]["empty"] == "No screens found (not in a Hyprland session)", ds.screens_groups()
+# The shortcuts no setting changes: a media key's command or shell action by its key (Hyprland lists a Lua bind's
+# command only as a number), not all of them lumped as "Runs a command" and "A shell action"; another command still so
+ds.hyprctl = lambda *a: [{"modmask": 0, "key": k, "dispatcher": f"HL.Dispatcher({d})", "arg": "1", "description": ""}
+                         for k, d in (("XF86AudioMute", "exec_cmd"), ("XF86AudioRaiseVolume", "exec_cmd"),
+                                      ("XF86AudioPlay", "global"), ("XF86AudioPause", "global"),
+                                      ("XF86MonBrightnessUp", "global"), ("F12", "exec_cmd"))] if a[0] == "binds" else []
+rows = {r["label"]: r["default"] for r in ds.binds_group({}, {})}
+assert rows == {"Mute": ["XF86AudioMute"], "Volume up": ["XF86AudioRaiseVolume"],
+                "Play / pause": ["XF86AudioPlay", "XF86AudioPause"], "Brightness up": ["XF86MonBrightnessUp"],
+                "Runs a command": ["F12"]}, rows
 ds.hyprctl = real_hyprctl
+# An app's startup setting (its "needs"): installed when a program it names is on the PATH or a path it names is there
+# (~: the home); while it isn't, the app shows it as that and can't change it, settings.lua keeping its value
+os.makedirs(f"{t}/apps/home/flatpak-app")
+open(f"{t}/apps/some-app", "w").close()
+os.chmod(f"{t}/apps/some-app", 0o755)
+os.environ["PATH"] = f"{t}/apps{os.pathsep}{os.environ['PATH']}"
+real_home, ds.HOME = ds.HOME, f"{t}/apps/home"
+assert ds.installed({"needs": ["some-app"]}) and ds.installed({"needs": ["no-such-app", "~/flatpak-app"]})
+assert not ds.installed({"needs": ["no-such-app", "~/no-such-folder", f"{t}/no-such-folder"]}) and ds.installed({})
+ds.HOME = real_home
+real_installed, ds.installed = ds.installed, lambda s: s["key"] != "startup.solaar"
+run("set", "startup.solaar", "true", "--later")
+shown = {s["key"]: s for p in json.loads(run("schema"))["pages"] for g in p["groups"] for s in g["settings"]}
+ds.installed = real_installed
+solaar = shown["startup.solaar"]
+assert solaar["label"] == "Solaar (not installed)" and solaar["readonly"], solaar
+assert shown["startup.solaar"]["value"] is True and not shown["startup.lutris"].get("readonly"), shown["startup.lutris"]
+assert '["startup.solaar"] = true' in open(f"{t}/dots/settings.lua").read(), "an app not installed lost its setting"
+assert all(s.get("needs") for k, s in shown.items() if k in ("startup.solaar", "startup.artcraft")), "Solaar or ArtCraft needs nothing"
 
 options = ds.caelestia_options()
 if not os.path.exists(ds.QML) or not options:

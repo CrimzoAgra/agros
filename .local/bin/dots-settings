@@ -29,6 +29,8 @@ Kinds of setting ("type"): bool, choice (its "options", or "options_cmd": a comm
 or "value<TAB>label"; "open": a value not listed is kept), keys, number ("min", "max", "step", "integer"), text
 ("pattern": a regular expression the whole value must match, "format": how it's said when it doesn't), json
 (any JSON value: Caelestia's lists), image (a choice shown as pictures: the wallpaper). "readonly": shown, not changed.
+"needs": an app's setting (Startup's): programs on the PATH or paths (~: your home), one there meaning it's installed;
+with none, the app shows it as "(not installed)", not changed there.
 Caelestia's own options: a key caelestia-shell.<option> (its shell.json) or caelestia-tokens.<option> (its
 shell-tokens.json, sizes and timings): type, default and choices come from the installed Caelestia
 (caelestia-options.qml), so the schema only gives the label and description, and one Caelestia no longer has isn't
@@ -36,7 +38,8 @@ shown; "from": "caelestia-options" lists every one of them, by area. Saved in Ca
 which Caelestia watches: they apply at once. The default is AgrOS's own value where it ships one (/etc/skel), else
 Caelestia's. caelestia-vars.<variable>: one of Caelestia's Hyprland variables (gaps, borders...), through
 hypr-vars.lua like its shortcuts. "from": "screens" lists the connected screens' settings (screens.<description>.mode,
-scale, position, enabled; screens.main), read by user/monitors.lua; "from": "binds" the shortcuts no setting changes
+scale, position, enabled, by its connector's name for a screen with no description: screens.Virtual-1.mode;
+screens.main), read by user/monitors.lua; "from": "binds" the shortcuts no setting changes
 (Hyprland's list of binds), to show and to find clashes with."""
 import fcntl
 import hashlib
@@ -45,6 +48,7 @@ import math
 import os
 import pwd
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -441,19 +445,28 @@ def scales(width, height, keep=None):
     return fits
 
 
+def screen_id(m):
+    """A screen's name in its settings: its full description (make, model and serial), or its connector's name
+    (Virtual-1) for one with none, as a VM's screen has no EDID. user/monitors.lua and workspaces.lua name it so too"""
+    return m.get("description") or m.get("name") or ""
+
+
 def screens_groups():
-    """The connected screens' settings (on or off ones), by their full description: one machine's own screens, so its
-    serial too (two of one model each have theirs). Read by user/monitors.lua; empty means as AgrOS sets it"""
-    monitors = [m for m in hyprctl("monitors", "all") or [] if m.get("description") and m.get("name") != "FALLBACK"]
+    """The connected screens' settings (on or off ones), by screen_id: one machine's own screens, so its serial too (two
+    of one model each have theirs). Read by user/monitors.lua; empty means as AgrOS sets it"""
+    listed = hyprctl("monitors", "all")
+    monitors = [m for m in listed or [] if screen_id(m) and m.get("name") != "FALLBACK"]
     if not monitors:
-        return [{"title": "Screens", "settings": [], "empty": "No screens found (not in a Hyprland session)"}]
+        why = "not in a Hyprland session" if listed is None else "Hyprland reported none"
+        return [{"title": "Screens", "settings": [], "empty": f"No screens found ({why})"}]
     groups, saved = [], stored()
     for m in monitors:
-        d = m["description"]
+        d = screen_id(m)
         modes = list(dict.fromkeys(x.removesuffix("Hz") for x in m.get("availableModes", [])))
         now = f"{m['width']}x{m['height']} at {m['refreshRate']:.0f} Hz, scale {m['scale']:g}" if not m.get("disabled") \
             else "off"
-        groups.append({"title": f"{m['name']}: {m['make']} {m['model']} (now {now})", "settings": [
+        what = " ".join(x for x in (m.get("make"), m.get("model")) if x)  # (a VM's screen: neither)
+        groups.append({"title": f"{m['name']}{': ' + what if what else ''} (now {now})", "settings": [
             {"key": f"screens.{d}.enabled", "label": "On", "type": "bool", "default": True, "apply": "hypr",
              "description": "Off: nothing is shown on it (the last screen showing stays on: a laptop's panel under its"
                             " closed lid doesn't count)."},
@@ -476,9 +489,17 @@ def screens_groups():
     return groups
 
 
+# What a keyboard's media keys do (Caelestia binds them, to wpctl or its shell's media and brightness actions)
+MEDIA_KEYS = {
+    "XF86AudioMute": "Mute", "XF86AudioMicMute": "Mute the microphone", "XF86AudioRaiseVolume": "Volume up",
+    "XF86AudioLowerVolume": "Volume down", "XF86MonBrightnessUp": "Brightness up",
+    "XF86MonBrightnessDown": "Brightness down", "XF86AudioPlay": "Play / pause", "XF86AudioPause": "Play / pause",
+    "XF86AudioNext": "Next track", "XF86AudioPrev": "Previous track", "XF86AudioStop": "Stop the music"}
+
+
 def binds_group(settings, saved):
     """The shortcuts no setting changes (Caelestia's fixed ones: arrows, media keys...), from Hyprland's list, so they
-    show with the rest and a clash with one does too"""
+    show with the rest and a clash with one does too. Mouse buttons (mouse:272) are named by the Settings app"""
     mods = [(64, "SUPER"), (4, "CTRL"), (8, "ALT"), (1, "SHIFT")]
 
     def norm(keys):  # (as the Settings app compares them: modifiers in any order, any case)
@@ -497,7 +518,8 @@ def binds_group(settings, saved):
         if norm(keys) in taken or keys.startswith("switch:"):
             continue
         what = re.sub(r"^HL\.Dispatcher\((\w+)\).*|^(\w+):.*", r"\1\2", b.get("dispatcher", ""))
-        what = b.get("description") or {
+        # (a media key's command or shell action: by its key, as Hyprland lists a Lua bind's only as a number)
+        what = b.get("description") or what in ("exec_cmd", "global") and MEDIA_KEYS.get(b.get("key")) or {
             "exec_cmd": "Runs a command", "global": "A shell action", "focus": "Focus", "move": "Move the window",
             "drag": "Drag the window", "resize": "Resize the window", "function": "A desktop action"}.get(what, words(what))
         label = f"{what} ({b['key']})" if b.get("key", "").lower() in ("left", "right", "up", "down") else what
@@ -634,6 +656,13 @@ def current(setting, saved):
     return value
 
 
+def installed(setting):
+    """Whether the app a setting is for is there (its "needs": a program on the PATH, or a path); true with none named"""
+    needs = setting.get("needs") or []
+    return not needs or any(os.path.exists(HOME + n[1:] if n.startswith("~/") else n) if "/" in n else shutil.which(n)
+                            for n in needs)
+
+
 def values(settings):
     saved = stored()
     return {key: current(s, saved) for key, s in settings.items()}
@@ -761,6 +790,9 @@ def main(args):
         now = values(settings)
         for s in (s for page in pages["pages"] for group in page["groups"] for s in group["settings"]):
             s["value"] = now[s["key"]]  # (every copy of one listed twice)
+            # (only in what the app shows: settings.lua keeps a value set, for when the app is installed)
+            if not installed(s) and not s.get("readonly"):
+                s.update(readonly=True, label=f"{s['label']} (not installed)")
         print(json.dumps(pages))
     elif cmd in ("values", "now"):
         print(json.dumps(values(settings)))
