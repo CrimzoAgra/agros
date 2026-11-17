@@ -43,5 +43,23 @@ run("set", b[0], json.dumps(not settings[b[0]]["default"]), "--later")
 run("set", b[1], json.dumps(not settings[b[1]]["default"]), "--later")
 saved = json.load(open(ds.SETTINGS))
 assert set(saved) == {b[0], b[1]}, f"a change lost another: {saved}"
+# A setting changed by its own command (hyprctl eval prints "ok"): --later's stdout only how to apply it, the Settings
+# app's word for it; the command's output on stderr. Read at the descriptor: the command writes there, not to sys.stdout
+import os, tempfile
+noisy = {"key": "t.noisy", "type": "bool", "default": False, "label": "Noisy", "set": "echo ok", "apply": "hypr"}
+ds.schema = lambda **_: {"pages": [{"groups": [{"settings": [noisy]}]}]}
+with tempfile.TemporaryFile("w+") as out, tempfile.TemporaryFile("w+") as err:
+    sys.stdout.flush(); sys.stderr.flush()
+    keep = os.dup(1), os.dup(2)
+    os.dup2(out.fileno(), 1); os.dup2(err.fileno(), 2)
+    try:
+        ds.main(["set", "t.noisy", "true", "--later"])
+        sys.stdout.flush(); sys.stderr.flush()
+    finally:
+        os.dup2(keep[0], 1); os.dup2(keep[1], 2)
+    out.seek(0); err.seek(0)
+    said, errs = out.read(), err.read()
+assert said == "hypr\n", f"a set command's output in --later's: {said!r}"
+assert "ok" in errs, f"a set command's output lost: {errs!r}"
 P
 echo "ok dots-settings-store"
