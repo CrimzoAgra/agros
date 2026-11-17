@@ -7,13 +7,6 @@ export WLR_NO_HARDWARE_CURSORS=1   # pointer drawn in the picture, so it doesn't
 # The desktop's pointer, not the system default's (icons/default inherits it: the PKGBUILD)
 export XCURSOR_PATH=/etc/greetd/caelestia-greeter/icons:/usr/share/icons XCURSOR_THEME=Bibata-Modern-Ice XCURSOR_SIZE=24
 set -a; . /etc/greetd/caelestia-greeter/env; set +a
-# The user it shows when no login has written its theme yet: env's, else the first AgrOS account, as agros-greeter's
-# install picks it. A new install has neither theme nor env's line (that install runs before the installer makes the
-# account): with no one named, the login screen could only say "No user set"
-if [ -z "${CAELESTIA_GREETER_USER:-}" ]; then
-    CAELESTIA_GREETER_USER=$(/usr/lib/agros/bin/agros-each-user --list 2>/dev/null | head -1)
-    export CAELESTIA_GREETER_USER
-fi
 # VMware (its vmwgfx driver), with agros-vmware: cage runs with its vmw-dmabuf shim, so it accepts the login screen's
 # GPU buffers and the screen draws on VMware's virtual GPU (the shim is cage's only, not the login screen's). Any other
 # virtual GPU can't take Qt's GPU buffers and the login screen dies: OpenGL on the CPU there (Mesa's llvmpipe; Qt's own

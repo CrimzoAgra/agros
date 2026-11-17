@@ -414,9 +414,7 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
   - Once the wallpaper shows, its elements come down onto the screen from in front of it (bigger and out of focus,
     shrinking and sharpening into place): the password bar first, then the rest from the centre outward
   - The wallpaper and colours are copied to it at every login (`greeter-theme-sync`)
-  - It shows the last account that logged in (before anyone has, as on a new install: the first account, from
-    `agros-greeter`'s `run`, as its install, which runs before the installer makes the account, couldn't name one);
-    with more than one account (uid 1000 and up, a login shell), the person
+  - It shows the last account that logged in; with more than one account (uid 1000 and up, a login shell), the person
     pill by the session's opens a list of them (the wallpaper and colours stay the last one's). The session pill opens
     the sessions' list the same way: above the pill, the current one ticked, picked with a click or the arrow keys and
     Enter, closed by Esc or a click elsewhere
