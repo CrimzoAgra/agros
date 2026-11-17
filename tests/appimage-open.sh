@@ -56,7 +56,8 @@ out=$(HOME=$t/home PATH=$t/bin:$PATH python3 "$here/.local/bin/appimage-open" --
 [[ $out == *"no launcher entry inside"* && $out != *Traceback* ]] || fail "a broken AppImage not said: $out"
 # On a drive that won't run it (a USB stick's FAT, a noexec or read-only mount: not made executable, nor runnable):
 # a copy installed, not a traceback; the stick's own file left as it is
-HOME=$t/stick-home PATH=$t/bin:$PATH python3 -I - "$here/.local/bin/appimage-open" "$t/stick.AppImage" <<'P' ||
+stick() {  # stick <home> <file> [env...]: the file installed (--install) from a drive that won't run it
+    env "${@:3}" HOME="$1" PATH=$t/bin:$PATH python3 -I - "$here/.local/bin/appimage-open" "$2" <<'P'
 import importlib.machinery, importlib.util, os, sys
 script, stick = sys.argv[1:]
 loader = importlib.machinery.SourceFileLoader("appimage_open", script)
@@ -72,10 +73,11 @@ os.chmod = no_chmod
 sys.argv = ["appimage-open", "--install", stick]
 mod.main()
 P
-    fail "an AppImage on a drive that won't run it not installed"
+}
+stick "$t/stick-home" "$t/stick.AppImage" || fail "an AppImage on a drive that won't run it not installed"
 [[ -x $t/stick-home/Applications/demo.AppImage && -f $t/stick.AppImage ]] ||
     fail "not installed from a copy, or the stick's file taken: $(ls "$t/stick-home/Applications" "$t")"
-[[ -z $(compgen -G "$t/stick-home/Applications/*.new") ]] || fail "a copy's temporary file left"
+[[ $(ls -A "$t/stick-home/Applications") == demo.AppImage ]] || fail "a copy left: $(ls -A "$t/stick-home/Applications")"
 # The system package with the same launcher entry (demo-bin owns /usr/share/applications/demo.desktop): removed with
 # --install (appimage-update), sudo without asking when it can; never for an AppImage only opened (any file could
 # name a package's entry), nor when no package owns it. sudo and pkexec log what they'd run
@@ -183,4 +185,11 @@ out=$(upd "$t/ff-img" OWNER=firefox) && fail "an update renaming its launcher en
     ! -e $t/ran ]] || fail "an update taking another app's launcher entry not refused, or a package removal asked: $out / $(cat "$t/ran" 2>/dev/null)"
 upd "$t/img" OWNER=demo-bin >/dev/null || fail "the same app's update not installed"
 [[ ! -e $t/ran ]] || fail "an update asked to remove a package again: $(cat "$t/ran")"
+# ...nor from a drive that won't run it, its file named as the installed one (demo.AppImage): the copy made to run it
+# didn't write over the installed app before it was refused, and isn't left behind
+{ cat "$t/orig.AppImage"; echo '# another build'; } >"$t/demo.AppImage"
+out=$(stick "$t/upd-home" "$t/demo.AppImage" IMG="$t/ff-img" APPIMAGE_WEBSITE=https://github.com/o/demo 2>&1) &&
+    fail "an update from a drive renaming its launcher entry installed: $out"
+cmp -s "$t/orig.AppImage" "$t/upd-home/Applications/demo.AppImage" && [[ $(ls -A "$t/upd-home/Applications") == demo.AppImage ]] ||
+    fail "a refused file from a drive wrote over the installed app, or its copy was left: $(ls -A "$t/upd-home/Applications")"
 echo "ok appimage-open"
