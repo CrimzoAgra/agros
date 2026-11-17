@@ -69,8 +69,9 @@ run
 grep -q '^restart' "$t/home/started" && fail "a shell on Caelestia as it comes restarted again: $(cat "$t/home/started")"
 # --prepare (caelestia-prepare.service, as the session starts): the build and the first wallpaper and colours done,
 # the shell not started; the run at Hyprland's start then finds them done and only starts the shell
+# (no shell running yet: qs lists none)
 printf '#!/bin/sh
-echo "Config path: /x/quickshell/caelestia/shell.qml"
+exit 0
 ' >"$t/bin/qs"
 cp "$here/.local/bin/caelestia-start" "$t/home/.local/bin/"
 rm -rf "$t/home/.local/state" "$t/home/.config/quickshell/caelestia" "$t/home/overlay-runs"; : >"$t/home/started"
@@ -79,8 +80,14 @@ HOME=$t/home PATH=$t/bin:$PATH "$t/home/.local/bin/caelestia-start" --prepare
 grep -q '^caelestia scheme set -n dynamic$' "$t/home/started" || fail "--prepare: the colours weren't set"
 grep -q 'shell -d' "$t/home/started" && fail "--prepare: the shell was started: $(cat "$t/home/started")"
 grep -q '(ahead of the desktop)' "$log" || fail "--prepare: not logged as such"
+printf '#!/bin/sh
+echo "Config path: /x/quickshell/caelestia/shell.qml"
+' >"$t/bin/qs"
 run
 [[ $(grep -c '^caelestia wallpaper' "$t/home/started") -eq 1 ]] || fail "after --prepare: the wallpaper was set again"
+# (a shell already up from that folder: --prepare builds nothing under it)
+HOME=$t/home PATH=$t/bin:$PATH "$t/home/.local/bin/caelestia-start" --prepare
+[[ $(wc -l <"$t/home/overlay-runs") -eq 2 ]] || fail "--prepare with the shell up: built under it"
 [[ $(tail -1 "$t/home/started") == "caelestia shell -d" ]] || fail "after --prepare: the shell wasn't started"
 # (the unit that runs it: packaged, wanted as the session starts, after agros-links, nothing ordered after it)
 u=$here/packages/agros-scripts/caelestia-prepare.service
