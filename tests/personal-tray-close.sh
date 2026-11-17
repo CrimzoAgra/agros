@@ -42,7 +42,7 @@ out=$(close lutris protonvpn-app equibop) || fail "closing them failed: $out"
 ! alive lutris && ! alive proton || fail "apps in their tray only left open"
 [[ $out == "Lutris and Proton VPN closed"* ]] || fail "their closing not said: $out"
 # Lutris with a game's window: left open (Proton VPN, in its tray, closed)
-start lutris game; start proton; echo "[{\"pid\": $(cat "$t/game.pid")}]" >"$t/clients"
+start lutris game; g=$(cat "$t/game.pid"); start proton; echo "[{\"pid\": $g}]" >"$t/clients"
 close lutris protonvpn-app >/dev/null || fail "closing them failed"
 alive lutris || fail "Lutris closed with a game of its open"
 alive proton && fail "Proton VPN, in its tray, left open beside Lutris with a game"
