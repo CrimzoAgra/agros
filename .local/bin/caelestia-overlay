@@ -132,10 +132,12 @@ grep '^WARNING' <<<"$out" | sed 's/^WARNING: //' >"$skipped" || true
 broken=""
 lint=$(command -v /usr/lib/qt6/bin/qmllint qmllint6 2>/dev/null | head -1) || true
 if [[ -n $lint ]]; then
+    # (8 files to a qmllint, one per CPU: one qmllint a file took ~5 s, at a first login the shell waiting on it. Its
+    # output read whole, each finding naming its file; it exits non-zero on any warning, so not taken as a failure)
+    found=$(find "$tmp" -type f -name '*.qml' -print0 | xargs -0r -P "$(nproc)" -n 8 "$lint" 2>&1) || true
     while IFS= read -r f; do
-        # (its output read whole: qmllint exits non-zero on any warning, which pipefail would take for no match)
-        [[ $("$lint" "$f" 2>&1) == *"[syntax]"* ]] && broken+=" ${f#"$tmp"/}"
-    done < <(find "$tmp" -type f -name '*.qml')
+        broken+=" ${f#"$tmp"/}"
+    done < <(sed -n 's/^[A-Za-z]*: \(.*\.qml\):[0-9]*:[0-9]*: .*\[syntax\]$/\1/p' <<<"$found" | sort -u)
 fi
 # Failed with no patch to blame (patch.py itself broken), or broken QML: Caelestia as it comes, none of my changes.
 # Not the old folder: after a Caelestia update its copies are of the old version, next to links to the new one
