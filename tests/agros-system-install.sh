@@ -76,4 +76,13 @@ for f in $etc; do
     case $f in etc/pacman.d/agros-gate.conf | etc/pacman.d/agros-noextract.conf | etc/sudoers.d | etc/sudoers.d/*) continue ;; esac
     grep -qxF -- "$f" <<<"$backup" || fail "agros-system's /$f isn't a backup file: an edit of yours lost at every upgrade"
 done
+
+# The NoExtract list leaves out the pointer's other Bibata styles, never the one the desktop (hypr-vars.lua) and the
+# login screen (agros-greeter) use: changed there alone, the pointer would have no theme
+cursor=$(sed -n 's/^ *cursorTheme = "\([^"]*\)",$/\1/p' "$here/.config/caelestia/hypr-vars.lua")
+[[ -n $cursor ]] || fail "the desktop's pointer not found in hypr-vars.lua"
+grep -q "XCURSOR_THEME=$cursor " "$here/packages/agros-greeter/run" && grep -qF "Inherits=$cursor\\n" "$here/packages/agros-greeter/PKGBUILD" ||
+    fail "the login screen's pointer isn't the desktop's, $cursor"
+grep -qx "NoExtract = usr/share/icons/Bibata-\* !usr/share/icons/$cursor/\*" "$here/packages/agros-system/agros-noextract.conf" ||
+    fail "the NoExtract list doesn't keep the desktop's pointer, $cursor: $(grep Bibata "$here/packages/agros-system/agros-noextract.conf")"
 echo "ok agros-system-install"
