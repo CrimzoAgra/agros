@@ -27,7 +27,8 @@ stub agros-each-user 'case $1 in --list) echo "list" >>'"$t"'/calls; echo someon
 export AGROS_EACH_USER=$t/bin/agros-each-user AGROS_AUR_USER=$me
 # Through PAM (a logind session for the user, out of the service's cgroup): never
 for c in runuser sudo su; do stub "$c" 'echo "PAM '"$c"'" >>'"$t"'/calls; exit 1'; done
-# pacman, on the download's lists: what it brings ($PENDING), the foreign ones ($FOREIGN), Qt's dependents, what's in
+# pacman, on the download's lists: what it brings ($PENDING), the foreign ones ($FOREIGN), [agros]'s ($AGROS_PKGS, each
+# installed at $AGROS_HAVE), Qt's dependents, what's in
 # Python 3.13's folder, the installed versions; what the builds need and isn't installed ($NEED), and its download
 # (noted, with whether the boot's "downloading" mark was there: update-apps waits on it)
 # shellcheck disable=SC2016
@@ -35,10 +36,11 @@ stub pacman 'foreign=${FOREIGN:-equibop quickshell-git}
 case "$1" in
     -Qu) printf "%s\n" "$PENDING" ;;
     -Qmq) printf "%s\n" $foreign ;;
-    -Slq) true ;;
+    -Slq) printf "%s\n" ${AGROS_PKGS:-} ;;
     -Qi) echo "Name            : qt6-base"; echo "Required By     : quickshell-git  darkly-bin  kconfig"; echo "Optional For    : None" ;;
     -Qoq) [ "${@: -1}" = /usr/lib/python3.13/ ] && printf "%s\n" python ${QOQ:-python-foo} python-repo ;;
-    -Q) case " $foreign " in *" $2 "*) echo "$2 $( [ "$2" = quickshell-git ] && echo 0.3-1 || echo 1.0-1 )" ;; *) exit 1 ;; esac ;;
+    -Q) case " ${AGROS_PKGS:-} " in *" $2 "*) echo "$2 $AGROS_HAVE"; exit 0 ;; esac
+        case " $foreign " in *" $2 "*) echo "$2 $( [ "$2" = quickshell-git ] && echo 0.3-1 || echo 1.0-1 )" ;; *) exit 1 ;; esac ;;
     -T) echo "pacman $*" >>'"$t"'/calls; [ -n "${NEED:-}" ] && echo "$NEED"; true ;;
     -Sw) echo "pacman $*" >>'"$t"'/calls; echo "download $( [ -e '"$t"'/au/downloading ] && echo marked || echo unmarked)" >>'"$t"'/calls ;;
     -Sp) if [ -n "${SP_UNSAT:-}" ] && [ "${@: -1}" = "$SP_UNSAT" ]; then
@@ -234,6 +236,21 @@ aur_has quickshell-git=0.4-1 caelestia-shell=1.1-1
 FOREIGN="caelestia-shell quickshell-git" PENDING="foo 1-1 -> 2-1" "$t/auto-update-aur" "$t/db" >"$t/out" 2>&1 || fail "the builds failed: $(cat "$t/out")"
 [[ $(grep '^built' "$t/calls" | cut -d' ' -f1-2 | paste -sd' ') == "built quickshell-git built caelestia-shell" ]] ||
     fail "not built in dependency order: $(grep '^built' "$t/calls")"
+# A new Qt, Quickshell from [agros] (not foreign): rebuilt at the version installed, CI's, not the AUR's newer one (untested,
+# or one CI held back); its fetch asked for that version (<base>=<version>), and wanted at it. Not found on the AUR (here
+# its build files have no git source to pin): that base not built, said, the others (equibop, foreign: the AUR's newest)
+# still built
+aur_has equibop=1.1-1 quickshell-git=0.5-1
+: >"$t/calls"
+FOREIGN=equibop AGROS_PKGS=quickshell-git AGROS_HAVE=0.3.0.r5.gabc1234-1.2 PENDING="qt6-base 6.9.0-1 -> 6.10.0-1" \
+    "$t/auto-update-aur" "$t/db" >"$t/out" 2>&1 && fail "a rebuild whose version couldn't be found reported success"
+[[ $(cat "$aur/rebuild") == quickshell-git ]] || fail "[agros]'s Quickshell not the one to rebuild: $(cat "$aur/rebuild")"
+grep -q -- "--fetch $build quickshell-git=0.3.0.r5.gabc1234-1.2$" "$t/calls" && grep -q -- "--fetch $build equibop$" "$t/calls" ||
+    fail "the fetch not asked for the version installed ([agros]'s) alone: $(grep -- '--fetch' "$t/calls")"
+[[ $(sort "$aur/wanted") == $'equibop 1.1-1\nquickshell-git 0.3.0.r5.gabc1234-1.2' ]] || fail "wanted: $(cat "$aur/wanted")"
+[[ $(cat "$aur/failed") == "quickshell-git: its version installed, 0.3.0.r5.gabc1234-1.2, couldn't be found on the AUR: not rebuilt for the new qt6-base 6.10.0-1" ]] ||
+    fail "the version not found not said: $(cat "$aur/failed" 2>/dev/null)"
+[[ $(cat "$aur/built") == "equibop 1.1-1" ]] && ! grep -q '^built quickshell' "$t/calls" || fail "built: $(cat "$aur/built" 2>/dev/null)"
 # A build that comes out older than the AUR's version: not taken (a planned one missing fails its base)
 aur_has quickshell-git=0.5-1
 FOREIGN=quickshell-git PENDING="foo 1-1 -> 2-1" "$t/auto-update-aur" "$t/db" >"$t/out" 2>&1 && fail "a build older than planned reported success"

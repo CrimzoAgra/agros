@@ -408,7 +408,8 @@ bundles() {
         timeout 30m systemd-inhibit --what=sleep:shutdown --mode=block --who="Flatpak update" \
             --why="Reinstalling apps from their files" "$@" /usr/lib/agros/bin/flatpak-bundle-update --install-fetched "$fetched"
     fi
-    rm -rf "$fetched"
+    # (removed by whoever made it: never root's rm in a folder a user owns)
+    "$@" rm -rf -- "$fetched"
 }
 bundles
 # The AgrOS users (agros-each-user's list): accounts with a home, each one's own apps, as that user (agros-each-user
