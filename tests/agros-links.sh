@@ -99,4 +99,20 @@ run
 echo newest-still >"$s/caelestia/mine.lua"; run
 [[ $(cat "$h/caelestia/mine.lua.agros-new") == newest-still && $(grep -c . "$t/warned") == 4 ]] ||
     fail "a newer version not offered again"
+# The bar's status icons (the sound one): an install from before AgrOS listed them gets /etc/skel's list in its own
+# shell.json, once, its other settings kept; a list of its own left alone; no shell.json left with none (json-edit, beside
+# it, starts a missing one as {})
+cp "$here/.local/bin/json-edit" "$t/lib/bin/"
+echo '{"bar": {"statusIcons": [{"enabled": true, "id": "audio"}], "x": 1}}' >"$s/caelestia/shell.json"
+mark=$t/home/.local/state/agros/bar-status-icons
+echo '{"bar": {"statusIcons": []}}' >"$h/caelestia/shell.json"; run
+[[ $(jq -c .bar.statusIcons "$h/caelestia/shell.json") == '[]' ]] || fail "a list of the user's own replaced: $(cat "$h/caelestia/shell.json")"
+rm -f "$mark"; echo '{"bar": {"y": 2}, "z": 3}' >"$h/caelestia/shell.json"; run
+[[ $(jq -c '[.bar.statusIcons, .bar.y, .z]' "$h/caelestia/shell.json") == '[[{"enabled":true,"id":"audio"}],2,3]' ]] ||
+    fail "AgrOS's status icons not added to a shell.json without them, or its settings lost: $(cat "$h/caelestia/shell.json")"
+# ...once: taken out by the user, it stays out
+echo '{"bar": {"y": 2}}' >"$h/caelestia/shell.json"; run
+[[ $(jq -c . "$h/caelestia/shell.json") == '{"bar":{"y":2}}' ]] || fail "the status icons added again after the user took them out"
+rm -f "$mark" "$h/caelestia/shell.json"; run
+[[ ! -e $h/caelestia/shell.json ]] || fail "a missing shell.json made, for the status icons: $(cat "$h/caelestia/shell.json")"
 echo "ok agros-links"
