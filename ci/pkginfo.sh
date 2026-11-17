@@ -10,7 +10,7 @@ pkginfo_fields='pkgname|pkgbase|xdata|pkgver|pkgdesc|url|builddate|packager|size
 # pkginfo <package file>: its name and version in $pkgname and $pkgver; when it isn't one makepkg would write: 1, said
 pkginfo() {
     # (C's characters: a-z only those 26 letters, and a byte that isn't text one that isn't a control character)
-    local f=$1 base=${1##*/} info all LC_ALL=C
+    local f=$1 base=${1##*/} info all && local -x LC_ALL=C
     pkgname='' pkgver=''
     # (the first .PKGINFO in it, as repo-add reads it (-q); a second one, which pacman reads too: refused)
     info=$(bsdtar -xOqf "$f" .PKGINFO 2>/dev/null) || info=
