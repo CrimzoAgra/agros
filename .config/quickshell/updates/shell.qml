@@ -33,6 +33,7 @@ ShellRoot {
     property var log: []
     property string step: "" // the part being updated now ("System and AUR apps"...)
     property bool failed: false
+    property bool listFailed: false // the list couldn't be made (update-apps missing or broken): not "nothing to update"
     property bool startWhenReady: Quickshell.env("UPDATES_START") === "1"
 
     readonly property var pending: items.filter(i => i.kind !== "offline")
@@ -74,12 +75,13 @@ ShellRoot {
         id: listProc
 
         running: true
-        // Ends with a line of its own: with nothing to update the list is empty, and empty output never reported back
-        // (the count from before the update stayed)
-        command: ["sh", "-c", `"${root.script}" --list; echo end`]
+        // Ends with a line of its own, with the list's exit status: with nothing to update the list is empty, and empty
+        // output never reported back (the count from before the update stayed); a list that failed said as such
+        command: ["sh", "-c", '"$0" --list; echo "end $?"', root.script]
         stdout: StdioCollector {
             onStreamFinished: {
-                root.items = text.split("\n").filter(l => l.includes("\t")).map(l => {
+                root.listFailed = !/^end 0$/m.test(text);
+                root.items = root.listFailed ? [] : text.split("\n").filter(l => l.includes("\t")).map(l => {
                     const [kind, name, old, now] = l.split("\t");
                     return { kind, name, old: old ?? "", new: now ?? "" };
                 });
@@ -196,7 +198,7 @@ ShellRoot {
                         id: headerIcon
 
                         anchors.centerIn: parent
-                        text: root.phase === "updating" ? "downloading" : root.phase === "checking" ? "sync" : root.pending.length ? "system_update" : "verified"
+                        text: root.phase === "updating" ? "downloading" : root.phase === "checking" ? "sync" : root.listFailed ? "error" : root.pending.length ? "system_update" : "verified"
                         font.family: "Material Symbols Rounded"
                         font.pixelSize: 30
                         color: root.c("onPrimaryContainer")
@@ -221,6 +223,7 @@ ShellRoot {
                             : root.phase === "updating" ? "Updating…"
                             : root.phase === "done" && root.failed ? "Finished, with problems"
                             : listProc.running ? "Checking what's left…"
+                            : root.listFailed ? "Couldn't check for updates"
                             : root.pending.length ? `${root.pending.length} update${root.pending.length > 1 ? "s" : ""} available`
                             : "Everything is up to date"
                         font.family: "Rubik"
@@ -265,11 +268,12 @@ ShellRoot {
                         spacing: 2
 
                         Text {
-                            visible: root.phase !== "checking" && !listProc.running && (!root.items.length || root.offline)
+                            visible: root.phase !== "checking" && !listProc.running && (!root.items.length || root.offline || root.listFailed)
                             Layout.fillWidth: true
                             Layout.topMargin: 40
                             horizontalAlignment: Text.AlignHCenter
-                            text: root.offline ? "Couldn't check: no connection to the package servers" : "Nothing to update"
+                            text: root.listFailed ? "Couldn't check: update-apps --list failed (run it in a terminal to see why)"
+                                : root.offline ? "Couldn't check: no connection to the package servers" : "Nothing to update"
                             font.family: "Rubik"
                             font.pixelSize: 15
                             color: root.c("onSurfaceVariant")
