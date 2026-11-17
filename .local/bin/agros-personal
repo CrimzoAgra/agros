@@ -116,8 +116,8 @@ personal_open() {
     return 0
 }
 
-# Lutris and Proton VPN start at login in their tray only (user/apps.lua, on by default), so a restore from the first
-# login's notification always found them open. Of the apps named, those two with no window (nor a game they started)
+# Lutris and Proton VPN start at login in their tray only (user/apps.lua: Lutris on by default, Proton VPN when turned
+# on), so a restore from the first login's notification found them open. Of the apps named, those two with no window (nor a game they started)
 # are closed for it, asked first in a terminal: nothing of theirs is lost, and they start again at the next login, which
 # the restore needs anyway. Hyprland not reachable to tell (a text console): left open, said as the others
 personal_close_tray() {

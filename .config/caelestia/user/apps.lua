@@ -7,12 +7,13 @@ for _, tag in ipairs({ "music_player", "communication_app", "todo_app", "system_
 end
 
 -- Apps started at login, each a switch in the Settings app (Startup page: startup.<app>; defaults in its schema: only
--- Lutris, Proton VPN and Capri on)
+-- Lutris and Capri on)
 local function at_login(app, cmd)
     if dots.setting("startup." .. app) then hl.on("hyprland.start", function() hl.exec_cmd(cmd) end) end
 end
 
--- Proton VPN at login (app-launch: in a unit of its own under uwsm, like apps started from the launcher)
+-- Proton VPN at login, when you turn it on (off at first: a VPN at every login is yours to choose) (app-launch: in a
+-- unit of its own under uwsm, like apps started from the launcher)
 -- After keyring-default (desktop.lua) has made "login" the default keyring: started alongside, on a fresh install it
 -- could ask for the old keyring's password while that's being moved
 at_login("protonvpn", "sh -c '~/.local/bin/keyring-default; exec ~/.local/bin/app-launch protonvpn-app'")

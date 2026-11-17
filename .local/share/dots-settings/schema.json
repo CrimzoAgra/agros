@@ -1084,7 +1084,7 @@
               "label": "Proton VPN",
               "description": "In its tray.",
               "type": "bool",
-              "default": true
+              "default": false
             },
             {
               "key": "startup.solaar",

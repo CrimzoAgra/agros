@@ -183,7 +183,7 @@ plugged in, mounted if it isn't, or the folder you name after it), encrypted wit
 a lost drive gives nothing without it. `agros-personal` decrypts it straight into place (nothing unencrypted written
 anywhere else) and backs up what it replaces; the keyring opens with your old login password. It refuses while an app
 whose files it brings back is open, but closes Lutris and Proton VPN when they're only in the tray (they start there at
-every login), asking first in a terminal. It's never in the repo:
+login, Proton VPN once you turn that on), asking first in a terminal. It's never in the repo:
 saved logins get past your password and 2FA, and git keeps every version. With no drive, it opens each app for you to
 sign in instead (LibreWolf's Firefox account brings bookmarks and passwords through Sync) and asks the weather
 widget's place. Save again now and then: logins expire.
@@ -268,8 +268,8 @@ Changes apply right away.
     behaviours, store launchers starting minimised, each Lutris change, and
     each change to Caelestia (listed from `caelestia-overlay`'s and the Lutris overlay's `patch.py --list`, so new ones
     show up by themselves). A Caelestia change turned off is left out of the rebuild (`Off:`, not a warning)
-  - **Startup**: the apps `user/apps.lua` can start at login (Lutris, Proton VPN and Capri on by default;
-    Solaar and ArtCraft off), and every app with a standard
+  - **Startup**: the apps `user/apps.lua` can start at login (Lutris and Capri on by default;
+    Proton VPN, Solaar and ArtCraft off), and every app with a standard
     autostart entry (`/etc/xdg/autostart`, `~/.config/autostart`); turning one of those off writes your copy of it
     with `Hidden=true`, as GNOME's startup settings do
   - **Shortcuts**: my shortcuts (`dots.bind` in `user/keys.lua`, `user/windows.lua` and `user/apps.lua`; defaults in the
