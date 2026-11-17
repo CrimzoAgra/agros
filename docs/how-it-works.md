@@ -24,11 +24,11 @@ Laptop settings and lighting are in a separate repo: **legion-control-linux**.
    package list) and install as usual. There's no desktop to pick: the installer installs `agros-desktop`, AgrOS's
    meta package, from the `[agros]` repo, alongside CachyOS's base. pacman puts in exactly the final set of packages
    in one go; nothing is installed only to be taken away again, and nothing is built during the install.
-2. Reboot and log in. At your first login, `caelestia-start` builds Caelestia's overlay and sets its wallpaper and
-   colours before the shell starts (done by `caelestia-prepare.service` before Hyprland starts, so the shell comes
-   up at once; `agros-welcome` does both if that failed, and moves the shell onto the overlay), and
-   `agros-welcome` does the rest of what's per user: LibreWolf's settings, the Spotify, Nuvio and ArtCraft Flatpaks with Spicetify, VSCodium's extensions
-   and Claude Code's plugins.
+2. Reboot and log in. At your first login, `caelestia-prepare.service` (`caelestia-start --prepare`) builds
+   Caelestia's overlay and sets its wallpaper and colours before Hyprland starts, so the shell comes up at once
+   (`agros-welcome` does both if that failed, and moves the shell onto the overlay). `agros-welcome` does the rest of
+   what's per user: LibreWolf's settings, the Spotify, Nuvio and ArtCraft Flatpaks with Spicetify, VSCodium's
+   extensions and Claude Code's plugins.
 3. **The one thing you run:** its notification offers *Restore my accounts*. Plug in your pen drive and click it, or
    run `agros-personal` ([Your accounts](#your-accounts)). Capri installs right after that, since her fork is private
    and needs your GitHub login (at the next login when gh only gets it from the keyring brought back: `dotfiles-check`
