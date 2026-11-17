@@ -296,6 +296,9 @@ list_firmware() {
 update_firmware() {
     command -v fwupdmgr >/dev/null || return 0
     local before left id rc=0
+    # (fwupd unable to list them at all, not "nothing to update" (2): a failure, not an empty list read as done)
+    timeout 1m fwupdmgr get-updates --json --no-unreported-check --no-metadata-check >/dev/null 2>&1
+    case $? in 0 | 2) ;; *) echo "Firmware: fwupd couldn't list the updates"; return 1 ;; esac
     before=$(fw_waiting | cut -f1)
     # (each device waiting by its id: never one with no room, which fwupd would try again. fwupd's own checks stand: on
     # battery below its level it refuses. 2: nothing to update)
