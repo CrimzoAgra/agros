@@ -10,7 +10,7 @@ The bar runs down the left edge of the screen. From top to bottom:
   unpin it or force-quit it
 - **The tray**: click the arrow to open it
 - **The clock**, then **status icons** (sound, network, Bluetooth, battery) that open their panels on hover
-- **The power button**: lock, log out, restart, shut down
+- **The power button**: log out, shut down, sleep and restart (**Super+L** locks the screen)
 
 Right-click an empty part of the bar for the Task Manager and the floating/tiling switch.
 
