@@ -23,14 +23,23 @@ a plain text login; `sudo login-reset --back` brings the AgrOS login screen back
 
 ## An update broke something
 
-Restart, press **Esc** as the computer starts, and pick the snapshot from before the update. See
-[Updates](12-updates.md).
+Restart, press **Esc** as the computer starts, and pick the snapshot from before the update. That's for now: to keep
+it, see [If an update goes wrong](12-updates.md#if-an-update-goes-wrong).
 
 ## Something went wrong while the computer started or shut down
 
 Starting and shutting down show only the splash, no text. What happened is kept in the system's log: `journalctl -b
 -p err` lists this start-up's errors, `journalctl -b -1 -p err` the last session's (its shutdown too). Pressing **Esc**
 on the splash shows the text as it goes.
+
+## Windows' clock is wrong after using AgrOS
+
+Windows keeps the computer's clock in local time, AgrOS (like every Linux) in UTC, so each moves it by your time zone.
+Have Windows use UTC too: in Windows, open **Terminal (Admin)** and run this, then restart.
+
+```
+reg add "HKLM\System\CurrentControlSet\Control\TimeZoneInformation" /v RealTimeIsUniversal /d 1 /t REG_DWORD /f
+```
 
 ## A first-login step failed
 
