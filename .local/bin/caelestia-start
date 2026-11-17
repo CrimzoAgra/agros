@@ -46,7 +46,7 @@ fi
         # the others by a sudo of their own, which passes anything else on
         later=${log%/*}/folders-later
         # shellcheck disable=SC2016  # (the stand-in's own $2 and $@)
-        mkdir -p "$later" && printf '%s\n' '#!/bin/sh' '[ "$2" = papirus-folders ] && exit 0' 'exec /usr/bin/sudo "$@"' \
+        mkdir -p "$later" && printf '%s\n' '#!/bin/sh' 'case $2 in papirus-folders | */papirus-folders) exit 0 ;; esac' 'exec /usr/bin/sudo "$@"' \
             >"$later/sudo" && chmod +x "$later/sudo"
         {
             PATH=$later:$PATH caelestia wallpaper -f /etc/xdg/quickshell/caelestia/assets/wallpaper.webp &&
