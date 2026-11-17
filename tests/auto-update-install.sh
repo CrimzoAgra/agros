@@ -11,6 +11,8 @@
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
+# (the batteries battery-low reads: none, but where a test makes them; never this machine's own)
+export AGROS_POWER_SUPPLY=$t/ps
 mkdir -p "$t/bin" "$t/pac/sync" "$t/au/db/sync"
 # The script as agros-system installs it (agros-scripts' helpers, pacman-lock-holder and wait-online, from here)
 au=$here/packages/agros-system
@@ -36,7 +38,7 @@ sed -e "s|/var/lib/auto-update|$t/au|g" -e "s|/var/lib/pacman|$t/pac|g" -e "s|/v
     -e "s|command -v limine-snapper-sync|command -v $t/limine-sync|; s|^\( *\)limine-snapper-sync >|\1$t/limine-sync >|" \
     -e "s|\${AGROS_EACH_USER:-/usr/lib/agros/bin/agros-each-user}|$t/bin/agros-each-user|" \
     -e "s|/usr/lib/agros/auto-update-aur|$t/auto-update-aur|g; s|/usr/lib/agros/auto-update |$t/auto-update |g" \
-    -e "s|/usr/lib/agros/bin/|$here/.local/bin/|g" -e "s|/sys/class/power_supply|$t/ps|" \
+    -e "s|/usr/lib/agros/bin/|$here/.local/bin/|g" \
     -e "s|/var/lib/agros/|$t/agros/|g" -e "s|/usr/share/pacman/keyrings/agros.gpg|$t/agros.gpg|g" \
     "$au/auto-update" >"$t/auto-update"
 sed -e "s|/var/lib/auto-update|$t/au|g" -e "s|/usr/lib/agros/auto-update-aur|$t/auto-update-aur|g" \
@@ -287,7 +289,7 @@ JOBS="  42 soft-reboot.target start waiting" "$t/auto-update" --install || fail 
 [[ $(cat "$t/pac/sync/core.db") == old && ! -s $t/calls && $(cut -d' ' -f3- "$t/au/skipped") == "a soft reboot"* ]] ||
     fail "installed at a soft reboot, or not counted: $(cat "$t/calls") $(cat "$t/au/skipped")"
 # Nearly empty on battery (a laptop off its charger): nothing installed, counted with its reason; on its charger, or
-# with more charge (a mouse's own battery, nearly empty, isn't the computer's), installed
+# with more charge (a mouse's own battery, nearly empty, isn't the computer's), installed. (battery-low's folder: $t/ps)
 battery() {  # <name> <capacity> <status> [<scope>]
     mkdir -p "$t/ps/$1"
     echo Battery >"$t/ps/$1/type"; echo "$2" >"$t/ps/$1/capacity"; echo "$3" >"$t/ps/$1/status"

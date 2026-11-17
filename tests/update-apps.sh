@@ -4,6 +4,8 @@
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
+# (the batteries battery-low reads: none, but where a test makes them; never this machine's own)
+export AGROS_POWER_SUPPLY=$t/ps
 mkdir -p "$t/bin" "$t/home"
 stub() { printf '#!/bin/sh\n%s\n' "$2" >"$t/bin/$1"; chmod +x "$t/bin/$1"; }
 # (checkupdates syncs its copy of the lists; what's waiting is pacman's -Qu on it, through the upstream gate: $t/qu)
@@ -166,6 +168,19 @@ HOME=$t/home XDG_STATE_HOME=$t/state XDG_CACHE_HOME=$t/home/.cache PATH=$t/bin:$
 keys=$(grep -n -- " --config [^ ]* -S --needed --noconfirm archlinux-keyring$" "$t/paru" | cut -d: -f1)
 su=$(grep -n -- " -Su --noconfirm$" "$t/paru" | cut -d: -f1)
 [[ -n $keys && -n $su ]] && ((keys < su)) || fail "the newer keyring not installed first, on its own: $(cat "$t/paru")"
+# On a battery nearly empty (a laptop off its charger, below 15%): nothing installed (a power cut mid-install leaves
+# packages half in), said, a failure for the Updates app; on its charger, updated
+mkdir -p "$t/ps/BAT0"; echo Battery >"$t/ps/BAT0/type"; echo 9 >"$t/ps/BAT0/capacity"; echo Discharging >"$t/ps/BAT0/status"
+rm -f "$t/paru"
+out=$(HOME=$t/home XDG_STATE_HOME=$t/state XDG_CACHE_HOME=$t/home/.cache PATH=$t/bin:$PATH "$here/.local/bin/update-apps" \
+    </dev/null 2>&1) && fail "an update on a nearly empty battery reported success"
+[[ ! -e $t/paru && $out == *"nearly empty (9 percent): nothing updated"* ]] ||
+    fail "updated on a nearly empty battery, or not said: $out / $(cat "$t/paru" 2>/dev/null)"
+echo Charging >"$t/ps/BAT0/status"
+HOME=$t/home XDG_STATE_HOME=$t/state XDG_CACHE_HOME=$t/home/.cache PATH=$t/bin:$PATH "$here/.local/bin/update-apps" \
+    </dev/null >/dev/null 2>&1 || true
+grep -q -- " -Su --noconfirm$" "$t/paru" || fail "not updated on a low battery that's charging: $(cat "$t/paru" 2>/dev/null)"
+rm -r "$t/ps"
 # A booted snapshot (its root an overlay in RAM) or the live USB: nothing updated (gone at the next boot; with Limine a
 # new kernel on the ESP without its modules), said, a failure for the Updates app; and no update offered by --check
 stub findmnt 'echo overlay'; rm -f "$t/paru" "$t/sent"

@@ -162,6 +162,12 @@ if snapshot; then
     echo "Boot the system itself (the boot menu's first entry) to update."
     exit 1
 fi
+# Nor on a battery nearly empty (as the shutdown's install, auto-update): a power cut mid-install leaves packages half
+# in, which pacman doesn't undo
+if charge=$("$helpers/battery-low"); then
+    echo "On battery, nearly empty ($charge percent): nothing updated. Plug the charger in, then update."
+    exit 1
+fi
 status=0 # 1 if any step failed (the Updates app says "Finished, with problems")
 echo "== System and AUR apps"
 # The boot's own downloads first (both fetching the same package into the cache at once would corrupt it): while it

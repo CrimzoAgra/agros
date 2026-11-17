@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Whether the computer runs on a battery nearly empty (off its charger, below 15%): exit 0 and its charge then, else 1.
+# A power cut mid-install (a low-battery shutdown, or one it may not last through) leaves packages half in, which pacman
+# doesn't undo: neither the shutdown's install (auto-update, /usr/lib/agros/bin/battery-low) nor Updates (update-apps)
+# installs then. The highest of the computer's own batteries (not a mouse's: scope Device)
+# (AGROS_POWER_SUPPLY: another folder in place of /sys/class/power_supply, the tests')
+on_battery='' charge=0
+for s in "${AGROS_POWER_SUPPLY:-/sys/class/power_supply}"/*; do
+    [[ $(cat "$s/type" 2>/dev/null) == Battery && $(cat "$s/scope" 2>/dev/null) != Device ]] || continue
+    c=$(cat "$s/capacity" 2>/dev/null)
+    [[ $c =~ ^[0-9]+$ ]] || continue
+    charge=$((c > charge ? c : charge))
+    [[ $(cat "$s/status" 2>/dev/null) != Discharging ]] || on_battery=1
+done
+[[ -n $on_battery ]] && ((charge < 15)) && echo "$charge"
