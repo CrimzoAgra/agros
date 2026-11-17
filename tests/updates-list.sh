@@ -29,4 +29,11 @@ out=$(timeout 20 sh -c "${cmd/timeout 10m /timeout 1 }" "$t/hangs") || true
 { grep -q ': root.offline ? "Couldn'"'"'t check for updates"' "$qml" &&
     grep -q 'root.pending.length ? "system_update" : root.offline ? "error" : "verified"' "$qml"; } ||
     fail "an offline check shown as up to date"
+# An account that can't sudo (not in wheel): the list, said that an administrator installs them, no "Update all"
+# (it only failed at sudo), nor the "Update now" notification's start
+{ grep -q 'command: \["id", "-nG"\]' "$qml" && grep -q 'root.admin = ` ${text.trim()} `.includes(" wheel ")' "$qml" &&
+    grep -q ': !root.admin && root.pending.length ? "An administrator has to install these updates"' "$qml" &&
+    grep -q 'visible: root.admin && root.pending.length > 0 || root.phase === "updating"' "$qml" &&
+    grep -q 'if (root.pending.length && root.admin)' "$qml"; } ||
+    fail "an account that can't sudo still offered \"Update all\", or not told why"
 echo "ok updates-list"

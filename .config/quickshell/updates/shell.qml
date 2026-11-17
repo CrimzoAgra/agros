@@ -35,6 +35,9 @@ ShellRoot {
     property bool failed: false
     property bool listFailed: false // the list couldn't be made (update-apps missing or broken): not "nothing to update"
     property bool startWhenReady: Quickshell.env("UPDATES_START") === "1"
+    // An admin's (wheel) alone can install them (update-apps uses sudo): another account sees the list, told so, and
+    // no "Update all", which only failed (the boot's update installs them all the same)
+    property bool admin: true
 
     readonly property var pending: items.filter(i => i.kind !== "offline")
     readonly property bool offline: items.some(i => i.kind === "offline")
@@ -91,10 +94,19 @@ ShellRoot {
                 root.phase = root.phase === "done" ? "done" : "ready";
                 if (root.startWhenReady) {
                     root.startWhenReady = false;
-                    if (root.pending.length)
+                    if (root.pending.length && root.admin)
                         root.updateAll();
                 }
             }
+        }
+    }
+
+    // (admin: this account in wheel)
+    Process {
+        running: true
+        command: ["id", "-nG"]
+        stdout: StdioCollector {
+            onStreamFinished: root.admin = ` ${text.trim()} `.includes(" wheel ")
         }
     }
 
@@ -240,6 +252,7 @@ ShellRoot {
                         text: root.phase === "updating" ? (root.step || "Starting") + (root.step === "Flatpaks" ? " (system ones may ask for your password)" : "")
                             : root.phase === "done" && root.failed ? "Something didn't update; the details are below"
                             : root.phase === "done" ? "All done"
+                            : !root.admin && root.pending.length ? "An administrator has to install these updates"
                             : "System, AUR apps, firmware, Flatpaks, AppImages, Proton and developer tools"
                         font.family: "Rubik"
                         font.pixelSize: 13
@@ -439,7 +452,7 @@ ShellRoot {
                 Button {
                     primary: true
                     label: "Update all"
-                    visible: root.pending.length > 0 || root.phase === "updating"
+                    visible: root.admin && root.pending.length > 0 || root.phase === "updating"
                     icon: "download"
                     enabled: root.phase !== "checking" && root.phase !== "updating" && root.pending.length > 0
                     onClicked: root.updateAll()

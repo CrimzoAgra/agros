@@ -48,7 +48,13 @@ check
 rm -f "$seen"; stub id 'echo users'; stub notify-send 'echo sent >>"'"$t"'/sent"'
 check
 [[ ! -e $t/sent ]] || fail "\"Update now\" offered to an account that can't sudo"
-rm "$t/bin/id"
+# ...nor an update tried there (it failed at sudo, part of the way in): said, a failure
+stub paru 'echo "paru $*" >>"'"$t"'/paru"'
+out=$(HOME=$t/home XDG_STATE_HOME=$t/state XDG_CACHE_HOME=$t/home/.cache PATH=$t/bin:$PATH "$here/.local/bin/update-apps" \
+    </dev/null 2>&1) && fail "an update by an account that can't sudo reported success"
+[[ ! -e $t/paru && $out == "Only an administrator can install updates"* ]] ||
+    fail "an update tried by an account that can't sudo, or not said: $out / $(cat "$t/paru" 2>/dev/null)"
+stub id 'echo users wheel'  # (an admin's, from here on)
 
 # The update, with no state folder yet: the Qt Quickshell was built for written down the first time, not taken for a
 # new Qt at every run (each one rebuilding Quickshell and Caelestia)

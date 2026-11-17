@@ -116,6 +116,8 @@ summary() {
 # and initramfs were written for real, their modules not: the next normal boot broken. Not updated, said (as the boot's
 # auto-update does), and no update offered
 snapshot() { [[ $(findmnt -no FSTYPE / 2>/dev/null) == overlay ]]; }
+# An admin's (wheel) alone: another account can't sudo (the boot's update installs them all the same)
+admin() { [[ " $(id -nG 2>/dev/null) " == *" wheel "* ]]; }
 
 if [[ ${1:-} == --check-now ]]; then
     all=$(list_updates)
@@ -137,8 +139,8 @@ if [[ ${1:-} == --check-now ]]; then
 fi
 
 if [[ ${1:-} == --check ]]; then
-    # (an admin's (wheel) only: another account can't sudo, so its "Update now" only failed; the boot's update covers it)
-    [[ " $(id -nG 2>/dev/null) " == *" wheel "* ]] || exit 0
+    # (an admin's only: another account's "Update now" only failed)
+    admin || exit 0
     ! snapshot || exit 0
     list=$(list_updates | grep -v '^offline' | cut -f2 | sort -u)
     [[ -n $list ]] || exit 0
@@ -160,6 +162,12 @@ fi
 if snapshot; then
     echo "This system runs from a snapshot (or the live USB), its changes in RAM: nothing updated, none of it kept."
     echo "Boot the system itself (the boot menu's first entry) to update."
+    exit 1
+fi
+# Another account: nothing tried (it failed at sudo, part of the way in), said (the Updates app offers it no "Update
+# all", so this is from a terminal)
+if ! admin; then
+    echo "Only an administrator can install updates: one of them has to run Updates."
     exit 1
 fi
 # Nor on a battery nearly empty (as the shutdown's install, auto-update): a power cut mid-install leaves packages half
