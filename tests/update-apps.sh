@@ -34,11 +34,17 @@ check() { HOME=$t/home XDG_CACHE_HOME=$t/home/.cache PATH=$t/bin:$PATH "$here/.l
 # (notify-wait's own tools: the notification, and D-Bus' watch for the server going away, which never comes here)
 stub gdbus 'exec sleep 60'
 stub notify-send 'exit 143'
+stub id 'echo users wheel'  # (an admin's: only they can update)
 check
 [[ ! -e $seen ]] || fail "a notification the server dropped noted as announced"
 stub notify-send 'exec sleep 30'
 check
 [[ $(cat "$seen" 2>/dev/null) == linux ]] || fail "an unclicked notification (its time ran out) not noted: announced again every check"
+# An account that can't sudo (not in wheel): no "Update now" offered (it only failed); the boot's update covers it
+rm -f "$seen"; stub id 'echo users'; stub notify-send 'echo sent >>"'"$t"'/sent"'
+check
+[[ ! -e $t/sent ]] || fail "\"Update now\" offered to an account that can't sudo"
+rm "$t/bin/id"
 
 # The update, with no state folder yet: the Qt Quickshell was built for written down the first time, not taken for a
 # new Qt at every run (each one rebuilding Quickshell and Caelestia)
@@ -68,6 +74,28 @@ qt() { QT=$1 HOME=$t/home XDG_STATE_HOME=$t/state PATH=$t/bin:$PATH "$here/.loca
 qt 6.10.0 --qt-rebuild >/dev/null || fail "the rebuild for a new Qt failed"
 grep -q -- "-S --rebuild --noconfirm aur/caelestia-shell aur/quickshell-git$" "$t/paru" || fail "not rebuilt for the new Qt: $(cat "$t/paru" 2>/dev/null)"
 [[ $(cat "$t/state/quickshell-qt") == "qt6-base 6.10.0 qt6-declarative 6.10.0 " ]] || fail "the new Qt not written down"
+# [agros]'s own (Quickshell, built there with AgrOS's fix) rebuilt as the boot's rebuild does it: the AUR's build files
+# of the version installed, AgrOS's fix added (auto-update-aur --fetch), built from them; never paru -S's, the AUR's
+# newest without the fix. The AUR's own (not in [agros]) still by paru -S
+rm -f "$t/paru" "$t/state/quickshell-qt"
+# shellcheck disable=SC2016  # (expanded by the stubs)
+stub pacman 'case "$1 $2" in "-Q qt6-base" | "-Q qt6-declarative") echo "$2 $QT-1" ;; "-Q quickshell-git") echo "quickshell-git 0.2.1.r5.gabc1234-1.2" ;;
+    "-Q caelestia-shell") true ;; -Qi*) echo "Required By     : quickshell-git  caelestia-shell"; echo "Optional For    : None" ;;
+    "-Slq agros") echo quickshell-git ;; "-Qm caelestia-shell") true ;; *) exit 1 ;; esac'
+stub curl 'echo "{\"results\":[{\"PackageBase\":\"quickshell-git\"}]}"'
+# shellcheck disable=SC2016
+stub paru 'echo "paru $* in ${PWD##*/}" >>"'"$t"'/paru"'
+# shellcheck disable=SC2016
+stub auto-update-aur 'echo "$*" >>"'"$t"'/fetch"; [ "$1" = --fetch ] && mkdir -p "$2/${3%%=*}"'
+export AUTO_UPDATE_AUR=$t/bin/auto-update-aur
+qt 6.9.0 --qt-mark && qt 6.10.0 --qt-rebuild >/dev/null || fail "the rebuild of [agros]'s own for a new Qt failed"
+grep -q -- "^--fetch $t/home/.cache/agros-rebuild\.[^ ]* quickshell-git=0.2.1.r5.gabc1234-1.2$" "$t/fetch" ||
+    fail "[agros]'s Quickshell not fetched at its version installed, with AgrOS's fix: $(cat "$t/fetch" 2>/dev/null)"
+grep -q -- "-Ui --noconfirm in quickshell-git$" "$t/paru" && ! grep -q "aur/quickshell-git" "$t/paru" ||
+    fail "[agros]'s Quickshell not built from those build files: $(cat "$t/paru")"
+grep -q -- "-S --rebuild --noconfirm aur/caelestia-shell in" "$t/paru" || fail "the AUR's own not rebuilt: $(cat "$t/paru")"
+[[ -z $(compgen -G "$t/home/.cache/agros-rebuild.*") ]] || fail "the rebuild's build folder left behind"
+unset AUTO_UPDATE_AUR; rm "$t/bin/curl"
 # Part of Qt not installed (an edition without qt6-declarative): --qt-mark doesn't fail, the stamp names each one
 # ("none"), and nothing is rebuilt with Qt unchanged
 rm -f "$t/paru" "$t/state/quickshell-qt"

@@ -266,7 +266,7 @@ mapfile -d '' -t files < <(git -C "$repo" ls-files -z .config .local | grep -zvE
 # Browser settings: refresh the values of the settings listed in settings.js from LibreWolf
 # (failing, e.g. an unreadable profile: the rest of the sync goes on)
 prof=$("$(dirname "$(readlink -f "$0")")/firefox-bookmarks-export" --profile 2>/dev/null) || prof=""
-python3 - "$repo/.local/share/firefox/settings.js" "$dry" "$prof" <<'EOF' || echo "  LibreWolf settings not refreshed (an error above)"
+python3 -I - "$repo/.local/share/firefox/settings.js" "$dry" "$prof" <<'EOF' || echo "  LibreWolf settings not refreshed (an error above)"
 import os, re, sys
 path, dry, prof = sys.argv[1], sys.argv[2] == "true", sys.argv[3]
 if not prof or not os.path.exists(path) or not os.path.exists(f"{prof}/prefs.js"):

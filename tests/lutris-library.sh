@@ -136,4 +136,10 @@ P2
 run
 [[ $(python3 -Ic 'import sqlite3, sys; print(",".join(sorted(r[0] for r in sqlite3.connect(sys.argv[1]).execute("SELECT service_id FROM games WHERE service = '"'egs'"'"))))' "$t/.local/share/lutris/pga.db") == game ]] ||
     { echo "FAIL: Epic add-ons are in the library (or its game isn't)"; exit 1; }
+# One run at a time (agros-welcome's and lutris-library.path's overlapped): another holding its lock, this one waits
+flock "$XDG_RUNTIME_DIR/lutris-library.lock" sleep 3 &
+sleep 0.5
+start=$SECONDS; run
+((SECONDS - start >= 2)) || { echo "FAIL: lutris-library ran beside another run (its lock not waited for)"; exit 1; }
+wait
 echo "ok lutris-library"

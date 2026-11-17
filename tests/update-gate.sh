@@ -37,6 +37,12 @@ case $1 in
               echo "error: failed to prepare transaction (could not satisfy dependencies)"
               echo ":: unable to satisfy dependency 'libhyprutils.so=14-64' required by hyprlock"; exit 1
           fi
+          # ($HB: an approved Hyprland's update breaking the published agros-hyprbars, built for the old series, while
+          # hyprland isn't held)
+          if [[ -n ${HB:-} ]] && ! pacman-conf --config "$conf" IgnorePkg | grep -qx hyprland; then
+              echo "error: failed to prepare transaction (could not satisfy dependencies)"
+              echo ":: installing hyprland (0.58.0-1) breaks dependency 'hyprland<0.58' required by agros-hyprbars"; exit 1
+          fi
           [[ -z ${BREAKS:-} ]] && exit 0
           grep -q '^IgnorePkg = libfoo' "$conf" && exit 0
           pacman-conf --config "$conf" IgnorePkg | grep -qx hyprland || exit 0
@@ -116,6 +122,11 @@ out=$(HAVE_hyprland=0.57.2-1 NEW_hyprland=0.58.0-1 OFFLINE=1 BREAKS=1 gate)
 out=$(HAVE_hyprland=0.57.2-1 NEW_hyprland=0.58.0-1 OFFLINE=1 NEEDS=1 gate)
 [[ $out == *"hyprlock (held: its update needs something not to be had yet)"* ]] &&
     grep -qx 'IgnorePkg = hyprlock' "$t/out.conf" || fail "a package needing a held one's new version not held: $out / $(cat "$t/out.conf")"
+# An approved Hyprland whose update breaks one not held (agros-hyprbars, built for the old series, its rebuild not
+# published yet): the set waits for that rebuild (the gate's Include kept), said, not the whole update failing on it
+out=$(HAVE_hyprland=0.57.2-1 NEW_hyprland=0.58.0-1 APPROVED='hyprland 0.58.0' HB=1 gate 2>"$t/err")
+[[ $out == *"hyprland (waits for agros-hyprbars's rebuild: its update would break it)"* ]] && ! open &&
+    ! grep -q "dry run failed" "$t/err" || fail "an approved Hyprland breaking agros-hyprbars not held: $out / $(cat "$t/err")"
 # The list fetched from beside [agros]'s database; a --dbpath (the boot's own copy of the lists) passed to every pacman
 : >"$CALLS"
 HAVE_hyprland=0.57.2-1 NEW_hyprland=0.57.2-1 APPROVED='hyprland 0.57.2' gate --dbpath "$t/db" >/dev/null

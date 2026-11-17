@@ -31,6 +31,9 @@ flock 9
     if [[ ! -e $mark ]]; then
         caelestia wallpaper -f /etc/xdg/quickshell/caelestia/assets/wallpaper.webp && caelestia scheme set -n dynamic &&
             touch "$mark" && echo "wallpaper and colours set"
+        # (the login screen's copy of them now: greeter-theme-sync at Hyprland's start ran before they were there, and
+        # the first reboot came up on a login screen with neither)
+        "$helpers/greeter-theme-sync"
     fi
 } >>"$log" 2>&1
 # (even when the build failed: Caelestia as it comes, rather than no bar at all; it daemonizes and returns)

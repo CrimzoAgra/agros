@@ -15,4 +15,13 @@ out=$(HOME=$h XDG_RUNTIME_DIR=$t R=$here D=$t/drive bash -c 'set -euo pipefail; 
     personal_dir=$D; personal_open() { :; }; personal_save' 2>&1) && rc=0 || rc=$?
 grep -qx OLD-GOOD-SAVE "$t/drive/dotfiles-personal.tar.gpg" ||
     fail "a tar error (exit $rc) still replaced the last save: $out"
+# Nor is anything it staged left in the runtime folder (in memory): not after a copy that failed either (Claude Code's
+# files, set -e ending it), which left them there
+[[ -z $(compgen -G "$t/personal.*") ]] || fail "a failed save left its staged files in the runtime folder"
+chmod 644 "$h/.local/share/keyrings/login.keyring"
+mkdir -p "$h/.claude"; echo SECRET >"$h/.claude/.credentials.json"; chmod 000 "$h/.claude/.credentials.json"
+out=$(HOME=$h XDG_RUNTIME_DIR=$t R=$here D=$t/drive bash -c 'set -euo pipefail; source "$R/.local/bin/agros-personal"
+    personal_dir=$D; personal_open() { :; }; personal_save' 2>&1) && rc=0 || rc=$?
+((rc)) && grep -qx OLD-GOOD-SAVE "$t/drive/dotfiles-personal.tar.gpg" || fail "a copy that failed still saved (exit $rc): $out"
+[[ -z $(compgen -G "$t/personal.*") ]] || fail "a copy that failed left its staged files in the runtime folder: $out"
 echo "ok personal-save-tar-error"

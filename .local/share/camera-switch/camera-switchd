@@ -6,6 +6,7 @@
 import glob
 import os
 import pwd
+import queue
 import select
 import struct
 import subprocess
@@ -43,8 +44,13 @@ def camera_dir() -> str | None:
 
 
 def notify(on: bool) -> None:
-    # Show a notification in every logged-in desktop session (agros-each-user's: not root's, nor the login screen's)
-    buses = subprocess.run([EACH_USER, "--sessions"], capture_output=True, text=True).stdout.split()
+    # Show a notification in every logged-in desktop session (agros-each-user's: not root's, nor the login screen's).
+    # Each given 10 s at most: a desktop's bus that doesn't answer (a session frozen for sleep, or a bus a user made hang)
+    # isn't waited on for good
+    try:
+        buses = subprocess.run([EACH_USER, "--sessions"], capture_output=True, text=True, timeout=30).stdout.split()
+    except subprocess.TimeoutExpired:
+        return
     for bus in buses:
         # The user's group from the account, not from the bus file: theirs to replace, e.g. by a link to a root-group
         # file (os.stat followed it: notify-send run with group root). A bus not the user's own (lstat) skipped
@@ -55,25 +61,33 @@ def notify(on: bool) -> None:
             gid = pwd.getpwuid(uid).pw_gid
         except (ValueError, IndexError, OSError, KeyError):
             continue
-        subprocess.run(
-            ["setpriv", f"--reuid={uid}", f"--regid={gid}", "--init-groups",
-             "env", f"DBUS_SESSION_BUS_ADDRESS=unix:path={bus}",
-             "notify-send", "-a", "Camera", "-i", "camera-web" if on else "camera-disabled",
-             "-t", "2000", "Camera on" if on else "Camera off"],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        )
+        try:
+            subprocess.run(
+                ["setpriv", f"--reuid={uid}", f"--regid={gid}", "--init-groups",
+                 "env", f"DBUS_SESSION_BUS_ADDRESS=unix:path={bus}",
+                 "notify-send", "-a", "Camera", "-i", "camera-web" if on else "camera-disabled",
+                 "-t", "2000", "Camera on" if on else "Camera off"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10,
+            )
+        except subprocess.TimeoutExpired:
+            pass
 
 
 # The boot thread and the switch both apply: one at a time, so an older position can't be written last
 lock = threading.Lock()
+# The positions to say, in order, by a thread of their own (announcer): waited on by the switch, a notification that hung
+# held its next move, the camera left on with the switch turned off
+said: queue.Queue = queue.Queue()
 
 
 def apply(on: bool, announce: bool) -> None:
     with lock:
-        _apply(on, announce)
+        _apply(on)
+    if announce:
+        said.put(on)
 
 
-def _apply(on: bool, announce: bool) -> None:
+def _apply(on: bool) -> None:
     d = camera_dir()
     if d:
         with open(f"{d}/authorized", "w") as f:
@@ -87,8 +101,15 @@ def _apply(on: bool, announce: bool) -> None:
         os.fsync(f.fileno())
     os.replace(STATE + ".new", STATE)
     print(f"camera {'on' if on else 'off'}", flush=True)
-    if announce:
-        notify(on)
+
+
+def announcer() -> None:
+    while True:
+        on = said.get()
+        try:
+            notify(on)
+        except OSError:
+            pass  # (no setpriv or notify-send: nothing said, the next one tried all the same)
 
 
 def saved_on() -> bool:
@@ -112,11 +133,12 @@ def main() -> None:
             time.sleep(1)
         with lock:  # the position as it is right then (the switch may have moved meanwhile)
             try:
-                _apply(saved_on(), announce=False)
+                _apply(saved_on())
             except OSError:
                 pass
 
     threading.Thread(target=at_boot, daemon=True).start()
+    threading.Thread(target=announcer, daemon=True).start()
 
     while True:
         path = find_input()

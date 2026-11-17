@@ -4,7 +4,7 @@ pasted on a stretched background, when the publisher uploaded no cover), saved w
 coverart folder, lutris.settings.COVERART_PATH: ~/.local/share/lutris/coverart/<slug>.jpg|png unless XDG_DATA_HOME
 moves it). Needs a SteamGridDB API key in ~/.config/dots/steamgriddb.key
 (steamgriddb.com → Preferences → API); without it, does nothing. Started in the background by ~/.local/bin/lutris
-when its library changed. A game SteamGridDB has nothing for is asked once (~/.cache/lutris/steamgriddb-tried).
+when its library changed, or the key came since (a restore brought it back), one run at a time. A game SteamGridDB has nothing for is asked once (~/.cache/lutris/steamgriddb-tried).
 Exits 1 when a game couldn't be asked (offline, the key turned down): the wrapper looks again at its next start."""
 import json
 import os

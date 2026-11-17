@@ -10,6 +10,7 @@
 #   Games view)
 # Run by lutris-library.path whenever Lutris's database changes (a store sync), and by agros-welcome. An open Lutris
 # shows the changes at once (lutris-overlay's library_refresh action, asked over D-Bus); a plain one once restarted
+import fcntl
 import glob
 import json
 import logging
@@ -19,7 +20,14 @@ import shutil
 import sqlite3
 import subprocess
 
-import gi
+# One run at a time (agros-welcome's and lutris-library.path's can overlap): two at once both added the same games and
+# hid each other's copies. The second waits, then looks again (what the first wrote included)
+_run = os.environ.get("XDG_RUNTIME_DIR") or os.path.expanduser("~/.cache")
+os.makedirs(_run, exist_ok=True)
+_lock = open(os.path.join(_run, "lutris-library.lock"), "w")
+fcntl.flock(_lock, fcntl.LOCK_EX)
+
+import gi  # noqa: E402
 
 gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")

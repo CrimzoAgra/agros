@@ -7,15 +7,6 @@
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
-# On the live USB: at login the AUR build is loaded (the installer's title bar), nothing built; otherwise nothing at all
-mkdir -p "$t/live" "$t/livebin"
-printf '#!/bin/sh\necho "$*" >>%s/live-calls\n' "$t" >"$t/livebin/hyprctl" && chmod +x "$t/livebin/hyprctl"
-HOME=$t/livehome HYPRBARS_LIVE=$t/live PATH=$t/livebin:$PATH "$here/.local/bin/hyprbars-build" --login ||
-    fail "live USB, --login: failed"
-grep -qx -- '-i 0 plugin load /usr/lib/libhyprbars.so' "$t/live-calls" || fail "live USB: the AUR one not loaded: $(cat "$t/live-calls" 2>/dev/null)"
-rm -f "$t/live-calls"
-HOME=$t/livehome HYPRBARS_LIVE=$t/live PATH=$t/livebin:$PATH "$here/.local/bin/hyprbars-build" || fail "live USB, a build: failed"
-[[ ! -e $t/live-calls && ! -e $t/livehome ]] || fail "live USB: a build tried: $(cat "$t/live-calls" 2>/dev/null)"
 # --login with this account's build not made for the running Hyprland yet (an update, offline then): the packaged one
 # (agros-hyprbars) loaded only when it was built for that Hyprland (its commit in it). Another build's fails the plugin's
 # own check, with a red "Version mismatch" error on screen at every login. (The build after it fails at once here: the
@@ -35,6 +26,20 @@ grep -qx -- "-i 0 plugin load $t/pkg/libhyprbars.so" "$t/login-calls" || fail "-
 : >"$t/login-calls"
 login 2222222222222222222222222222222222222222 || fail "--login on another Hyprland failed"
 grep -q 'plugin load' "$t/login-calls" && fail "--login: the packaged one loaded on a Hyprland it wasn't built for: $(cat "$t/login-calls")"
+# On the live USB: at login the packaged one is loaded (the installer's title bar), again only when it was built for
+# that Hyprland; nothing built; otherwise nothing at all
+mkdir -p "$t/live"
+live() { HOME=$t/livehome HYPRBARS_LIVE=$t/live HYPRBARS_PACKAGED=$t/pkg/libhyprbars.so PATH=$t/lbin:$PATH COMMIT=$1 \
+    "$here/.local/bin/hyprbars-build" "${@:2}"; }
+: >"$t/login-calls"
+live 1111111111111111111111111111111111111111 --login || fail "live USB, --login: failed"
+grep -qx -- "-i 0 plugin load $t/pkg/libhyprbars.so" "$t/login-calls" || fail "live USB: the packaged one not loaded: $(cat "$t/login-calls")"
+: >"$t/login-calls"
+live 2222222222222222222222222222222222222222 --login || fail "live USB, --login on another Hyprland: failed"
+grep -q 'plugin load' "$t/login-calls" && fail "live USB: the packaged one loaded on a Hyprland it wasn't built for"
+: >"$t/login-calls"
+live 1111111111111111111111111111111111111111 || fail "live USB, a build: failed"
+[[ ! -s $t/login-calls && ! -e $t/livehome ]] || fail "live USB: a build tried: $(cat "$t/login-calls")"
 [[ -f /usr/include/hyprland/src/version.h ]] || { echo "skip hyprbars (no Hyprland headers)"; exit 0; }
 
 # A running Hyprland older than the headers on disk

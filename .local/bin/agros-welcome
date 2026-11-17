@@ -147,6 +147,8 @@ caelestia_setup() {
             echo "!! Wallpaper set, but not its colours (run: caelestia scheme set -n dynamic)"
         fi
         mkdir -p "${mark%/*}" && touch "$mark"
+        # (the login screen's copy of them, as caelestia-start does once it sets them)
+        "$helpers/greeter-theme-sync" >/dev/null 2>&1
     else
         echo "Wallpaper will be set from inside Caelestia (run: caelestia wallpaper -f $wall)"
     fi
@@ -217,7 +219,7 @@ claude_notify_hook() {
 librewolf_setup() {
     local settings="$HOME/.local/share/firefox/settings.js" prof pid
     command -v librewolf >/dev/null && [[ -f $settings ]] || return 0
-    pgrep -x librewolf >/dev/null && { echo "LibreWolf is open: its settings are applied at the next login"; return 1; }
+    pgrep -u "$UID" -x librewolf >/dev/null && { echo "LibreWolf is open: its settings are applied at the next login"; return 1; }
     prof=$("$helpers/firefox-bookmarks-export" --profile 2>/dev/null)
     if [[ -z $prof ]]; then
         librewolf --headless about:blank >/dev/null 2>&1 &
@@ -231,15 +233,22 @@ librewolf_setup() {
         kill "$pid" 2>/dev/null; wait "$pid" 2>/dev/null
     fi
     [[ -n $prof && -d $prof ]] || { echo "!! No LibreWolf profile: settings not applied"; return 1; }
-    [[ -e $prof/.dotfiles-imported ]] && return 0
-    grep '^user_pref' "$settings" >>"$prof/prefs.js"
-    # The new tab's background: the picture, under the id settings.js names it by
-    local wallpaper="$HOME/.local/share/firefox/newtab-wallpaper.jpg" id
-    id=$(grep -oP 'customWallpaper\.uuid", "\K[^"]+' "$settings") || true
-    [[ -f $wallpaper && -n $id ]] && mkdir -p "$prof/wallpaper/library" && cp "$wallpaper" "$prof/wallpaper/library/$id"
-    librewolf_theme "$prof"
-    touch "$prof/.dotfiles-imported"
-    echo "LibreWolf settings applied."
+    if [[ ! -e $prof/.dotfiles-imported ]]; then
+        grep '^user_pref' "$settings" >>"$prof/prefs.js"
+        # The new tab's background: the picture, under the id settings.js names it by
+        local wallpaper="$HOME/.local/share/firefox/newtab-wallpaper.jpg" id
+        id=$(grep -oP 'customWallpaper\.uuid", "\K[^"]+' "$settings") || true
+        [[ -f $wallpaper && -n $id ]] && mkdir -p "$prof/wallpaper/library" && cp "$wallpaper" "$prof/wallpaper/library/$id"
+        touch "$prof/.dotfiles-imported"
+        echo "LibreWolf settings applied."
+    fi
+    # Its theme downloaded: offline at the first login, tried again at the next (it was never tried again), failing a
+    # third login in a row said and counted as done, as VSCodium's step
+    local tries="$st/librewolf-theme-failed"
+    librewolf_theme "$prof" && { rm -f "$tries"; return 0; }
+    (($("$helpers/fail-streak" "$tries") < 3)) && return 1
+    echo "!! The Lagoon theme didn't download three logins in a row: pick it in LibreWolf's settings, Appearance"
+    rm -f "$tries"
 }
 
 # The Lagoon theme settings.js picks (Mozilla's, on addons.mozilla.org; not part of LibreWolf): put in the profile's
@@ -251,7 +260,7 @@ librewolf_theme() {
     mkdir -p "$prof/extensions"
     curl -sfL --max-time 60 -o "$prof/extensions/$id.xpi" \
         https://addons.mozilla.org/firefox/downloads/latest/nova-lagoon/latest.xpi ||
-        { rm -f "$prof/extensions/$id.xpi"; echo "!! The Lagoon theme didn't download: pick it in LibreWolf's settings, Appearance"; return 0; }
+        { rm -f "$prof/extensions/$id.xpi"; echo "!! The Lagoon theme didn't download (offline?): tried again at the next login"; return 1; }
     echo 'user_pref("extensions.autoDisableScopes", 14);' >>"$prof/prefs.js"
     librewolf --headless about:blank >/dev/null 2>&1 &
     pid=$!
@@ -369,15 +378,20 @@ if [[ ! -e $st/offered ]]; then
     else
         text="Some of the setup didn't finish: it's tried again at the next login (details: $st/welcome.log)."
     fi
-    text+=" Plug in your pen drive to restore your accounts (logins, keys, browser profile). Later: run agros-personal, or agros-welcome --system for the hardware apps and VMware."
+    # (the system's part offered to an admin (wheel) only: another account can't sudo, and its terminal only failed)
+    admin=
+    [[ " $(id -nG 2>/dev/null) " == *" wheel "* ]] && admin=1
+    text+=" Plug in your pen drive to restore your accounts (logins, keys, browser profile). Later: run agros-personal${admin:+, or agros-welcome --system for the hardware apps and VMware}."
     setsid -f bash -c '
+        sys=()
+        [[ -z $4 ]] || sys=(-A system="Install hardware apps and VMware")
         a=$("$1/notify-when-up" -a AgrOS -i system-software-install -u critical -A restore="Restore my accounts" \
-            -A system="Install hardware apps and VMware" -A later="Later" "Welcome to AgrOS" "$2") || exit 1
+            "${sys[@]}" -A later="Later" "Welcome to AgrOS" "$2") || exit 1
         touch "$3"
         case $a in
             restore) exec foot -T "AgrOS: your accounts" sh -c "\"$1/agros-personal\"; echo; read -rp \"Enter closes this window \" _" ;;
             system) exec foot -T "AgrOS: hardware apps and VMware" sh -c "\"$1/agros-welcome\" --system; echo; read -rp \"Enter closes this window \" _" ;;
         esac
-    ' _ "$helpers" "$text" "$st/offered" >/dev/null 2>&1 </dev/null
+    ' _ "$helpers" "$text" "$st/offered" "$admin" >/dev/null 2>&1 </dev/null
 fi
 echo "== done $(date '+%F %T')"

@@ -171,7 +171,9 @@ def set_wrapper(text: str, appid: str, want: bool) -> str:
     head, indent, body, tail = m.group(1), m.group(2), m.group(3), m.group(4)
     opt = re.search(r'(\n\t*"LaunchOptions"\s*")((?:[^"\\]|\\.)*)(")', body)
     current = opt.group(2) if opt else ""
-    options = re.sub(rf"(^|\s){re.escape(SELF)}\s+", r"\1", current).strip()
+    # (under any home: a localconfig.vdf from another account, brought back by agros-personal, or from before the home
+    # was renamed, names it where it isn't, and the game didn't start at all)
+    options = re.sub(rf"(^|\s)(?:{re.escape(SELF)}|\S*/\.local/bin/nvidia-shader-fix)\s+", r"\1", current).strip()
     if want:
         if "%command%" in options:
             options = options.replace("%command%", f"{SELF} %command%", 1)

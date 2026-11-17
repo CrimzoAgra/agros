@@ -17,7 +17,8 @@ S
 printf '#!/usr/bin/env bash\necho "caelestia $*" >>"$HOME/started"\n' >"$t/bin/caelestia"
 # (the shell up at once: not the live one looked for, nor 30 s waited where there's none, CI)
 printf '#!/bin/sh\necho "Config path: /x/quickshell/caelestia/shell.qml"\n' >"$t/bin/qs"
-chmod +x "$t/home/.local/bin/caelestia-overlay" "$t/bin/caelestia" "$t/bin/qs"
+printf '#!/bin/sh\necho greeter-theme-sync >>"$HOME/started"\n' >"$t/home/.local/bin/greeter-theme-sync"
+chmod +x "$t/home/.local/bin/caelestia-overlay" "$t/bin/caelestia" "$t/bin/qs" "$t/home/.local/bin/greeter-theme-sync"
 run() { HOME=$t/home PATH=$t/bin:$PATH "$t/home/.local/bin/caelestia-start"; }
 log=$t/home/.local/state/agros/caelestia-start.log
 
@@ -26,6 +27,9 @@ run
 [[ $(tail -1 "$t/home/started") == "caelestia shell -d" ]] || fail "first login: the shell wasn't started last"
 grep -q '^caelestia scheme set -n dynamic$' "$t/home/started" || fail "first login: the colours weren't set"
 [[ -e $t/home/.local/state/agros/wallpaper-set ]] || fail "first login: the wallpaper's mark isn't there"
+# (the login screen's copy of them once they're set: at Hyprland's start, before, they weren't there yet)
+[[ $(grep -A1 '^caelestia scheme set' "$t/home/started" | tail -1) == greeter-theme-sync ]] ||
+    fail "first login: the login screen not given the wallpaper and colours once set: $(cat "$t/home/started")"
 grep -q 'overlay checked: exit 0' "$log" || fail "first login: the build isn't logged"
 
 # (with the overlay there too: a rebuild left waiting for a game, lost with the session, made at the next login)
@@ -33,6 +37,7 @@ run
 [[ $(wc -l <"$t/home/overlay-runs") -eq 2 ]] || fail "next login: the overlay wasn't checked"
 [[ $(grep -c 'shell -d' "$t/home/started") -eq 2 ]] || fail "next login: the shell wasn't started"
 [[ $(grep -c '^caelestia wallpaper' "$t/home/started") -eq 1 ]] || fail "next login: the wallpaper was set again"
+[[ $(grep -c '^greeter-theme-sync' "$t/home/started") -eq 1 ]] || fail "next login: the login screen's copy made again"
 
 rm -rf "$t/home/.config/quickshell/caelestia"
 FAIL=1 run

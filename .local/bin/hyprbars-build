@@ -10,11 +10,13 @@
 #   hyprbars-build          build it now
 #   hyprbars-build --login  what titlebars.lua runs as Hyprland starts: load my build if it was made for this
 #                           Hyprland and this patch; after a Hyprland update or a patch change, load the packaged one
-#                           (agros-hyprbars: this patch, built in CI for its Hyprland) at once and rebuild mine in the
-#                           background, swapping it in when done (a notification if that fails)
+#                           (agros-hyprbars: this patch, built in CI for its Hyprland) at once when it was built for
+#                           this Hyprland (none loaded meanwhile otherwise), and rebuild mine in the background,
+#                           swapping it in when done (a notification if that fails)
 #   hyprbars-build --prebuild  build it for the Hyprland just installed, without loading it, so the next login has it
 #                           at once (the pacman hook packages/agros-system/agros-hyprbars-prebuild.hook runs it on a
-#                           Hyprland update; Hyprland needn't be running)
+#                           Hyprland update, one of its libraries', and an agros-scripts one: a new patch; Hyprland
+#                           needn't be running)
 set -euo pipefail
 helpers=$(dirname "$(readlink -f "$0")")  # (the shared helpers, beside this)
 patch="$HOME/.local/share/hyprbars/hyprbars.patch"
@@ -24,10 +26,17 @@ aur=${HYPRBARS_PACKAGED:-/usr/lib/libhyprbars.so}  # (the packaged one, agros-hy
 # Hyprland named (its first one when run from an SSH login or a text console: there hyprctl didn't know it, and this
 # stopped on jq's parse error)
 hyprctl() { command hyprctl -i "${HYPRLAND_INSTANCE_SIGNATURE:-0}" "$@"; }
+# The packaged one loaded, only when it was built for this Hyprland (its commit is in it): any other Hyprland build, a
+# point release too, fails the plugin's own check with a red "Version mismatch" error on screen, at every login until
+# this account's build is made (a Hyprland update whose plugin build failed, offline at the update)
+load_packaged() { if [[ -n $hypr && -f $aur ]] && grep -qaF -- "$hypr" "$aur"; then hyprctl plugin load "$aur" >/dev/null 2>&1 || true; fi; }
 # On the live USB: never built (no compiler, nothing to keep it for); at login the packaged one the ISO ships is loaded,
-# patched as here, so the installer's window has the same title bar
+# patched as here, so the installer's window has the same title bar (when it was built for its Hyprland, as anywhere)
 if [[ -d ${HYPRBARS_LIVE:-/run/archiso} ]]; then
-    [[ ${1:-} == --login ]] && { hyprctl plugin load "$aur" >/dev/null 2>&1 || true; }
+    if [[ ${1:-} == --login ]]; then
+        hypr=$(hyprctl version -j 2>/dev/null | jq -r '.commit // empty' 2>/dev/null) || hypr=
+        load_packaged
+    fi
     exit 0
 fi
 # Rebuilt when either changes: a Hyprland update (or a rebuild against new aquamarine/hyprutils/...: its ABI hash), or
@@ -59,10 +68,6 @@ loaded() {
     hyprctl plugin list -j 2>/dev/null |
         jq -e --arg mine "${1:-}" 'any(.[]?; .name == "hyprbars" and ($mine == "" or (.version | contains("dotfiles"))))' >/dev/null
 }
-# The packaged one loaded, only when it was built for this Hyprland (its commit is in it): any other Hyprland build, a
-# point release too, fails the plugin's own check with a red "Version mismatch" error on screen, at every login until
-# this account's build is made (a Hyprland update whose plugin build failed, offline at the update)
-load_packaged() { if [[ -f $aur ]] && grep -qaF -- "$hypr" "$aur"; then hyprctl plugin load "$aur" >/dev/null 2>&1 || true; fi; }
 
 if [[ ${1:-} == --login ]]; then
     if [[ -f $out && $(cat "$stamp" 2>/dev/null) == "$build_id" ]]; then

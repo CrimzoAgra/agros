@@ -22,6 +22,12 @@ assert f'"LaunchOptions"\t\t"{S} %command%"' in plain and '"Playtime"\t\t"9"' in
 new = fix.set_wrapper(vdf, "300", True)
 assert '"300"' in new and f"{S} %command%" in new.split('"300"')[1], "no entry added for a game never started"
 assert fix.set_wrapper(vdf, "300", False) == vdf, "an entry added for a game the fix doesn't want"
+# One under another home (another account's localconfig.vdf brought back by agros-personal, a renamed home): taken out,
+# not left for Steam to run from where it isn't
+moved = on.replace(S, "/home/old-name/.local/bin/nvidia-shader-fix")
+assert moved != on
+assert fix.set_wrapper(moved, "100", False) == vdf, "another home's wrapper left in"
+assert fix.set_wrapper(moved, "100", True) == on, "another home's wrapper not replaced by this one"
 # The same id as a key outside the apps block (after it, elsewhere in the file): not taken for the game's entry; its
 # entry added in the apps block, the other one left as it was
 other = vdf.replace('\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n}\n', '\t\t\t\t}\n\t\t\t\t"cloud"\n\t\t\t\t{\n\t\t\t\t\t"400"\n\t\t\t\t\t{\n'
