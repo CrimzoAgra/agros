@@ -32,6 +32,14 @@ assert covers.needs_cover(item(wide)), "wide cover kept"
 assert covers.needs_cover(item(f"{t}/steam/covers/corrupt.jpg")), "corrupt cover kept"
 assert covers.needs_cover(types.SimpleNamespace(get_media_paths=lambda: [])), "no cover kept"
 assert covers.same_name("Aerial_Knights Never Yield", "Aerial_Knight's Never Yield") and not covers.same_name("Aerial_Knight's We Never Yield", "Aerial_Knight's Never Yield"), "names matched wrong"
+# The game named exactly as it first, of those named alike but for punctuation ("REDACTED" is another game, and its
+# search gives it first)
+calls = []
+def search(path):
+    calls.append(path)
+    return [{"id": 1, "name": "REDACTED"}, {"id": 2, "name": "[REDACTED]"}] if path.startswith("/search/") else [{"url": "u"}]
+covers.api = search
+assert covers.find_cover({"service": "egs", "service_id": "x", "name": "[REDACTED]"}) == "u" and calls[-1].startswith("/grids/game/2?"), calls
 # A key SteamGridDB turns down: the run stops at the first game (not a failed request per game), none marked tried
 import os, urllib.error
 asked = []

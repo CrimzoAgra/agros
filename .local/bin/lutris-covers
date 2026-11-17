@@ -81,8 +81,10 @@ def find_cover(game):
     else:
         found = api("/search/autocomplete/" + urllib.parse.quote(game["name"], safe=""))
         # The one named like it, else the first: its first hit can be another game ("Aerial_Knight's Never Yield"
-        # gives its sequel first)
-        found = [f for f in found if same_name(f["name"], game["name"])] or found
+        # gives its sequel first). Named exactly as it first: alike but for punctuation can be another game too
+        # ("[REDACTED]" gave "REDACTED", a game of its own, and its fan-made cover)
+        found = ([f for f in found if f["name"].casefold() == game["name"].casefold()]
+                 or [f for f in found if same_name(f["name"], game["name"])] or found)
         grids = api(f"/grids/game/{found[0]['id']}{query}") if found else []
     return grids[0]["url"] if grids else None
 
