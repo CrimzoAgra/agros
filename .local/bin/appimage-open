@@ -111,19 +111,26 @@ def clashing_entry(app: str, install_only: bool) -> str:
     return ""
 
 
+# (a pattern's characters for unsquashfs and --appimage-extract: in a name read from the AppImage, more of it extracted)
+GLOB = re.compile(r"[][*?\\]")
+
+
 def resolve(appimage: str, tmp: str, name: str, run: bool = True) -> str:
     """The extracted file <name> in tmp, with what it links to extracted too: linuxdeploy's AppImages have their launcher
-    entry and icon at the top as links into usr/share, and extracting a link extracts only the link"""
+    entry and icon at the top as links into usr/share, and extracting a link extracts only the link. "" when it ends
+    outside what was extracted (a link to /home/... or ../.., itself or through a folder that's a link: read, then copied
+    into your icons, it was a file of yours) or names a pattern"""
+    root = os.path.realpath(f"{tmp}/squashfs-root")
     path = f"{tmp}/squashfs-root/{name}"
     for _ in range(8):
         if not os.path.islink(path):
             break
         name = os.path.normpath(os.path.join(os.path.dirname(name), os.readlink(path)))
-        if name.startswith(("/", "..")):  # (outside the AppImage)
-            break
+        if name.startswith(("/", "..")) or GLOB.search(name):  # (outside the AppImage, or a pattern)
+            return ""
         extract(appimage, name, tmp, run)
         path = f"{tmp}/squashfs-root/{name}"
-    return path
+    return path if os.path.realpath(path).startswith(root + "/") else ""
 
 
 def entry_of(appimage: str, tmp: str, run: bool = True) -> tuple[str, str, str] | None:
@@ -140,7 +147,8 @@ def entry_of(appimage: str, tmp: str, run: bool = True) -> tuple[str, str, str] 
     app = desktops[0].removesuffix(".desktop")  # its own case: a package's entry and dock pins use it
     icon = ""
     name = re.search(r"^Icon=(.+)$", text, re.M)
-    if name:
+    # (an icon's name only: a path or a pattern (Icon=../../.ssh/id_ed25519, Icon=*) read outside it, or all of it)
+    if name and not re.search(r"/|\.\.", name.group(1)) and not GLOB.search(name.group(1)):
         for ext in ("png", "svg"):
             extract(appimage, f"{name.group(1)}.{ext}", tmp, run)
             found = resolve(appimage, tmp, f"{name.group(1)}.{ext}", run)

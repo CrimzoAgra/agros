@@ -13,7 +13,7 @@ ln -s usr/share/icons/hicolor/256x256/apps/demo.png "$t/img/demo.png"
 cat >"$t/Demo-x86_64.AppImage" <<EOF
 #!/usr/bin/python3
 import fnmatch, os, shutil, sys
-img, pat = "$t/img", sys.argv[2].split("/")
+img, pat = os.environ.get("IMG", "$t/img"), sys.argv[2].split("/")
 for d, dirs, files in os.walk(img):
     for f in dirs + files:
         rel = os.path.relpath(os.path.join(d, f), img).split("/")
@@ -142,4 +142,27 @@ if command -v mksquashfs >/dev/null && command -v unsquashfs >/dev/null; then
 else
     skipped "no squashfs-tools here: an AppImage read without running it not checked"
 fi
+# Nothing read from outside the AppImage: a launcher entry that's a link out of it (to a path of its own, or up out of
+# it) not read, so not installed; an icon named as a path out of it (Icon=../../...) or as a pattern (which extracted
+# more of it) not taken
+mkdir -p "$t/esc-img" "$t/up-img" "$t/icon-img"
+printf '[Desktop Entry]\nName=Outside\nExec=outside\nType=Application\n' >"$t/outside.desktop"
+ln -s "$t/outside.desktop" "$t/esc-img/demo.desktop"
+ln -s ../../../../../../../../../../../../../.."$t/outside.desktop" "$t/up-img/demo.desktop"
+for img in esc-img up-img; do
+    cp "$t/Demo-x86_64.AppImage" "$t/$img.AppImage"
+    out=$(IMG=$t/$img HOME=$t/$img-home PATH=$t/bin:$PATH python3 "$here/.local/bin/appimage-open" --install "$t/$img.AppImage" 2>&1) &&
+        fail "a launcher entry linked out of the AppImage ($img) installed: $out"
+    [[ $out == *"no launcher entry inside"* && ! -e $t/$img-home/.local/share/applications/demo.desktop ]] ||
+        fail "a launcher entry linked out of the AppImage ($img) read: $out"
+done
+echo secret >"$t/secret.png"; echo png >"$t/icon-img/demo.png"
+for icon in "$(printf '../%.0s' {1..20})${t#/}/secret" 'd?mo' 'dem[o]'; do
+    printf '[Desktop Entry]\nName=Demo\nExec=demo\nIcon=%s\nType=Application\n' "$icon" >"$t/icon-img/demo.desktop"
+    cp "$t/Demo-x86_64.AppImage" "$t/icon.AppImage"; rm -rf "$t/icon-home"
+    IMG=$t/icon-img HOME=$t/icon-home PATH=$t/bin:$PATH python3 "$here/.local/bin/appimage-open" --install "$t/icon.AppImage" >/dev/null 2>&1 ||
+        fail "an AppImage with Icon=$icon not installed"
+    [[ -z $(ls -A "$t/icon-home/.local/share/icons" 2>/dev/null) ]] && grep -qxF "Icon=$icon" "$t/icon-home/.local/share/applications/demo.desktop" ||
+        fail "an icon taken by Icon=$icon: $(ls "$t/icon-home/.local/share/icons" 2>/dev/null)"
+done
 echo "ok appimage-open"
