@@ -640,6 +640,15 @@ def lua_string(text):
                          for c in text) + '"'
 
 
+def settings_lock():
+    """One change at a time (the Settings app and a terminal at once): each reads the file the last one wrote, none
+    lost. Held until the file it returns is closed (with ...:)"""
+    os.makedirs(CONFIG, exist_ok=True)
+    lock = open(f"{CONFIG}/.settings.lock", "w")
+    fcntl.flock(lock, fcntl.LOCK_EX)
+    return lock
+
+
 def write_lua(settings):
     saved = stored()
     # Only the ones kept here: Lua has no use for the window mode, autostart entries or Caelestia's options (its own
@@ -752,28 +761,25 @@ def main(args):
         elif "autostart" in setting:
             return autostart_set(setting["autostart"], value)
         else:
-            os.makedirs(CONFIG, exist_ok=True)
-            # One change at a time (the Settings app and a terminal at once): each reads the file the last one wrote,
-            # none lost
-            lock = open(f"{CONFIG}/.settings.lock", "w")
-            fcntl.flock(lock, fcntl.LOCK_EX)
-            saved = stored()
-            if value == setting["default"]:
-                saved.pop(args[1], None)
-            else:
-                saved[args[1]] = value
-            with open(f"{SETTINGS}.tmp", "w") as f:
-                json.dump(saved, f, indent=2, sort_keys=True)
-            os.replace(f"{SETTINGS}.tmp", SETTINGS)
-            write_lua(settings)
-            lock.close()
+            with settings_lock():
+                saved = stored()
+                if value == setting["default"]:
+                    saved.pop(args[1], None)
+                else:
+                    saved[args[1]] = value
+                with open(f"{SETTINGS}.tmp", "w") as f:
+                    json.dump(saved, f, indent=2, sort_keys=True)
+                os.replace(f"{SETTINGS}.tmp", SETTINGS)
+                write_lua(settings)
         how = setting.get("apply", "")
         if args[3:] == ["--later"]:
             print(how)
         else:
             apply(how)
     elif cmd == "lua":
-        write_lua(settings)
+        # (under the lock too: settings.json read before a set wrote it, its settings.lua went over the set's)
+        with settings_lock():
+            write_lua(settings)
     else:
         sys.exit(__doc__)
 
