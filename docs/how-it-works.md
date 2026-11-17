@@ -310,10 +310,12 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
   - Sleep (Super+Shift+L) suspends when the PC can't hibernate (CachyOS's default zram-only swap), not nothing
   - Super+W opens LibreWolf (Caelestia's is Firefox, which AgrOS leaves out); the Bibata pointer (Caelestia's
     sweet-cursors isn't installed)
-  - In a VMware VM without `agros-vmware`'s shim (the live ISO), the apps drawn on the CPU (the virtual GPU refuses
-    their buffers), Hyprland not: put into the user's systemd and D-Bus environments as the config loads (for what
-    uwsm starts: autostart, `uwsm app`, D-Bus services; before `graphical-session.target`, which waits for Hyprland's
-    `WAYLAND_DISPLAY`), and into the environment of what Hyprland starts once it's up
+  - In a VMware VM (`vmwgfx` loaded, as the login screen and the shim's drop-in tell it) without `agros-vmware`'s
+    shim (the live ISO), the apps drawn on the CPU (the virtual GPU refuses their buffers), Hyprland not: put into
+    the user's systemd and D-Bus environments as the config loads (for what uwsm starts: autostart, `uwsm app`, D-Bus
+    services; before `graphical-session.target`, which waits for Hyprland's `WAYLAND_DISPLAY`; uwsm's start of
+    Hyprland lists what reaches that environment before `WAYLAND_DISPLAY` and unsets it at logout), and into the
+    environment of what Hyprland starts once it's up
   - Then the Settings app's changes: shortcuts (`caelestia-keys.*`) and the other variables (`caelestia-vars.*`: gaps,
     border, rounding, blur, the touchpad)
 - **`.config/caelestia/shell.json`**: Caelestia settings (AgrOS's; each account's copy changes from the Settings app,

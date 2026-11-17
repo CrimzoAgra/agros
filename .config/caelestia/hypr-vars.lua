@@ -44,7 +44,7 @@ for key, keys in pairs(ok and type(settings) == "table" and settings or {}) do
     local other = type(key) == "string" and key:match("^caelestia%-vars%.(%w+)$")
     if other and type(keys) ~= "table" then vars[other] = keys end
 end
--- In a VMware virtual machine (its virtual GPU, PCI vendor 0x15ad): Hyprland draws on that GPU (window animations,
+-- In a VMware virtual machine (its virtual GPU, the vmwgfx driver): Hyprland draws on that GPU (window animations,
 -- blur), the apps on the CPU. Apps' GPU-drawn buffers from it are refused ("invalid arguments for wl_surface.attach")
 -- and the app dropped: Quickshell (the shell, widgets), Qt apps and XWayland (so every X11 app: Nuvio...). Never in
 -- Hyprland's own environment: set before it starts, it took Hyprland's own renderer down to the CPU too
@@ -58,14 +58,16 @@ for entry in preload:gmatch("[^:]+") do
     if entry ~= "/usr/lib/agros/vmw-dmabuf.so" then kept[#kept + 1] = entry end
 end
 if table.concat(kept, ":") ~= preload then hl.env("LD_PRELOAD", table.concat(kept, ":")) end
-local f = io.open((os.getenv("SYSFS") or "/sys") .. "/class/drm/card0/device/vendor")
-local vendor = f and f:read("l")
+-- VMware by its vmwgfx driver being loaded, as the login screen and the shim's drop-in tell it, not by card0's vendor:
+-- with simpledrm in the kernel the real GPU is often card1. (Opening the folder only proves it's there)
+local f = io.open((os.getenv("SYSFS") or "/sys") .. "/module/vmwgfx")
+local vmware = f ~= nil
 if f then f:close() end
 -- (Hyprland's maps read in VMware alone: this file runs again at every reload, on every machine)
-local maps = vendor == "0x15ad" and io.open("/proc/self/maps")
+local maps = vmware and io.open("/proc/self/maps")
 local shim = maps and maps:read("a"):find("vmw-dmabuf", 1, true)
 if maps then maps:close() end
-local cpu_apps = vendor == "0x15ad" and not shim
+local cpu_apps = vmware and not shim
 -- Most apps aren't Hyprland's children: under uwsm, XDG autostart, `uwsm app` (app-launch) and D-Bus activation start
 -- them as systemd user units, with the user manager's environment. So into it (and D-Bus's) too, here as the config
 -- loads: before Hyprland puts WAYLAND_DISPLAY there, which uwsm waits for before graphical-session.target (autostart

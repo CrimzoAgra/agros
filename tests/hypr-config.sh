@@ -1293,14 +1293,16 @@ out=$(cd "$t" && HOME=$t/home lua preload.lua stub.lua 2>&1) || fail "LD_PRELOAD
 
 # In VMware without the shim, the apps on the CPU: the two variables in the user's systemd and D-Bus environments as
 # the config loads (before Hyprland starts anything), and Hyprland's own children's once it's up. With the shim (in
-# Hyprland's maps), on another GPU, in a check of the config or a reload (Hyprland has them already): neither
-mkdir -p "$t/sys/class/drm/card0/device"
+# Hyprland's maps), outside VMware, in a check of the config or a reload (Hyprland has them already): neither
+mkdir -p "$t/sys/module"
 cat >"$t/vmware.lua" <<'L'
 package.path = os.getenv("HOME") .. "/.config/caelestia/?.lua;" .. package.path
 dofile(arg[1])
 local open, getenv = io.open, os.getenv
-local function run(vendor, shim, env)
-    local v = open(getenv("SYSFS") .. "/class/drm/card0/device/vendor", "w"); v:write(vendor .. "\n"); v:close()
+-- (VMware by its driver's folder in sysfs, as the login screen and the shim's drop-in tell it)
+local function run(vmware, shim, env)
+    local module = getenv("SYSFS") .. "/module/vmwgfx"
+    if vmware then os.execute("mkdir -p '" .. module .. "'") else os.remove(module) end
     io.open = function(p, ...)
         if p == "/proc/self/maps" then MAPS_READ = true end
         if p == "/proc/self/maps" and shim then
@@ -1316,21 +1318,21 @@ local function run(vendor, shim, env)
     return loaded, ENV.LIBGL_ALWAYS_SOFTWARE == "1" and ENV.XWAYLAND_NO_GLAMOR == "1"
 end
 local function check(name, ok) if not ok then error(name, 0) end end
-local loaded, apps = run("0x15ad", false, {})
+local loaded, apps = run(true, false, {})
 check("VMware without the shim: not in the session's environment as the config loads", loaded == 1
       and SESSION_ENV[1]:find("systemctl --user set-environment LIBGL_ALWAYS_SOFTWARE=1 XWAYLAND_NO_GLAMOR=1", 1, true)
       and SESSION_ENV[1]:find("dbus-update-activation-environment LIBGL_ALWAYS_SOFTWARE=1 XWAYLAND_NO_GLAMOR=1", 1, true))
 check("VMware without the shim: not for Hyprland's children", apps)
-loaded, apps = run("0x15ad", true, {})
+loaded, apps = run(true, true, {})
 check("VMware with the shim: set", loaded == 0 and not apps)
 MAPS_READ = false
-loaded, apps = run("0x10de", false, {})
-check("another GPU: set", loaded == 0 and not apps)
+loaded, apps = run(false, false, {})
+check("not VMware: set", loaded == 0 and not apps)
 -- (nor Hyprland's maps read there: the config loads again at every reload)
-check("another GPU: Hyprland's maps read", not MAPS_READ)
-loaded = run("0x15ad", false, { DOTS_VERIFY_CONFIG = "1" })
+check("not VMware: Hyprland's maps read", not MAPS_READ)
+loaded = run(true, false, { DOTS_VERIFY_CONFIG = "1" })
 check("a check of the config: put in the session's environment", loaded == 0)
-loaded, apps = run("0x15ad", false, { LIBGL_ALWAYS_SOFTWARE = "1" })
+loaded, apps = run(true, false, { LIBGL_ALWAYS_SOFTWARE = "1" })
 check("a reload: put in the session's environment again", loaded == 0 and apps)
 L
 out=$(cd "$t" && HOME=$t/home SYSFS=$t/sys lua vmware.lua stub.lua 2>&1) || fail "the VMware fallback: $out"
