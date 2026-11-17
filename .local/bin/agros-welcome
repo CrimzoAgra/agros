@@ -378,15 +378,20 @@ if [[ ! -e $st/offered ]]; then
     else
         text="Some of the setup didn't finish: it's tried again at the next login (details: $st/welcome.log)."
     fi
-    text+=" Plug in your pen drive to restore your accounts (logins, keys, browser profile). Later: run agros-personal, or agros-welcome --system for the hardware apps and VMware."
+    # (the system's part offered to an admin (wheel) only: another account can't sudo, and its terminal only failed)
+    admin=
+    [[ " $(id -nG 2>/dev/null) " == *" wheel "* ]] && admin=1
+    text+=" Plug in your pen drive to restore your accounts (logins, keys, browser profile). Later: run agros-personal${admin:+, or agros-welcome --system for the hardware apps and VMware}."
     setsid -f bash -c '
+        sys=()
+        [[ -z $4 ]] || sys=(-A system="Install hardware apps and VMware")
         a=$("$1/notify-when-up" -a AgrOS -i system-software-install -u critical -A restore="Restore my accounts" \
-            -A system="Install hardware apps and VMware" -A later="Later" "Welcome to AgrOS" "$2") || exit 1
+            "${sys[@]}" -A later="Later" "Welcome to AgrOS" "$2") || exit 1
         touch "$3"
         case $a in
             restore) exec foot -T "AgrOS: your accounts" sh -c "\"$1/agros-personal\"; echo; read -rp \"Enter closes this window \" _" ;;
             system) exec foot -T "AgrOS: hardware apps and VMware" sh -c "\"$1/agros-welcome\" --system; echo; read -rp \"Enter closes this window \" _" ;;
         esac
-    ' _ "$helpers" "$text" "$st/offered" >/dev/null 2>&1 </dev/null
+    ' _ "$helpers" "$text" "$st/offered" "$admin" >/dev/null 2>&1 </dev/null
 fi
 echo "== done $(date '+%F %T')"

@@ -34,11 +34,17 @@ check() { HOME=$t/home XDG_CACHE_HOME=$t/home/.cache PATH=$t/bin:$PATH "$here/.l
 # (notify-wait's own tools: the notification, and D-Bus' watch for the server going away, which never comes here)
 stub gdbus 'exec sleep 60'
 stub notify-send 'exit 143'
+stub id 'echo users wheel'  # (an admin's: only they can update)
 check
 [[ ! -e $seen ]] || fail "a notification the server dropped noted as announced"
 stub notify-send 'exec sleep 30'
 check
 [[ $(cat "$seen" 2>/dev/null) == linux ]] || fail "an unclicked notification (its time ran out) not noted: announced again every check"
+# An account that can't sudo (not in wheel): no "Update now" offered (it only failed); the boot's update covers it
+rm -f "$seen"; stub id 'echo users'; stub notify-send 'echo sent >>"'"$t"'/sent"'
+check
+[[ ! -e $t/sent ]] || fail "\"Update now\" offered to an account that can't sudo"
+rm "$t/bin/id"
 
 # The update, with no state folder yet: the Qt Quickshell was built for written down the first time, not taken for a
 # new Qt at every run (each one rebuilding Quickshell and Caelestia)

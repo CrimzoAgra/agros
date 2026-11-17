@@ -131,6 +131,8 @@ if [[ ${1:-} == --check-now ]]; then
 fi
 
 if [[ ${1:-} == --check ]]; then
+    # (an admin's (wheel) only: another account can't sudo, so its "Update now" only failed; the boot's update covers it)
+    [[ " $(id -nG 2>/dev/null) " == *" wheel "* ]] || exit 0
     list=$(list_updates | grep -v '^offline' | cut -f2 | sort -u)
     [[ -n $list ]] || exit 0
     seen="${XDG_CACHE_HOME:-$HOME/.cache}/update-apps-notified"
