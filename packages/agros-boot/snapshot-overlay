@@ -1,0 +1,14 @@
+#!/bin/bash
+# A snapshot booted from the boot menu (its root a read-only Btrfs subvolume, as Snapper makes them) made writable,
+# its changes in RAM (overlayfs): the system starts and the desktop logs in as on any boot (they write to /var and the
+# homes), nothing written to the snapshot, all gone at the next boot. Any other root left as it is, and a failure only
+# said (it boots read-only, as before). In the boot image (agros-boot: /usr/lib/agros/snapshot-overlay, run by
+# agros-snapshot-overlay.service once the root is mounted at /sysroot; the hook agros-snapshot-overlay puts both in)
+root=/sysroot
+[[ $(findmnt -no FSTYPE --mountpoint "$root" 2>/dev/null) == btrfs ]] || exit 0
+[[ $(btrfs property get -t subvol "$root" ro 2>/dev/null) == ro=true ]] || exit 0
+echo "the root is a read-only snapshot: its changes kept in RAM (overlayfs)"
+ram=$(mktemp -d -p / snapshot-overlay.XXXXXX) && mount -t tmpfs snapshot-overlay "$ram" && mkdir "$ram/upper" "$ram/work" &&
+    mount -t overlay overlay -o "lowerdir=$root,upperdir=$ram/upper,workdir=$ram/work" "$root" ||
+    echo "the snapshot couldn't be made writable: it boots read-only"
+exit 0

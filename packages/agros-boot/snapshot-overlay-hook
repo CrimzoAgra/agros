@@ -1,0 +1,17 @@
+#!/bin/bash
+# agros-boot's mkinitcpio hook agros-snapshot-overlay (/usr/lib/initcpio/install): in a systemd boot image, a snapshot
+# booted from the boot menu made writable in RAM (snapshot-overlay, run by its unit after the root's mounted).
+# grub-btrfs's grub-btrfs-overlayfs is busybox's, run by no systemd image, and Limine's sd-btrfs-overlayfs comes only
+# with Limine's tools. Added to HOOKS by 91-agros-snapshot-overlay.conf where neither is there
+build() {
+    add_module btrfs
+    add_module overlay
+    map add_binary bash btrfs findmnt mount mktemp mkdir
+    add_file /usr/lib/agros/snapshot-overlay /usr/lib/agros/snapshot-overlay 755
+    add_file /usr/lib/agros/snapshot-overlay.service /usr/lib/systemd/system/agros-snapshot-overlay.service 644
+    add_symlink /usr/lib/systemd/system/initrd.target.wants/agros-snapshot-overlay.service ../agros-snapshot-overlay.service
+}
+
+help() {
+    echo "A read-only Btrfs snapshot booted from the boot menu made writable in RAM (overlayfs), in a systemd boot image"
+}

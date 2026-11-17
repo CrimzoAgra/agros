@@ -1,0 +1,13 @@
+# agros-boot, in the boot image only (agros-snapshot-overlay): a read-only snapshot's root made writable in RAM once
+# it's mounted (/sysroot), before the switch to it, as Limine's sd-btrfs-overlayfs does
+[Unit]
+Description=Make a booted read-only snapshot writable in RAM
+DefaultDependencies=no
+ConditionPathExists=/etc/initrd-release
+After=initrd-fs.target
+Before=initrd.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/agros/snapshot-overlay
