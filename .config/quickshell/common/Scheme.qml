@@ -29,7 +29,8 @@ Scope {
             surfaceContainer: "181920",
             surfaceContainerHigh: "1e1f26",
             surfaceContainerHighest: "24252e",
-            surfaceContainerLow: "131419"
+            surfaceContainerLow: "131419",
+            tertiary: "e2bbdb"
         })
 
     function c(name: string): color {
