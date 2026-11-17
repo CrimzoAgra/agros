@@ -77,7 +77,6 @@ package() {
     # Caelestia's own wallpaper in the wallpaper folder, so its picker (and Random) have one to show
     install -d "$skel/Pictures/Wallpapers"
     ln -s /etc/xdg/quickshell/caelestia/assets/wallpaper.webp "$skel/Pictures/Wallpapers/caelestia.webp"
-    rm -f "$skel/.config/autostart/cachyos-hello.desktop"  # (CachyOS Hello isn't installed)
     install -d "$skel/.local/share"
     # (lutris: the Rockstar Games Launcher's cover and banner, which Lutris has none of)
     cp -r --no-preserve=ownership .local/share/applications .local/share/firefox .local/share/lutris "$skel/.local/share/"
