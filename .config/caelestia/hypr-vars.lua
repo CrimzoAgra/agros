@@ -46,9 +46,8 @@ for key, keys in pairs(ok and type(settings) == "table" and settings or {}) do
 end
 -- In a VMware virtual machine (its virtual GPU, PCI vendor 0x15ad): Hyprland draws on that GPU (window animations,
 -- blur), the apps on the CPU. Apps' GPU-drawn buffers from it are refused ("invalid arguments for wl_surface.attach")
--- and the app dropped: Quickshell (the shell, widgets), Qt apps and XWayland (so every X11 app: Nuvio...). Set once
--- Hyprland is up, from here because this file loads before Caelestia's own start-up (hyprland/execs.lua), so this runs
--- first and the shell starts with it: set before, it took Hyprland's own renderer down to the CPU too
+-- and the app dropped: Quickshell (the shell, widgets), Qt apps and XWayland (so every X11 app: Nuvio...). Never in
+-- Hyprland's own environment: set before it starts, it took Hyprland's own renderer down to the CPU too
 -- (agros-system's agros-vm.sh used to set it for the whole session, in every VM: Hyprland too, on the CPU)
 -- Not when Hyprland runs with agros-vmware's vmw-dmabuf shim (its drop-in for Hyprland's uwsm unit): it makes Hyprland accept those
 -- buffers, so the apps stay on the GPU too. The shim is Hyprland's only: taken out for every app it starts (any other
@@ -59,14 +58,26 @@ for entry in preload:gmatch("[^:]+") do
     if entry ~= "/usr/lib/agros/vmw-dmabuf.so" then kept[#kept + 1] = entry end
 end
 if table.concat(kept, ":") ~= preload then hl.env("LD_PRELOAD", table.concat(kept, ":")) end
+local f = io.open((os.getenv("SYSFS") or "/sys") .. "/class/drm/card0/device/vendor")
+local vendor = f and f:read("l")
+if f then f:close() end
+local maps = io.open("/proc/self/maps")
+local shim = maps and maps:read("a"):find("vmw-dmabuf", 1, true)
+if maps then maps:close() end
+local cpu_apps = vendor == "0x15ad" and not shim
+-- Most apps aren't Hyprland's children: under uwsm, XDG autostart, `uwsm app` (app-launch) and D-Bus activation start
+-- them as systemd user units, with the user manager's environment. So into it (and D-Bus's) too, here as the config
+-- loads: before Hyprland puts WAYLAND_DISPLAY there, which uwsm waits for before graphical-session.target (autostart
+-- after it), so nothing starts without them. uwsm takes them out again at logout, as it does Hyprland's own variables
+-- (not for a check of the config: its process has no shim to find; nor on a reload: Hyprland has them by then)
+if cpu_apps and os.getenv("DOTS_VERIFY_CONFIG") ~= "1" and os.getenv("LIBGL_ALWAYS_SOFTWARE") ~= "1" then
+    local set = "LIBGL_ALWAYS_SOFTWARE=1 XWAYLAND_NO_GLAMOR=1"
+    os.execute("systemctl --user set-environment " .. set .. "; dbus-update-activation-environment " .. set .. " 2>/dev/null")
+end
+-- And for what Hyprland starts itself, once it's up, so not Hyprland: from here because this file loads before
+-- Caelestia's own start-up (hyprland/execs.lua), so this runs first and the shell starts with them
 hl.on("hyprland.start", function()
-    local f = io.open("/sys/class/drm/card0/device/vendor")
-    local vendor = f and f:read("l")
-    if f then f:close() end
-    local maps = io.open("/proc/self/maps")
-    local shim = maps and maps:read("a"):find("vmw-dmabuf", 1, true)
-    if maps then maps:close() end
-    if vendor == "0x15ad" and not shim then
+    if cpu_apps then
         hl.env("LIBGL_ALWAYS_SOFTWARE", "1")
         hl.env("XWAYLAND_NO_GLAMOR", "1")
     end
