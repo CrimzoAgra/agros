@@ -4,7 +4,8 @@
 # beside this file). Hyprland named, as after-games does: from an SSH login or a text console the reload failed with
 # nothing said. Quiet, its output let go at once: a caller that runs it in the background (setsid -f) isn't held
 # until the game closes. --tell: a change the user made (the Settings app's), said once in a notification when it
-# waits for a game; the scripts' own reloads (a screen plugged in, a workspace) wait without one
+# waits for a game; the scripts' own reloads (a screen plugged in, a workspace) wait without one. Exit 3: left to the
+# reload already waiting for the game (none done yet; it reads the config once the game closes)
 exec >/dev/null 2>&1
 bin=$(dirname "$(readlink -f "$0")")
 tell=false; [ "${1:-}" = --tell ] && tell=true
@@ -20,7 +21,7 @@ if "$bin/game-focus" --game-open; then
     exec 7>"${XDG_RUNTIME_DIR:-/tmp}/hypr-reload-pending"
     if ! flock -n 7; then
         $tell && [ ! -e "$told" ] && tell_later
-        exit 0
+        exit 3
     fi
     rm -f "$told"
     $tell && tell_later

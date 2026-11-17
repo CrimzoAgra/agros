@@ -3,7 +3,8 @@
 # can't be redistributed, then the offer to bring your accounts back from your pen drive.
 #   agros-welcome            your account's part, at your first login (the service runs it; again by hand is fine)
 #   agros-welcome --system   the system's part, with sudo, in a terminal it opens itself: the apps for hardware
-#                            that's plugged in (Razer, Logitech, Moza, tablets, the Legion's camera switch) and
+#                            that's plugged in (Razer, Logitech, Moza, tablets, the Legion's camera switch, the
+#                            NVIDIA driver loaded early) and
 #                            VMware Workstation (its license forbids passing it on, so it's built here from the AUR)
 # Log: ~/.local/state/agros/welcome.log
 set -uo pipefail
@@ -40,6 +41,14 @@ usb_device() {
     done
     return 1
 }
+# An NVIDIA graphics card (PCI vendor 10de, a display controller: class 03xxxx), as lspci lists it
+nvidia_gpu() {
+    local d
+    for d in "${SYSFS:-/sys}"/bus/pci/devices/*; do
+        [[ $(cat "$d/vendor" 2>/dev/null) == 0x10de && $(cat "$d/class" 2>/dev/null) == 0x03* ]] && return 0
+    done
+    return 1
+}
 kernel_headers() {
     local f
     for f in /usr/lib/modules/*/pkgbase; do [[ -f $f ]] && echo "$(<"$f")-headers"; done | sort -u
@@ -58,6 +67,10 @@ system_part() {
     if grep -qs 'Name="Ideapad extra buttons"' /proc/bus/input/devices && usb_device 04f2 b83e; then
         names+=("the Legion's camera switch")
         want+=(agros-camera-switch)
+    fi
+    if nvidia_gpu; then
+        names+=("the NVIDIA driver loaded early in the boot")
+        want+=(agros-nvidia)
     fi
     if ((${#want[@]})); then
         echo "For the hardware plugged in: ${names[*]}"

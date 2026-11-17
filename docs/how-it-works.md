@@ -30,12 +30,13 @@ Laptop settings and lighting are in a separate repo: **legion-control-linux**.
    and Claude Code's plugins.
 3. **The one thing you run:** its notification offers *Restore my accounts*. Plug in your pen drive and click it, or
    run `agros-personal` ([Your accounts](#your-accounts)). Capri installs right after that, since her fork is private
-   and needs your GitHub login.
+   and needs your GitHub login (at the next login when gh only gets it from the keyring brought back: `dotfiles-check`
+   installs her then).
 
 The same notification offers *Install hardware apps and VMware* (`agros-welcome --system`). It installs the apps for
 the hardware that's plugged in: Boxflat (Moza), OpenRazer + Polychromatic (Razer), Solaar (Logitech),
-OpenTabletDriver (tablets) and the Legion's camera switch. It also builds VMware Workstation from the AUR, because its
-license forbids passing it on.
+OpenTabletDriver (tablets), the Legion's camera switch and, with an NVIDIA card, `agros-nvidia`. It also builds VMware
+Workstation from the AUR, because its license forbids passing it on.
 
 Before reinstalling, put this PC's accounts on the pen drive: `agros-personal --save` (encrypted with a passphrase
 you pick; never in the repo).
@@ -85,7 +86,7 @@ of yours for the mirror counts, not added again), and its removal takes them out
 |---|---|
 | `agros-desktop` | The meta package: every package the desktop is made of (Hyprland, Caelestia, the apps, PipeWire with its JACK, fonts, themes). Hardware apps are optional |
 | `agros-hyprland-settings` | The settings every new account gets (`/etc/skel`): Caelestia's own configs (its dots, pinned), AgrOS's over them (everything in `.config`), launcher entries, LibreWolf settings, the wallpaper, and every version each of these has had (`/usr/share/agros/skel-versions`, from the repo's and Caelestia's git history); fonts and icons system-wide |
-| `agros-scripts` | The programs in `.local/bin` and the data they use, in `/usr/lib/agros`, linked into each home (by links in `/etc/skel` for new accounts; `agros-links` adds new ones at every login, before the desktop starts, and copies in once each config file and launcher entry an update added to `/etc/skel`, and updates the settings you never edited) |
+| `agros-scripts` | The programs in `.local/bin` and the data they use, in `/usr/lib/agros`, linked into each home (by links in `/etc/skel` for new accounts; `agros-links` adds new ones at every login, before the desktop starts, and copies in once each config file, launcher entry, LibreWolf setting and wallpaper an update added to `/etc/skel` (or an account not made from it lacks), and updates the settings you never edited) |
 | `agros-system` | The update at every boot (downloaded and AUR apps built at boot, installed at shutdown with firmware), pacman hooks that rebuild each user's Caelestia overlay and hyprbars and check the Hyprland config, Bluetooth and the screens back on after sleep, the ananicy rule, the keyring, the night light's and time zone's permissions (geoclue, polkit), folder icons that follow the colour scheme (a sudoers rule for `papirus-folders` alone), mDNS from Avahi alone (resolved's off: the two clashed over the computer's name), UFW's logging off (once), the upstream gate (Hyprland's updates held until AgrOS's CI has checked them), the files never unpacked (NoExtract), AgrOS's name in `/etc/os-release`, a VMware VM's screen following its window (VMware's tools) |
 | `agros-greeter` | The Caelestia-style login screen for greetd, its PAM service following the system's, `login-reset` |
 | `agros-boot` | The hidden boot menu in AgrOS's GRUB theme (`grub-theme/`, its pictures and fonts made by `make.sh`), the faster splash with shutdown titles, no text at boot or shutdown (behind the splash), screens in their best mode from boot |
@@ -180,7 +181,9 @@ SteamGridDB's key (`lutris-covers`); and the weather widget's place.
 `agros-personal --save` puts them, apps closed, in `dotfiles-personal.tar.gpg` on your pen drive (the removable drive
 plugged in, mounted if it isn't, or the folder you name after it), encrypted with a passphrase you pick (gpg, AES-256):
 a lost drive gives nothing without it. `agros-personal` decrypts it straight into place (nothing unencrypted written
-anywhere else) and backs up what it replaces; the keyring opens with your old login password. It's never in the repo:
+anywhere else) and backs up what it replaces; the keyring opens with your old login password. It refuses while an app
+whose files it brings back is open, but closes Lutris and Proton VPN when they're only in the tray (they start there at
+every login), asking first in a terminal. It's never in the repo:
 saved logins get past your password and 2FA, and git keeps every version. With no drive, it opens each app for you to
 sign in instead (LibreWolf's Firefox account brings bookmarks and passwords through Sync) and asks the weather
 widget's place. Save again now and then: logins expire.
@@ -224,7 +227,8 @@ Changes apply right away.
   and the app once, for every page
 - **`.local/bin/dots-settings`**: saves your choices (only those that differ from the default) to
   `~/.config/dots/settings.json`, for this machine only, and writes them to `settings.lua` for Hyprland, where
-  `dots.setting(key)` reads them; scripts use `dots-settings get KEY` or `values`. Where a setting lives elsewhere it
+  `dots.setting(key)` reads them (written again at Hyprland's load when the schema's md5sum isn't the one it was made
+  from: an update); scripts use `dots-settings get KEY` or `values`. Where a setting lives elsewhere it
   says so in the schema, and `dots-settings` reads and writes it there:
   - `caelestia-shell.<option>` / `caelestia-tokens.<option>`: one of Caelestia's own options, in its `shell.json` /
     `shell-tokens.json`, written through `json-edit`. Caelestia watches those files, so the change shows at once (no
@@ -670,7 +674,8 @@ helper a package update just brought works before `agros-links` has linked it), 
   their windows get the games' class
 - **`.local/bin/hypr-reload`**: the one way to reload Hyprland's config: after any game (a reload takes a fullscreen
   game out of fullscreen), Hyprland named (works from an SSH login or a text console). Used by the Settings app
-  (`dots-settings`), `capri-update`, `vm-screen-follow` and `user/workspaces.lua`
+  (`dots-settings`), `capri-update`, `vm-screen-follow` and `user/workspaces.lua`. Exit 3: another reload already
+  waits for the game and reads the config then (`user/workspaces.lua` waits for that one before putting windows back)
 - **`.local/bin/qs-running`**: whether a Quickshell config is running (`qs list --all` read whole: `grep -q` quitting
   early got qs a SIGPIPE, which `pipefail` took for "not running"). Whether Caelestia runs from the overlay:
   `caelestia-overlay --running` (its folder's path resolved too), `agros-welcome`'s and the overlay's own
@@ -1089,7 +1094,8 @@ brings each change; nothing to run by hand).
 - **`agros-boot`** also: no "no video" between the login screen and the desktop. `system/boot-video-mode` at every boot gives the kernel console each connected screen's best mode as a
   `video=` boot option (Limine or GRUB), and only rebuilds the boot entries when the screens changed
 - **`agros-nvidia`**: loads the NVIDIA driver from the start of the boot (in the initramfs, which CachyOS's
-  `chwd` leaves it out of): about 2 s sooner, with the boot splash on it
+  `chwd` leaves it out of): about 2 s sooner, with the boot splash on it. Installed by `agros-welcome --system` when
+  there's an NVIDIA card (PCI vendor 10de, a display controller)
 - **The boot images** after `agros-boot` or `agros-nvidia` is installed, updated or removed: made again once, after the
   transaction, by mkinitcpio's own pacman hook (Limine's `limine-mkinitcpio-hook` has its own in its place), which
   watches `usr/lib/initcpio/*`: `agros-boot` ships a file there (`plymouth-title-font`), `agros-nvidia` one only for this

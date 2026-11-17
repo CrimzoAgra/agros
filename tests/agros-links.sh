@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# agros-links: a config file or launcher entry new in /etc/skel reaches an existing home once (inside a folder the user already has too),
+# agros-links: a config file, launcher entry, LibreWolf setting or wallpaper new in /etc/skel reaches an existing home once (inside a folder the user already has too),
 # never over the user's own, and one the user deleted doesn't come back. One an update changed replaces the user's while
 # it's a version AgrOS shipped (never edited), else is put beside it as .agros-new and said once (again if that
 # notification failed); the user's own
@@ -31,6 +31,18 @@ run
 [[ $(cat "$t/home/.local/share/applications/new.desktop") == agros ]] || fail "a new launcher entry not copied in"
 [[ ! -e $t/home/.local/share/lutris ]] || fail "Lutris's covers copied in by agros-links"
 rm "$t/home/.local/share/applications/new.desktop"
+
+# An account not made from /etc/skel: LibreWolf's settings (agros-welcome applies them, or counts the step done with
+# nothing applied) and Caelestia's wallpaper (a link) come in too; yours left as they are
+mkdir -p "$t/skel/.local/share/firefox" "$t/skel/Pictures/Wallpapers" "$t/home/Pictures/Wallpapers"
+echo agros >"$t/skel/.local/share/firefox/settings.js"; ln -s /etc/xdg/wallpaper.webp "$t/skel/Pictures/Wallpapers/caelestia.webp"
+echo agros >"$t/skel/Pictures/Wallpapers/mine.jpg"; echo mine >"$t/home/Pictures/Wallpapers/mine.jpg"
+run
+[[ $(cat "$t/home/.local/share/firefox/settings.js") == agros ]] || fail "LibreWolf's settings not copied in"
+[[ $(readlink "$t/home/Pictures/Wallpapers/caelestia.webp") == /etc/xdg/wallpaper.webp ]] || fail "Caelestia's wallpaper not linked in"
+[[ $(cat "$t/home/Pictures/Wallpapers/mine.jpg") == mine ]] || fail "a wallpaper of yours replaced"
+rm "$t/home/.local/share/firefox/settings.js"; run
+[[ ! -e $t/home/.local/share/firefox/settings.js ]] || fail "LibreWolf's settings, deleted, came back"
 
 rm -rf "$h/fetch"; run
 [[ ! -e $h/fetch ]] || fail "a config the user deleted came back"

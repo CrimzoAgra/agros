@@ -96,15 +96,62 @@ personal_drive() {
     return 0
 }
 
+# An app's processes, yours: Lutris by its command (Python runs it), VSCodium by its folder (Arch's runs as Electron on
+# /usr/lib/vscodium, the AUR's binary is codium), the rest by name
+personal_pids() {
+    case $1 in
+        lutris) pgrep -u "$UID" -f '(^|/)lutris( |$)' ;;
+        codium) pgrep -u "$UID" -f '(^|/)codium( |$)|/vscodium(-bin)?/' ;;
+        *) pgrep -u "$UID" -x "$1" ;;
+    esac
+}
+
 # The apps it's for that are open, yours (their files change under them, or theirs would overwrite these; another
 # account's use its own files)
 personal_open() {
     local p
-    for p in librewolf equibop spotify protonvpn-app steam; do pgrep -u "$UID" -x "$p" >/dev/null && echo "$p"; done
-    pgrep -u "$UID" -f '(^|/)lutris( |$)' >/dev/null && echo lutris
+    for p in librewolf equibop spotify protonvpn-app steam lutris codium; do personal_pids "$p" >/dev/null && echo "$p"; done
     # (its list read whole: grep -q quitting early got flatpak a SIGPIPE, which pipefail took for not open)
     grep -qx com.nuvio.media.desktop <<<"$(flatpak ps --columns=application 2>/dev/null)" && echo nuvio
     return 0
+}
+
+# Lutris and Proton VPN start at login in their tray only (user/apps.lua, on by default), so a restore from the first
+# login's notification always found them open. Of the apps named, those two with no window (nor a game they started)
+# are closed for it, asked first in a terminal: nothing of theirs is lost, and they start again at the next login, which
+# the restore needs anyway. Hyprland not reachable to tell (a text console): left open, said as the others
+personal_close_tray() {
+    local app p wins mine pids=() names=() list r
+    local -A shown=()
+    wins=$(hyprctl -i "${HYPRLAND_INSTANCE_SIGNATURE:-0}" clients -j 2>/dev/null) || return 0
+    wins=$(jq -r '.[].pid' <<<"$wins" 2>/dev/null) || return 0
+    # each process a window belongs to, and the ones that started it (a game's window is Lutris's too)
+    for p in $wins; do
+        while [[ $p =~ ^[0-9]+$ ]] && ((p > 1)) && [[ -z ${shown[$p]-} ]]; do
+            shown[$p]=1
+            p=$(awk '$1 == "PPid:" {print $2}' "/proc/$p/status" 2>/dev/null) || p=  # (gone since: no parent)
+        done
+    done
+    for app in "$@"; do
+        [[ $app == lutris || $app == protonvpn-app ]] || continue
+        mine=$(personal_pids "$app") || continue
+        for p in $mine; do [[ -n ${shown[$p]-} ]] && continue 2; done
+        # shellcheck disable=SC2206  # (process ids)
+        pids+=($mine)
+        if [[ $app == lutris ]]; then names+=(Lutris); else names+=("Proton VPN"); fi
+    done
+    ((${#pids[@]})) || return 0
+    list=$(printf '%s and ' "${names[@]}") list=${list% and }
+    if [[ -t 0 ]]; then
+        read -rp "$list: open in the tray only. Close for this (they start again at your next login)? [Y/n] " r || r=n
+        [[ $r == [nN]* ]] && return 0
+    fi
+    kill -TERM "${pids[@]}" 2>/dev/null || true
+    for _ in {1..20}; do
+        kill -0 "${pids[@]}" 2>/dev/null || break
+        sleep 0.5
+    done
+    echo "$list closed (they were in the tray only)."
 }
 
 # Claude Code running (restoring only: saving copies its files first)
@@ -211,6 +258,8 @@ personal_main() {
 personal_restore() {
     local file=$1 open prof loc name dest backup meta list to=() shell="$HOME/.config/caelestia/shell.json"
     open=$(personal_open; personal_claude_open)
+    # shellcheck disable=SC2086  # (the apps' names, one word each)
+    [[ -z $open ]] || { personal_close_tray $open; open=$(personal_open; personal_claude_open); }
     [[ -z $open ]] || { echo "Close these first (they'd write over what's brought back): $(echo $open)."; return 1; }
     # The file's list first, and nothing done unless it's read: a mistyped passphrase here had nothing backed up, and the
     # next ask, typed right, brought everything back over your files
@@ -251,12 +300,17 @@ personal_restore() {
     [[ -d $backup ]] && echo "Replaced files backed up to $backup."
     [[ -n $prof ]] || echo "LibreWolf has no profile yet: start it once and close it, then agros-personal."
     # Capri: her fork is private, so an install without your GitHub login couldn't fetch her. With it back now, she's
-    # installed (a failure said, the restore still done)
-    if [[ ! -e ${XDG_DATA_HOME:-$HOME/.local/share}/capri/current && -x $helpers/capri-update ]] &&
-        command -v gh >/dev/null && gh auth status >/dev/null 2>&1; then
-        echo "Installing Capri (your GitHub login is back)..."
-        gh auth setup-git >/dev/null 2>&1 || true
-        "$helpers/capri-update" || echo "!! Capri didn't install: run capri-update"
+    # installed (a failure said, the restore still done). gh keeps its login in the keyring, and the one brought back
+    # opens only from the next login: then dotfiles-check installs her (its mark), as it runs at every login
+    if [[ ! -e ${XDG_DATA_HOME:-$HOME/.local/share}/capri/current && -x $helpers/capri-update ]] && command -v gh >/dev/null; then
+        if gh auth status >/dev/null 2>&1; then
+            echo "Installing Capri (your GitHub login is back)..."
+            gh auth setup-git >/dev/null 2>&1 || true
+            "$helpers/capri-update" || echo "!! Capri didn't install: run capri-update"
+        elif grep -qx .config/gh/hosts.yml <<<"$list"; then
+            mkdir -p "${XDG_STATE_HOME:-$HOME/.local/state}/agros" && : >"${XDG_STATE_HOME:-$HOME/.local/state}/agros/capri-at-login"
+            echo "Capri is installed at your next login (your GitHub login works from then: it's in the keyring)."
+        fi
     fi
     echo "Accounts back. Log out and in (the keyring): it opens with the password you logged in with on your old PC."
 }

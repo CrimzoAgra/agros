@@ -41,7 +41,9 @@ printf '#!/bin/sh\necho "notify $*" >>"%s/ran"\n' "$t" >"$t/bin/notify-send"
 chmod +x "$home/.local/bin/game-focus" "$home/.local/bin/after-games" "$t/bin/notify-send"
 out=$(HYPRLAND_INSTANCE_SIGNATURE='' PATH=$t/bin:$PATH "$home/.local/bin/dots-settings" apply hypr) || fail "apply failed"
 [[ $out == deferred ]] || fail "a deferred apply not said: $out"
-HYPRLAND_INSTANCE_SIGNATURE='' PATH=$t/bin:$PATH "$home/.local/bin/hypr-reload"
+# (a second one leaves it to the waiting one: said by its exit, 3, as the screens' reload waits for that one then)
+rc=0; HYPRLAND_INSTANCE_SIGNATURE='' PATH=$t/bin:$PATH "$home/.local/bin/hypr-reload" || rc=$?
+[[ $rc == 3 ]] || fail "a reload left to the one waiting for the game not said by exit 3: $rc"
 for _ in {1..50}; do grep -q '^notify' "$t/ran" && break; sleep 0.1; done
 [[ $(grep -c '^notify .*Applied once your game closes' "$t/ran") == 1 ]] || fail "not said once: $(cat "$t/ran")"
 grep -q reload "$t/ran" && fail "reloaded during the game"

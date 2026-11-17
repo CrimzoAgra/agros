@@ -29,7 +29,7 @@ PROGRAMS = {
     "gtk-launch": "gtk3", "head": "coreutils", "hyprctl": "hyprland", "journalctl": "systemd", "nmcli": "networkmanager",
     "protonvpn-app": "proton-vpn-gtk-app", "qs": "quickshell-git", "readlink": "coreutils", "setsid": "util-linux",
     "sh": "bash", "sleep": "coreutils", "systemctl": "systemd", "tail": "coreutils", "cat": "coreutils",
-    "rm": "coreutils", "mkdir": "coreutils", "mv": "coreutils", "env": "coreutils", "timeout": "coreutils",
+    "rm": "coreutils", "mkdir": "coreutils", "mv": "coreutils", "env": "coreutils", "timeout": "coreutils", "md5sum": "coreutils",
     "caelestia": "caelestia-cli", "loginctl": "systemd",
     # (the widgets' GPU meter: only with NVIDIA's driver loaded, which brings it)
     "nvidia-smi": "optional:nvidia-utils",

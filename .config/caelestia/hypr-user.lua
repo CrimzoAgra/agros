@@ -26,13 +26,20 @@ local verify = os.getenv("DOTS_VERIFY_CONFIG") == "1"
 dots.verifying = verify  -- (for the other files: user/keys.lua's keymap not made then)
 
 -- Settings from the Settings app (~/.local/bin/dots-settings writes them here, every value, defaults included):
--- dots.setting("windows.cascade"). Written again first if missing or older than the list of settings (an update)
+-- dots.setting("windows.cascade"). Written again first if missing or made from another list of settings (an update):
+-- its second line has the list's md5sum it was made from (a file's time can't tell: a package's is its build's)
 local settings_file = os.getenv("HOME") .. "/.config/dots/settings.lua"
-local stale = io.popen("test -s '" .. settings_file .. "' -a '" .. settings_file
-                       .. "' -nt ~/.local/share/dots-settings/schema.json || echo stale")
-if stale then
-    if stale:read("l") == "stale" and not verify then os.execute("~/.local/bin/dots-settings lua") end
-    stale:close()
+local sum = io.popen("md5sum ~/.local/share/dots-settings/schema.json 2>/dev/null")
+if sum then
+    local want = (sum:read("l") or ""):match("^%x+")
+    sum:close()
+    local f, made = io.open(settings_file), nil
+    if f then
+        f:read("l")
+        made = (f:read("l") or ""):match("^%-%- schema md5 (%x*)$")
+        f:close()
+    end
+    if want and made ~= want and not verify then os.execute("~/.local/bin/dots-settings lua") end
 end
 local ok, settings = pcall(dofile, settings_file)
 local values = ok and type(settings) == "table" and settings or {}

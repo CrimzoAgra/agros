@@ -15,7 +15,7 @@ The list of settings, their defaults and how each one applies: ~/.local/share/do
                                      caelestia (rebuild and restart it), mouse-dpi (set it on the mouse); lutris changes
                                      apply when Lutris next starts. Prints "deferred" when hypr or caelestia waits
                                      for a game to close
-  dots-settings lua                  write settings.lua again (Hyprland's config does when the schema is newer)
+  dots-settings lua                  write settings.lua again (Hyprland's config does when the schema changed)
 A setting with "get"/"set" shell commands in the schema lives elsewhere (the window mode: ~/.local/state/window-mode);
 "set" gets the value in $VALUE. A group with "from" lists the changes of a patch that can be turned off, from the
 patch itself (patch.py --list), so a new one shows without editing the schema; "from": "autostart" lists the apps
@@ -39,6 +39,7 @@ hypr-vars.lua like its shortcuts. "from": "screens" lists the connected screens'
 scale, position, enabled; screens.main), read by user/monitors.lua; "from": "binds" the shortcuts no setting changes
 (Hyprland's list of binds), to show and to find clashes with."""
 import fcntl
+import hashlib
 import json
 import math
 import os
@@ -47,6 +48,7 @@ import re
 import subprocess
 import sys
 import tempfile
+from fractions import Fraction
 
 HOME = pwd.getpwuid(os.getuid()).pw_dir  # not $HOME: run as you from root (sudo, su), it may be root's
 SCHEMA = f"{HOME}/.local/share/dots-settings/schema.json"
@@ -427,13 +429,25 @@ def hyprctl(*args):
 SCALES = ["1", "1.25", "1.5", "1.6", "1.75", "2"]
 
 
+def scales(width, height, keep=None):
+    """The scales Hyprland takes for a screen's mode: those that give it a whole size in pixels both ways (it refuses
+    1.75 on 1920x1080, 1.5 on 2560x1600); every one with no mode known. keep: the one set, listed all the same"""
+    fits = [s for s in SCALES if not (width and height) or all((n / Fraction(s)).denominator == 1 for n in (width, height))]
+    if isinstance(keep, str) and keep and keep not in fits:
+        try:
+            fits = sorted([*fits, keep], key=float)
+        except ValueError:
+            pass  # (not a number: not one to show)
+    return fits
+
+
 def screens_groups():
     """The connected screens' settings (on or off ones), by their full description: one machine's own screens, so its
     serial too (two of one model each have theirs). Read by user/monitors.lua; empty means as AgrOS sets it"""
     monitors = [m for m in hyprctl("monitors", "all") or [] if m.get("description") and m.get("name") != "FALLBACK"]
     if not monitors:
         return [{"title": "Screens", "settings": [], "empty": "No screens found (not in a Hyprland session)"}]
-    groups = []
+    groups, saved = [], stored()
     for m in monitors:
         d = m["description"]
         modes = list(dict.fromkeys(x.removesuffix("Hz") for x in m.get("availableModes", [])))
@@ -449,8 +463,9 @@ def screens_groups():
                                                                   for x in modes]},
             {"key": f"screens.{d}.scale", "label": "Scale", "type": "choice", "default": "", "apply": "hypr",
              "description": "How big everything is drawn on it. Automatic: from its size and resolution.",
-             "options": [{"value": "", "label": "Automatic"}] + [{"value": x, "label": f"{float(x):.0%}"}
-                                                                  for x in SCALES]},
+             "options": [{"value": "", "label": "Automatic"}] + [
+                 {"value": x, "label": f"{float(x):.0%}"}
+                 for x in scales(m.get("width"), m.get("height"), saved.get(f"screens.{d}.scale"))]},
             # (checked here: a typo reached Hyprland's monitor rule)
             {"key": f"screens.{d}.position", "label": "Position", "type": "text", "default": "", "apply": "hypr",
              "placeholder": "Automatic", "pattern": r"(\d+x\d+)?", "format": "whole pixels as WxH, like 1920x0",
@@ -665,8 +680,17 @@ def write_lua(settings):
     # (its own temporary file: "lua", run by Hyprland's config, and a "set" at once wrote the same one, and could leave
     # half of each; UTF-8, as its strings keep their non-ASCII, whatever the locale)
     tmp = f"{CONFIG}/settings.lua.{os.getpid()}.tmp"
+    # The schema's checksum (md5sum's) on its second line: hypr-user.lua writes this again when the schema's differs (an
+    # update). Not by the files' times: a package's files carry its build's, so a setting changed after the build left
+    # this the newer file, and the update's new settings nil
+    try:
+        with open(SCHEMA, "rb") as f:
+            schema_sum = hashlib.md5(f.read()).hexdigest()
+    except OSError:
+        schema_sum = ""
     with open(tmp, "w", encoding="utf-8") as f:
         f.write("-- Written by ~/.local/bin/dots-settings from settings.json: change settings in the Settings app\n")
+        f.write(f"-- schema md5 {schema_sum}\n")
         f.write("return {\n" + "\n".join(lines) + "\n}\n")
     os.replace(tmp, f"{CONFIG}/settings.lua")
 
