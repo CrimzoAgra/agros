@@ -53,8 +53,13 @@ git() { LC_ALL=C command git -C "$src" -c user.name=capri-update -c user.email=c
     -c versionsort.suffix=- "$@"; }
 # One at a time in her folder: a --check (the update check, the Updates app's list) fetching while an update merged
 # there failed it on git's own lock. A --check finding one running says nothing (that one says how it went); an update
-# waits for the other to finish. (Not installed: nothing to look for, and no lock left in a home without her)
-$check && [[ ! -d $src/.git ]] && exit 0
+# waits for the other to finish. (Not installed: nothing to look for, and no lock left in a home without her. Her folder
+# gone with a build of hers still here: the old Capri's, whose folder a run took out before its clone of the new one
+# failed: said, so the Updates app lists it and a run tries again; said nothing, it waited for an update of another kind)
+if $check && [[ ! -d $src/.git ]]; then
+    [[ -e $dir/current ]] && echo "capri: update available (the new Capri)"
+    exit 0
+fi
 lock="${XDG_STATE_HOME:-$HOME/.local/state}/capri-update.lock"
 mkdir -p "${lock%/*}"
 # (a run fail() started again holds it already, on the fd 9 it kept across its exec: opened again, it was let go of and
@@ -77,9 +82,13 @@ fi
 if [[ -d $src/.git && $(git remote get-url upstream 2>/dev/null) != "$upstream" ]]; then
     $check && { echo "capri: update available (the new Capri)"; exit 0; }
     rm -rf "$src"
-    replaced=true
 fi
+# (the old Capri's build replaced: not kept to go back to. Known also in a later run, when this one's clone failed, and
+# in the run fail() starts again, from its environment)
+replaced=${CAPRI_UPDATE_REPLACED:-}
+unset CAPRI_UPDATE_REPLACED
 if [[ ! -d $src/.git ]]; then
+    [[ -e $dir/current ]] && replaced=true
     mkdir -p "$dir"
     # (--no-tags, and fetched so: the release tags are only the original's, a tag of my fork named as one of them never
     # taken for it, or said "moved" for good)
@@ -178,7 +187,7 @@ fail() {
     rm -rf "${new:-}"
     if [[ ${2:-} != again ]] && pick; then
         warn "Capri not on $failed_tag" "$1 She gets my changes with $tag instead."
-        CAPRI_UPDATE_FELL_BACK=1 CAPRI_UPDATE_LOCKED=1 exec "$0"
+        CAPRI_UPDATE_FELL_BACK=1 CAPRI_UPDATE_LOCKED=1 CAPRI_UPDATE_REPLACED=$replaced exec "$0"
     fi
     if [[ -n $have ]]; then warn "Capri not updated" "$1 She stays on the version she has."
     else warn "Capri not installed" "$1"; fi
@@ -257,7 +266,7 @@ fi
 rm -f "$retries"
 # The build before kept, but not the old Capri's (replaced): another app, not one to go back to
 keep=$old
-${replaced:-false} && keep=
+[[ $replaced != true ]] || keep=
 # The old Capri's hooks (Claude Code's, Codex's, Antigravity's: turned on from her menu) ran her script from this
 # folder, gone with her: said, as each would now fail (taken out by hand; the new one has no hooks)
 for f in "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json" "${CODEX_HOME:-$HOME/.codex}/hooks.json" \

@@ -166,6 +166,12 @@ run --check >/dev/null
 g "$app/src" remote set-url upstream "$t/old-original"
 g "$app/src" tag -f v9.9.9 >/dev/null
 grep -q "update available (the new Capri)" <<<"$(run --check)" || fail "--check missed the old Capri"
+# Its clone of the new one failing (the private fork, no GitHub login yet): her old folder already gone, --check still
+# offers the switch, and the run that gets through makes it (below: the old Capri's build not kept all the same)
+fork=$t/nowhere
+run >/dev/null && fail "a failed clone of the new Capri reported success"
+fork=$t/fork
+grep -q "update available (the new Capri)" <<<"$(run --check)" || fail "--check after a failed clone of the new Capri said nothing"
 mkdir -p "$t/ho|me/.claude"
 printf '{"command": "node \\"%s/current/hooks/capri-hook.js\\""}\n' "$app" >"$t/ho|me/.claude/settings.json"
 echo 's' >"$t/up/other.js"; g "$t/up" commit -qam eleven; g "$t/up" tag v1.0.0
