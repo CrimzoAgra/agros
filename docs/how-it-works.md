@@ -537,6 +537,8 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
     layout's keymap with Scroll Lock on a free modifier, which Hyprland loads, and keeps the bar's icon in step with
     the light)
   - Caps/Num Lock badges follow whichever keyboard was used last
+  - A VMware Workstation window focused: every key reaches the VM, Super shortcuts too (Hyprland's `vm` submap, with no
+    other binds), until another window has the focus or Ctrl+Alt+Esc
 
 ## Screens and colours
 

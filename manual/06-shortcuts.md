@@ -2,6 +2,9 @@
 
 **Super** is the Windows key. Every shortcut can be changed in **Desktop Settings → Shortcuts**.
 
+While a VMware Workstation window has the focus, every key goes to the virtual machine, Super shortcuts too. Click
+another window, or press **Ctrl+Alt+Esc**, to have them back.
+
 ## The basics
 
 | Shortcut | Does |
