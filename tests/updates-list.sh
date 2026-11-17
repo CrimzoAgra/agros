@@ -19,4 +19,8 @@ printf '#!/bin/sh\nexit 3\n' >"$t/broken" && chmod +x "$t/broken"
     grep -q ': root.listFailed ? "Couldn'"'"'t check for updates"' "$qml" &&
     grep -q 'text: root.listFailed ? "Couldn'"'"'t check: update-apps --list failed' "$qml"; } ||
     fail "a list that failed not shown as one"
+# Offline (update-kinds' "offline" line, nothing else listed): not "Everything is up to date" in the header
+{ grep -q ': root.offline ? "Couldn'"'"'t check for updates"' "$qml" &&
+    grep -q 'root.pending.length ? "system_update" : root.offline ? "error" : "verified"' "$qml"; } ||
+    fail "an offline check shown as up to date"
 echo "ok updates-list"

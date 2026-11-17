@@ -144,6 +144,41 @@ if main_resizers=$(resizers origin/HEAD); then
     [[ -z $new ]] || ahead "hyprbars on hyprland-plugins' main starts a resize the patch doesn't own: $(paste -sd' ' <<<"$new")"
 fi
 
+# Upstream's fixes after v0.57.0 the patch carries for the tag (on main they're upstream's own; the patch's copies
+# must still apply there): the stencil write mask set before the bar's stencil is cleared (#717: else blur left it at 0
+# and rounded bars flickered), and a press the bar took gets its release wherever that lands, every new press starting
+# clear (#722 and more: a window minimised from its button had the release of the next click in it swallowed).
+# missing_fixes <ref>: what's missing in the patched barDeco.cpp, one per line
+missing_fixes() {
+    git -C "$t/src" checkout -q -f "$1" && git -C "$t/src" apply "$here/.local/share/hyprbars/hyprbars.patch" 2>/dev/null || return 1
+    python3 -I - "$t/src/hyprbars/barDeco.cpp" <<'PY' || return 1
+import re, sys
+text = open(sys.argv[1], encoding="utf-8").read()
+def body(name):
+    m = re.search(r"^\S.*CHyprBar::" + name + r"\(.*?\n(.*?)^\}", text, re.S | re.M)
+    return m[1] if m else ""
+code = [l.strip() for l in text.splitlines() if l.strip() and not l.strip().startswith("//")]
+clear = code.index("glClear(GL_STENCIL_BUFFER_BIT);") if "glClear(GL_STENCIL_BUFFER_BIT);" in code else 0
+if "glStencilMask(0xFF);" not in code[max(0, clear - 3):clear]:
+    print("#717: no glStencilMask(0xFF) before the bar's stencil clear")
+button = body("onMouseButton")
+if not 0 <= button.find("m_bCancelledDown") < button.find("inputIsValid()"):
+    print("#722: onMouseButton leaves a taken press's release to inputIsValid")
+valid = body("inputIsValid")
+if "WINDOWATCURSOR && WINDOWATCURSOR != m_pWindow" not in valid and "|| WINDOWATCURSOR)" not in valid:
+    print("#722: inputIsValid gives a press on a window over the focused one's bar to that bar")
+down = body("handleDownEvent")
+if not 0 <= down.find("m_bCancelledDown = false;") < down.find("return"):
+    print("#722: handleDownEvent doesn't start a new press clear")
+PY
+    git -C "$t/src" reset -q --hard
+}
+missing=$(missing_fixes "$ref") || fail "the upstream fixes check failed on hyprland-plugins $ref"
+[[ -z $missing ]] || fail "the patched hyprbars ($ref) lacks: $(paste -sd';' <<<"$missing")"
+if missing=$(missing_fixes origin/HEAD); then
+    [[ -z $missing ]] || ahead "the patched hyprbars on hyprland-plugins' main lacks: $(paste -sd';' <<<"$missing")"
+fi
+
 # Built, as hyprbars-build builds it (this series' version, patched; g++ by name), against the installed headers
 if [[ -n ${DOTS_BUILD_TESTS:-} ]]; then
     git -C "$t/src" checkout -q "${pin:-v${ver%.*}.0}"

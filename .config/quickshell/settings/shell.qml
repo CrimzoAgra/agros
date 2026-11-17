@@ -124,7 +124,9 @@ ShellRoot {
                 try {
                     data = JSON.parse(text);
                 } catch (e) {
-                    root.error = schemaProc.readError;
+                    // (not over a failed save's message: the read that save's restart killed ends here too, empty)
+                    if (!root.error)
+                        root.error = schemaProc.readError;
                     schemaProc.lastText = ""; // the next good reading is shown, and clears this
                     return;
                 }
@@ -197,7 +199,8 @@ ShellRoot {
         // (Its output may come after it has exited: the apply is timed from here)
         stdout: StdioCollector {
             onStreamFinished: {
-                const how = text.trim();
+                // (its last line: a set command's own output, a wallpaper's or a scheme's, comes before it)
+                const how = text.trim().split("\n").pop();
                 if (how && !root.pendingApply.includes(how))
                     root.pendingApply = [...root.pendingApply, how];
                 if (root.pendingApply.length)
@@ -230,7 +233,8 @@ ShellRoot {
                 return;
             }
             // Each one runs, and any failing shows (not only the last one's exit status)
-            applier.command = ["sh", "-c", "s=0; " + root.pendingApply.map(h => `"${root.cli}" apply ${h} || s=1`).join("; ") + "; exit $s"];
+            // (each as an argument, not pasted into the script: what a set printed besides its apply is no command)
+            applier.command = ["sh", "-c", 's=0; for h; do "$0" apply "$h" || s=1; done; exit $s', root.cli, ...root.pendingApply];
             root.pendingApply = [];
             root.deferred = false;
             applier.running = true;
@@ -994,6 +998,8 @@ ShellRoot {
                         opacity: root.busy ? 1 : 0.7
 
                         Icon {
+                            id: busyIcon
+
                             text: root.busy ? "sync" : "check_circle"
                             font.pixelSize: 18
 
@@ -1003,7 +1009,7 @@ ShellRoot {
                                 to: 0
                                 duration: 1200
                                 loops: Animation.Infinite
-                                onStopped: parent.rotation = 0
+                                onStopped: busyIcon.rotation = 0 // (by id: an animation has no parent)
                             }
                         }
                         Label {

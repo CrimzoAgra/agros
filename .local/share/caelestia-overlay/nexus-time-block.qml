@@ -95,6 +95,7 @@
             subtext: Tr.tr("From time servers on the internet (NTP)")
             checked: clock.ntp
             onToggled: {
+                clock.ntp = checked; // (shown at once, not back until the system says: its answer puts it right if refused)
                 clock.run(["set-ntp", checked ? "true" : "false"]);
                 checked = Qt.binding(() => clock.ntp); // (what the system says, once it has applied it)
             }

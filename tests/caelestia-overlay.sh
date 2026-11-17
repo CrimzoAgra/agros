@@ -238,6 +238,14 @@ for f in $(python3 "$here/.local/share/caelestia-overlay/patch.py" --list | pyth
     fi
 done
 rm -rf "$t/one" "$t/off"
+# A folder a feature writes into gone (a Caelestia update moved it): that feature skipped before it writes anything, not
+# its other files left patched (the bar used a Dock never made, and the whole shell didn't load)
+cp -as "$src" "$t/one"; rm -r "$t/one/modules/bar/components"
+out=$(DOTS_SETTINGS=$t/bin/dots-settings python3 "$here/.local/share/caelestia-overlay/patch.py" "$src" "$t/one" 2>&1) || true
+grep -q '^WARNING: bar dock skipped, .*(modules/bar/components/ not found)$' <<<"$out" ||
+    fail "a feature's folder gone not said: $(grep 'bar dock' <<<"$out")"
+grep -q 'Dock {' "$t/one/modules/bar/Bar.qml" && fail "a feature's folder gone: its other files still patched (Bar.qml's Dock)"
+rm -rf "$t/one"
 # Window peek works on the dock's and the workspace preview's popouts: with one of them off it's still in, with both
 # off it's off too (said so), not a patch that no longer fits
 cat >"$t/bin/two-off" <<'S'

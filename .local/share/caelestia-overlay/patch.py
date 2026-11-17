@@ -109,6 +109,11 @@ def own(name):
 
 
 def write(files):
+    # Every file's folder there first: one gone (a Caelestia update moved it) skips the feature before anything is
+    # written, not after its other files were (the bar then used a part never made, and the whole shell didn't load)
+    for rel in files:
+        if not os.path.isdir(os.path.dirname(os.path.join(dst, rel))):
+            raise LookupError(f"{os.path.dirname(rel)}/ not found")
     for rel, content in files.items():
         path = os.path.join(dst, rel)
         if os.path.lexists(path):
@@ -788,7 +793,9 @@ def notif_click():
         // Many apps name only themselves ("Proton VPN"), not their launcher entry: found by that name then, as
         // Caelestia finds their icon (not for no name: that finds an unrelated app)
         const entry = notification?.desktopEntry || (appName ? (DesktopEntries.heuristicLookup(appName)?.id ?? "") : "");
-        Quickshell.execDetached(["hyprctl", "eval", `dots.focus_app(${JSON.stringify(entry)}, ${JSON.stringify(appName)}, ${launch})`]);
+        // (JSON's quoting as Lua's: the same but for control characters, \\u00XX in JSON, which Lua can't read)
+        const lua = s => JSON.stringify(String(s ?? "").replace(/[\\x00-\\x1f]/g, " "));
+        Quickshell.execDetached(["hyprctl", "eval", `dots.focus_app(${lua(entry)}, ${lua(appName)}, ${launch})`]);
     }
 
 """)

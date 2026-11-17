@@ -55,6 +55,7 @@ ShellRoot {
     property bool open: false
     // Super+click free for the previews while open (Caelestia's window drag otherwise takes it: keys.lua)
     onOpenChanged: {
+        openedOn = open ? Hyprland.focusedMonitor : null;
         cleaning = [];
         Quickshell.execDetached(["hyprctl", "eval", `dots.switcher_open(${open})`]);
     }
@@ -63,7 +64,10 @@ ShellRoot {
     property int selected: 0
     property var wasActive: null // Alt+Tab: the window active when it opened (its first card)
 
-    readonly property HyprlandMonitor monitor: Hyprland.focusedMonitor
+    // The screen it opened on, kept while it's open: the focused screen follows the pointer, and the switcher jumped to
+    // the other screen (its previews that screen's) when the mouse crossed over. One unplugged meanwhile: the focused one
+    property HyprlandMonitor openedOn: null
+    readonly property HyprlandMonitor monitor: open && openedOn ? openedOn : Hyprland.focusedMonitor
     readonly property int current: column(activeId())
 
     // A window's workspace as Hyprland last reported it (the IPC data, refreshed before each use), Quickshell's object

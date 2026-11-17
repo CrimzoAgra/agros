@@ -198,7 +198,7 @@ ShellRoot {
                         id: headerIcon
 
                         anchors.centerIn: parent
-                        text: root.phase === "updating" ? "downloading" : root.phase === "checking" ? "sync" : root.listFailed ? "error" : root.pending.length ? "system_update" : "verified"
+                        text: root.phase === "updating" ? "downloading" : root.phase === "checking" ? "sync" : root.listFailed ? "error" : root.pending.length ? "system_update" : root.offline ? "error" : "verified"
                         font.family: "Material Symbols Rounded"
                         font.pixelSize: 30
                         color: root.c("onPrimaryContainer")
@@ -225,6 +225,7 @@ ShellRoot {
                             : listProc.running ? "Checking what's left…"
                             : root.listFailed ? "Couldn't check for updates"
                             : root.pending.length ? `${root.pending.length} update${root.pending.length > 1 ? "s" : ""} available`
+                            : root.offline ? "Couldn't check for updates" // (no connection: not "up to date")
                             : "Everything is up to date"
                         font.family: "Rubik"
                         font.pixelSize: 22
