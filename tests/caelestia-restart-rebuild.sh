@@ -19,7 +19,17 @@ printf '#!/bin/sh\necho "$*" >>"%s/units"\nwhile [ "${1#-}" != "$1" ]; do shift;
 printf '#!/bin/sh\nwhile [ "${1#-}" != "$1" ]; do shift; done\nexec "$@"\n' >"$t/bin/setsid"  # (in the foreground here)
 # Spotify running, hidden in the tray: its window rules on before the stop (logged), off again on a failure
 printf '#!/bin/sh\nexit 0\n' >"$t/bin/pgrep"
-printf '#!/bin/sh\ncase "$1" in clients) echo "[]" ;; eval) echo "$2" >>"%s/hypr" ;; esac\n' "$t" >"$t/bin/hyprctl"
+# Hyprland: its evals logged (the peek's end on its own, saying whether the shell was still running then)
+cat >"$t/bin/hyprctl" <<S
+#!/bin/sh
+case "\$1" in
+    clients) echo "[]" ;;
+    eval) case "\$2" in
+              *peek_end*) if [ -e "$t/running" ]; then echo "peek_end while running"; else echo peek_end; fi >>"$t/peek" ;;
+              *) echo "\$2" >>"$t/hypr" ;;
+          esac ;;
+esac
+S
 printf '#!/bin/sh\necho notified >>"%s/log"\n' "$t" >"$t/bin/notify-send"
 # (beside the stubbed overlay: the scripts it runs are the ones beside itself)
 cp "$here/.local/bin/"{caelestia-restart,dots-warn,notify-when-up} "$t/home/.local/bin/"
@@ -27,11 +37,13 @@ cp "$here/.local/bin/"{caelestia-restart,dots-warn,notify-when-up} "$t/home/.loc
 printf '#!/bin/sh\n[ -e "%s/game" ]\n' "$t" >"$t/home/.local/bin/game-focus"
 printf '#!/bin/sh\necho after-games >>"%s/log"; rm -f "%s/game"\n' "$t" "$t" >"$t/home/.local/bin/after-games"
 chmod +x "$t/bin/"* "$t/home/.local/bin/"*
-run() { echo 42 >"$t/running"; : >"$t/log"; : >"$t/hypr"; rc=0; HOME=$t/home HYPRLAND_INSTANCE_SIGNATURE=x WAYLAND_DISPLAY=w XDG_CURRENT_DESKTOP=Hyprland PATH=$t/bin:$PATH "$t/home/.local/bin/caelestia-restart" "$@" >/dev/null 2>&1 || rc=$?; }
+run() { echo 42 >"$t/running"; : >"$t/log"; : >"$t/hypr"; : >"$t/peek"; rc=0; HOME=$t/home HYPRLAND_INSTANCE_SIGNATURE=x WAYLAND_DISPLAY=w XDG_CURRENT_DESKTOP=Hyprland PATH=$t/bin:$PATH "$t/home/.local/bin/caelestia-restart" "$@" >/dev/null 2>&1 || rc=$?; }
 run --rebuild
 ((rc == 0)) || fail "exit $rc after a good rebuild"
 [[ $(cat "$t/log") == $'kill\nrebuilt\nstart' ]] || fail "not stopped, rebuilt, started: $(tr '\n' ' ' <"$t/log")"
 [[ $(cat "$t/hypr") == 'dots.spotify_silent_set(true)' ]] || fail "Spotify's window rules not just on: $(tr '\n' ' ' <"$t/hypr")"
+# A window peek the stopped shell left (its faded windows invisible) ended once it's gone
+[[ $(cat "$t/peek") == peek_end ]] || fail "the peek not ended after the stop: $(tr '\n' ' ' <"$t/peek")"
 # A game open: not stopped, rebuilt or started until it closes (after-games: in the background, run here at once), said
 touch "$t/game"; run --rebuild
 ((rc == 0)) || fail "exit $rc with a game open"
@@ -123,6 +135,8 @@ mkdir -p "$t/home/.config/quickshell/caelestia"; touch "$t/home/.config/quickshe
 run
 ((rc == 3)) && [[ $(tr '\n' ' ' <"$t/log") == "kill start kill without changes start notified " ]] ||
     fail "a shell whose config never loaded on the changes not started again without them, said (exit $rc): $(tr '\n' ' ' <"$t/log")"
+# (each stop ends a peek: the shell without the changes doesn't end one as it starts)
+[[ $(tr '\n' ' ' <"$t/peek") == "peek_end peek_end " ]] || fail "a peek not ended at each stop: $(tr '\n' ' ' <"$t/peek")"
 grep -q "didn't load with your changes" "$t/home/.local/state/caelestia-overlay-skipped" || fail "why the changes are off not written down"
 # ...one on Caelestia as it comes already: nothing more to try, 3
 rm "$t/home/.local/state/caelestia-overlay-skipped"; touch "$t/noload"

@@ -78,11 +78,15 @@ stop() {
     for pid in $old; do
         qs kill --pid "$pid" >/dev/null 2>&1
     done
-    gone 50 && return 0
-    for pid in $(pids); do
-        kill -9 "$pid" 2>/dev/null
-    done
-    gone 20
+    if ! gone 50; then
+        for pid in $(pids); do
+            kill -9 "$pid" 2>/dev/null
+        done
+        gone 20 || return 1
+    fi
+    # (stopped mid-peek, the windows it faded out stayed invisible: the overlay's shell ends the peek as it starts, but
+    # one started without the changes doesn't. Nothing done when there's no peek)
+    hyprctl eval 'dots.peek_end()' >/dev/null 2>&1 || true
 }
 # start: the shell started; 0 once its config has loaded (it answers on its IPC: Caelestia's targets), 2 when it's up
 # but its config never loads, 1 when it never comes up (at most 30 s each)

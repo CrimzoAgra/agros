@@ -71,4 +71,20 @@ P
 [[ -x $t/stick-home/Applications/demo.AppImage && -f $t/stick.AppImage ]] ||
     fail "not installed from a copy, or the stick's file taken: $(ls "$t/stick-home/Applications" "$t")"
 [[ -z $(compgen -G "$t/stick-home/Applications/*.new") ]] || fail "a copy's temporary file left"
+# The system package with the same launcher entry (demo-bin owns /usr/share/applications/demo.desktop): removed with
+# --install (appimage-update), sudo without asking when it can; never for an AppImage only opened (any file could
+# name a package's entry), nor when no package owns it. sudo and pkexec log what they'd run
+# shellcheck disable=SC2016  # (expanded by the stand-ins)
+printf '#!/bin/sh\n[ "$1 $2" = "-Qqo /usr/share/applications/demo.desktop" ] && [ -n "$OWNER" ] && echo "$OWNER"\n' >"$t/bin/pacman"
+for c in sudo pkexec; do printf '#!/bin/sh\necho "%s $*" >>"%s/ran"\n' "$c" "$t" >"$t/bin/$c"; done
+remove() {  # <home> [--install]
+    rm -f "$t/ran"; cp "$t/home/Applications/demo.AppImage" "$t/pkg.AppImage"
+    HOME=$1 PATH=$t/bin:$PATH python3 "$here/.local/bin/appimage-open" ${2:+"$2"} "$t/pkg.AppImage" >/dev/null 2>&1
+}
+OWNER=demo-bin remove "$t/pkg-home" --install || fail "not installed over a package's copy"
+grep -qx "sudo -n pacman -R --noconfirm demo-bin" "$t/ran" || fail "the package's copy not removed with --install: $(cat "$t/ran" 2>/dev/null)"
+OWNER=demo-bin remove "$t/open-home" || fail "an opened AppImage not installed"
+grep -q pacman "$t/ran" 2>/dev/null && fail "a package removed for an AppImage only opened: $(cat "$t/ran")"
+OWNER='' remove "$t/none-home" --install || fail "not installed with no package's copy"
+grep -q pacman "$t/ran" 2>/dev/null && fail "a package removed with none owning the entry: $(cat "$t/ran")"
 echo "ok appimage-open"

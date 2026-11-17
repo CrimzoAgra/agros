@@ -759,7 +759,10 @@ def main(args):
         if "set" in setting:
             # (a yes/no as true or false, as get reads it, not Python's True)
             shown = json.dumps(value) if isinstance(value, bool) else str(value)
-            if subprocess.run(["sh", "-c", setting["set"]], env={**os.environ, "VALUE": shown}).returncode != 0:
+            # (what the command prints goes to stderr: --later's stdout is only how to apply it, which the Settings app
+            # reads, and hyprctl's "ok" there was taken for one)
+            if subprocess.run(["sh", "-c", setting["set"]], env={**os.environ, "VALUE": shown},
+                              stdout=sys.stderr).returncode != 0:
                 sys.exit(f"{setting['label']}: not changed")
         elif "autostart" in setting:
             return autostart_set(setting["autostart"], value)

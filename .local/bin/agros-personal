@@ -115,7 +115,9 @@ personal_save() {
     local drive open prof paths=() lw=() games=() p f staged skip=() s
     drive=$(personal_drive)
     [[ -n $drive ]] || { echo "No pen drive found: plug it in, or name its folder (agros-personal --save <folder>)."; return 1; }
-    [[ ! -e $drive/.git ]] || { echo "Not in a git repo: your logins go on your pen drive."; return 1; }
+    # (a folder anywhere in one, not only its top: a subfolder of the dotfiles repo is in it too)
+    [[ ! -e $drive/.git ]] && ! git -C "$drive" rev-parse --git-dir >/dev/null 2>&1 ||
+        { echo "Not in a git repo: your logins go on your pen drive."; return 1; }
     open=$(personal_open)
     [[ -z $open ]] || { echo "Close these first (their files are being written): $(echo $open)."; return 1; }
     for p in "${PERSONAL_PATHS[@]}"; do [[ -e $HOME/$p ]] && paths+=("$p"); done
