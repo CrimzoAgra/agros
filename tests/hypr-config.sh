@@ -46,6 +46,14 @@ handlers, binds, config_errors, hidden_rules, unset_gestures, WINDOW_RULES = {},
 -- there while HOLD_TIMERS is on (else run at once); PEEK_TAGS: window peek's tag dispatches, in order
 CONFIG, HELD_TIMERS, PEEK_TAGS, TIMER_SETS = { ["decoration.blur.ignore_opacity"] = true }, {}, {}, {}
 BIND_ACTIONS, MONITOR_RULES, FOCUS, ENV = {}, {}, 1, {}
+-- SESSION_ENV: what was put in the user's systemd and D-Bus environments (never the real ones: a test run in a VMware VM
+-- changed its session's)
+SESSION_ENV = {}
+local execute = os.execute
+os.execute = function(cmd, ...)
+    if cmd and cmd:find("set-environment", 1, true) then SESSION_ENV[#SESSION_ENV + 1] = cmd; return true end
+    return execute(cmd, ...)
+end
 local popen = io.popen
 io.popen = function(cmd, ...)
     if cmd:find("/proc/acpi/button/lid", 1, true) then return { read = function() return LID or "" end, close = function() end } end
@@ -1282,6 +1290,46 @@ for _, c in ipairs({ { shim, "" }, { shim .. ":/a.so", "/a.so" }, { "/a.so:" .. 
 end
 L
 out=$(cd "$t" && HOME=$t/home lua preload.lua stub.lua 2>&1) || fail "LD_PRELOAD without the shim: $out"
+
+# In VMware without the shim, the apps on the CPU: the two variables in the user's systemd and D-Bus environments as
+# the config loads (before Hyprland starts anything), and Hyprland's own children's once it's up. With the shim (in
+# Hyprland's maps), on another GPU, in a check of the config or a reload (Hyprland has them already): neither
+mkdir -p "$t/sys/class/drm/card0/device"
+cat >"$t/vmware.lua" <<'L'
+package.path = os.getenv("HOME") .. "/.config/caelestia/?.lua;" .. package.path
+dofile(arg[1])
+local open, getenv = io.open, os.getenv
+local function run(vendor, shim, env)
+    local v = open(getenv("SYSFS") .. "/class/drm/card0/device/vendor", "w"); v:write(vendor .. "\n"); v:close()
+    io.open = function(p, ...)
+        if p == "/proc/self/maps" and shim then
+            return { read = function() return "7f00 r-xp /usr/lib/agros/vmw-dmabuf.so\n" end, close = function() end }
+        end
+        return open(p, ...)
+    end
+    os.getenv = function(k) if env[k] ~= nil then return env[k] end return getenv(k) end
+    ENV, SESSION_ENV, handlers, package.loaded["hypr-vars"] = {}, {}, {}, nil
+    require("hypr-vars")
+    local loaded = #SESSION_ENV
+    for _, fn in ipairs(handlers["hyprland.start"] or {}) do fn() end
+    return loaded, ENV.LIBGL_ALWAYS_SOFTWARE == "1" and ENV.XWAYLAND_NO_GLAMOR == "1"
+end
+local function check(name, ok) if not ok then error(name, 0) end end
+local loaded, apps = run("0x15ad", false, {})
+check("VMware without the shim: not in the session's environment as the config loads", loaded == 1
+      and SESSION_ENV[1]:find("systemctl --user set-environment LIBGL_ALWAYS_SOFTWARE=1 XWAYLAND_NO_GLAMOR=1", 1, true)
+      and SESSION_ENV[1]:find("dbus-update-activation-environment LIBGL_ALWAYS_SOFTWARE=1 XWAYLAND_NO_GLAMOR=1", 1, true))
+check("VMware without the shim: not for Hyprland's children", apps)
+loaded, apps = run("0x15ad", true, {})
+check("VMware with the shim: set", loaded == 0 and not apps)
+loaded, apps = run("0x10de", false, {})
+check("another GPU: set", loaded == 0 and not apps)
+loaded = run("0x15ad", false, { DOTS_VERIFY_CONFIG = "1" })
+check("a check of the config: put in the session's environment", loaded == 0)
+loaded, apps = run("0x15ad", false, { LIBGL_ALWAYS_SOFTWARE = "1" })
+check("a reload: put in the session's environment again", loaded == 0 and apps)
+L
+out=$(cd "$t" && HOME=$t/home SYSFS=$t/sys lua vmware.lua stub.lua 2>&1) || fail "the VMware fallback: $out"
 # Every setting the config makes (at load and in its handlers, as the runs above played them) in Hyprland's own list of
 # them (its Lua stubs; the plugins' own aside): a setting renamed or gone found here, not only at the next login
 stubs=/usr/share/hypr/stubs/hl.meta.lua
