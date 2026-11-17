@@ -5,15 +5,18 @@
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
-mkdir -p "$t/bin" "$t/u1/.local/bin" "$t/u2"
+mkdir -p "$t/bin" "$t/u1/.local/bin" "$t/u2" "$t/lib/bin"
 me=$(id -un)
+# (AgrOS's programs: in $t/lib/bin, as in /usr/lib/agros/bin, each home's ~/.local/bin linking to them)
+export AGROS_LIB=$t/lib
+ours() { local h; chmod +x "$t/lib/bin/$1"; for h in "${@:2}"; do mkdir -p "$h/.local/bin" && ln -sfn "$t/lib/bin/$1" "$h/.local/bin/$1"; done; }
 printf '#!/bin/sh\necho "%s:x:%s:%s::%s:/bin/bash"\necho "%s:x:%s:%s::%s:/bin/bash"\n' "$me" "$UID" "$UID" "$t/u1" "$me" "$UID" "$UID" "$t/u2" >"$t/bin/getent"
 # (setpriv: its options dropped, the command run as this user)
 printf '#!/bin/sh\nwhile [ "${1#--}" != "$1" ]; do shift; done\nexec "$@"\n' >"$t/bin/setpriv"
 # (the command notes its arguments, and whether it has a terminal or anything on its stdin: it mustn't, a user's
 # command run from root's pacman)
-printf '#!/bin/sh\necho "ran $*" >>"%s/ran"\n(exec </dev/tty) 2>/dev/null && echo tty >>"%s/ran"\n[ -t 1 ] && echo tty1 >>"%s/ran"\n[ -t 2 ] && echo tty2 >>"%s/ran"\nread -r x && echo "stdin $x" >>"%s/ran"\nexit 0\n' "$t" "$t" "$t" "$t" "$t" >"$t/u1/.local/bin/hook-cmd"
-chmod +x "$t/bin/"* "$t/u1/.local/bin/hook-cmd"
+printf '#!/bin/sh\necho "ran $*" >>"%s/ran"\n(exec </dev/tty) 2>/dev/null && echo tty >>"%s/ran"\n[ -t 1 ] && echo tty1 >>"%s/ran"\n[ -t 2 ] && echo tty2 >>"%s/ran"\nread -r x && echo "stdin $x" >>"%s/ran"\nexit 0\n' "$t" "$t" "$t" "$t" "$t" >"$t/lib/bin/hook-cmd"
+chmod +x "$t/bin/"*; ours hook-cmd "$t/u1"
 echo typed | script -qec "PATH=$t/bin:\$PATH $here/.local/bin/agros-each-user hook-cmd --prebuild" /dev/null >/dev/null ||
     fail "a run for each user failed"
 [[ $(cat "$t/ran") == "ran --prebuild" ]] || fail "not run once, for the user who has it: $(cat "$t/ran" 2>/dev/null)"
@@ -21,12 +24,10 @@ rm "$t/ran"
 AGROS_NO_USER_HOOKS=1 PATH=$t/bin:$PATH "$here/.local/bin/agros-each-user" hook-cmd --prebuild || fail "the install's skip failed"
 [[ ! -e $t/ran ]] || fail "run for a user during an install (AGROS_NO_USER_HOOKS)"
 # One user's command reading a descriptor it was handed (the list's, fd 4, once) doesn't take the next users with it
-mkdir -p "$t/u2/.local/bin"
-printf '#!/bin/sh\n(cat <&4) >/dev/null 2>&1\necho "ran %s" >>"%s/ran2"\n' u1 "$t" >"$t/u1/.local/bin/other-cmd"
-printf '#!/bin/sh\necho "ran %s" >>"%s/ran2"\n' u2 "$t" >"$t/u2/.local/bin/other-cmd"
-chmod +x "$t/u1/.local/bin/other-cmd" "$t/u2/.local/bin/other-cmd"
+printf '#!/bin/sh\n(cat <&4) >/dev/null 2>&1\necho ran >>"%s/ran2"\n' "$t" >"$t/lib/bin/other-cmd"
+ours other-cmd "$t/u1" "$t/u2"
 PATH=$t/bin:$PATH "$here/.local/bin/agros-each-user" other-cmd || fail "a run of other-cmd failed"
-[[ $(sort "$t/ran2" | paste -sd,) == "ran u1,ran u2" ]] || fail "a user's command read the next users away: $(cat "$t/ran2")"
+[[ $(paste -sd, "$t/ran2") == "ran,ran" ]] || fail "a user's command read the next users away: $(cat "$t/ran2")"
 # (only that value: any other, 0 too, runs it)
 AGROS_NO_USER_HOOKS=0 PATH=$t/bin:$PATH "$here/.local/bin/agros-each-user" hook-cmd --prebuild || fail "a run with AGROS_NO_USER_HOOKS=0 failed"
 [[ -e $t/ran ]] || fail "not run with AGROS_NO_USER_HOOKS=0 (only 1 skips it)"
@@ -43,18 +44,44 @@ PATH=$t/bin:$PATH "$here/.local/bin/agros-each-user" --as "$me" sh -c 'exit 3' &
 # user's command
 PATH=$t/bin:$PATH timeout 1 "$here/.local/bin/agros-each-user" --as "$me" sh -c 'sleep 37.6; :' && fail "a timed-out --as (sh -c) reported success"
 printf '#!/bin/sh
-echo "slow %s" >>"%s/slow"
+echo slow >>"%s/slow"
 exec sleep 37.9
-' u1 "$t" >"$t/u1/.local/bin/slow-cmd"
-printf '#!/bin/sh
-echo "slow %s" >>"%s/slow"
-exec sleep 37.9
-' u2 "$t" >"$t/u2/.local/bin/slow-cmd"
-chmod +x "$t/u1/.local/bin/slow-cmd" "$t/u2/.local/bin/slow-cmd"
+' "$t" >"$t/lib/bin/slow-cmd"
+ours slow-cmd "$t/u1" "$t/u2"
 start=$SECONDS
 PATH=$t/bin:$PATH timeout 1 "$here/.local/bin/agros-each-user" slow-cmd && fail "a timed-out run over the users reported success"
 ((SECONDS - start < 4)) && [[ $(wc -l <"$t/slow") == 1 ]] || fail "a stopped run over the users went on to the next one: $(cat "$t/slow")"
 gone 'sleep 37\.[69]' || fail "a stopped command, or its child, left running"
+# Only AgrOS's own program: a user's file of their own by that name (or a link elsewhere) not run, said; the others'
+# links run it
+printf '#!/bin/sh\necho ran >>"%s/ran3"\n' "$t" >"$t/lib/bin/own-cmd"
+ours own-cmd "$t/u1"
+printf '#!/bin/sh\necho mine >>"%s/ran3"\nexec sleep 37.8\n' "$t" >"$t/u2/.local/bin/own-cmd"; chmod +x "$t/u2/.local/bin/own-cmd"
+out=$(PATH=$t/bin:$PATH "$here/.local/bin/agros-each-user" own-cmd 2>&1) || fail "a run skipping a user's own file failed: $out"
+[[ $(cat "$t/ran3") == ran && $out == *"$me's ~/.local/bin/own-cmd isn't AgrOS's: not run"* ]] ||
+    fail "a user's own file run by root's hook, or its skip not said: $(cat "$t/ran3") / $out"
+rm "$t/ran3" "$t/u2/.local/bin/own-cmd"; ln -s "$t/u2/elsewhere" "$t/u2/.local/bin/own-cmd"; cp "$t/lib/bin/own-cmd" "$t/u2/elsewhere"
+PATH=$t/bin:$PATH "$here/.local/bin/agros-each-user" own-cmd 2>/dev/null || fail "a run skipping a link elsewhere failed"
+[[ $(cat "$t/ran3") == ran ]] || fail "a link to a file outside AgrOS run by root's hook: $(cat "$t/ran3")"
+# Each user's run under a time limit (pacman waits on it, its lock held): stopped, said, failed; the next user's still
+# run. One that ignores the stop (TERM) killed 10 s later
+printf '#!/bin/sh\necho late >>"%s/late"\nexec sleep 37.2\n' "$t" >"$t/lib/bin/late-cmd"
+ours late-cmd "$t/u1" "$t/u2"
+start=$SECONDS
+out=$(AGROS_EACH_USER_LIMIT=1 PATH=$t/bin:$PATH "$here/.local/bin/agros-each-user" late-cmd 2>&1) && fail "a run past its time limit reported success"
+((SECONDS - start < 8)) && [[ $(wc -l <"$t/late") == 2 && $out == *"late-cmd as $me still ran after 1 s: stopped"* ]] ||
+    fail "a run past its time limit not stopped and said, or the next user's not run: $(cat "$t/late") / $out ($((SECONDS - start)) s)"
+gone 'sleep 37\.2' || fail "a run past its time limit left running"
+printf '#!/bin/sh\ntrap "" TERM\nsleep 37.1\n' >"$t/lib/bin/stubborn-cmd"
+ours stubborn-cmd "$t/u1"
+AGROS_EACH_USER_LIMIT=1 PATH=$t/bin:$PATH "$here/.local/bin/agros-each-user" stubborn-cmd 2>/dev/null && fail "a run that ignored its stop reported success"
+gone 'sleep 37\.1' || fail "a run that ignored its stop left running"
+# Its output without control characters (a user's escapes on root's terminal), tabs and newlines kept; stderr's too
+printf '#!/bin/sh\nprintf "a\\033]0;title\\007b\\tc\\r\\n"\nprintf "\\033[2Jd\\n" >&2\n' >"$t/lib/bin/esc-cmd"
+ours esc-cmd "$t/u1"
+out=$(PATH=$t/bin:$PATH "$here/.local/bin/agros-each-user" esc-cmd 2>"$t/esc-err")
+[[ $out == $'a]0;titleb\tc' && $(cat "$t/esc-err") == '[2Jd' ]] ||
+    fail "a command's control characters let through: $(od -c <<<"$out" | head -3) / $(od -c <"$t/esc-err" | head -2)"
 # Its output from a terminal (through this's pipes) all out, in order, before the caller's next line
 # (a lot of it: the pipes still emptying when this returned, the caller's line came first)
 for _ in 1 2 3 4 5; do
