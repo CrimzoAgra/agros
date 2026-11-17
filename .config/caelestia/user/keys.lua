@@ -33,7 +33,7 @@ local kb_file = keymap and keymap:read("l")
 if keymap then keymap:close() end
 if kb_file and kb_file ~= "" then hl.config({ input = { kb_file = kb_file } }) end
 hl.on("hyprland.start", function() hl.exec_cmd("~/.local/bin/scroll-lock sync") end)
--- On the key's release: code 78 (evdev 70 + 8, as this hook gets codes; 70 here is F4).
+-- On the key's release: code 78 (evdev's 70 + 8, as this hook numbers keys: 70 here would be F4).
 -- Not a bind: those don't match it, as the key holds Mod3 itself now (the key hook below)
 
 -- Caps/Num Lock badges in the bar: Hyprland keeps each keyboard's locks apart and reports the "main" one, which is
