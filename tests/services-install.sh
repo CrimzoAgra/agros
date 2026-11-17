@@ -2,9 +2,9 @@
 # agros-system's and agros-camera-switch's install scripts (packages/*/*.install) in a throwaway root (AGROS_ROOT), a
 # systemctl stand-in: the services on at install, passwd's PAM given the keyring's line once and back at removal,
 # pacman.conf the upstream gate's Include likewise, and [agros]'s SigLevel (its database's signature required) and
-# second server (the R2 mirror, after Pages); a
-# running camera switch marked for systemd's restart, a stopped one not; the switch's saved position gone at removal,
-# the camera put back
+# second server (the R2 mirror, after Pages); the camera switch started at install, not only enabled (agros-welcome
+# --system installs it on a running desktop), a running one marked for systemd's restart, a stopped one not; the
+# switch's saved position gone at removal, the camera put back
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
@@ -87,7 +87,7 @@ calls >/dev/null
 # agros-camera-switch (running: is-active says so)
 touch "$t/active"
 pac agros-camera-switch post_install
-[[ $(calls) == *"systemctl enable camera-switch.service"* ]] || fail "the switch not enabled"
+[[ $(calls) == *"systemctl enable --now camera-switch.service"* ]] || fail "the switch not enabled and started"
 pac agros-camera-switch post_upgrade
 [[ $(calls) == *"set-property camera-switch.service Markers=+needs-restart"* ]] || fail "the running switch not marked"
 rm "$t/active"
