@@ -757,7 +757,7 @@ helper a package update just brought works before `agros-links` has linked it), 
 - **`.config/mimeapps.list`**: default apps for file types
 - **`.local/bin/appimage-open`**: opens AppImages (`.local/share/applications/appimage-open.desktop`): installs the app
   in `~/Applications` with a launcher entry, or replaces the old version, and starts it; so an app's own Update button
-  updates it by itself
+  updates it by itself. One on a drive that won't run it (a USB stick's FAT, a noexec mount) is copied there first
 - **`.local/bin/appimage-update`**: updates those AppImages from their GitHub releases, checked against the release's
   checksums
 - **`.local/bin/flatpak-bundle-update`**: updates Flatpaks installed from a downloaded `.flatpak` file (no Flatpak repo,

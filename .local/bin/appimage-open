@@ -148,7 +148,20 @@ def main() -> None:
     if len(args) != 1 or not os.path.isfile(args[0]):
         sys.exit(__doc__)
     src = os.path.abspath(args[0])
-    os.chmod(src, os.stat(src).st_mode | 0o111)
+    # Made executable. On a drive that won't run it (a USB stick's FAT, a read-only or noexec mount; a file not yours):
+    # a copy of it in ~/Applications, which becomes the installed file or, with no launcher entry inside, is what runs
+    # (it failed, a traceback no one saw, nothing installed or started)
+    try:
+        os.chmod(src, os.stat(src).st_mode | 0o111)
+    except OSError:
+        pass
+    if not os.access(src, os.X_OK):
+        os.makedirs(APPS, exist_ok=True)
+        copy = f"{APPS}/{os.path.basename(src)}"
+        shutil.copyfile(src, f"{copy}.new")
+        os.chmod(f"{copy}.new", 0o755)
+        os.replace(f"{copy}.new", copy)
+        src = copy
 
     with tempfile.TemporaryDirectory() as tmp:
         found = entry_of(src, tmp)

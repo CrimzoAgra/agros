@@ -28,6 +28,7 @@ for d, dirs, files in os.walk(img):
 EOF
 chmod +x "$t/Demo-x86_64.AppImage"
 cp "$t/Demo-x86_64.AppImage" "$t/again.AppImage"  # (installing moves it: a copy for the second home below)
+cp "$t/Demo-x86_64.AppImage" "$t/stick.AppImage"  # (and one on a drive that won't run it, below)
 export NOTIFY_WHEN_UP_TRIES=1  # (its notifications in the background: not tried for a minute after the test)
 for c in pacman notify-send update-desktop-database sudo pkexec; do printf '#!/bin/sh\nexit 1\n' >"$t/bin/$c"; done
 chmod +x "$t"/bin/*
@@ -48,4 +49,26 @@ printf 'not a program' >"$t/broken.AppImage"
 out=$(HOME=$t/home PATH=$t/bin:$PATH python3 "$here/.local/bin/appimage-open" --install "$t/broken.AppImage" 2>&1) &&
     fail "a broken AppImage installed"
 [[ $out == *"no launcher entry inside"* && $out != *Traceback* ]] || fail "a broken AppImage not said: $out"
+# On a drive that won't run it (a USB stick's FAT, a noexec or read-only mount: not made executable, nor runnable):
+# a copy installed, not a traceback; the stick's own file left as it is
+HOME=$t/stick-home PATH=$t/bin:$PATH python3 -I - "$here/.local/bin/appimage-open" "$t/stick.AppImage" <<'P' ||
+import importlib.machinery, importlib.util, os, sys
+script, stick = sys.argv[1:]
+loader = importlib.machinery.SourceFileLoader("appimage_open", script)
+mod = importlib.util.module_from_spec(importlib.util.spec_from_loader("appimage_open", loader))
+loader.exec_module(mod)
+access, chmod = os.access, os.chmod
+os.access = lambda p, m, **k: False if p == stick else access(p, m, **k)
+def no_chmod(p, *a, **k):
+    if p == stick:
+        raise PermissionError(1, "Operation not permitted", p)
+    return chmod(p, *a, **k)
+os.chmod = no_chmod
+sys.argv = ["appimage-open", "--install", stick]
+mod.main()
+P
+    fail "an AppImage on a drive that won't run it not installed"
+[[ -x $t/stick-home/Applications/demo.AppImage && -f $t/stick.AppImage ]] ||
+    fail "not installed from a copy, or the stick's file taken: $(ls "$t/stick-home/Applications" "$t")"
+[[ -z $(compgen -G "$t/stick-home/Applications/*.new") ]] || fail "a copy's temporary file left"
 echo "ok appimage-open"
