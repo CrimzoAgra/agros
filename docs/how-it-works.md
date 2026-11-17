@@ -840,9 +840,10 @@ brings each change; nothing to run by hand).
   - The ISO build (agros-iso's `check_gate`) stops when its Hyprland isn't approved, keeping the published ISO; the
     ISO keeps a copy of that approved set, and a new install gets it rather than the newest unchecked one (agros-iso's
     `agros-gate-install`, an installer step)
-  - The Include comes and goes with the file (`agros-system`'s install adds it, its removal takes it out): pacman can't
-    read a config including a missing file, and the ISO's `pacman.conf` for the installed system is in place before
-    anything is installed
+  - The Include comes and goes with the file (`agros-system`'s install adds it, and each upgrade where it's missing: a
+    machine from before the gate, a merged `pacman.conf.pacnew`; its removal takes it out): pacman can't read a config
+    including a missing file, and the ISO's `pacman.conf` for the installed system is in place before anything is
+    installed
 - **`.local/bin/update-apps`**: updates everything (system and AUR apps with `paru` through the upstream gate, then each kind
   `update-kinds` runs: firmware with fwupd, Flatpaks, AppImages, Capri, Proton builds, developer tools), like at boot.
   `--list` is what the Updates app shows (`update-kinds --list`); every 6 hours (`update-check.timer`) it checks, and when

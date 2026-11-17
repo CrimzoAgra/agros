@@ -59,17 +59,26 @@ agros_repo() {
     [[ $new == "$(cat "$conf")" ]] || printf '%s\n' "$new" >"$conf"
 }
 
-# The files no one uses, never unpacked (this package's agros-noextract.conf): pacman.conf includes it, added at install
-# and at upgrade too (machines installed before it), as the gate's. The ISO's copy of the list (agros-iso's
-# agros-trim.sh puts it in the installed pacman.conf, ending "# agros-iso", for the packages installed before this one)
-# taken out once the Include is in: one list after that, this package's
-include_noextract() {
+# pacman_include <name>: pacman.conf's Include of this package's /etc/pacman.d/<name>.conf, after [options], where it
+# has none (one with a comment after it counts). Both at install and at upgrade: a machine installed before the file
+# came, or whose pacman.conf lost the line (a merged .pacnew), gets it back. Its removal takes them out again
+pacman_include() {
     local conf=$_r/etc/pacman.conf
     [[ -f $conf ]] || return 0
-    if ! grep -qE '^[[:space:]]*Include[[:space:]]*=[[:space:]]*/etc/pacman\.d/agros-noextract\.conf[[:space:]]*(#.*)?$' "$conf"; then
-        sed -i '/^\[options\]/a Include = /etc/pacman.d/agros-noextract.conf' "$conf"
-    fi
-    sed -i '/^NoExtract = .* # agros-iso$/d' "$conf"
+    grep -qE "^[[:space:]]*Include[[:space:]]*=[[:space:]]*/etc/pacman\.d/$1\.conf[[:space:]]*(#.*)?$" "$conf" ||
+        sed -i "/^\[options\]/a Include = /etc/pacman.d/$1.conf" "$conf"
+}
+# The upstream gate (agros-gate.conf), included from here with the file, not by the ISO's pacman.conf: that one is in
+# place before anything is installed, and pacman can't read a config including a missing file (the installer's first
+# pacman run failed, the disk already wiped). At upgrade too: without it (a machine from before the gate, a merged
+# .pacnew) a manual pacman -Syu took Hyprland unchecked.
+# The files no one uses, never unpacked (agros-noextract.conf): the ISO's copy of the list (agros-iso's agros-trim.sh
+# puts it in the installed pacman.conf, ending "# agros-iso", for the packages installed before this one) taken out once
+# the Include is in: one list after that, this package's
+pacman_includes() {
+    pacman_include agros-gate
+    pacman_include agros-noextract
+    [[ -f $_r/etc/pacman.conf ]] && sed -i '/^NoExtract = .* # agros-iso$/d' "$_r/etc/pacman.conf"
 }
 
 # The services on, and the keyring's password changed with yours (passwd's PAM)
@@ -81,14 +90,7 @@ post_install() {
     if [[ -f $_r/etc/pam.d/passwd ]] && ! grep -q pam_gnome_keyring "$_r/etc/pam.d/passwd"; then
         echo '-password   optional     pam_gnome_keyring.so' >>"$_r/etc/pam.d/passwd"
     fi
-    # The upstream gate's file (this package's) included by pacman.conf, added here with the file, not by the ISO's
-    # pacman.conf: that one is in place before anything is installed, and pacman can't read a config including a
-    # missing file (the installer's first pacman run failed, the disk already wiped). Its removal takes it out again
-    local conf=$_r/etc/pacman.conf
-    if [[ -f $conf ]] && ! grep -qE '^[[:space:]]*Include[[:space:]]*=[[:space:]]*/etc/pacman\.d/agros-gate\.conf[[:space:]]*(#.*)?$' "$conf"; then
-        sed -i '/^\[options\]/a Include = /etc/pacman.d/agros-gate.conf' "$conf"
-    fi
-    include_noextract
+    pacman_includes
     agros_repo
     quiet_ufw
     quiet_passim
@@ -96,7 +98,7 @@ post_install() {
 }
 
 post_upgrade() {
-    include_noextract
+    pacman_includes
     agros_repo
     quiet_ufw
     quiet_passim
