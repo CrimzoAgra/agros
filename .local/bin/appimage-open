@@ -2,13 +2,14 @@
 """Opens AppImages: installs the app (or the new version of it) and starts it.
 
 AppImages open with this (mimeapps.list), so an app's own "Update" button, which downloads the new
-AppImage and opens it, updates the app by itself: the file goes to ~/Applications/<app>.AppImage in place of
+AppImage and opens it, updates the app after one click: the file goes to ~/Applications/<app>.AppImage in place of
 the old version (which is closed first), the launcher entry and icon come from inside the AppImage, and the
 app starts again. An AppImage without a launcher entry inside just runs. When installing (--install: appimage-update,
 not a file you open) the first time, a system package with the same launcher entry (the app installed another way
 before, e.g. from the AUR) is removed, asking for your password, so there's one copy; its updates must keep that
-launcher entry. A file you open is asked about first (it runs as you), and read without running it where it can be
-(unsquashfs); one whose launcher entry is another app's (an installed app's, or a file of yours) isn't installed.
+launcher entry. A file you open is asked about first (it runs as you): an installed app's new version, opened from
+that app, as "Update <Name>?". It's read without running it where it can be (unsquashfs); one whose launcher entry is
+another app's (an installed app's, or a file of yours) isn't installed.
 
   appimage-open <file.AppImage>             install/update and start it
   appimage-open --install <file.AppImage>   install/update only (appimage-update)
@@ -71,25 +72,43 @@ def extract(appimage: str, pattern: str, into: str, run: bool = True) -> None:
         pass
 
 
+def installed_name(app: str) -> str:
+    """The name in an installed app's launcher entry (this made it, from its first install), else its id"""
+    for entry in (f"{ENTRIES}/{app}.desktop", f"{ENTRIES}/{app.lower()}.desktop"):
+        try:
+            with open(entry, errors="replace") as f:
+                found = re.search(r"^Name=(.+)$", f.read(), re.M)
+        except OSError:
+            continue
+        if found:
+            return found.group(1).strip()
+    return app
+
+
 def ask_to_run(src: str) -> bool:
     """You said to run it (zenity), before it's made runnable or run: a file you opened, from a download or a stick.
-    Not asked for one in ~/Applications (installed), nor the new version an installed app's own Update button opens:
-    the same app (its launcher entry's id, read by unsquashfs, never run) as the installed AppImage it's opened from
-    (its APPIMAGE). Any other file opened from that app (a download, a link), or from what it started (a terminal's
-    shell, which inherits APPIMAGE too), is asked about. No answer (no zenity, no desktop): not run"""
+    Not asked for one in ~/Applications (installed). The new version an installed app's own Update button opens is
+    asked too, as "Update <Name>?" (one click): the same app (its launcher entry's id, read by unsquashfs, never run)
+    as the installed AppImage it's opened from (its APPIMAGE). Not taken unasked on that: APPIMAGE is inherited by all
+    the app starts (a browser's downloads it opens, a terminal's shell), and a site's file naming itself as the app
+    would have closed it and taken its place. No answer (no zenity, no desktop): not run"""
     if os.path.realpath(src).startswith(os.path.realpath(APPS) + "/"):
         return True
+    name = os.path.basename(src)
+    question = ["--title=Run this AppImage?", "--ok-label=Run", f"--text={name} is a program: it runs as you, with your "
+                "files. Run it (and install it in ~/Applications) only if you trust where it came from."]
     running = os.environ.get("APPIMAGE", "")
     if running and os.path.realpath(running).startswith(os.path.realpath(APPS) + "/"):
         with tempfile.TemporaryDirectory() as tmp:
             found = entry_of(src, tmp, run=False)
         if found and os.path.realpath(f"{APPS}/{found[0].lower()}.AppImage") == os.path.realpath(running):
-            return True
+            app = installed_name(found[0])
+            question = [f"--title=Update {app}?", "--ok-label=Update", f"--text={name} is a new version of {app}: "
+                        f"{app} closes, and the new version takes its place and starts. Update only if it came from "
+                        f"{app}'s own Update button."]
     try:
-        return subprocess.run(["zenity", "--question", "--no-markup", "--title=Run this AppImage?", "--ok-label=Run",
-                               "--cancel-label=Cancel", f"--text={os.path.basename(src)} is a program: it runs as you, "
-                               "with your files. Run it (and install it in ~/Applications) only if you trust where it "
-                               "came from."], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
+        return subprocess.run(["zenity", "--question", "--no-markup", *question, "--cancel-label=Cancel"],
+                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
     except OSError:
         return False
 

@@ -45,4 +45,4 @@ These install when you choose **Install hardware apps and VMware** after your fi
   `paru -S <name>` installs one.
 - **Flatpaks**: `flatpak install <name>`.
 - **AppImages**: double-click one. It asks before running it, then installs itself, appears in the app menu, and
-  keeps itself updated.
+  keeps itself updated. An app's own **Update** button asks too ("Update <app>?"): say yes only when you clicked it.

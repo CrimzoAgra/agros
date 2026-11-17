@@ -32,8 +32,8 @@ cp "$t/Demo-x86_64.AppImage" "$t/stick.AppImage"  # (and one on a drive that won
 cp "$t/Demo-x86_64.AppImage" "$t/orig.AppImage"  # (and one kept as it is, for the later cases)
 export NOTIFY_WHEN_UP_TRIES=1  # (its notifications in the background: not tried for a minute after the test)
 for c in pacman notify-send update-desktop-database sudo pkexec; do printf '#!/bin/sh\nexit 1\n' >"$t/bin/$c"; done
-# (zenity: asked to run a file opened, noted; "Run" unless $NO)
-printf '#!/bin/sh\necho asked >>"%s/asked"\n[ -z "$NO" ]\n' "$t" >"$t/bin/zenity"
+# (zenity: asked to run a file opened, noted with what it asked; "Run" unless $NO)
+printf '#!/bin/sh\necho "asked $*" >>"%s/asked"\n[ -z "$NO" ]\n' "$t" >"$t/bin/zenity"
 # (only the system's launcher entries the test makes)
 export XDG_DATA_DIRS=$t/sys
 chmod +x "$t"/bin/*
@@ -104,7 +104,7 @@ rm -f "$t/asked"
 HOME=$t/home PATH=$t/bin:$PATH python3 "$here/.local/bin/appimage-open" --install "$t/ask.AppImage" >/dev/null 2>&1 || fail "--install failed"
 [[ ! -e $t/asked ]] || fail "--install (appimage-update) asked"
 # Opened from an installed AppImage (its APPIMAGE, which a download it opens or a terminal's shell inherits): asked all
-# the same, unless it's that app's own new version (read without running it: below, with unsquashfs)
+# the same; that app's own new version too, as an update (read without running it: below, with unsquashfs)
 cp "$t/home/Applications/demo.AppImage" "$t/from-app.AppImage"; chmod 644 "$t/from-app.AppImage"
 NO=1 APPIMAGE=$t/home/Applications/demo.AppImage HOME=$t/from-home PATH=$t/bin:$PATH \
     python3 "$here/.local/bin/appimage-open" "$t/from-app.AppImage" || fail "a refused run from an installed app failed"
@@ -143,12 +143,21 @@ if command -v mksquashfs >/dev/null && command -v unsquashfs >/dev/null; then
         fail "an AppImage not read with unsquashfs"
     grep -qx "Exec=$t/real-home/Applications/demo.AppImage %U" "$t/real-home/.local/share/applications/demo.desktop" &&
         [[ $(cat "$t/real-home/.local/share/icons/demo-appimage.png") == png ]] || fail "an AppImage's entry or icon not read with unsquashfs"
-    # That app's own new version, opened by its Update button (its APPIMAGE the installed file): not asked, installed
-    cp "$t/real-home/Applications/demo.AppImage" "$t/real-new.AppImage"; rm -f "$t/asked"
+    # That app's own new version, opened by its Update button (its APPIMAGE the installed file): asked all the same
+    # (APPIMAGE is inherited by all the app starts: a site's download naming itself as the app would take its place),
+    # as an update; no, and the installed app stays as it is
+    cp "$t/real-home/Applications/demo.AppImage" "$t/real-new.AppImage"; echo '# new' >>"$t/real-new.AppImage"; rm -f "$t/asked"
     NO=1 APPIMAGE=$t/real-home/Applications/demo.AppImage HOME=$t/real-home PATH=$t/bin:$PATH \
+        python3 "$here/.local/bin/appimage-open" "$t/real-new.AppImage" >/dev/null 2>&1 || fail "a refused update failed"
+    [[ $(cat "$t/asked" 2>/dev/null) == *"--title=Update Demo?"*"--ok-label=Update"* && -e $t/real-new.AppImage ]] &&
+        ! cmp -s "$t/real-new.AppImage" "$t/real-home/Applications/demo.AppImage" ||
+        fail "an app's own update (its APPIMAGE) not asked as an update, or installed after a no: $(cat "$t/asked" 2>/dev/null)"
+    # ...yes, and it's installed
+    rm -f "$t/asked"
+    APPIMAGE=$t/real-home/Applications/demo.AppImage HOME=$t/real-home PATH=$t/bin:$PATH \
         python3 "$here/.local/bin/appimage-open" "$t/real-new.AppImage" >/dev/null 2>&1 || fail "an app's own update not installed"
-    [[ ! -e $t/asked && ! -e $t/real-new.AppImage ]] ||
-        fail "an app's own update (its APPIMAGE) asked about, or not installed"
+    [[ $(cat "$t/asked" 2>/dev/null) == *"--title=Update Demo?"* && ! -e $t/real-new.AppImage ]] ||
+        fail "an app's own update not installed after a yes: $(cat "$t/asked" 2>/dev/null)"
 else
     skipped "no squashfs-tools here: an AppImage read without running it not checked"
 fi
