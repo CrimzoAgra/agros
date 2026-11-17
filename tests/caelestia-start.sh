@@ -45,4 +45,21 @@ mkdir -p "$t/home/.local/state/caelestia/wallpaper"; echo /pics/mine.jpg >"$t/ho
 run
 grep -q '^caelestia wallpaper' "$t/home/started" && fail "an existing install: its wallpaper replaced"
 [[ -e $t/home/.local/state/agros/wallpaper-set ]] || fail "an existing install: no mark"
+
+# Up but its config never loaded (qs ipc unanswered: Quickshell running with nothing on screen, no bar, no
+# notifications), on the overlay's changes (its shell.qml a file of its own here): handed to caelestia-restart
+# --without-changes. On Caelestia as it comes (links only): nothing more to try. (No waiting the 30 s: sleep does nothing)
+printf '#!/bin/sh\n[ "$1" = ipc ] && exit 255\necho "Config path: /x/quickshell/caelestia/shell.qml"\n' >"$t/bin/qs"
+printf '#!/bin/sh\n' >"$t/bin/sleep"
+printf '#!/bin/sh\necho "restart $*" >>"$HOME/started"\n' >"$t/home/.local/bin/caelestia-restart"
+chmod +x "$t/bin/qs" "$t/bin/sleep" "$t/home/.local/bin/caelestia-restart"
+: >"$t/home/started"
+run
+[[ $(tail -1 "$t/home/started") == "restart --without-changes" ]] ||
+    fail "a shell whose config never loaded not started again without the changes: $(cat "$t/home/started")"
+grep -q "didn't load with AgrOS's changes" "$log" || fail "a shell whose config never loaded: not logged"
+sed -i 's|touch "\$HOME/.config/quickshell/caelestia/shell.qml"|ln -sf /x "$HOME/.config/quickshell/caelestia/shell.qml"|' "$t/home/.local/bin/caelestia-overlay"
+rm -rf "$t/home/.config/quickshell/caelestia"; : >"$t/home/started"
+run
+grep -q '^restart' "$t/home/started" && fail "a shell on Caelestia as it comes restarted again: $(cat "$t/home/started")"
 echo "ok caelestia-start"

@@ -301,6 +301,15 @@ if run >/dev/null; then fail "a broken patch.py reported success"; fi
 [[ -L $dst/shell.qml ]] || fail "a broken patch.py left no shell"
 grep -q "without your changes" "$skipped" || fail "a broken patch.py wasn't reported"
 
+# --without-changes (caelestia-restart's, with the shell stopped: its config never loaded on them): Caelestia as it
+# comes, why written down, not marked built (the next build puts the changes back), done as asked (exit 0)
+cp "$t/patch.orig" "$p"; run >/dev/null || fail "the overlay failed again with patch.py back"
+out=$(HOME=$t XDG_STATE_HOME=$t/state PATH=$t/bin:$PATH DOTS_SETTINGS=$t/bin/dots-settings CAELESTIA_REBUILDING=1 \
+    "$here/.local/bin/caelestia-overlay" --without-changes "it didn't load" 2>&1) || fail "--without-changes failed: $out"
+[[ -z $(find "$dst" -type f) && -L $dst/shell.qml ]] || fail "--without-changes left changes: $(find "$dst" -type f | head -3)"
+[[ $(cat "$skipped") == "it didn't load" ]] || fail "--without-changes: why not written down: $(cat "$skipped")"
+grep -q '^Patched' <<<"$(run)" || fail "after --without-changes, the next build didn't put the changes back"
+
 # Every patch fitting but leaving QML that doesn't parse (a whole shell that wouldn't start): Caelestia as it comes
 if command -v /usr/lib/qt6/bin/qmllint qmllint6 >/dev/null 2>&1; then
     cp -r "$here/.local/share/caelestia-overlay/." "$t/.local/share/caelestia-overlay/"

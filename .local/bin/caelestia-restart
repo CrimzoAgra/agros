@@ -3,6 +3,12 @@
 # environment: your login shell as $SHELL, none of the editor/Claude variables of whatever started this.
 #   caelestia-restart --rebuild   the overlay rebuilt while the shell is stopped (dots-settings): rebuilt under the
 #                                 running shell, its folder swapped beneath it, Hyprland dropped the shell
+#   caelestia-restart --without-changes   started again on Caelestia as it comes (caelestia-start's, when the shell
+#                                 it started on the overlay never loaded its config)
+# A shell that comes up but never loads its config (Quickshell stays running with nothing on screen when a part of it
+# can't be created: AgrOS's changes on a Caelestia or Quickshell other than the one CI checked them against, a type
+# renamed) leaves no bar, no notifications and no lock screen: started again on Caelestia as it comes (caelestia-overlay
+# --without-changes), said once it's up, exit 3. Tried with the changes again at the next login or update
 # With a game open it waits until the game closes (in the background, said in a notification), whoever asked: the
 # Settings app, a rebuild handed over by caelestia-overlay, the shortcut
 # shellcheck disable=SC2046  # one variable name per word on purpose
@@ -63,47 +69,82 @@ flock 9
 # /etc/xdg/quickshell/caelestia, which "qs -c caelestia kill" (now the overlay's) doesn't match, and two shells
 # doubled the room the bar keeps (maximised and tiled windows' gaps)
 pids() { qs list --all 2>/dev/null | awk '/Process ID:/ {pid = $3} /Config path: .*\/quickshell\/caelestia\/shell\.qml$/ {print pid}'; }
-old=$(pids)
-for pid in $old; do
-    qs kill --pid "$pid" >/dev/null 2>&1
-done
-# Until it's gone (at most 5 s): one still closing makes the new one (-n) not start at all. Still there: killed outright,
-# and if even that doesn't take, no rebuild (it would swap the folder under it)
+# Until it's gone (at most 5 s): one still closing makes the new one (-n) not start at all
 gone() { for _ in $(seq "$1"); do [[ -z $(pids) ]] && return 0; sleep 0.1; done; return 1; }
-if ! gone 50; then
+# stop: every Caelestia stopped (those it stops in $old); one still there killed outright, 1 if even that doesn't take
+stop() {
+    local pid
+    old=$(pids)
+    for pid in $old; do
+        qs kill --pid "$pid" >/dev/null 2>&1
+    done
+    gone 50 && return 0
     for pid in $(pids); do
         kill -9 "$pid" 2>/dev/null
     done
-    gone 20 || stuck=1
-fi
+    gone 20
+}
+# start: the shell started; 0 once its config has loaded (it answers on its IPC: Caelestia's targets), 2 when it's up
+# but its config never loads, 1 when it never comes up (at most 30 s each)
+start() {
+    local new=''
+    # In a systemd scope of its own: started from an app's terminal (VS Code...), it would otherwise be in that app's
+    # scope, and closing or force-quitting the app would take the shell down with it
+    # (named to the nanosecond: two restarts in one second had the second's scope refused, and no shell)
+    systemd-run --user --scope --quiet --collect --unit="caelestia-$(date +%s%N)" setsid qs -c caelestia -n -d >/dev/null 2>&1 9>&-
+    # (a new one: not one of those stopped, should one linger)
+    for _ in $(seq 300); do
+        new=$(grep -vxF -f <(printf '%s\n' "$old") <<<"$(pids)" | head -n1)
+        [[ -n $new ]] && break
+        sleep 0.1
+    done
+    [[ -n $new ]] || return 1
+    for _ in $(seq 300); do qs ipc --pid "$new" show >/dev/null 2>&1 && return 0; sleep 0.1; done
+    return 2
+}
 # Still there: no second one started beside it (two shells, the bar's room doubled), nor a rebuild under it
-[[ -z ${stuck:-} ]] || { echo "caelestia-restart: Caelestia wouldn't stop: not restarted${1:+, not rebuilt}"; exit 3; }
+stop || { echo "caelestia-restart: Caelestia wouldn't stop: not restarted${1:+, not rebuilt}"; exit 3; }
 rc=0
+unloaded="Caelestia didn't load with your changes (one of them its Caelestia or Quickshell can't create), so it runs without them; its log: qs log -c caelestia"
 if [[ ${1:-} == --rebuild ]]; then
     # (a failure the exit status too, 3: the Settings app says "Applying it failed"; the shell started again all the
     # same, and what it has then, none of your changes or the ones before, said once it's up, below; caelestia-overlay
     # tells 3 from "not handed over")
     CAELESTIA_REBUILDING=1 "$helpers/caelestia-overlay" >/dev/null || { echo "caelestia-restart: the overlay didn't build (said once Caelestia is up)"; rc=3; }
+elif [[ ${1:-} == --without-changes ]]; then
+    CAELESTIA_REBUILDING=1 "$helpers/caelestia-overlay" --without-changes "$unloaded" >/dev/null
+    rc=3
 fi
 # From home: apps opened from the launcher and dock start in Caelestia's folder (Thunar opens there)
 cd "$HOME" || exit 1
-# In a systemd scope of its own: started from an app's terminal (VS Code...), it would otherwise be in that app's
-# scope, and closing or force-quitting the app would take the shell down with it
-# (named to the nanosecond: two restarts in one second had the second's scope refused, and no shell)
-systemd-run --user --scope --quiet --collect --unit="caelestia-$(date +%s%N)" setsid qs -c caelestia -n -d >/dev/null 2>&1 9>&-
-# (the lock kept until it's up, at most 30 s; never up: 3, a failure, as a failed rebuild)
+# (the lock kept until it's up and loaded; not: 3, a failure, as a failed rebuild)
+start
+s=$?
+# Up, its config never loaded, on the overlay's changes (its own files there): again without them
+if ((s == 2)) && [[ -n $(find "$HOME/.config/quickshell/caelestia" -type f -name '*.qml' -print -quit 2>/dev/null) ]]; then
+    echo "caelestia-restart: its config didn't load with AgrOS's changes: started again without them"
+    if stop && CAELESTIA_REBUILDING=1 "$helpers/caelestia-overlay" --without-changes "$unloaded" >/dev/null; then
+        start
+        s=$?
+    else
+        s=1
+    fi
+    plain=1 rc=3
+fi
 up=''
-# (a new one: not one of those stopped above, should one linger)
-for _ in $(seq 300); do [[ -n $(grep -vxF -f <(printf '%s\n' "$old") <<<"$(pids)") ]] && { up=1; break; }; sleep 0.1; done
-[[ -n $up ]] || { echo "caelestia-restart: Caelestia didn't start"; rc=3; }
+case $s in
+    0) up=1 ;;
+    1) echo "caelestia-restart: Caelestia didn't start"; rc=3 ;;
+    *) echo "caelestia-restart: Caelestia started but its config didn't load (qs log -c caelestia)"; rc=3 ;;
+esac
 exec 9>&-
-# A rebuild's skipped changes said now, the new shell (the notification server) up: said during the build, with it
+# A rebuild's skipped changes (or the changes left out) said now, the new shell (the notification server) up: said during the build, with it
 # stopped, it went to nobody (dots-warn: its notifications come up just after it shows in qs list)
 skipped=${XDG_STATE_HOME:-$HOME/.local/state}/caelestia-overlay-skipped
 # (in the background: dots-warn tries for a minute when the shell never came up, and the caller waited on it. In a
 # scope of its own: run by the after-game waiter, this is its unit's main process, and its end killed the unit's
 # cgroup, a setsid'd warning in it too; without a user manager, detached)
-if [[ ${1:-} == --rebuild && -s $skipped ]]; then
+if [[ (${1:-} == --rebuild || ${1:-} == --without-changes || -n ${plain:-}) && -s $skipped ]]; then
     set -- setsid -f "$helpers/dots-warn" "Caelestia changed: some of your changes are off" "$(cat "$skipped")"
     systemd-run --user --scope --quiet --collect "$@" >/dev/null 2>&1 </dev/null || "$@" >/dev/null 2>&1 </dev/null
 fi

@@ -36,3 +36,12 @@ flock 9
 # (even when the build failed: Caelestia as it comes, rather than no bar at all; it daemonizes and returns)
 caelestia shell -d >>"$log" 2>&1 9>&-
 for _ in $(seq 300); do "$helpers/qs-running" /quickshell/caelestia/shell.qml && break; sleep 0.1; done
+# ...and its config loaded: it answers on its IPC. One that doesn't load leaves Quickshell running with nothing on
+# screen (no bar, no notifications, no lock screen): AgrOS's changes on a Caelestia or Quickshell other than the one CI
+# checked them against (a type renamed). Not within 30 s, on the overlay's changes (its own files there): started again
+# without them, said once it's up (caelestia-restart --without-changes; the lock let go first, as it takes it)
+for _ in $(seq 300); do qs ipc -c caelestia show >/dev/null 2>&1 && exit 0; sleep 0.1; done
+[[ -n $(find "$HOME/.config/quickshell/caelestia" -type f -name '*.qml' -print -quit 2>/dev/null) ]] || exit 0
+echo "$(date '+%F %T') its config didn't load with AgrOS's changes: started again without them" >>"$log"
+exec 9>&-
+exec "$helpers/caelestia-restart" --without-changes >>"$log" 2>&1

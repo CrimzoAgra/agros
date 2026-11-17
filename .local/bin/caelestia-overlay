@@ -62,6 +62,10 @@
 # files, the Settings app's caelestia.* switches): left as it is, the shell not restarted (the pacman hook runs this on
 # every AgrOS update). A restart needed while a game is open waits until it closes.
 #   caelestia-overlay --running   exit 0 if a Caelestia runs from the overlay (the scripts' one way to ask)
+#   caelestia-overlay --without-changes <why>   Caelestia as it comes (links only, none of the changes), <why> written
+#                                 down as a failed build's is and not marked built (tried again at the next login or
+#                                 update): caelestia-restart's, the shell stopped, when one started on the changes but
+#                                 its config never loaded
 set -euo pipefail
 src=/etc/xdg/quickshell/caelestia
 dst="$HOME/.config/quickshell/caelestia"
@@ -69,6 +73,8 @@ helpers=$(dirname "$(readlink -f "$0")")  # (the shared helpers, beside this)
 # A Caelestia running from this folder (its path resolved too, for a HOME through a link)
 running() { "$helpers/qs-running" "Config path: $dst/shell.qml" "Config path: $(realpath -m "$dst")/shell.qml"; }
 if [[ ${1:-} == --running ]]; then running; exit; fi
+plain=
+[[ ${1:-} != --without-changes ]] || plain=${2:?usage: caelestia-overlay --without-changes <why>}
 
 [[ -d $src ]] || { echo "Caelestia not installed at $src"; exit 1; }
 mkdir -p "${dst%/*}"
@@ -86,7 +92,7 @@ stamp=$( {
     "${DOTS_SETTINGS:-$helpers/dots-settings}" values 2>/dev/null |
         jq -c 'with_entries(select(.key | startswith("caelestia.")))' 2>/dev/null || true
 } | sha256sum | cut -d' ' -f1)
-if [[ -e $dst/shell.qml && $(cat "$dst/.agros-built" 2>/dev/null) == "$stamp" ]]; then
+if [[ -z $plain && -e $dst/shell.qml && $(cat "$dst/.agros-built" 2>/dev/null) == "$stamp" ]]; then
     echo "Caelestia overlay up to date: nothing to rebuild"
     exit 0
 fi
@@ -113,9 +119,8 @@ fi
 tmp=$(mktemp -d "$dst.new.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT
 rmdir "$tmp" && cp -as "$src" "$tmp"
-rc=0
-out=$(python3 "$share/patch.py" "$src" "$tmp" 2>&1) || rc=$?
-printf '%s\n' "$out"
+rc=0 out=
+[[ -n $plain ]] || { out=$(python3 "$share/patch.py" "$src" "$tmp" 2>&1) || rc=$?; printf '%s\n' "$out"; }
 # Patches that no longer fit: kept for dotfiles-check, and said now if you're logged in (this also runs from the
 # pacman hook, where nobody reads the output)
 skipped="${XDG_STATE_HOME:-$HOME/.local/state}/caelestia-overlay-skipped"
@@ -135,7 +140,10 @@ fi
 # Failed with no patch to blame (patch.py itself broken), or broken QML: Caelestia as it comes, none of my changes.
 # Not the old folder: after a Caelestia update its copies are of the old version, next to links to the new one
 failed=false
-if [[ -n $broken ]]; then
+if [[ -n $plain ]]; then
+    failed=true
+    echo "$plain" >"$skipped"
+elif [[ -n $broken ]]; then
     failed=true
     echo "The overlay left broken QML (${broken# }), Caelestia runs without your changes" >"$skipped"
     rm -rf "$tmp" && cp -as "$src" "$tmp"
@@ -158,4 +166,5 @@ fi
 $failed || echo "$stamp" >"$tmp/.agros-built"
 # Swapped in one step: the folder is never missing
 if [[ -e $dst ]]; then mv -T --exchange "$tmp" "$dst"; else mv -T "$tmp" "$dst"; fi
-if $failed; then exit 1; fi
+# (--without-changes done as asked: not a failure)
+if $failed && [[ -z $plain ]]; then exit 1; fi

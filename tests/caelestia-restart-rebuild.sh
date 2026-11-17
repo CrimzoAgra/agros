@@ -101,5 +101,37 @@ for arg in --rebuild ""; do
     [[ $(tr '\n' ' ' <"$t/hypr") == "$unsilenced" ]] || fail "Spotify's window rules left on, the shell not restarted ($arg): $(tr '\n' ' ' <"$t/hypr")"
     grep -qE '^(start|rebuilt)' "$t/log" && fail "started or rebuilt beside a shell that wouldn't stop ($arg): $(tr '\n' ' ' <"$t/log")"
 done
+# A shell that comes up but never loads its config (qs ipc unanswered: Quickshell left running with nothing on screen),
+# on the overlay's changes (a file of its own there): stopped, started again on Caelestia as it comes (caelestia-overlay
+# --without-changes), said once it's up, 3. Here it loads whenever $t/noload isn't there and the changes are gone; each
+# start a new process ID. (No waiting the 30 s: sleep does nothing)
+cat >"$t/bin/qs" <<S
+#!/bin/sh
+case "\$1" in
+    list) [ -e "$t/running" ] && printf 'Process ID: %s\nConfig path: /x/quickshell/caelestia/shell.qml\n' "\$(cat "$t/running")" ;;
+    kill) rm -f "$t/running"; echo kill >>"$t/log" ;;
+    -c) echo start >>"$t/log"; n=\$(cat "$t/n" 2>/dev/null || echo 43); echo \$((n + 1)) >"$t/n"; echo "\$n" >"$t/running" ;;
+    ipc) [ ! -e "$t/noload" ] && [ ! -e "$t/home/.config/quickshell/caelestia/mine.qml" ] ;;
+esac
+S
+cat >"$t/home/.local/bin/caelestia-overlay" <<S
+#!/bin/sh
+[ "\$1" = --without-changes ] || exit 0
+echo "without changes" >>"$t/log"; rm -f "$t/home/.config/quickshell/caelestia/mine.qml"; echo "\$2" >"$t/home/.local/state/caelestia-overlay-skipped"
+S
+mkdir -p "$t/home/.config/quickshell/caelestia"; touch "$t/home/.config/quickshell/caelestia/mine.qml"
+run
+((rc == 3)) && [[ $(tr '\n' ' ' <"$t/log") == "kill start kill without changes start notified " ]] ||
+    fail "a shell whose config never loaded on the changes not started again without them, said (exit $rc): $(tr '\n' ' ' <"$t/log")"
+grep -q "didn't load with your changes" "$t/home/.local/state/caelestia-overlay-skipped" || fail "why the changes are off not written down"
+# ...one on Caelestia as it comes already: nothing more to try, 3
+rm "$t/home/.local/state/caelestia-overlay-skipped"; touch "$t/noload"
+run
+((rc == 3)) && [[ $(tr '\n' ' ' <"$t/log") == "kill start " ]] || fail "a shell without the changes whose config never loaded (exit $rc): $(tr '\n' ' ' <"$t/log")"
+# ...and --without-changes (caelestia-start's, its shell at login never loaded): stopped, without them, started, said
+rm "$t/noload"; touch "$t/home/.config/quickshell/caelestia/mine.qml"
+run --without-changes
+((rc == 3)) && [[ $(tr '\n' ' ' <"$t/log") == "kill without changes start notified " ]] ||
+    fail "--without-changes: not stopped, started without the changes, said (exit $rc): $(tr '\n' ' ' <"$t/log")"
 rm "$t/bin/sleep"
 echo "ok caelestia-restart-rebuild"

@@ -10,6 +10,12 @@ notification when it finds something.
 
 Press **Ctrl+Super+Alt+R** to restart the shell.
 
+## The bar came back without the dock
+
+If AgrOS's changes to the shell stop it from loading (after an update to Caelestia or Quickshell), it starts without
+them rather than not at all: the bar as Caelestia has it, no dock, and a notification says so. `dotfiles-check` says
+why. Your changes are tried again at your next login and after each update.
+
 ## The login screen doesn't appear
 
 Press **Ctrl+Alt+F2**, log in with your username and password, run `sudo login-reset`, then restart. That gives you

@@ -356,12 +356,19 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
 - **`.local/bin/caelestia-start`**: starts Caelestia at login (Caelestia's `execs.lua` runs it, so set by
   `agros-hyprland-settings`), running `caelestia-overlay` first (at every login: it rebuilds only what's out of date,
   so one an update left waiting for a game is made then); each start logged in
-  `~/.local/state/agros/caelestia-start.log`
+  `~/.local/state/agros/caelestia-start.log`. A shell that comes up but never loads its config (it doesn't answer `qs
+  ipc show` within 30 s: Quickshell stays running with nothing on screen when a part can't be created, AgrOS's changes
+  on a Caelestia or Quickshell other than the one CI checked, a type renamed), on the overlay's changes, is started
+  again without them (`caelestia-restart --without-changes`, below), not left with no bar, notifications or lock screen
 - **`.local/bin/caelestia-restart`**: restarts Caelestia with a clean environment (also Ctrl+Super+Alt+R), keeping
   Spotify hidden. `--rebuild` (the Settings app's Caelestia changes) rebuilds the overlay while the shell is stopped:
   rebuilt under the running shell, Hyprland dropped it. Exit 3 when that build failed (the shell started again on what
   was there); the changes it skipped are said once the new shell is up (Caelestia is the notification server: said
-  during the build, they went to nobody). A shell that won't close in 5 s is killed outright. With a game open, any
+  during the build, they went to nobody). Each start waits for the shell's config to load (it answers `qs ipc show`,
+  30 s at most): one that never does, on the overlay's changes, is stopped and started again on Caelestia as it comes
+  (`caelestia-overlay --without-changes <why>`: links only, why written down for `dotfiles-check` and said once the
+  shell is up, not marked built, so the next login or update tries the changes again), exit 3; `--without-changes`
+  does that at once (`caelestia-start`'s). A shell that won't close in 5 s is killed outright. With a game open, any
   restart (the Settings app's, a rebuild handed over, the shortcut) waits until it closes (`after-games`, in the
   background), and a notification says so. Run outside the desktop (SSH, a text console) or without the desktop's
   environment (no `XDG_CURRENT_DESKTOP`: the shell would start with no Qt theme), it has Hyprland run it instead, once
