@@ -8,7 +8,7 @@ Most things work the way you're used to. A few are different.
 | Taskbar | The **bar** on the left: the dock shows pinned and open apps |
 | Alt+Tab | **Alt+Tab**: the same, with live previews |
 | Task Manager (Ctrl+Shift+Esc) | **Ctrl+Shift+Esc** opens btop |
-| Win+D, virtual desktops | **Workspaces**: Super+1...0 jumps to one (see [Windows and workspaces](07-windows-and-workspaces.md)) |
+| Task View, virtual desktops (Win+Tab) | **Workspaces**: Super+Tab shows them, Super+1...0 jumps to one (see [Windows and workspaces](07-windows-and-workspaces.md)) |
 | Snipping Tool (Win+Shift+S) | **Print** or **Super+Shift+S** selects an area, the screen frozen meanwhile |
 | Clipboard history (Win+V) | **Super+V** |
 | Emoji panel (Win+.) | **Super+.** |
@@ -22,7 +22,7 @@ Most things work the way you're used to. A few are different.
 - **Tiling, if you want it.** Windows float like on Windows. Press **Super+Alt+Space** to switch every window to tiling,
   where they fill the screen side by side, and again to switch back.
 - **Installing apps** goes through the package manager rather than downloading installers. Most apps you'll want are
-  already installed (see [Apps](08-apps.md)). For others, ask the terminal: `paru -S <name>` searches Arch's repos and
-  the AUR. AppImages open with a double-click and install themselves.
+  already installed (see [Apps](08-apps.md)). For others, use the terminal: `paru <name>` searches Arch's repos and the
+  AUR, `paru -S <name>` installs one. AppImages open with a double-click and install themselves.
 - **Drives** have no letters: your files are in your home folder (`/home/<you>`), and USB drives appear in the file
   manager's sidebar.

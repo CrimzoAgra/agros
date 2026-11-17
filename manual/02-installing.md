@@ -17,8 +17,9 @@ _Turn off Secure Boot in the BIOS first._ CachyOS, and so AgrOS, doesn't boot wi
 
 ## 3. Run the installer
 
-On the live desktop, click **Launch installer**. It needs an internet connection: AgrOS's packages are downloaded
-during the install, so you get the latest versions.
+The installer opens by itself once the live desktop is up (give it a minute or two). Closed it? Open it again with
+**Install AgrOS** in the Super menu. It needs an internet connection: AgrOS's packages are downloaded during the
+install, so you get the latest versions. Not connected yet? Connect (Wi-Fi from the bar) and it carries on by itself.
 
 1. Pick your language, location and keyboard.
 2. Pick the drive. **Erase disk** takes over the whole drive; to keep Windows, choose **Install alongside** (drag

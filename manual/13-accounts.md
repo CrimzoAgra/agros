@@ -24,5 +24,6 @@ GB, so use a stick with room for it.
 
 Click **Restore my accounts** in the notification after your first login, or run `agros-personal`. Plug in the stick
 and type your passphrase. Everything goes straight back where it belongs, and anything it replaces is backed up first.
+Capri, the desktop companion, installs right after: her code needs your GitHub login.
 
 No stick? `agros-personal` opens each app for you to sign in instead.

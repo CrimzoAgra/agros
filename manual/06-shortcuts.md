@@ -1,6 +1,7 @@
 # Keyboard shortcuts
 
-**Super** is the Windows key. Every shortcut can be changed in **Desktop Settings → Shortcuts**.
+**Super** is the Windows key. Most shortcuts can be changed in **Desktop Settings → Shortcuts** (the fixed ones are
+listed at the bottom of that page).
 
 While a VMware Workstation window has the focus, every key goes to the virtual machine, Super shortcuts too. Click
 another window, or press **Ctrl+Alt+Esc**, to have them back.
@@ -41,7 +42,8 @@ another window, or press **Ctrl+Alt+Esc**, to have them back.
 | Super+1...0 | Go to workspace 1-10 |
 | Super+Alt+1...0 | Move the window there and follow it |
 | Super+Shift+1...0 | Move the window there and stay |
-| Super+scroll, Super+PageUp/PageDown | Next / previous workspace |
+| Super+scroll, Super+PageUp/PageDown, Ctrl+Super+Left/Right | Next / previous workspace |
+| Super+Alt+scroll, Super+Alt+PageUp/PageDown | Move the window to the next / previous workspace |
 
 ## Screenshots and tools
 
@@ -50,6 +52,8 @@ another window, or press **Ctrl+Alt+Esc**, to have them back.
 | Print, Super+Shift+S | Screenshot of an area, the screen frozen meanwhile |
 | Super+Shift+Alt+S | Screenshot of an area, the screen left moving |
 | Ctrl+Alt+R | Record the screen |
+| Super+Alt+R | Record the screen with sound |
+| Super+Shift+Alt+R | Record an area |
 | Super+Shift+C | Colour picker |
 | Super+V | Clipboard history |
 | Super+. | Emoji |
@@ -64,3 +68,4 @@ another window, or press **Ctrl+Alt+Esc**, to have them back.
 | Super+K | Notifications and quick settings |
 | Ctrl+Alt+C | Clear notifications |
 | Ctrl+Super+Alt+R | Restart the shell, if it misbehaves |
+| Shift+Space | Put Capri away / bring her back (once she's installed; not while a game or a fullscreen window has the focus) |

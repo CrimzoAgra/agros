@@ -8,6 +8,9 @@ Everything here comes installed, listed next to the Windows app it replaces.
 | **Equibop**, themed in your colours | Discord |
 | **Spotify**, themed in your colours | Spotify |
 | **LibreOffice** | Microsoft Office |
+| **Text Editor** | Notepad |
+| **qView**, an image viewer | Photos |
+| **mpv**, a video player | Media Player |
 | **VSCodium**, VS Code's open-source build | VS Code |
 | **Thunar**: the bar at the bottom shows how full the drive is (it changes colour when the drive is nearly full) | File Explorer |
 | **File Roller** + 7-Zip (Extract/Compress in the right-click menu) | WinRAR, 7-Zip |
@@ -32,11 +35,12 @@ These install when you choose **Install hardware apps and VMware** after your fi
 | Solaar | Logitech devices (instead of G Hub / Options+) |
 | Boxflat | Moza racing wheels (instead of Pit House) |
 | OpenTabletDriver | Drawing tablets |
+| The camera switch | The Lenovo Legion's webcam switch |
 | VMware Workstation | Virtual machines |
 
 ## Installing more
 
-- **From the repos**: `paru -S <name>` in a terminal. It searches Arch's packages and the AUR, Arch's community
-  collection.
+- **From the repos**: `paru <name>` in a terminal searches Arch's packages and the AUR, Arch's community collection;
+  `paru -S <name>` installs one.
 - **Flatpaks**: `flatpak install <name>`.
 - **AppImages**: double-click one. It installs itself, appears in the app menu, and keeps itself updated.
