@@ -44,4 +44,5 @@ sudo passwd <name>
 The login screen then lists both accounts: click the person button next to the session's to pick one. The new
 account's first login runs AgrOS Welcome for it, as yours did. Updates are the whole computer's: they happen at boot
 and shutdown whoever logs in, and only administrators are offered **Update now**, the Updates app's **Update all**
-and the hardware apps.
+and the hardware apps. When an automatic update goes wrong, the warning after login tells another account to ask an
+administrator to run Updates.

@@ -1116,7 +1116,9 @@ brings each change; nothing to run by hand).
   apps the install left out, or a firmware update that failed, and 3 shutdowns in a row with nothing installed, with the
   last one's reason (the boot's download didn't finish: only a finished one is installed; something else using pacman
   still held its lock; a soft reboot, which keeps the kernel running; with pacman's error when the download failed; on
-  battery, nearly empty: below 15%, discharging; pacman's lists couldn't be kept aside, a full disk). An install cut off
+  battery, nearly empty: below 15%, discharging; pacman's lists couldn't be kept aside, a full disk). Each says to run
+  Updates (and where to read the log) to an admin alone; another account, its Updates without "Update all" and the log
+  closed to it, is told to ask an administrator to run Updates. An install cut off
   has pacman's lists put back, and its lock removed, at the next boot or install. The boot's run (download, Flatpaks,
   AUR builds and all, everything it started: nothing it runs as a user leaves its unit) stops after 4 h; a Flatpak from
   a file isn't reinstalled with less than 35 min of that left (cut off between its removal and install, the app would be

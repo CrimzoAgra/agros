@@ -83,11 +83,21 @@ for want in 'rules.lua:"game"' 'rules.lua:"music_player"' 'rules.lua:"communicat
 done
 grep -rqF 'name: "refreshDevices"' /etc/xdg/quickshell/caelestia 2>/dev/null ||
     problems+=("Caelestia no longer has its refreshDevices shortcut: the Caps/Num Lock badges won't refresh (user/keys.lua)")
+# What sets the system's problems below right: Updates' "Update all", which an administrator's (wheel) alone (another
+# account's Updates has none, and update-apps refuses it), and the boot update's log, readable by them alone (root:wheel
+# 0640): another account is told to ask one
+if [[ " $(id -nG 2>/dev/null) " == *" wheel "* ]]; then
+    run_updates="run Updates" see_log="see /var/log/auto-update.log, or "
+    run_review="run update-apps in a terminal (it shows their build scripts to review first)"
+else
+    run_updates="ask an administrator to run Updates" see_log=""
+    run_review="ask an administrator to run update-apps in a terminal (it shows their build scripts to review first)"
+fi
 # Quickshell uses Qt's private parts: a Qt version it wasn't rebuilt for can stop the shells from starting (the Qt it
 # was built for: written down by update-apps, which rebuilds it)
 # (update-apps compares them, as it writes them)
 "$helpers/update-apps" --qt-stale &&
-    problems+=("Qt was updated after Quickshell: run Updates (it rebuilds Quickshell and Caelestia for it)")
+    problems+=("Qt was updated after Quickshell: $run_updates (it rebuilds Quickshell and Caelestia for it)")
 # (both folders named by the tests only)
 au=${AUTO_UPDATE_DIR:-/var/lib/auto-update}
 pacdb=${PACMAN_DB_DIR:-/var/lib/pacman}
@@ -111,7 +121,7 @@ behind() {
 # one is. Updates installs them, but only the next shutdown's install takes the file away)
 held=$([[ -s $au/held ]] && behind "$au/held")
 [[ -n $held ]] &&
-    problems+=("The automatic update was held back (a new $held; the boot couldn't rebuild the AUR apps built on it: see /var/log/auto-update.log): run Updates")
+    problems+=("The automatic update was held back (a new $held; the boot couldn't rebuild the AUR apps built on it): ${see_log}$run_updates")
 # the boot's AUR builds that failed (auto-update-aur's "<base>: <why>" each, or why none was built): those apps wait,
 # the rest installs without them. Not beside the held update (the same failure), and only while one it meant to build
 # ("<name> <version>" in wanted) is still older than that, those named: Updates built it since, or the run failed
@@ -119,9 +129,8 @@ held=$([[ -s $au/held ]] && behind "$au/held")
 # (one held for its build files to be reviewed, auto-update-aur's guard: the Updates app leaves it out too, update-apps
 # in a terminal shows them)
 aur_left=$([[ -z $held && -s $au/aur/failed && -s $au/aur/wanted ]] && behind "$au/aur/wanted")
-aur_do="run Updates"
-grep -qF "review it: run update-apps in a terminal" "$au/aur/failed" 2>/dev/null &&
-    aur_do="run update-apps in a terminal (it shows their build scripts to review first)"
+aur_do=$run_updates
+grep -qF "review it: run update-apps in a terminal" "$au/aur/failed" 2>/dev/null && aur_do=$run_review
 [[ -n $aur_left ]] &&
     problems+=("The automatic update couldn't build AUR apps ($(plain <"$au/aur/failed" | paste -sd';' | sed 's/;/; /g')): still waiting: $aur_left; $aur_do")
 # AUR apps the shutdown's install left out, pacman refusing them (a conflict, a file conflict, a missing dependency:
@@ -129,22 +138,22 @@ grep -qF "review it: run update-apps in a terminal" "$au/aur/failed" 2>/dev/null
 if read -r aiwhen aiat aiwhy 2>/dev/null <"$au/aur-install-failed"; then
     ai_left=$(behind <(tail -n +2 "$au/aur-install-failed"))
     [[ -n $ai_left ]] &&
-        problems+=("The automatic update couldn't install AUR apps at shutdown ($ai_left, $aiwhen $aiat${aiwhy:+: $(plain <<<"$aiwhy")}): the rest installed; run Updates")
+        problems+=("The automatic update couldn't install AUR apps at shutdown ($ai_left, $aiwhen $aiat${aiwhy:+: $(plain <<<"$aiwhy")}): the rest installed; $run_updates")
 fi
 # firmware the shutdown couldn't install (fwupd's reason, e.g. the battery too low): tried again at the next one
 read -r fwwhen fwat fwwhy 2>/dev/null <"$au/firmware-failed" &&
-    problems+=("A firmware update failed to install at shutdown ($fwwhen $fwat${fwwhy:+: $(plain <<<"$fwwhy")}): it's tried again at the next one, or run Updates")
+    problems+=("A firmware update failed to install at shutdown ($fwwhen $fwat${fwwhy:+: $(plain <<<"$fwwhy")}): it's tried again at the next one, or $run_updates")
 # the install at shutdown failed (auto-update --install writes down how it went: "failed <date> <why>"); tried again
 # at the next shutdown, but it fails the same way until it's looked at
 read -r how when at why 2>/dev/null <"$au/install-result"
 [[ ${how:-} == failed ]] &&
-    problems+=("The automatic update failed to install at shutdown ($when $at${why:+: $(plain <<<"$why")}): see /var/log/auto-update.log, or run Updates")
+    problems+=("The automatic update failed to install at shutdown ($when $at${why:+: $(plain <<<"$why")}): ${see_log}$run_updates")
 # nothing installed at shutdown several times in a row (its boot download never finishing: a short session, a download
 # that fails every boot; something else using pacman still running): "<shutdowns> <since> <the last one's why>",
 # written down beside how the last real install went
 read -r skips since skipwhy 2>/dev/null <"$au/skipped"
 [[ ${skips:-} =~ ^[0-9]+$ ]] && ((skips >= 3)) &&
-    problems+=("The automatic update hasn't installed for $skips shutdowns in a row (since $since; the last: $(plain <<<"${skipwhy:-the boot download unfinished}")): see /var/log/auto-update.log, or run Updates")
+    problems+=("The automatic update hasn't installed for $skips shutdowns in a row (since $since; the last: $(plain <<<"${skipwhy:-the boot download unfinished}")): ${see_log}$run_updates")
 # a lock the boot's download left (shutdown cut it off): the next boot's download takes it out, but meanwhile nothing
 # was downloaded (not while that download is running: it's its own)
 [[ -e $au/db/db.lck ]] && ! systemctl is-active -q auto-update 2>/dev/null &&
