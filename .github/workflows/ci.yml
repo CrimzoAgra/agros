@@ -328,8 +328,9 @@ jobs:
           path: out
 
   report:
-    # One issue for what this run held back or didn't put out (ci/report.sh), closed once a run puts all out
-    needs: [repo, test, release]
+    # One issue for what this run held back or didn't put out (ci/report.sh), closed once a run puts all out (Pages'
+    # deploy too: a release signed but never deployed closed the issue as all out)
+    needs: [repo, test, release, publish]
     if: ${{ always() && github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
     runs-on: ubuntu-26.04
     permissions:
@@ -351,7 +352,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RESULT: ${{ needs.test.outputs.result }}
           BUILD: ${{ needs.repo.result }}
-          RELEASE: ${{ needs.release.result }}
+          RELEASE: ${{ needs.release.result == 'success' && needs.publish.result || needs.release.result }}
           HELD: /tmp/held/held
           REPORT: /tmp/report/report
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
