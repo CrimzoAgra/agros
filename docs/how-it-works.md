@@ -1243,7 +1243,7 @@ pipeline reads as "not found": a running Proton was removed under a game), nor i
 pipeline's status decides something; read the output whole (`grep -q x <<<"$(cmd)"`), or mark a line
 `# pipefail-ok: <why>`.
 
-CI runs them on every push (not one to the docs alone), pull request and night, with what the checks against Caelestia, Hyprland, Qt and the kernel need
+CI runs them on every push (not one changing only the manual, a README or the docs' images), pull request and night, with what the checks against Caelestia, Hyprland, Qt and the kernel need
 (its dots at the pinned commit), so none is skipped there: a skip there, whole or in part (`skipped` in
 `tests/lib.sh`; `tests/run.sh` for a whole one), fails CI, as its pass approves that Hyprland. The checks against
 upstream's next release (Caelestia's, Lutris's and Hyprland's main branches, hyprland-plugins' main: a change there
