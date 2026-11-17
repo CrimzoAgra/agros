@@ -36,10 +36,22 @@ fi
     # (a wallpaper Caelestia already has: an install from before the mark, its wallpaper picked since, kept)
     [[ -s ${XDG_STATE_HOME:-$HOME/.local/state}/caelestia/wallpaper/path.txt ]] && touch "$mark"
     first=
+    # (set ahead of the desktop, by --prepare: set again at Hyprland's start, below)
+    again=${log%/*}/scheme-again
     if [[ ! -e $mark ]]; then
+        # Caelestia's CLI recolours the folder icons at each of the two (sudo -n papirus-folders, forked, not waited
+        # for): the wallpaper's and the scheme's ran at once, the colour left to whichever ended last, and in the
+        # prepare run the unit's end killed them half-way (as root, their ln's left running). Done once, with the final
+        # colour: by the scheme's run at Hyprland's start (here, or its run again after the prepare run). Left out of
+        # the others by a sudo of their own, which passes anything else on
+        later=${log%/*}/folders-later
+        # shellcheck disable=SC2016  # (the stand-in's own $2 and $@)
+        mkdir -p "$later" && printf '%s\n' '#!/bin/sh' '[ "$2" = papirus-folders ] && exit 0' 'exec /usr/bin/sudo "$@"' \
+            >"$later/sudo" && chmod +x "$later/sudo"
         {
-            caelestia wallpaper -f /etc/xdg/quickshell/caelestia/assets/wallpaper.webp &&
-                caelestia scheme set -n dynamic && touch "$mark" && echo "wallpaper and colours set"
+            PATH=$later:$PATH caelestia wallpaper -f /etc/xdg/quickshell/caelestia/assets/wallpaper.webp &&
+                PATH=${prepare:+$later:}$PATH caelestia scheme set -n dynamic && touch "$mark" &&
+                echo "wallpaper and colours set" && { [[ -z $prepare ]] || touch "$again"; }
             # (the login screen's copy of them now: greeter-theme-sync at Hyprland's start ran before they were
             # there, and the first reboot came up on a login screen with neither)
             "$helpers/greeter-theme-sync"
@@ -53,6 +65,13 @@ fi
     [[ -z $first ]] || wait "$first"
 } >>"$log" 2>&1
 [[ -z $prepare ]] || exit 0
+# Set ahead of the desktop, the colours didn't reach the window borders: Caelestia's CLI asks Hyprland whether its
+# config is Lua and, with no Hyprland yet to ask, wrote them to current.conf, which the Lua config doesn't read
+# (current.lua kept Caelestia's own colours until the next scheme change). Set again now Hyprland is there, beside the
+# shell's start, not before it (the wallpaper and the shell's colours are there already); the folder icons' with them
+if [[ -e $again ]]; then
+    { caelestia scheme set -n dynamic && rm -f "$again" && echo "colours set again, for Hyprland"; } >>"$log" 2>&1 9>&- &
+fi
 # (even when the build failed: Caelestia as it comes, rather than no bar at all; it daemonizes and returns)
 caelestia shell -d >>"$log" 2>&1 9>&-
 for _ in $(seq 300); do "$helpers/qs-running" /quickshell/caelestia/shell.qml && break; sleep 0.1; done

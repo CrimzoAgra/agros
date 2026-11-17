@@ -11,6 +11,8 @@
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
+# (the batteries battery-low reads: none, but where a test makes them; never this machine's own)
+export AGROS_POWER_SUPPLY=$t/ps
 mkdir -p "$t/bin" "$t/pac/sync" "$t/au/db/sync"
 # The script as agros-system installs it (agros-scripts' helpers, pacman-lock-holder and wait-online, from here)
 au=$here/packages/agros-system
@@ -36,7 +38,7 @@ sed -e "s|/var/lib/auto-update|$t/au|g" -e "s|/var/lib/pacman|$t/pac|g" -e "s|/v
     -e "s|command -v limine-snapper-sync|command -v $t/limine-sync|; s|^\( *\)limine-snapper-sync >|\1$t/limine-sync >|" \
     -e "s|\${AGROS_EACH_USER:-/usr/lib/agros/bin/agros-each-user}|$t/bin/agros-each-user|" \
     -e "s|/usr/lib/agros/auto-update-aur|$t/auto-update-aur|g; s|/usr/lib/agros/auto-update |$t/auto-update |g" \
-    -e "s|/usr/lib/agros/bin/|$here/.local/bin/|g" -e "s|/sys/class/power_supply|$t/ps|" \
+    -e "s|/usr/lib/agros/bin/|$here/.local/bin/|g" \
     -e "s|/var/lib/agros/|$t/agros/|g" -e "s|/usr/share/pacman/keyrings/agros.gpg|$t/agros.gpg|g" \
     "$au/auto-update" >"$t/auto-update"
 sed -e "s|/var/lib/auto-update|$t/au|g" -e "s|/usr/lib/agros/auto-update-aur|$t/auto-update-aur|g" \
@@ -121,11 +123,11 @@ for s in sudo runuser su; do printf '#!/bin/sh\necho "PAM %s" >>%s/calls\nexit 1
 # shellcheck disable=SC2016
 printf '#!/bin/sh\nwhile [ "${1#--}" != "$1" ]; do shift; done\nexec "$@"\n' >"$t/bin/systemd-inhibit"
 # fwupd: nothing waiting ($FW: get-updates' JSON); fwupdtool, the shutdown's, noted (exit $FWTOOL_RC; $FW_LEFT: what
-# it still offers after, a device it skipped, saying why); systemd-run noted
+# it still offers after, a device it skipped, saying why; $FW_NOROOM: the EFI partition too small); systemd-run noted
 # shellcheck disable=SC2016  # (expanded by the stand-ins)
 printf '#!/bin/sh\n[ "$1" = get-updates ] && [ -n "$FW" ] && { echo "$FW"; exit 0; }\nexit 2\n' >"$t/bin/fwupdmgr"
 # shellcheck disable=SC2016
-printf '#!/bin/sh\nif [ "$1" = get-updates ]; then [ -n "$FW_LEFT" ] && echo "$FW_LEFT"; exit 0; fi\necho "fwupdtool $*" >>%s/calls\necho "flashing"\n[ -z "$FW_LEFT" ] || echo "  ‣ Device requires AC power to be connected"\nexit ${FWTOOL_RC:-0}\n' "$t" >"$t/bin/fwupdtool"
+printf '#!/bin/sh\nif [ "$1" = get-updates ]; then [ -n "$FW_LEFT" ] && echo "$FW_LEFT"; exit 0; fi\necho "fwupdtool $*" >>%s/calls\necho "flashing"\n[ -z "$FW_LEFT" ] || echo "  ‣ Device requires AC power to be connected"\n[ -z "$FW_NOROOM" ] || echo "/boot does not have sufficient space, required 64.0 MB, need additional 30.0 MB"\nexit ${FWTOOL_RC:-0}\n' "$t" >"$t/bin/fwupdtool"
 printf '#!/bin/sh\necho "systemd-run $*" >>%s/calls\n' "$t" >"$t/bin/systemd-run"
 # fstab and mounts (this machine's not read): $FSTAB_BOOT puts /boot in fstab, $BOOT_UNMOUNTED has it not mounted
 # shellcheck disable=SC2016  # (expanded by the stand-ins)
@@ -287,7 +289,7 @@ JOBS="  42 soft-reboot.target start waiting" "$t/auto-update" --install || fail 
 [[ $(cat "$t/pac/sync/core.db") == old && ! -s $t/calls && $(cut -d' ' -f3- "$t/au/skipped") == "a soft reboot"* ]] ||
     fail "installed at a soft reboot, or not counted: $(cat "$t/calls") $(cat "$t/au/skipped")"
 # Nearly empty on battery (a laptop off its charger): nothing installed, counted with its reason; on its charger, or
-# with more charge (a mouse's own battery, nearly empty, isn't the computer's), installed
+# with more charge (a mouse's own battery, nearly empty, isn't the computer's), installed. (battery-low's folder: $t/ps)
 battery() {  # <name> <capacity> <status> [<scope>]
     mkdir -p "$t/ps/$1"
     echo Battery >"$t/ps/$1/type"; echo "$2" >"$t/ps/$1/capacity"; echo "$3" >"$t/ps/$1/status"
@@ -627,6 +629,27 @@ out=$(HOME=$t/h AUTO_UPDATE_DIR=$t/au PACMAN_DB_DIR=$t/pac "$here/.local/bin/dot
 [[ $out == *"firmware update failed to install at shutdown"*"Device requires AC power to be connected"* ]] || fail "dotfiles-check didn't say the skipped firmware: $out"
 lists; rm "$t/au/firmware-failed"; FWTOOL_RC=1 "$t/auto-update" --install >/dev/null
 [[ -s $t/au/firmware-told && $(cut -d' ' -f3- "$t/au/firmware-failed") == flashing ]] || fail "a failed firmware update not kept and noted"
+# The EFI partition too small for it (beside Windows, often Windows' 100 MB one): fwupd refuses it before writing
+# anything, every time. Said once, at the next boot's login, as that; not tried again at every shutdown, nor said at
+# every login (dotfiles-check), until a newer one comes
+lists; : >"$t/calls"; FWTOOL_RC=1 FW_NOROOM=1 "$t/auto-update" --install >/dev/null
+[[ ! -e $t/au/firmware-failed && ! -e $t/au/firmware-told ]] && cmp -s "$t/au/firmware" "$t/au/firmware-noroom" ||
+    fail "a firmware update the EFI partition has no room for kept to try again, or said at every login"
+lists; : >"$t/calls"; "$t/auto-update" --install >/dev/null
+grep -q fwupdtool "$t/calls" && fail "a firmware update with no room for it tried again at the next shutdown"
+FW=$FW "$t/auto-update"
+grep -q -- "--firmware-note" "$t/calls" || fail "a firmware update with no room for it not said at the next boot"
+"$t/auto-update" --firmware-note
+grep -q "^notify .*Firmware update can't be installed System Firmware: the boot partition (EFI) is too small for it" "$t/calls" ||
+    fail "a firmware update with no room for it not said as that: $(cat "$t/calls")"
+lists; : >"$t/calls"; "$t/auto-update" --install >/dev/null; FW=$FW "$t/auto-update"
+grep -qE "fwupdtool|--firmware-note" "$t/calls" && fail "a firmware update with no room for it tried or said again: $(cat "$t/calls")"
+# (a newer one: said and tried as any)
+: >"$t/calls"; FW=${FW/1.2/1.3} "$t/auto-update"; "$t/auto-update" --firmware-note
+grep -q "^notify .*Firmware update ready System Firmware" "$t/calls" || fail "a newer firmware update not said: $(cat "$t/calls")"
+lists; : >"$t/calls"; "$t/auto-update" --install >/dev/null
+grep -q fwupdtool "$t/calls" || fail "a newer firmware update not tried, after one with no room: $(cat "$t/calls")"
+FW=$FW "$t/auto-update"; cp "$t/au/firmware" "$t/au/firmware-told"
 # Too little of the install's time left: firmware not started; after a firmware update that took long, the packages put
 # off to the next shutdown (counted)
 sed 's/((SECONDS <= stop - packages - 25 \* 60))/((0))/' "$t/auto-update" >"$t/auto-update-late"; chmod +x "$t/auto-update-late"
@@ -640,7 +663,8 @@ grep -q fwupdtool "$t/calls" && ! grep -q '^pacman -Su' "$t/calls" && grep -q "f
     fail "the packages installed with too little time left after the firmware: $(cat "$t/calls")"
 # Nothing waiting at the next boot: the notes gone, its failure too
 "$t/auto-update"
-[[ ! -e $t/au/firmware && ! -e $t/au/firmware-told && ! -e $t/au/firmware-failed ]] || fail "firmware no longer waiting still noted"
+[[ ! -e $t/au/firmware && ! -e $t/au/firmware-told && ! -e $t/au/firmware-failed && ! -e $t/au/firmware-noroom ]] ||
+    fail "firmware no longer waiting still noted"
 
 # The log keeps the last 20 runs
 for _ in {1..25}; do "$t/auto-update" --install >/dev/null; done

@@ -20,7 +20,10 @@ You don't have to think about updates.
 - **Firmware** is installed at shutdown too, but only after a notification told you it's ready, and before the
   system's updates (which wait for the next shutdown if the firmware took long). A BIOS/UEFI update is applied as the
   computer next starts: don't turn it off then. On a laptop running low on battery, or unplugged when the device needs
-  power, it waits for the next shutdown (a warning says so after you log in).
+  power, it waits for the next shutdown (a warning says so after you log in). One that doesn't fit on the boot
+  partition (EFI) is said once ("Firmware update can't be installed... the boot partition (EFI) is too small for
+  it"), and isn't tried again until a newer one comes: installed beside Windows, that partition is often Windows' own
+  small one.
 - **A new Proton build** (GE-Proton, dwproton, in Steam or Lutris) shows up in Steam once you restart Steam, and in
   Lutris once you restart it and pick it in a game's **Configure**, **Runner options**, **Wine version** (a
   notification says so). The old one stays while a game uses it, and one you installed yourself is never removed.
@@ -45,7 +48,10 @@ You don't have to think about updates.
 
 Open **Updates** from the app menu, or click the button next to the app menu's search bar. It lists what's waiting, app
 by app, with old and new versions: system and AUR apps, firmware, Flatpaks, AppImages, Proton builds and developer
-tools. **Update all** installs everything now, firmware included.
+tools. **Update all** installs everything now, firmware included, and keeps the laptop awake meanwhile, closing the
+lid included. It installs nothing on a laptop below 15% battery and unplugged: plug the charger in first. An account
+that isn't an administrator sees the list, with "An administrator has to install these updates", and no **Update all**
+(its updates are installed at boot and shutdown all the same).
 
 In a terminal, `update-apps` does the same and shows what each AUR package's build script changed before building it.
 

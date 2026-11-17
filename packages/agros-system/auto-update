@@ -83,8 +83,11 @@ aur=$au/aur
 # (systemd-run, by the boot's run), so the boot's run doesn't wait on a login
 if [[ ${1:-} == --firmware-note ]]; then
     names=$(cut -f2 "$au/firmware" | paste -sd, | sed 's/,/, /g')
-    if "$each_user" --notify-wait -a Updates -i system-software-update "Firmware update ready" \
-        "$names: installed when you shut down or restart (Updates installs it now)"; then
+    title="Firmware update ready" text="$names: installed when you shut down or restart (Updates installs it now)"
+    # (one the EFI partition has no room for, the shutdown found: said once, as that)
+    cmp -s "$au/firmware" "$au/firmware-noroom" && title="Firmware update can't be installed" \
+        text="$names: the boot partition (EFI) is too small for it. It isn't tried again until a newer one comes"
+    if "$each_user" --notify-wait -a Updates -i system-software-update "$title" "$text"; then
         cp "$au/firmware" "$au/firmware-told"
         echo "firmware update said: $names"
     fi
@@ -135,7 +138,9 @@ if [[ ${1:-} == --install ]]; then
     # waited on. Never a time limit of its own: one sent it SIGTERM mid-flash. Started only with its time and the
     # packages' both left (55 min), it has up to 30 min before the packages are put off to the next shutdown (below),
     # and the unit's own limit alone after that (a flash still writing at 60 min has hung)
-    if [[ -s $au/firmware-told ]] && cmp -s "$au/firmware" "$au/firmware-told" && command -v fwupdtool >/dev/null &&
+    # (nor one the EFI partition had no room for: below)
+    if [[ -s $au/firmware-told ]] && cmp -s "$au/firmware" "$au/firmware-told" && ! cmp -s "$au/firmware" "$au/firmware-noroom" &&
+        command -v fwupdtool >/dev/null &&
         ((SECONDS <= stop - packages - 25 * 60)); then
         say "Installing firmware updates, don't turn the computer off..."
         mapfile -t ids < <(cut -f1 "$au/firmware-told")
@@ -152,7 +157,15 @@ if [[ ${1:-} == --install ]]; then
         fi
         if ((fw == 0 || fw == 2)) && [[ -z $left ]]; then
             echo "firmware: installed (a UEFI or BIOS update applies at the next boot)"
-            rm -f "$au/firmware" "$au/firmware-told" "$au/firmware-failed"
+            rm -f "$au/firmware" "$au/firmware-told" "$au/firmware-failed" "$au/firmware-noroom"
+        elif grep -q 'does not have sufficient space' "$au/firmware-out"; then
+            # The EFI partition too small for it (fwupd checks before it writes anything): beside Windows, often
+            # Windows' own 100 MB, nearly full. It never fits, so not tried again at every shutdown and said at every
+            # login (dotfiles-check, firmware-failed): said once, at the next boot's login, as that (--firmware-note,
+            # firmware-told gone), and tried again only for a newer one (firmware-noroom: this one)
+            echo "!! firmware: not installed, the EFI partition is too small for it"
+            mv -f "$au/firmware-told" "$au/firmware-noroom"
+            rm -f "$au/firmware-failed"
         else
             echo "!! firmware: not installed"
             why=$(sed -n 's/^ *‣ *//p' "$au/firmware-out" | head -1)
@@ -164,16 +177,8 @@ if [[ ${1:-} == --install ]]; then
     ((SECONDS <= stop - packages)) || skip "the firmware update took long: the packages at the next shutdown"
     # Nor on a battery nearly empty (a laptop off its charger, below 15%: a low-battery shutdown, or one it may not last
     # through): a power cut mid-install leaves packages half in, which pacman doesn't undo. Left for a shutdown on AC
-    # power or with more charge. The highest of the computer's own batteries (not a mouse's: scope Device)
-    on_battery='' charge=0
-    for s in /sys/class/power_supply/*; do
-        [[ $(cat "$s/type" 2>/dev/null) == Battery && $(cat "$s/scope" 2>/dev/null) != Device ]] || continue
-        c=$(cat "$s/capacity" 2>/dev/null)
-        [[ $c =~ ^[0-9]+$ ]] || continue
-        charge=$((c > charge ? c : charge))
-        [[ $(cat "$s/status" 2>/dev/null) != Discharging ]] || on_battery=1
-    done
-    [[ -z $on_battery ]] || ((charge >= 15)) || skip "on battery, nearly empty ($charge percent): at a shutdown on AC power"
+    # power or with more charge (battery-low: Updates' check too)
+    ! charge=$(/usr/lib/agros/bin/battery-low) || skip "on battery, nearly empty ($charge percent): at a shutdown on AC power"
     # Only what a finished download brought (its mark, "complete"): one cut off (its 2 h, a shutdown during it) has
     # lists newer than the packages it got, and installing from them would download the rest at shutdown. But for the
     # keyrings it got first (below). Said with pacman's error, where the boot wrote one down (download-failed)
@@ -467,7 +472,7 @@ if command -v fwupdmgr >/dev/null; then
         cmp -s "$au/firmware" "$au/firmware-told" ||
             systemd-run --quiet --collect --unit=agros-firmware-note /usr/lib/agros/auto-update --firmware-note
     else
-        rm -f "$au/firmware" "$au/firmware-told" "$au/firmware-failed"
+        rm -f "$au/firmware" "$au/firmware-told" "$au/firmware-failed" "$au/firmware-noroom"
     fi
 fi
 

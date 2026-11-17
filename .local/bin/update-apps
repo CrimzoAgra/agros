@@ -116,6 +116,8 @@ summary() {
 # and initramfs were written for real, their modules not: the next normal boot broken. Not updated, said (as the boot's
 # auto-update does), and no update offered
 snapshot() { [[ $(findmnt -no FSTYPE / 2>/dev/null) == overlay ]]; }
+# An admin's (wheel) alone: another account can't sudo (the boot's update installs them all the same)
+admin() { [[ " $(id -nG 2>/dev/null) " == *" wheel "* ]]; }
 
 if [[ ${1:-} == --check-now ]]; then
     all=$(list_updates)
@@ -137,8 +139,8 @@ if [[ ${1:-} == --check-now ]]; then
 fi
 
 if [[ ${1:-} == --check ]]; then
-    # (an admin's (wheel) only: another account can't sudo, so its "Update now" only failed; the boot's update covers it)
-    [[ " $(id -nG 2>/dev/null) " == *" wheel "* ]] || exit 0
+    # (an admin's only: another account's "Update now" only failed)
+    admin || exit 0
     ! snapshot || exit 0
     list=$(list_updates | grep -v '^offline' | cut -f2 | sort -u)
     [[ -n $list ]] || exit 0
@@ -160,6 +162,18 @@ fi
 if snapshot; then
     echo "This system runs from a snapshot (or the live USB), its changes in RAM: nothing updated, none of it kept."
     echo "Boot the system itself (the boot menu's first entry) to update."
+    exit 1
+fi
+# Another account: nothing tried (it failed at sudo, part of the way in), said (the Updates app offers it no "Update
+# all", so this is from a terminal)
+if ! admin; then
+    echo "Only an administrator can install updates: one of them has to run Updates."
+    exit 1
+fi
+# Nor on a battery nearly empty (as the shutdown's install, auto-update): a power cut mid-install leaves packages half
+# in, which pacman doesn't undo
+if charge=$("$helpers/battery-low"); then
+    echo "On battery, nearly empty ($charge percent): nothing updated. Plug the charger in, then update."
     exit 1
 fi
 status=0 # 1 if any step failed (the Updates app says "Finished, with problems")
@@ -184,13 +198,17 @@ if [[ ! -t 0 ]]; then
     fi
 fi
 # Power off and sleep held off while pacman installs (and the AUR apps build): killed by shutdown, pacman leaves its
-# lock behind, and every install after it fails on that. Held by a process of its own, ended after (or with this)
+# lock behind, and every install after it fails on that. Held by a process of its own, ended after (or with this).
+# The lid too: logind suspends on it whatever sleep lock is held (LidSwitchIgnoreInhibited=yes, its default), and only
+# a handle-lid-switch lock stops that. Where that one's refused (polkit), power off and sleep alone
 inhibitor=
-if systemd-inhibit --what=sleep:shutdown --mode=block --who=Updates --why="Installing updates" true 2>/dev/null; then
-    systemd-inhibit --what=sleep:shutdown --mode=block --who=Updates --why="Installing system and AUR updates" \
+for what in sleep:shutdown:handle-lid-switch sleep:shutdown; do
+    systemd-inhibit --what="$what" --mode=block --who=Updates --why="Installing updates" true 2>/dev/null || continue
+    systemd-inhibit --what="$what" --mode=block --who=Updates --why="Installing system and AUR updates" \
         tail --pid=$$ -f /dev/null </dev/null >/dev/null 2>&1 &
     inhibitor=$!
-fi
+    break
+done
 runtimes=$("$helpers/update-kinds" --runtimes-now)
 # Through the upstream gate (update-gate): the lists synced first, then Hyprland and its libraries updated only to
 # versions AgrOS's CI has checked (held, said, else)
@@ -198,6 +216,15 @@ gated=$(mktemp --tmpdir agros-pacman.XXXXXX.conf)
 if "${paru[@]}" -Sy --noconfirm; then
     waits=$("$helpers/update-gate" /etc/pacman.conf "$gated") || cp /etc/pacman.conf "$gated"
     [[ -z $waits ]] || printf "Waits for AgrOS's check (comes with a later update): %s\n" "$waits"
+    # The keyrings first, on their own, where there's a newer one (as the boot's update does, auto-update): a package
+    # signed by a key the keyring here doesn't have yet (weeks offline, a new packager's) failed the whole update
+    mapfile -t keys < <(LC_ALL=C pacman -Qu --config "$gated" 2>/dev/null | "$helpers/updates-pending" |
+        awk '$1 ~ /^(archlinux|cachyos|agros)-keyring$/ { print $1 }')
+    if ((${#keys[@]})); then
+        echo "The keyrings first: ${keys[*]}"
+        "${paru[@]}" --config "$gated" -S --needed --noconfirm "${keys[@]}" ||
+            { echo "!! The keyrings couldn't be installed first: the rest tried with the keys as they are"; status=1; }
+    fi
     "${paru[@]}" --config "$gated" -Su --noconfirm || status=1
 else
     status=1

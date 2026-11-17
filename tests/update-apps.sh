@@ -4,6 +4,8 @@
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
+# (the batteries battery-low reads: none, but where a test makes them; never this machine's own)
+export AGROS_POWER_SUPPLY=$t/ps
 mkdir -p "$t/bin" "$t/home"
 stub() { printf '#!/bin/sh\n%s\n' "$2" >"$t/bin/$1"; chmod +x "$t/bin/$1"; }
 # (checkupdates syncs its copy of the lists; what's waiting is pacman's -Qu on it, through the upstream gate: $t/qu)
@@ -46,7 +48,13 @@ check
 rm -f "$seen"; stub id 'echo users'; stub notify-send 'echo sent >>"'"$t"'/sent"'
 check
 [[ ! -e $t/sent ]] || fail "\"Update now\" offered to an account that can't sudo"
-rm "$t/bin/id"
+# ...nor an update tried there (it failed at sudo, part of the way in): said, a failure
+stub paru 'echo "paru $*" >>"'"$t"'/paru"'
+out=$(HOME=$t/home XDG_STATE_HOME=$t/state XDG_CACHE_HOME=$t/home/.cache PATH=$t/bin:$PATH "$here/.local/bin/update-apps" \
+    </dev/null 2>&1) && fail "an update by an account that can't sudo reported success"
+[[ ! -e $t/paru && $out == "Only an administrator can install updates"* ]] ||
+    fail "an update tried by an account that can't sudo, or not said: $out / $(cat "$t/paru" 2>/dev/null)"
+stub id 'echo users wheel'  # (an admin's, from here on)
 
 # The update, with no state folder yet: the Qt Quickshell was built for written down the first time, not taken for a
 # new Qt at every run (each one rebuilding Quickshell and Caelestia)
@@ -139,8 +147,17 @@ grep -q "couldn't be listed (paru -Qua: error: failed to get AUR info)" <<<"$out
 stub paru 'case "$*" in *-Qua*) exit 1 ;; *) echo "paru $*" >>"'"$t"'/paru" ;; esac'
 out=$(HOME=$t/home XDG_STATE_HOME=$t/state XDG_CACHE_HOME=$t/home/.cache PATH=$t/bin:$PATH "$here/.local/bin/update-apps" </dev/null 2>&1) || true
 grep -qE "couldn't be listed|built now, their build" <<<"$out" && fail "no AUR updates said as a list or a failure: $(head -5 <<<"$out")"
+# (the lid too: logind suspends on it whatever sleep lock is held, LidSwitchIgnoreInhibited=yes, but for that one)
+grep -q -- "--what=sleep:shutdown:handle-lid-switch --mode=block .*tail --pid=" "$t/inhibit" ||
+    fail "the install not held against power off, sleep and the lid: $(cat "$t/inhibit" 2>/dev/null)"
+# (the lid's lock refused, polkit's: power off and sleep held all the same)
+# shellcheck disable=SC2016
+stub systemd-inhibit 'case "$1" in *handle-lid-switch*) exit 1 ;; esac; echo "inhibit $*" >>"'"$t"'/inhibit"; while [ "${1#--}" != "$1" ]; do shift; done; exec "$@"'
+rm -f "$t/inhibit"
+HOME=$t/home XDG_STATE_HOME=$t/state XDG_CACHE_HOME=$t/home/.cache PATH=$t/bin:$PATH "$here/.local/bin/update-apps" \
+    </dev/null >/dev/null 2>&1 || true
 grep -q -- "--what=sleep:shutdown --mode=block .*tail --pid=" "$t/inhibit" ||
-    fail "the install not held against power off and sleep: $(cat "$t/inhibit" 2>/dev/null)"
+    fail "the lid's lock refused, power off and sleep not held either: $(cat "$t/inhibit" 2>/dev/null)"
 # The boot's run (auto-update active) still to download what its AUR builds need (its "downloading" mark): waited for,
 # paru not run until the mark is gone (both writing pacman's cache at once would corrupt it)
 mkdir -p "$t/au"; touch "$t/au/downloading"; rm -f "$t/paru"
@@ -157,6 +174,28 @@ wait || true
 { grep -q -- " -Sy --noconfirm$" "$t/paru" && grep -qE -- " --config [^ ]+ -Su --noconfirm$" "$t/paru"; } ||
     fail "paru not run once the boot's download was done, through the gate: $(cat "$t/paru" 2>/dev/null)"
 rm "$t/bin/sleep"
+# A newer keyring waiting (weeks offline): installed first, on its own, then the rest (a package signed with a key the
+# keyring here lacks failed the whole update); one pacman.conf holds back ("[ignored]") left out
+rm -f "$t/paru"; stub systemctl 'exit 1'
+stub pacman 'case "$1" in -Qu) printf "%s\n" "linux 6.1-1 -> 6.2-1" "archlinux-keyring 1-1 -> 2-1" "cachyos-keyring 1-1 -> 2-1 [ignored]" ;; esac; true'
+HOME=$t/home XDG_STATE_HOME=$t/state XDG_CACHE_HOME=$t/home/.cache PATH=$t/bin:$PATH "$here/.local/bin/update-apps" \
+    </dev/null >/dev/null 2>&1 || true
+keys=$(grep -n -- " --config [^ ]* -S --needed --noconfirm archlinux-keyring$" "$t/paru" | cut -d: -f1)
+su=$(grep -n -- " -Su --noconfirm$" "$t/paru" | cut -d: -f1)
+[[ -n $keys && -n $su ]] && ((keys < su)) || fail "the newer keyring not installed first, on its own: $(cat "$t/paru")"
+# On a battery nearly empty (a laptop off its charger, below 15%): nothing installed (a power cut mid-install leaves
+# packages half in), said, a failure for the Updates app; on its charger, updated
+mkdir -p "$t/ps/BAT0"; echo Battery >"$t/ps/BAT0/type"; echo 9 >"$t/ps/BAT0/capacity"; echo Discharging >"$t/ps/BAT0/status"
+rm -f "$t/paru"
+out=$(HOME=$t/home XDG_STATE_HOME=$t/state XDG_CACHE_HOME=$t/home/.cache PATH=$t/bin:$PATH "$here/.local/bin/update-apps" \
+    </dev/null 2>&1) && fail "an update on a nearly empty battery reported success"
+[[ ! -e $t/paru && $out == *"nearly empty (9 percent): nothing updated"* ]] ||
+    fail "updated on a nearly empty battery, or not said: $out / $(cat "$t/paru" 2>/dev/null)"
+echo Charging >"$t/ps/BAT0/status"
+HOME=$t/home XDG_STATE_HOME=$t/state XDG_CACHE_HOME=$t/home/.cache PATH=$t/bin:$PATH "$here/.local/bin/update-apps" \
+    </dev/null >/dev/null 2>&1 || true
+grep -q -- " -Su --noconfirm$" "$t/paru" || fail "not updated on a low battery that's charging: $(cat "$t/paru" 2>/dev/null)"
+rm -r "$t/ps"
 # A booted snapshot (its root an overlay in RAM) or the live USB: nothing updated (gone at the next boot; with Limine a
 # new kernel on the ESP without its modules), said, a failure for the Updates app; and no update offered by --check
 stub findmnt 'echo overlay'; rm -f "$t/paru" "$t/sent"
