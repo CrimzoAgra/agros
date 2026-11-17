@@ -1,4 +1,8 @@
 # agros-system: for every AgrOS user (agros-each-user)
+# Each user's Caelestia overlay (caelestia-overlay: ~/.config/quickshell/caelestia, Caelestia's installed shell with
+# AgrOS's changes over it) made again straight away: a caelestia-shell update changes the files it links to and
+# patches, and the shell would start on a stale overlay until the next login rebuilt it. agros-scripts too: AgrOS's
+# changes are in it (caelestia-overlay and its files)
 [Trigger]
 Operation = Install
 Operation = Upgrade
