@@ -327,8 +327,10 @@ end
 -- reads the screens as they are by then, so the ones that find it busy have nothing left to do); then what a
 -- returning screen had comes back
 local function reload(wait)
+    -- (once reloaded only: a reload already waiting for a game (3) waited for; a failed one asked again every second)
     hl.exec_cmd("sleep " .. wait .. "; flock -n \"${XDG_RUNTIME_DIR:-/tmp}/hypr-screens.lock\" sh -c '~/.local/bin/hypr-reload;"
-                .. " hyprctl eval \"dots.screens_changed()\"'")
+                .. " r=$?; [ $r = 3 ] && flock \"${XDG_RUNTIME_DIR:-/tmp}/hypr-reload-pending\" true && r=0;"
+                .. " [ $r = 0 ] && hyprctl eval \"dots.screens_changed()\"'")
 end
 
 -- After the reload for a screen plugged in (its workspace rules exist by then): the windows merged away from it go

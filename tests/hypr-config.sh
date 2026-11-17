@@ -38,7 +38,8 @@ cat >"$t/stub.lua" <<'L'
 -- Hyprland's hl, enough for the config: rules, binds and handlers recorded, queries answered from WINDOWS and SCREENS.
 -- A bad argument is a config error (listed), not a Lua error, as in Hyprland. Focus and window moves are played on
 -- SCREENS (FOCUS: the focused one's index) and WINDOWS (ACTIVE: the active window), what the binds do in BIND_ACTIONS;
--- LID: what /proc says of the laptop lid; RELOADED: a dispatched hypr-reload
+-- LID: what /proc says of the laptop lid; RELOADED: a dispatched hypr-reload; SCREENS_RELOAD: the command a screen
+-- change ran (its reload, then screens_changed)
 local plugin = os.getenv("PLUGIN") == "1"
 handlers, binds, config_errors, hidden_rules, unset_gestures, WINDOW_RULES = {}, {}, {}, {}, {}, {}
 -- CONFIG: what hl.get_config answers (the blur setting window peek turns off and back); HELD_TIMERS: timers queued
@@ -123,6 +124,7 @@ hl = {
     exec_cmd = function(cmd)
         check(type(cmd) == "string", "hl.exec_cmd: not a string")
         if tostring(cmd):find("dots-warn", 1, true) then io.write("exec dots-warn\n") end
+        if tostring(cmd):find("hypr-screens.lock", 1, true) then SCREENS_RELOAD = cmd end
         check(not cmd:find("open_retry([[0x5]]", 1, true), "a window on a special workspace waited for a workspace id")
     end,
     dispatch = function(d)
@@ -491,6 +493,8 @@ WINDOWS = { win("0x1", 1), win("0x2", 2), win("0xb", 11), win("0xc", 13), win("0
             win("0xf", 17) }
 WINDOWS[#WINDOWS + 1] = win("0x9", 3); WINDOWS[#WINDOWS].pinned = true  -- (a desktop widget: on every workspace)
 SCREENS = { first }; fire("monitor.removed", second)
+-- (its command, run below by sh with hypr-reload and hyprctl stand-ins)
+local rf = io.open(os.getenv("XDG_RUNTIME_DIR") .. "/screens-reload", "w"); rf:write(SCREENS_RELOAD or ""); rf:close()
 check("unplugged 11", where("0xb"), "3"); check("unplugged 13", where("0xc"), "4")
 check("unplugged minimised on 13", where("0xd"), "special:minimised-4"); check("unplugged 15", where("0xe"), "5")
 check("unplugged 17", where("0xf"), "6"); check("pinned window", where("0x9"), "3")
@@ -569,6 +573,29 @@ for _, e in ipairs(config_errors) do error("config error " .. e, 0) end
 L
 out=$(cd "$t" && HOME=$t/home XDG_RUNTIME_DIR=$t/run HYPRLAND_INSTANCE_SIGNATURE=test lua sync.lua stub.lua 2>&1) \
     || fail "synced screens: $out"
+# The screen change's command: screens_changed run once the config reloaded, not when hypr-reload failed (screens_changed
+# found the config not reloaded and asked again: each second, through a game); left to a reload waiting for a game (3),
+# once that one is done
+[[ -s $t/run/screens-reload ]] || fail "a screen unplugged ran no reload"
+mkdir -p "$t/sr/home/.local/bin" "$t/sr/bin"
+printf '#!/bin/sh\necho "hyprctl $*" >>"%s/sr/ran"\n' "$t" >"$t/sr/bin/hyprctl"
+printf '#!/bin/sh\necho reload >>"%s/sr/ran"\nexit "$RC"\n' "$t" >"$t/sr/home/.local/bin/hypr-reload"
+chmod +x "$t/sr/bin/hyprctl" "$t/sr/home/.local/bin/hypr-reload"
+screens_reload() { HOME=$t/sr/home XDG_RUNTIME_DIR=$t/sr PATH=$t/sr/bin:$PATH RC=$1 sh -c "$(cat "$t/run/screens-reload")"; }
+for rc in 0 1; do
+    : >"$t/sr/ran"; screens_reload $rc || true
+    want=reload; [[ $rc == 0 ]] && want=$'reload\nhyprctl eval dots.screens_changed()'
+    [[ $(cat "$t/sr/ran") == "$want" ]] || fail "hypr-reload exiting $rc: $(cat "$t/sr/ran")"
+done
+: >"$t/sr/ran"; : >"$t/sr/hypr-reload-pending"
+flock "$t/sr/hypr-reload-pending" sh -c "until [ -e '$t/sr/game-closed' ]; do sleep 0.1; done" &
+for _ in {1..50}; do flock -n "$t/sr/hypr-reload-pending" true || break; sleep 0.1; done
+screens_reload 3 &
+sleep 1
+[[ $(cat "$t/sr/ran") == reload ]] || fail "screens_changed run while another reload waited for the game: $(cat "$t/sr/ran")"
+touch "$t/sr/game-closed"; wait
+[[ $(cat "$t/sr/ran") == $'reload\nhyprctl eval dots.screens_changed()' ]] ||
+    fail "screens_changed not run once the reload waiting for the game was done: $(cat "$t/sr/ran")"
 # Window drags: edges resize (Hyprland's resize_on_border on, off while a game is open), and a maximised window dragged stops being maximised:
 # moved (any title bar, the plugin's hook), shrunk to the standard size round the pointer; resized, only untagged
 cat >"$t/drag.lua" <<'L'
