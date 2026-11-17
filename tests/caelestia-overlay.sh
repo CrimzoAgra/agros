@@ -246,6 +246,22 @@ grep -q '^WARNING: bar dock skipped, .*(modules/bar/components/ not found)$' <<<
     fail "a feature's folder gone not said: $(grep 'bar dock' <<<"$out")"
 grep -q 'Dock {' "$t/one/modules/bar/Bar.qml" && fail "a feature's folder gone: its other files still patched (Bar.qml's Dock)"
 rm -rf "$t/one"
+# An update that fits the anchors but changed around them: never patched over the wrong thing. A section put after the
+# weather's "coming soon" card stays (only the card is swapped, not all up to the Units comment), and a new file of the
+# overlay's that Caelestia now has its own of skips that feature (not written over Caelestia's)
+cp -r "$src" "$t/mut-src"
+sed -i 's|^        // Units$|        // Forecast\n        SectionHeader {\n            text: "agros-test-section"\n        }\n\n&|' \
+    "$t/mut-src/modules/nexus/pages/LanguageAndRegion.qml"
+grep -q agros-test-section "$t/mut-src/modules/nexus/pages/LanguageAndRegion.qml" || fail "test setup: the Units comment not found"
+echo '// Caelestia: agros-test-own' >"$t/mut-src/services/ScrollLock.qml"
+cp -as "$t/mut-src" "$t/one"
+out=$(DOTS_SETTINGS=$t/bin/dots-settings python3 "$here/.local/share/caelestia-overlay/patch.py" "$t/mut-src" "$t/one" 2>&1) || true
+grep -q '^Patched: settings: weather location picker' <<<"$out" || fail "the weather picker didn't fit with a section after it: $out"
+grep -q agros-test-section "$t/one/modules/nexus/pages/LanguageAndRegion.qml" || fail "the weather picker cut out the section after it"
+grep -q "^WARNING: Scroll Lock icon skipped, .*(services/ScrollLock.qml is Caelestia's own now)$" <<<"$out" ||
+    fail "Caelestia's own ScrollLock.qml not said: $(grep 'Scroll Lock' <<<"$out")"
+grep -q agros-test-own "$t/one/services/ScrollLock.qml" || fail "Caelestia's own ScrollLock.qml written over"
+rm -rf "$t/one" "$t/mut-src"
 # Window peek works on the dock's and the workspace preview's popouts: with one of them off it's still in, with both
 # off it's off too (said so), not a patch that no longer fits
 cat >"$t/bin/two-off" <<'S'

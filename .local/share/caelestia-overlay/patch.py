@@ -108,6 +108,15 @@ def own(name):
         return f.read()
 
 
+def components(*rels):
+    """My whole new components (each the overlay's file of the same name) at rels, as files for write(). A Caelestia
+    with a file of its own at one skips the feature: written over, Caelestia's parts that use it got mine"""
+    for rel in rels:
+        if os.path.lexists(os.path.join(src, rel)):
+            raise LookupError(f"{rel} is Caelestia's own now")
+    return {rel: own(os.path.basename(rel)) for rel in rels}
+
+
 def write(files):
     # Every file's folder there first: one gone (a Caelestia update moved it) skips the feature before anything is
     # written, not after its other files were (the bar then used a part never made, and the whole shell didn't load)
@@ -187,9 +196,7 @@ def dock():
         "modules/bar/popouts/PopoutState.qml": state,
         "modules/bar/popouts/Content.qml": content,
     }
-    files["modules/bar/components/Dock.qml"] = own("Dock.qml")
-    files["modules/bar/popouts/DockMenu.qml"] = own("DockMenu.qml")
-    return files
+    return files | components("modules/bar/components/Dock.qml", "modules/bar/popouts/DockMenu.qml")
 
 
 def window_icons():
@@ -223,18 +230,17 @@ def nexus_region():
     rel = "modules/nexus/pages/LanguageAndRegion.qml"
     s = read(rel)
     s = insert(s, "import Quickshell\n", "import Quickshell.Io\n", before=False)
-    start = s.find("        // Placeholder until the map-based location picker lands\n")
-    end = s.find("        // Units\n", start)
-    if start < 0 or end < 0:
-        raise LookupError("the weather location placeholder")
-    s = s[:start] + own("nexus-weather-block.qml") + "\n" + s[end:]
+    # Caelestia's "coming soon" card only (its block, which must still say so), not up to the next section's comment:
+    # a section an update puts in between, or that comment gone further down, was cut out with it
+    s = swap_block(s, "        // Placeholder until the map-based location picker lands\n", own("nexus-weather-block.qml"),
+                   "the weather location placeholder", must="coming soon")
     clock = """            first: true
             last: true
             label: Tr.tr("Clock format")"""
     s = swap(s, clock, clock.replace("            last: true\n", ""), "the clock format row")
     s = insert(s, "            onSelected: item => GlobalConfig.services.clockFormat = item.value\n        }\n",
                own("nexus-time-block.qml"), before=False)
-    return {rel: s, "modules/nexus/common/SuggestRow.qml": own("SuggestRow.qml")}
+    return {rel: s} | components("modules/nexus/common/SuggestRow.qml")
 
 
 def dock_space():
@@ -599,7 +605,7 @@ def scroll_lock():
     }
 """, before=False)
     files = {"modules/bar/components/StatusIcons.qml": status, "modules/bar/popouts/LockStatus.qml": popout}
-    files["services/ScrollLock.qml"] = own("ScrollLock.qml")
+    files |= components("services/ScrollLock.qml")
     files["modules/bar/components/status/LockStatus.qml"] = own("LockStatus.qml")
     return files
 
@@ -1115,8 +1121,7 @@ def window_peek():
     }
 
 """)
-    files = {"services/WindowPeek.qml": own("WindowPeek.qml"), "modules/drawers/PeekLayer.qml": own("PeekLayer.qml"),
-             "modules/drawers/ContentWindow.qml": window}
+    files = {"modules/drawers/ContentWindow.qml": window} | components("services/WindowPeek.qml", "modules/drawers/PeekLayer.qml")
     # The previews (each only where its feature put it in: the dock's popout, the workspace preview)
     menu, ws = "modules/bar/popouts/DockMenu.qml", "modules/bar/popouts/WorkspacePreview.qml"
     if not os.path.exists(os.path.join(dst, menu)) and not os.path.exists(os.path.join(dst, ws)):
@@ -1244,8 +1249,7 @@ def bar_menu():
 """)
     files = {"modules/bar/popouts/Content.qml": content, "modules/bar/Bar.qml": bar, "modules/bar/BarWrapper.qml": wrapper,
              "modules/drawers/Interactions.qml": inter, "modules/drawers/ContentWindow.qml": window}
-    files["modules/bar/popouts/BarMenu.qml"] = own("BarMenu.qml")
-    return files
+    return files | components("modules/bar/popouts/BarMenu.qml")
 
 
 def dashboard_language():
@@ -1630,7 +1634,7 @@ def workspace_preview():
 """)
     return {"modules/bar/popouts/PopoutState.qml": state, "modules/bar/popouts/Wrapper.qml": wrapper,
             "modules/bar/popouts/Content.qml": content, "modules/bar/Bar.qml": bar,
-            "modules/bar/popouts/WorkspacePreview.qml": own("WorkspacePreview.qml")}
+            **components("modules/bar/popouts/WorkspacePreview.qml")}
 
 
 def snap_preview():
@@ -1644,8 +1648,7 @@ def snap_preview():
     }
 
 """)
-    return {"services/WindowDrag.qml": own("WindowDrag.qml"), "modules/drawers/SnapPreview.qml": own("SnapPreview.qml"),
-            "modules/drawers/ContentWindow.qml": window}
+    return {"modules/drawers/ContentWindow.qml": window} | components("services/WindowDrag.qml", "modules/drawers/SnapPreview.qml")
 
 
 def edge_triggers():
@@ -1713,7 +1716,7 @@ def edge_triggers():
         raise LookupError("the sidebar's hover")
     inter = inter.replace(f"const showSidebarHover = {edge};", f"const showSidebarHover = {new};")
     inter = inter.replace(f"return {edge};", f"return {new};")
-    return {"services/WindowDrag.qml": own("WindowDrag.qml"), "modules/drawers/Interactions.qml": inter}
+    return {"modules/drawers/Interactions.qml": inter} | components("services/WindowDrag.qml")
 
 
 # The changes, in the order they're applied. Each can be turned off in the Settings app (Features page), which lists
