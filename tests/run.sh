@@ -16,8 +16,16 @@ one() {
     case $t in
         boot-video-mode) out=$(python3 "$here/../system/boot-video-mode" --test 2>&1 </dev/null) && out="ok boot-video-mode" ;;
         # (no test can wait on the terminal: no stdin, and in a session of its own, without it, as sudo asks there)
-        *) out=$(setsid -w "$here/$t.sh" 2>&1 </dev/null) ;;
-    esac || { f=$(grep -m1 "^FAIL: " <<<"$out") || f=${out##*$'\n'}; out="FAIL $t: ${f#FAIL: }"; }
+        # (and none runs on forever: stopped at its time limit, AGROS_TEST_TIMEOUT seconds, with what it started in its
+        # session, timeout's process group (one left holding the output kept this waiting too). A hang otherwise ran CI's
+        # job until GitHub stopped it hours later, with no word of which test)
+        *) out=$(setsid -w timeout -k 10 "$limit" "$here/$t.sh" 2>&1 </dev/null) ;;
+    esac || {
+        local rc=$?
+        f=$(grep -m1 "^FAIL: " <<<"$out") || f=${out##*$'\n'}
+        ((rc != 124 && rc != 137)) || f="stopped at its time limit (${limit}s; its last line: ${f:-none})"
+        out="FAIL $t: ${f#FAIL: }"
+    }
     # (a pass ends on its own "ok <test>" or "skip <test>" line: one that stopped early with exit 0, an exit meant for a
     # stand-in it writes or a script it sources, never reached its last checks)
     last=${out##*$'\n'}
@@ -34,9 +42,10 @@ one() {
     echo "$out" | tail -1
 }
 jobs=${AGROS_TEST_JOBS:-$(nproc 2>/dev/null || echo 1)}
+limit=${AGROS_TEST_TIMEOUT:-900}
 res=$(mktemp -d) && trap 'rm -rf "$res"' EXIT
 if ((jobs > 1 && ${#tests[@]} > 1)); then
-    export -f one && export here
+    export -f one && export here limit
     # shellcheck disable=SC2016  # (expanded by that bash)
     printf '%s\0' "${tests[@]}" | xargs -0 -P "$jobs" -I{} bash -c 'one "$1" >"$2/$1"' _ {} "$res"
 fi

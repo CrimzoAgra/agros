@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # On CI (its pass approves that Hyprland for AgrOS's machines: the upstream gate) a test skipped there fails, whole
 # (run.sh: its last line "skip ..." or "... SKIPPED ...") or in part (lib.sh's skipped()); elsewhere both are said and
-# pass. A pass ends on the test's own ok line: one that ended early with exit 0 fails, on CI or not. run.sh and lib.sh
-# copied beside fake tests
+# pass. A pass ends on the test's own ok line: one that ended early with exit 0 fails, on CI or not; one that hangs is
+# stopped at its time limit and fails. run.sh and lib.sh copied beside fake tests
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
@@ -41,4 +41,14 @@ for x in early other silent; do
 done
 out=$(AGROS_TEST_JOBS=3 bash "$t/tests/run.sh" plain silent) && fail "one without its ok line among others passed: $out"
 [[ $out == $'ok plain\nFAIL silent: '* ]] || fail "one without its ok line among others not said in order: $out"
+# One that hangs, with what it started holding the output too: stopped at its time limit, said, and run.sh not kept
+# waiting by either (alone, and among others)
+printf '#!/bin/sh\necho "waiting"\nsleep 300 &\nsleep 300\necho "ok hang"\n' >"$t/tests/hang.sh"
+chmod +x "$t/tests/hang.sh"
+start=$SECONDS
+out=$(AGROS_TEST_TIMEOUT=1 bash "$t/tests/run.sh" hang) && fail "a test that hung passed: $out"
+[[ $out == "FAIL hang: stopped at its time limit (1s; its last line: waiting)" ]] || fail "a hung test not said: $out"
+out=$(AGROS_TEST_TIMEOUT=1 AGROS_TEST_JOBS=3 bash "$t/tests/run.sh" plain hang) && fail "a test that hung among others passed: $out"
+[[ $out == $'ok plain\nFAIL hang: stopped at its time limit'* ]] || fail "a hung test among others not said in order: $out"
+((SECONDS - start < 30)) || fail "a hung test, or what it started, kept run.sh waiting: $((SECONDS - start))s"
 echo "ok run-ci-skip"
