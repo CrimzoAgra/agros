@@ -6,7 +6,9 @@ AppImage and opens it, updates the app by itself: the file goes to ~/Application
 the old version (which is closed first), the launcher entry and icon come from inside the AppImage, and the
 app starts again. An AppImage without a launcher entry inside just runs. When installing (--install: appimage-update,
 not a file you open), a system package with the same launcher entry (the app installed another way
-before, e.g. from the AUR) is removed, asking for your password, so there's one copy.
+before, e.g. from the AUR) is removed, asking for your password, so there's one copy. A file you open is asked about
+first (it runs as you), and read without running it where it can be (unsquashfs); one whose launcher entry is another
+app's (an installed app's, or a file of yours) isn't installed.
 
   appimage-open <file.AppImage>             install/update and start it
   appimage-open --install <file.AppImage>   install/update only (appimage-update)
@@ -15,6 +17,7 @@ import os
 import re
 import shutil
 import signal
+import struct
 import subprocess
 import sys
 import tempfile
@@ -26,13 +29,77 @@ ENTRIES = f"{HOME}/.local/share/applications"
 ICONS = f"{HOME}/.local/share/icons"
 
 
+def squashfs_offset(appimage: str) -> int | None:
+    """Where its files (a squashfs image) start: right after its ELF runtime, at the end of the ELF's section headers.
+    None when it isn't laid out so (not an ELF, or no squashfs there: another kind of AppImage)"""
+    try:
+        with open(appimage, "rb") as f:
+            head = f.read(64)
+            if len(head) < 64 or head[:4] != b"\x7fELF" or head[4] not in (1, 2) or head[5] not in (1, 2):
+                return None
+            e = "<" if head[5] == 1 else ">"
+            if head[4] == 2:
+                shoff, = struct.unpack(e + "Q", head[0x28:0x30])
+                shentsize, shnum = struct.unpack(e + "HH", head[0x3A:0x3E])
+            else:
+                shoff, = struct.unpack(e + "I", head[0x20:0x24])
+                shentsize, shnum = struct.unpack(e + "HH", head[0x2E:0x32])
+            offset = shoff + shentsize * shnum
+            f.seek(offset)
+            return offset if f.read(4) == b"hsqs" else None
+    except (OSError, struct.error):
+        return None
+
+
 def extract(appimage: str, pattern: str, into: str) -> None:
+    """Its files matching the pattern (one per path part) into <into>/squashfs-root, links as links. Read by unsquashfs,
+    the AppImage never run for it; only where that can't be (no squashfs-tools, another kind of AppImage) by its own
+    --appimage-extract, which runs it: by then you've said to run it (ask_to_run), or it's an install from the GitHub
+    release you picked (appimage-update)"""
+    offset = squashfs_offset(appimage)
+    if offset is not None and shutil.which("unsquashfs"):
+        cmd = ["unsquashfs", "-q", "-n", "-f", "-o", str(offset), "-d", f"{into}/squashfs-root", appimage, pattern]
+    else:
+        cmd = [appimage, "--appimage-extract", pattern]
     # (one that doesn't run here or hangs: nothing extracted, so "no launcher entry", not a traceback)
     try:
-        subprocess.run([appimage, "--appimage-extract", pattern], cwd=into,
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60)
+        subprocess.run(cmd, cwd=into, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60)
     except (OSError, subprocess.TimeoutExpired):
         pass
+
+
+def ask_to_run(src: str) -> bool:
+    """You said to run it (zenity), before it's made runnable or anything of it read: a file you opened, from a download
+    or a stick. Not asked for one in ~/Applications (installed), nor the new version an installed app's own Update button
+    opens (it runs from ~/Applications: its APPIMAGE). No answer (no zenity, no desktop): not run"""
+    for path in (src, os.environ.get("APPIMAGE", "")):
+        if path and os.path.realpath(path).startswith(os.path.realpath(APPS) + "/"):
+            return True
+    try:
+        return subprocess.run(["zenity", "--question", "--no-markup", "--title=Run this AppImage?", "--ok-label=Run",
+                               "--cancel-label=Cancel", f"--text={os.path.basename(src)} is a program: it runs as you, "
+                               "with your files. Run it (and install it in ~/Applications) only if you trust where it "
+                               "came from."], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
+    except OSError:
+        return False
+
+
+def clashing_entry(app: str, install_only: bool) -> str:
+    """Another launcher entry with this id ("" when none): a file of yours in ~/.local/share/applications (not one this
+    made), which this would write over; else, opening a file, an installed app's (an AppImage naming itself
+    librewolf.desktop would take LibreWolf's place in the menu, the dock and as the default browser). Installing
+    (appimage-update), a system package's copy is removed instead (remove_package_copy)"""
+    mine = f"{ENTRIES}/{app}.desktop"
+    if os.path.exists(mine):
+        made = "# Made by ~/.local/bin/appimage-open" in open(mine, errors="replace").read()
+        return "" if made else mine
+    if install_only:
+        return ""
+    dirs = os.environ.get("XDG_DATA_DIRS") or "/usr/local/share:/usr/share"
+    for d in [*dirs.split(":"), f"{HOME}/.local/share/flatpak/exports/share", "/var/lib/flatpak/exports/share"]:
+        if d and os.path.exists(f"{d}/applications/{app}.desktop"):
+            return f"{d}/applications/{app}.desktop"
+    return ""
 
 
 def resolve(appimage: str, tmp: str, name: str) -> str:
@@ -148,6 +215,8 @@ def main() -> None:
     if len(args) != 1 or not os.path.isfile(args[0]):
         sys.exit(__doc__)
     src = os.path.abspath(args[0])
+    if not install_only and not ask_to_run(src):
+        sys.exit(0)
     # Made executable. On a drive that won't run it (a USB stick's FAT, a read-only or noexec mount; a file not yours):
     # a copy of it in ~/Applications, which becomes the installed file or, with no launcher entry inside, is what runs
     # (it failed, a traceback no one saw, nothing installed or started)
@@ -172,6 +241,11 @@ def main() -> None:
                 os.execv(src, [src])
             sys.exit(f"{src}: no launcher entry inside, not installed")
         app, text, icon = found
+        clash = clashing_entry(app, install_only)
+        if clash:
+            notify("-a", "AppImage", "-i", "dialog-warning", f"{os.path.basename(src)} not installed",
+                   f"Its launcher entry, {app}.desktop, is already another app's ({clash})")
+            sys.exit(f"{src}: its launcher entry {app}.desktop is already another app's ({clash}): not installed")
         dest = f"{APPS}/{app.lower()}.AppImage"
         updating = os.path.exists(dest) and src != dest
         os.makedirs(APPS, exist_ok=True)

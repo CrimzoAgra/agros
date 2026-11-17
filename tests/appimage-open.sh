@@ -31,6 +31,10 @@ cp "$t/Demo-x86_64.AppImage" "$t/again.AppImage"  # (installing moves it: a copy
 cp "$t/Demo-x86_64.AppImage" "$t/stick.AppImage"  # (and one on a drive that won't run it, below)
 export NOTIFY_WHEN_UP_TRIES=1  # (its notifications in the background: not tried for a minute after the test)
 for c in pacman notify-send update-desktop-database sudo pkexec; do printf '#!/bin/sh\nexit 1\n' >"$t/bin/$c"; done
+# (zenity: asked to run a file opened, noted; "Run" unless $NO)
+printf '#!/bin/sh\necho asked >>"%s/asked"\n[ -z "$NO" ]\n' "$t" >"$t/bin/zenity"
+# (only the system's launcher entries the test makes)
+export XDG_DATA_DIRS=$t/sys
 chmod +x "$t"/bin/*
 HOME=$t/home PATH=$t/bin:$PATH python3 "$here/.local/bin/appimage-open" --install "$t/Demo-x86_64.AppImage" ||
     fail "not installed"
@@ -87,4 +91,41 @@ OWNER=demo-bin remove "$t/open-home" || fail "an opened AppImage not installed"
 grep -q pacman "$t/ran" 2>/dev/null && fail "a package removed for an AppImage only opened: $(cat "$t/ran")"
 OWNER='' remove "$t/none-home" --install || fail "not installed with no package's copy"
 grep -q pacman "$t/ran" 2>/dev/null && fail "a package removed with none owning the entry: $(cat "$t/ran")"
+# A file you open is asked about before anything (made runnable, read, run): no, and nothing's done; an installed one
+# (in ~/Applications) or --install isn't asked
+rm -f "$t/asked"; cp "$t/home/Applications/demo.AppImage" "$t/ask.AppImage"; chmod 644 "$t/ask.AppImage"
+NO=1 HOME=$t/ask-home PATH=$t/bin:$PATH python3 "$here/.local/bin/appimage-open" "$t/ask.AppImage" || fail "a refused run failed"
+[[ -s $t/asked && ! -e $t/ask-home/Applications && ! -x $t/ask.AppImage ]] ||
+    fail "a file opened not asked about, or made runnable or installed after a no: $(ls -l "$t/ask.AppImage")"
+rm -f "$t/asked"
+HOME=$t/home PATH=$t/bin:$PATH python3 "$here/.local/bin/appimage-open" --install "$t/ask.AppImage" >/dev/null 2>&1 || fail "--install failed"
+[[ ! -e $t/asked ]] || fail "--install (appimage-update) asked"
+# A launcher entry that's another app's: an installed one's (an AppImage naming itself as LibreWolf), or a file of yours
+# (written over before), not installed, said; nothing moved into ~/Applications
+mkdir -p "$t/sys/applications"; echo '[Desktop Entry]' >"$t/sys/applications/demo.desktop"
+cp "$t/home/Applications/demo.AppImage" "$t/clash.AppImage"
+out=$(HOME=$t/clash-home PATH=$t/bin:$PATH python3 "$here/.local/bin/appimage-open" "$t/clash.AppImage" 2>&1) &&
+    fail "an AppImage installed over an installed app's launcher entry"
+[[ $out == *"already another app's ($t/sys/applications/demo.desktop)"* && ! -e $t/clash-home/Applications/demo.AppImage &&
+    ! -e $t/clash-home/.local/share/applications/demo.desktop ]] || fail "an installed app's launcher entry taken over, or not said: $out"
+rm "$t/sys/applications/demo.desktop"
+mkdir -p "$t/clash-home/.local/share/applications"; echo '[Desktop Entry]' >"$t/clash-home/.local/share/applications/demo.desktop"
+out=$(HOME=$t/clash-home PATH=$t/bin:$PATH python3 "$here/.local/bin/appimage-open" --install "$t/clash.AppImage" 2>&1) &&
+    fail "an AppImage installed over your own launcher entry"
+[[ $(cat "$t/clash-home/.local/share/applications/demo.desktop") == '[Desktop Entry]' ]] || fail "your own launcher entry written over: $out"
+# Read without running it: a real AppImage's layout (an ELF, here one that does nothing, then a squashfs image of its
+# files) installed through unsquashfs; its own --appimage-extract would have extracted nothing
+if command -v mksquashfs >/dev/null && command -v unsquashfs >/dev/null; then
+    mkdir -p "$t/sq/usr/share/applications"
+    cp "$t/img/usr/share/applications/demo.desktop" "$t/sq/usr/share/applications/"
+    ln -s usr/share/applications/demo.desktop "$t/sq/demo.desktop"; echo png >"$t/sq/demo.png"
+    mksquashfs "$t/sq" "$t/sq.img" -quiet -noappend >/dev/null
+    cat "$(command -v true)" "$t/sq.img" >"$t/real.AppImage"; chmod +x "$t/real.AppImage"
+    HOME=$t/real-home PATH=$t/bin:$PATH python3 "$here/.local/bin/appimage-open" --install "$t/real.AppImage" >/dev/null 2>&1 ||
+        fail "an AppImage not read with unsquashfs"
+    grep -qx "Exec=$t/real-home/Applications/demo.AppImage %U" "$t/real-home/.local/share/applications/demo.desktop" &&
+        [[ $(cat "$t/real-home/.local/share/icons/demo-appimage.png") == png ]] || fail "an AppImage's entry or icon not read with unsquashfs"
+else
+    skipped "no squashfs-tools here: an AppImage read without running it not checked"
+fi
 echo "ok appimage-open"
