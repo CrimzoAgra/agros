@@ -3,8 +3,9 @@ Description=Get Caelestia's first start ready (AgrOS's changes built, a first lo
 # As the graphical session starts, before Hyprland: graphical-session-pre.target, which wants this, is ordered after it
 # (a target is after what it wants), and uwsm starts Hyprland after that target. So at Hyprland's start caelestia-start
 # finds them done and starts the shell at once, instead of building them first while the session's other windows (the
-# live USB's installer) came up before the bar. After agros-links: it runs the programs through its links
-After=agros-links.service
+# live USB's installer) came up before the bar. After agros-links (it runs the programs through its links) and uwsm's
+# environment loader (the same environment as Hyprland's own run)
+After=agros-links.service wayland-wm-env@hyprland.desktop.service
 PartOf=graphical-session.target
 
 [Service]
