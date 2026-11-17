@@ -8,6 +8,8 @@ mkdir -p "$t/bin" "$t/home"
 stub() { printf '#!/bin/sh\n%s\n' "$2" >"$t/bin/$1"; chmod +x "$t/bin/$1"; }
 # (checkupdates syncs its copy of the lists; what's waiting is pacman's -Qu on it, through the upstream gate: $t/qu)
 stub checkupdates 'exit 0'
+# (the system booted as itself: CI's container root is an overlay, which reads as a booted snapshot)
+stub findmnt 'echo btrfs'
 stub pacman '[ "$1" = -Qu ] && cat '"$t"'/qu 2>/dev/null; true'
 echo "linux 6.1-1 -> 6.2-1" >"$t/qu"
 # (paru translates its "[ignored]": in Portuguese it's "[ignorado]")
@@ -155,6 +157,20 @@ wait || true
 { grep -q -- " -Sy --noconfirm$" "$t/paru" && grep -qE -- " --config [^ ]+ -Su --noconfirm$" "$t/paru"; } ||
     fail "paru not run once the boot's download was done, through the gate: $(cat "$t/paru" 2>/dev/null)"
 rm "$t/bin/sleep"
+# A booted snapshot (its root an overlay in RAM) or the live USB: nothing updated (gone at the next boot; with Limine a
+# new kernel on the ESP without its modules), said, a failure for the Updates app; and no update offered by --check
+stub findmnt 'echo overlay'; rm -f "$t/paru" "$t/sent"
+out=$(HOME=$t/home XDG_STATE_HOME=$t/state XDG_CACHE_HOME=$t/home/.cache PATH=$t/bin:$PATH "$here/.local/bin/update-apps" \
+    </dev/null 2>&1) && fail "an update from a snapshot reported success"
+[[ ! -e $t/paru && $out == *"runs from a snapshot"*"nothing updated"* ]] ||
+    fail "updated from a snapshot, or not said: $out / $(cat "$t/paru" 2>/dev/null)"
+stub id 'echo users wheel'; rm -f "$seen"; echo "linux 6.1-1 -> 6.2-1" >"$t/qu"
+stub pacman '[ "$1" = -Qu ] && cat '"$t"'/qu 2>/dev/null; true'
+check
+[[ ! -e $t/sent && ! -e $seen ]] || fail "an update offered from a snapshot"
+stub findmnt 'echo btrfs'
+check
+[[ -e $t/sent ]] || fail "test setup: no update offered from the system itself either"
 
 # A new Python (3.13 to 3.14) from its paru -Su: the AUR's packages in the old folder (python-foo) rebuilt, as the
 # boot's AUR builds do (update-kinds' one list), not the repo's; a Python bugfix release rebuilds nothing

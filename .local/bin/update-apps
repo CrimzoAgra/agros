@@ -111,6 +111,12 @@ summary() {
     ((n > 4)) && names+=", ..."
 }
 
+# A snapshot booted from the boot menu (its root an overlay in RAM: agros-boot's snapshot-overlay, grub-btrfs's or
+# Limine's), or the live USB: an update there is gone at the next boot, and with /boot the ESP (Limine) its new kernel
+# and initramfs were written for real, their modules not: the next normal boot broken. Not updated, said (as the boot's
+# auto-update does), and no update offered
+snapshot() { [[ $(findmnt -no FSTYPE / 2>/dev/null) == overlay ]]; }
+
 if [[ ${1:-} == --check-now ]]; then
     all=$(list_updates)
     list=$(grep -v '^offline' <<<"$all" | cut -f2 | sed '/^$/d' | sort -u)
@@ -133,6 +139,7 @@ fi
 if [[ ${1:-} == --check ]]; then
     # (an admin's (wheel) only: another account can't sudo, so its "Update now" only failed; the boot's update covers it)
     [[ " $(id -nG 2>/dev/null) " == *" wheel "* ]] || exit 0
+    ! snapshot || exit 0
     list=$(list_updates | grep -v '^offline' | cut -f2 | sort -u)
     [[ -n $list ]] || exit 0
     seen="${XDG_CACHE_HOME:-$HOME/.cache}/update-apps-notified"
@@ -150,6 +157,11 @@ if [[ ${1:-} == --check ]]; then
     exit 0
 fi
 
+if snapshot; then
+    echo "This system runs from a snapshot (or the live USB), its changes in RAM: nothing updated, none of it kept."
+    echo "Boot the system itself (the boot menu's first entry) to update."
+    exit 1
+fi
 status=0 # 1 if any step failed (the Updates app says "Finished, with problems")
 echo "== System and AUR apps"
 # The boot's own downloads first (both fetching the same package into the cache at once would corrupt it): while it
