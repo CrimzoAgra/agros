@@ -95,15 +95,17 @@ taking it out. `update-gate`'s approved list, the boot's copy of `agros-arch-ok`
 
 The AUR packages AgrOS uses (`aur/packages.txt`: Caelestia, equibop, Spicetify, darkly, ...) are built into
 the same repo. Quickshell is built first, on its own, with AgrOS's fix
-(`packages/agros-system/aur-patches/quickshell-git.patch`, added by `aur-agros-patch`, its pkgrel a `.1` above the
-AUR's). Without it, a window that closed while Quickshell was asking Hyprland for the window list came back from the
+(`packages/agros-system/aur-patches/quickshell-git.patch`, added by `aur-agros-patch`, its pkgrel a `.<rel>` above the
+AUR's, raised when what it adds changes; stripped, as Arch's own packages are). Without it, a window that closed while Quickshell was asking Hyprland for the window list came back from the
 late answer and stayed listed for good (a game quit, its icon left in the dock). The boot's rebuild on a new Qt
 (`auto-update-aur`) adds the same fix, and a patch that no longer applies fails the build rather than going out without
 it. CachyOS's installer is built there too: `cachyos-calamares` rebuilt with AgrOS's changes (the live ISO installs
 it from `[agros]`; among them, an EFI partition already on the disk checked against the minimum size, agros-iso's 64
 MB, not the 512 MB a new one gets, so it installs beside Windows' 100 MB one): its version is CachyOS's with a `.N`
-after the pkgrel (`calamares_rel` in `ci/build-repo.sh`), raised with any change to AgrOS's changes, beside their new
-checksum (`calamares_sum`), or CI fails. CachyOS's recipe for it is taken at a fixed commit of CachyOS-PKGBUILDS
+after the pkgrel (`calamares_rel` in `ci/build-repo.sh`), raised with any change to AgrOS's changes or to the pins
+below, beside their new checksum (`calamares_sum`, over both), or CI fails. A build whose settings name a module it
+wasn't built with (CMake leaves one out unsaid when its library is missing, and the installer stopped at that step) is
+held, the published one kept. CachyOS's recipe for it is taken at a fixed commit of CachyOS-PKGBUILDS
 (`calamares_pkgbuild`), and the installer's code at a fixed commit of its `cachyos` branch (`calamares_src`), not their
 newest: their changes reach AgrOS's installer only once looked at, the pins moved on and `calamares_rel` raised; the
 weekly status says when either has moved. (On 2026-11-17 CachyOS moved the recipe from `cachyos-dev`, as
@@ -118,7 +120,11 @@ the `1.` keeping it above the whole repo's `r<count>` it had before), as each ne
 ships a file mkinitcpio's pacman hook watches); `agros-hyprbars` by the Hyprland it's built for, then the commits that
 touch it (`<hyprland version>.r<count>.<commit>`: a build for another Hyprland is a new version); `agros-desktop`,
 `agros-welcome`, `agros-keyring`, `agros-nvidia` and `agros-wine` have a fixed `pkgver`, raised by
-hand in their `PKGBUILD` with any change to them: CI fails when one changed under a version already published. To change AgrOS, change this repo: CI builds and publishes the packages, and pacman updates every
+hand in their `PKGBUILD` with any change to them: CI fails when one changed under a version already published. A
+version already published keeps the published file (a rebuild under the same name read as corrupted in pacman's
+cache), except a compiled one built against other libraries, Qt or Python than it (`built_against`): that rebuild goes
+out, so new installs and the ISO get one that runs. Quickshell, Caelestia and Calamares aren't even built when nothing
+that would change that has (`reused` in `ci/published.sh`). To change AgrOS, change this repo: CI builds and publishes the packages, and pacman updates every
 machine. Settings in `/etc/skel` reach new accounts. An account that has them already gets an update's new version
 at its next login (`agros-links`) where its file is still one AgrOS shipped, byte for byte (one you never edited); one
 you edited is kept, AgrOS's new version put beside it as `<file>.agros-new` (as pacman's `.pacnew`), and a
@@ -339,8 +345,9 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
       the result (also if the menu was closed meanwhile) and opens the Updates app
     - Opens over fullscreen games and videos too (`general.showOverFullscreen` in `shell.json`; notifications and
       toasts stay off fullscreen windows)
-  - Panels that open on hover (dashboard, Super menu, sidebar, volume, utilities) open only from the screen's last
-    pixel, not the border's whole width, and not while a mouse button is held or a window is dragged; once open, one
+  - Panels that open on hover (dashboard, Super menu, sidebar, volume, utilities) open only from the screen's last 3
+    pixels (not the last alone: Caelestia's dots' `cursor:hotspot_padding` keeps the pointer a pixel short of every
+    edge), not the border's whole width, and not while a mouse button is held or a window is dragged; once open, one
     stays while the pointer is over it (`edge_triggers`)
   - Notifications:
     - The sidebar slides down from the top when you hover the top edge above it, with notifications only (no
@@ -724,7 +731,7 @@ helper a package update just brought works before `agros-links` has linked it), 
   fullscreen game: nothing sent), no reload, the pointer never moved; tried 10 times a second apart (just after waking
   Hyprland may not answer yet), each answer waited for up to 3 s: up to ~40 s per session when Hyprland doesn't answer,
   ~70 s when it answers the check but not the switch. Run after waking by `agros-system`'s sleep hook, as each user
-- **`.local/share/github-release/lib.sh`**: a GitHub release's x86_64 file and its checksum (`appimage-update`,
+- **`.local/share/github-release/lib.sh`**: a GitHub release's x86_64 file and its checksum, when the release has any (`appimage-update`,
   `flatpak-bundle-update`)
 - **`.local/bin/app-for-window`**: the app a window belongs to when its class names none Quickshell finds (Java, Wine
   and script apps, a Flatpak's id): by the class's last part, the Flatpak's id, then the window's program against each
@@ -794,9 +801,9 @@ helper a package update just brought works before `agros-links` has linked it), 
   in `~/Applications` with a launcher entry, or replaces the old version, and starts it; so an app's own Update button
   updates it by itself. One on a drive that won't run it (a USB stick's FAT, a noexec mount) is copied there first
 - **`.local/bin/appimage-update`**: updates those AppImages from their GitHub releases, checked against the release's
-  checksums
+  checksums when it has them (some, but none for the file: not installed)
 - **`.local/bin/flatpak-bundle-update`**: updates Flatpaks installed from a downloaded `.flatpak` file (no Flatpak repo,
-  e.g. ArtCraft Launcher) from their GitHub releases, checksum-verified; `--check` lists the ones with a newer version
+  e.g. ArtCraft Launcher) from their GitHub releases, checked the same way; `--check` lists the ones with a newer version
   (both use `.local/share/github-release/lib.sh`: the release's x86_64 file and its checksum). At boot, each user's
   own are done as that user and the system-wide ones once, as root
 - **`.local/bin/capri-update`**: installs and updates Capri: my fork (`CrimzoAgra/capri-overlay`: CapriDesktop with
@@ -834,6 +841,7 @@ brings each change; nothing to run by hand).
 - **Updates app** (`.config/quickshell/updates/`, in the Super menu; opened through `.local/bin/updates`):
   - Lists what's waiting, by app with its icon and old → new version: system and AUR apps, firmware, Flatpaks,
     AppImages, Capri, Proton builds, developer tools
+  - A list that couldn't be made (`update-apps --list` failed) says so, not "Everything is up to date"
   - "Update all" runs `update-apps`, showing its progress; shown only while something is waiting. Closed with the
     title bar; an update already running carries on (its log: `$XDG_RUNTIME_DIR/update-apps.log`), and opening it
     again and pressing "Update all" follows it
@@ -948,7 +956,7 @@ brings each change; nothing to run by hand).
     `/var/lib/auto-update/aur/log/`; right after each build, the packages it made are read through the sandbox into
     root's own folder (a regular file only: a FIFO a build left there would block the read; each read under a
     `timeout`), and only those the plan names are kept (their `.PKGINFO`'s name and version as their file names
-    them, at least the AUR's version: a `sudo` or `linux` a build left beside them isn't); a dependency a `.SRCINFO`
+    them, at least the version planned, the AUR's or the installed one a runtime rebuild is pinned to: a `sudo` or `linux` a build left beside them isn't); a dependency a `.SRCINFO`
     names must look like one (`name`, `name>=1.2`) and reaches root's pacman after `--`. Nothing a build wrote reaches
     a notification as it is: the reasons `dotfiles-check` shows are fixed sentences, with a name stripped to
     `[A-Za-z0-9@._+<>=-]` (and `dotfiles-check` keeps only plain characters of anything `auto-update` wrote down,
@@ -998,7 +1006,8 @@ brings each change; nothing to run by hand).
     and HTTPS, which fwupd starts over D-Bus) is masked once by `agros-system` (fwupd works without it, only logging
     that it's not there; removing `agros-system` unmasks it)
   - **Proton builds** (yours, as you) where Steam and Lutris look for them: Steam's `compatibilitytools.d` and Lutris's
-    Wine runners (`$XDG_DATA_HOME/lutris/runners/wine`, or `lutris.conf`'s `runner_dir`). For each family there
+    Wine runners (`$XDG_DATA_HOME/lutris/runners/wine`, or `lutris.conf`'s `runner_dir` when named in full: a relative
+    one is skipped, as what's removed must be inside it). For each family there
     (GE-Proton from GloriousEggroll's GitHub releases, dwproton from Dawn Winery's at dawn.wine), its newest release
     beside the old ones (which release a folder is: its `version` file, else its name), checked against the release's
     `.sha512sum` (none, or not matching: not installed), unpacked in a hidden folder there and moved in whole, marked
@@ -1024,7 +1033,8 @@ brings each change; nothing to run by hand).
   "Update all" builds them without that review (it lists which ones first, in its log; it asks for your password in a
   dialog). After its `paru -Syu` it rebuilds what's built on a runtime it changed (the boot's same list: Quickshell,
   Caelestia, qtengine for a new Qt; the AUR's Python packages for a new Python minor version), and on a Qt changed
-  since they were last built. Log: `/var/log/auto-update.log` (its last 20 runs kept);
+  since they were last built: the AUR's newest, once the runtime is in (not at the version installed, nor with AgrOS's
+  Quickshell fix, as the boot's). Log: `/var/log/auto-update.log` (its last 20 runs kept);
   `dotfiles-check` says an install at shutdown that failed or was held back (until one goes through), AUR builds, AUR
   apps the install left out, or a firmware update that failed, and 3 shutdowns in a row with nothing installed, with the last one's reason (the boot's
   download didn't finish: only a finished one is installed; something else using pacman still held its lock; a soft
@@ -1156,14 +1166,17 @@ the sync says it failed).
 After pulling changes made elsewhere, copy the ones you want into your home first, or the next `dotfiles-sync` skips
 the files the repo has newer (and says so) until you do. Changes to `packages/`, `system/` or the login screen reach
 the system as package updates: push them, CI publishes the new packages, and the next update installs them (a change
-to `agros-desktop`, `agros-welcome`, `agros-keyring` or `agros-nvidia` with its `pkgver` raised: CI fails without it;
-`agros-vmware`'s and `agros-thunar-usage`'s versions move only with a commit to their folder in `packages/`,
-`agros-boot`'s only with one to what it's made from).
+to `agros-desktop`, `agros-welcome`, `agros-keyring`, `agros-nvidia` or `agros-wine` with its `pkgver` raised: CI fails
+without it; `agros-vmware`'s and `agros-thunar-usage`'s versions move only with a commit to their folder in
+`packages/`, `agros-boot`'s only with one to what it's made from, `agros-hyprbars`' with one to it or a new
+Hyprland).
 
 ## Tests
 
 `tests/run.sh` runs them all (`tests/run.sh lutris-overlay` just one), each in a throwaway home, so nothing of yours is
-touched. Run it after changing a script, and after Caelestia, Lutris or Hyprland updates: they check that the
+touched. Several run at once (one per CPU; `AGROS_TEST_JOBS=1`, one at a time), and one that fails among them runs again
+alone: only a failure there counts. A pass ends on the test's own `ok <test>` line, so one that stops early with exit 0
+fails. Run it after changing a script, and after Caelestia, Lutris or Hyprland updates: they check that the
 Caelestia and Lutris changes and the hyprbars patch still fit, besides the boot update (its AUR builds, firmware,
 Proton and developer tools too), the account restore, the
 bookmarks export, dotfiles-sync not undoing pulled changes, the settings file Lua reads, the login screen's theme,
@@ -1174,7 +1187,7 @@ pipeline reads as "not found": a running Proton was removed under a game), nor i
 pipeline's status decides something; read the output whole (`grep -q x <<<"$(cmd)"`), or mark a line
 `# pipefail-ok: <why>`.
 
-CI runs them on every push, pull request and night, with what the checks against Caelestia, Hyprland, Qt and the kernel need
+CI runs them on every push (not one to the docs alone), pull request and night, with what the checks against Caelestia, Hyprland, Qt and the kernel need
 (its dots at the pinned commit), so none is skipped there: a skip there, whole or in part (`skipped` in
 `tests/lib.sh`; `tests/run.sh` for a whole one), fails CI, as its pass approves that Hyprland. The checks against
 upstream's next release (Caelestia's, Lutris's and Hyprland's main branches, hyprland-plugins' main: a change there
@@ -1200,9 +1213,11 @@ breaks something holds back that one piece, never the rest (`.github/workflows/c
   so. Moving to a new signing subkey: add it to `ci/agros.asc` (and agros-iso's `agros.asc`) and raise
   `agros-keyring`'s `pkgver`, let machines update, then replace the secret; signing with a subkey `ci/agros.asc` lacks
   fails the release, before anything goes out.
-- **A package that doesn't build** (an AUR change, AgrOS's Quickshell patch or Calamares changes no longer fitting, a
-  download that failed): the published one is kept, its signature checked, with the packages of the repo it needs
-  (`ci/published.sh`); the rest goes out. None published yet: the build fails.
+- **A package that doesn't build** (an AUR change, AgrOS's Quickshell patch or Calamares changes no longer fitting,
+  Calamares built without a module its settings name, a download that failed): the published one is kept, its
+  signature checked, with the packages of the repo it needs (`ci/published.sh`); the rest goes out. None published yet:
+  the build fails. The AUR packages and CachyOS's installer are built without compiler warnings (theirs, not AgrOS's);
+  AgrOS's own packages keep them.
 - **Tests that fail** (`ci/test-passes.sh`) are run again to see which side broke them: with the published `[agros]`
   (they pass: this run's new AUR builds broke them, swapped for the published ones by `build-repo.sh --hold-new`; the
   new Hyprland still approved), then on Arch as of the last day the tests passed on it (its archive's snapshot; the day
@@ -1218,7 +1233,8 @@ breaks something holds back that one piece, never the rest (`.github/workflows/c
   which built nothing and which GitHub shows as a success, too), what's held (and since when), CachyOS changes waiting
   for a merge (agros-iso's CachyOS sync, since when) and the sync's own failures (its ISO check's are the pull request's
   to say), a daily run (CI's, the sync's) not seen for 3 days (GitHub turns a public repo's schedules off after 60 days
-  without a commit), and whether Arch's newest Hyprland is approved yet; a lookup that fails is said too, never read as
+  without a commit), whether Arch's newest Hyprland is approved yet, and CachyOS's installer recipe or code moved on
+  past AgrOS's pins (`calamares_pkgbuild`, `calamares_src`); a lookup that fails is said too, never read as
   nothing to say. Its table also says how far Caelestia's dots have gone since the commit `agros-hyprland-settings`
   pins (a new one is taken on purpose; nothing else says when there is one). The owner is mentioned, so GitHub notifies
   them. Its size watch (`ci/sizes.sh` in an Arch container, `ci/sizes.py`) works out
@@ -1233,8 +1249,6 @@ breaks something holds back that one piece, never the rest (`.github/workflows/c
   kept for the next; a set whose files pacman can't all list has its NoExtract patterns left unchecked, said. Last
   week's sizes are kept in last week's issue (a comment in its body; left out, said, if it would take the body past
   GitHub's 65536 characters); the size watch not running at all is said with a link to its log.
-  The AUR packages and CachyOS's installer are built there without compiler warnings
-(theirs, not AgrOS's); AgrOS's own packages keep them.
 - **Once a month** `.github/workflows/keepalive.yml` turns every scheduled workflow here (CI's nightly run, the weekly
   status, itself) on again through GitHub's API (`gh api -X PUT repos/<repo>/actions/workflows/<file>/enable`, with
   `actions: write`), as keepalive-workflow v2 does, so GitHub's 60 days without a commit never turn them off; no dummy
