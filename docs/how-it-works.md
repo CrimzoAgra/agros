@@ -188,7 +188,8 @@ plugged in, mounted if it isn't, or the folder you name after it), encrypted wit
 a lost drive gives nothing without it. `agros-personal` decrypts it straight into place (nothing unencrypted written
 anywhere else) and backs up what it replaces; the keyring opens with your old login password. It refuses while an app
 whose files it brings back is open, but closes Lutris and Proton VPN when they're only in the tray (they start there at
-login, Proton VPN once you turn that on), asking first in a terminal. It's never in the repo (`--save` refuses a
+login, Proton VPN once you turn that on), asking first in a terminal. Proton VPN's start at login (`startup.protonvpn`,
+off at first) isn't in the file: a restore that brought its account back says where to turn it on. It's never in the repo (`--save` refuses a
 folder inside a git repo): saved logins get past your password and 2FA, and git keeps every version. With no drive, it
 opens each app for you to sign in instead (LibreWolf's Firefox account brings bookmarks and passwords through Sync) and
 asks the weather widget's place. Save again now and then: logins expire.
