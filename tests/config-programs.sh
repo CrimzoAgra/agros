@@ -9,9 +9,18 @@
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
-python3 -I - "$here" <<'P'
+# Caelestia's own Hyprland config too, at the commit agros-hyprland-settings pins: its keys' and login starts' programs,
+# with the apps its variables name (hypr-vars.lua's over its own: Super+W's browser...)
+dots=$(sed -n 's/^_dots=//p' "$here/packages/agros-hyprland-settings/PKGBUILD")
+if git init -q "$t/dots" && git -C "$t/dots" fetch -q --depth 1 https://github.com/caelestia-dots/caelestia "$dots" 2>/dev/null; then
+    git -C "$t/dots" checkout -q FETCH_HEAD
+else
+    skipped "Caelestia's dots couldn't be fetched: its own keys' programs not checked"
+    rm -rf "$t/dots"
+fi
+python3 -I - "$here" "$t/dots" <<'P'
 import glob, json, os, re, shlex, sys
-here = sys.argv[1]
+here, dots = sys.argv[1], sys.argv[2] if os.path.isdir(sys.argv[2]) else ""
 
 # program -> its package; "optional:" one that isn't always installed (each place that runs it says why that's fine)
 PROGRAMS = {
@@ -26,9 +35,19 @@ PROGRAMS = {
     # (its login start is off by default: agros-welcome --system installs it with a Logitech device plugged in)
     "solaar": "optional:solaar",
 }
-# Always there (the base system), and a package another one of agros-desktop's brings (gtk3: Thunar's)
-BASE = {"bash", "coreutils", "util-linux", "systemd"}
-PULLED = {"gtk3": "thunar"}
+# ...and Caelestia's
+CAELESTIA = {
+    "gnome-keyring-daemon": "gnome-keyring", "polkit-gnome-authentication-agent-1": "polkit-gnome",
+    "wl-paste": "wl-clipboard", "trash-empty": "trash-cli", "gsettings": "glib2", "agent": "geoclue",
+    "gammastep": "gammastep", "mpris-proxy": "bluez-utils", "hyprpicker": "hyprpicker", "wpctl": "wireplumber",
+    "pkill": "procps-ng", "ydotool": "ydotool", "cliphist": "cliphist", "notify-send": "libnotify",
+    "codium": "vscodium", "thunar": "thunar", "pwvucontrol": "pwvucontrol", "librewolf": "librewolf",
+}
+if dots:
+    PROGRAMS.update(CAELESTIA)
+# Always there (the base system), and a package another one of agros-desktop's brings (gtk3, glib2: Thunar's)
+BASE = {"bash", "coreutils", "util-linux", "systemd", "procps-ng"}
+PULLED = {"gtk3": "thunar", "glib2": "thunar"}
 pkgbuild = open(f"{here}/packages/agros-desktop/PKGBUILD").read()
 depends = set(re.sub(r"#.*", "", re.search(r"^depends=\((.*?)^\)", pkgbuild, re.S | re.M).group(1)).split())
 failures = []
@@ -135,8 +154,10 @@ def programs(line, where):
         k = j
 
 seen = set()
-for f in sorted(glob.glob(f"{here}/.config/caelestia/**/*.lua", recursive=True)):
-    src, rel = open(f).read(), os.path.relpath(f, here)
+lua = sorted(glob.glob(f"{here}/.config/caelestia/**/*.lua", recursive=True))
+for f in lua + (sorted(glob.glob(f"{dots}/hypr/**/*.lua", recursive=True)) if dots else []):
+    src = open(f).read()
+    rel = "Caelestia's " + os.path.relpath(f, dots) if dots and f.startswith(dots) else os.path.relpath(f, here)
     for m in re.finditer(r"\b(hl\.exec_cmd|io\.popen|at_login|hl\.dsp\.exec_cmd)\(", src):
         line = src.count("\n", 0, m.start()) + 1
         args = arguments(src, m.end() - 1, ")")
@@ -148,6 +169,12 @@ for f in sorted(glob.glob(f"{here}/.config/caelestia/**/*.lua", recursive=True))
         unit = unit if "." in unit else unit + ".service"
         if not os.path.isfile(f"{here}/.config/systemd/user/{unit}"):
             failures.append(f"{rel}: starts {unit}, which isn't in .config/systemd/user")
+if dots:
+    variables = {}
+    for f in (f"{dots}/hypr/variables.lua", f"{here}/.config/caelestia/hypr-vars.lua"):
+        variables.update(re.findall(r'^\s*(\w+)\s*=\s*"([^"]*)"', open(f).read(), re.M))
+    for name in ("terminal", "browser", "editor", "fileExplorer", "audioSettings", "sleepGestureCmd"):
+        programs(variables.get(name, "X"), f"Caelestia's variable {name}")
 for f in sorted(glob.glob(f"{here}/.config/systemd/user/*")):
     rel = os.path.relpath(f, here)
     for m in re.finditer(r"^Exec\w*=[-@:+!]*(.*)$", open(f).read(), re.M):
