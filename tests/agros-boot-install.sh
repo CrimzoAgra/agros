@@ -7,7 +7,8 @@
 # not there before AgrOS), and the motherboard's wait back.
 # splash-theme --update/--remove, boot-loader's one decision (Limine or GRUB), and boot-menu's own edits of GRUB's and
 # Limine's settings, the quiet boot's kernel options in both (refused with one of the system's boot tools on PATH).
-# The mkinitcpio drop-in that adds Plymouth's hook where it's missing
+# The mkinitcpio drop-ins that add Plymouth's hook, and the snapshot overlay's (a booted snapshot writable in RAM), where
+# they're missing; that overlay's own script
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
@@ -276,4 +277,54 @@ hooks() { bash -c 'read -ra HOOKS <<<"$1"; . "$2"; echo "${HOOKS[*]}"' _ "$1" "$
 out=$(bash -c 'HOOKS="$1"; . "$2"; declare -p HOOKS' _ "base udev block encrypt filesystems" "$b/mkinitcpio-plymouth.conf")
 [[ $out == 'declare -a HOOKS=([0]="base" [1]="udev" [2]="block" [3]="plymouth" [4]="encrypt" [5]="filesystems")' ]] ||
     fail "string HOOKS: $out"
+
+# A snapshot booted from the boot menu made writable in RAM. The drop-in, on a Btrfs root: AgrOS's hook in a systemd boot
+# image where none it runs is there (grub-btrfs's busybox one doesn't count there: CachyOS's installer drops it anyway),
+# grub-btrfs's in a busybox one where it's installed; never twice, nor beside Limine's, nor on another filesystem
+# (findmnt's stand-in: $ROOT_FS, else btrfs)
+# shellcheck disable=SC2016  # (expanded by the stand-ins)
+printf '#!/bin/sh\necho "${ROOT_FS:-btrfs}"\n' >"$t/bin/findmnt"
+# shellcheck disable=SC2016
+printf '#!/bin/sh\necho "ro=${RO:-true}"\n' >"$t/bin/btrfs"
+printf '#!/bin/sh\nmkdir -p %s/ram && echo %s/ram\n' "$t" "$t" >"$t/bin/mktemp"
+printf '#!/bin/sh\necho "mount $*" >>%s/calls\n' "$t" >"$t/bin/mount"
+chmod +x "$t/bin/findmnt" "$t/bin/btrfs" "$t/bin/mktemp" "$t/bin/mount"
+snap() { bash -c 'read -ra HOOKS <<<"$1"; . "$2"; echo "${HOOKS[*]}"' _ "$1" "$b/mkinitcpio-snapshot-overlay.conf"; }
+sd="base systemd autodetect microcode kms modconf block keyboard sd-vconsole plymouth filesystems"
+[[ $(snap "$sd") == "$sd agros-snapshot-overlay" ]] || fail "the snapshot hook not added to a systemd image: $(snap "$sd")"
+[[ $(snap "$sd grub-btrfs-overlayfs") == "$sd grub-btrfs-overlayfs agros-snapshot-overlay" ]] ||
+    fail "grub-btrfs's busybox hook taken for one a systemd image runs: $(snap "$sd grub-btrfs-overlayfs")"
+for h in sd-btrfs-overlayfs agros-snapshot-overlay; do
+    [[ $(snap "$sd $h") == "$sd $h" ]] || fail "a snapshot hook added beside $h: $(snap "$sd $h")"
+done
+export ROOT_FS=ext4
+[[ $(snap "$sd") == "$sd" ]] || fail "the snapshot hook added on a root that isn't Btrfs: $(snap "$sd")"
+unset ROOT_FS
+bb="base udev autodetect block filesystems fsck"
+want=$bb
+[[ ! -e /usr/lib/initcpio/install/grub-btrfs-overlayfs ]] || want+=" grub-btrfs-overlayfs"
+[[ $(snap "$bb") == "$want" ]] || fail "a busybox image's snapshot hook: $(snap "$bb") (grub-btrfs's, only where installed)"
+[[ $(snap "$bb btrfs-overlayfs") == "$bb btrfs-overlayfs" ]] || fail "a snapshot hook added beside btrfs-overlayfs"
+# (an older mkinitcpio.conf's HOOKS as a string)
+[[ $(bash -c 'HOOKS="$1"; . "$2"; echo "${#HOOKS[@]}"' _ "$sd" "$b/mkinitcpio-snapshot-overlay.conf") == 12 ]] ||
+    fail "string HOOKS not made an array with the snapshot hook"
+# Its script, in the boot image: a read-only Btrfs root gets an overlay in RAM; a writable one, or another filesystem, not
+rm -f "$t/calls"
+bash "$b/snapshot-overlay" >/dev/null || fail "the snapshot overlay's script failed"
+[[ $(calls) == "mount -t tmpfs snapshot-overlay $t/ram"$'\n'"mount -t overlay overlay -o lowerdir=/sysroot,upperdir=$t/ram/upper,workdir=$t/ram/work /sysroot" &&
+    -d $t/ram/upper && -d $t/ram/work ]] || fail "a read-only snapshot not overlaid: $(calls)"
+for env in RO=false ROOT_FS=ext4; do
+    rm -f "$t/calls"
+    env "$env" bash "$b/snapshot-overlay" >/dev/null || fail "the snapshot overlay's script failed ($env)"
+    [[ -z $(calls) ]] || fail "overlaid with $env: $(calls)"
+done
+# The hook's files are the package's: the hook under the name the drop-in adds, its script and unit where it takes them
+pkg=$(cat "$b/PKGBUILD")
+for f in /usr/lib/initcpio/install/agros-snapshot-overlay /usr/lib/agros/snapshot-overlay /usr/lib/agros/snapshot-overlay.service; do
+    grep -qF "\"\$pkgdir$f\"" <<<"$pkg" || fail "agros-boot doesn't install $f"
+done
+grep -qx '    add_file /usr/lib/agros/snapshot-overlay /usr/lib/agros/snapshot-overlay 755' "$b/snapshot-overlay-hook" &&
+    grep -q '^    add_file /usr/lib/agros/snapshot-overlay.service /usr/lib/systemd/system/agros-snapshot-overlay.service ' "$b/snapshot-overlay-hook" &&
+    grep -qx 'ExecStart=/usr/lib/agros/snapshot-overlay' "$b/snapshot-overlay.service" ||
+    fail "the snapshot hook's script or unit not where it takes them from"
 echo "ok agros-boot-install"

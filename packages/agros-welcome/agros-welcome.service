@@ -2,11 +2,17 @@
 Description=AgrOS first login: per-user app setup (wallpaper, Flatpaks, VSCodium, Claude Code), then your accounts
 After=graphical-session.target
 PartOf=graphical-session.target
-ConditionPathExists=!%S/agros/done
+# Again at each login while a step hasn't worked yet (done) or the offer hasn't been answered (offered): either missing
+ConditionPathExists=|!%S/agros/done
+ConditionPathExists=|!%S/agros/offered
 
 [Service]
 Type=oneshot
 ExecStart=%h/.local/bin/agros-welcome
+# (kept active once it exits: the offer's notification waits in the background for its answer, in this unit; ended
+# with the unit, it was killed at once, its buttons did nothing and it was never marked offered. Logging out stops it
+# (PartOf), and an offer left unanswered comes back at the next login)
+RemainAfterExit=yes
 TimeoutStartSec=1h
 
 [Install]

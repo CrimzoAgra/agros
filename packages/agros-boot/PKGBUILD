@@ -1,7 +1,7 @@
 # Maintainer: Filipe Agra
 # A faster, cleaner boot: the boot menu hidden (Esc shows it; Windows and snapshots listed), the CachyOS splash without
 # its closing animation (and with shutdown/restart titles), no text at boot or shutdown behind it, the console in each
-# screen's best mode from boot
+# screen's best mode from boot, a snapshot booted from the menu writable in RAM
 pkgname=agros-boot
 pkgver=0
 pkgrel=1
@@ -16,7 +16,7 @@ optdepends=('snapper: snapshots before updates, listed in the boot menu'
             'snap-pac: snapshots around pacman transactions'
             'grub-btrfs: snapshots in the GRUB menu')
 install=agros-boot.install
-backup=('etc/mkinitcpio.conf.d/90-agros-plymouth.conf')
+backup=('etc/mkinitcpio.conf.d/90-agros-plymouth.conf' 'etc/mkinitcpio.conf.d/91-agros-snapshot-overlay.conf')
 _root=$(realpath "${startdir}/../..")
 # What it's made from (package() below): its version counts only the commits that touch these, not every AgrOS commit, as
 # each new version makes every boot image again (it ships a file mkinitcpio's pacman hook watches, usr/lib/initcpio/*).
@@ -38,6 +38,12 @@ package() {
     install -Dm644 -t "$pkgdir/usr/share/libalpm/hooks" agros-grub-quiet.hook agros-splash.hook
     install -Dm644 plymouth-title-font "$pkgdir/usr/lib/initcpio/install/plymouth-title-font"
     install -Dm644 mkinitcpio-plymouth.conf "$pkgdir/etc/mkinitcpio.conf.d/90-agros-plymouth.conf"
+    # (a snapshot booted from the boot menu made writable in RAM: a systemd boot image's hook, its script and unit put
+    # in the image by it, and the drop-in that adds it where no such hook is there)
+    install -Dm644 snapshot-overlay-hook "$pkgdir/usr/lib/initcpio/install/agros-snapshot-overlay"
+    install -Dm755 snapshot-overlay "$pkgdir/usr/lib/agros/snapshot-overlay"
+    install -Dm644 snapshot-overlay.service "$pkgdir/usr/lib/agros/snapshot-overlay.service"
+    install -Dm644 mkinitcpio-snapshot-overlay.conf "$pkgdir/etc/mkinitcpio.conf.d/91-agros-snapshot-overlay.conf"
     install -Dm644 agros-boot.tmpfiles "$pkgdir/usr/lib/tmpfiles.d/agros-boot.conf"
     # AgrOS's GRUB theme (boot-menu sets it); make.sh, which made its pictures and fonts, isn't installed
     install -Dm644 -t "$pkgdir/usr/share/grub/themes/agros" grub-theme/theme.txt grub-theme/*.png grub-theme/*.pf2
