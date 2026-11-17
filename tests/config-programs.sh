@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # What the desktop's configs run is there: every program the Hyprland config (hl.exec_cmd, its login starts, io.popen),
 # the user units (Exec*=), the Quickshell apps (command:, execDetached) and Caelestia's settings (the Super menu's
-# actions) run. One of ~/.local/bin is a script in
-# .local/bin; any other comes with a package agros-desktop installs, or the base system (the table below: a new one is
-# added there with its package, one no longer run taken out). Every unit Lua starts is in .config/systemd/user, and
-# the apps the default apps and the dock's pins name are installed. A package dropped from agros-desktop, or a script
-# renamed, while a config still runs it, fails here, not as a login start, a key or a button that does nothing
+# actions) run. One of ~/.local/bin is a script in .local/bin; any other comes with a package agros-desktop installs, or
+# the base system (the table below: a new one is added there with its package, one no longer run taken out). Every unit
+# Lua starts is in .config/systemd/user, and the apps the default apps and the dock's pins name are installed. A package
+# dropped from agros-desktop, or a script renamed, while a config still runs it, fails here, not as a login start, a key
+# or a button that does nothing
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
@@ -14,13 +14,14 @@ set -euo pipefail
 dots=$(sed -n 's/^_dots=//p' "$here/packages/agros-hyprland-settings/PKGBUILD")
 if git init -q "$t/dots" && git -C "$t/dots" fetch -q --depth 1 https://github.com/caelestia-dots/caelestia "$dots" 2>/dev/null; then
     git -C "$t/dots" checkout -q FETCH_HEAD
+    dots=$t/dots
 else
     skipped "Caelestia's dots couldn't be fetched: its own keys' programs not checked"
-    rm -rf "$t/dots"
+    dots=""
 fi
-python3 -I - "$here" "$t/dots" <<'P'
+python3 -I - "$here" "$dots" <<'P'
 import glob, json, os, re, shlex, sys
-here, dots = sys.argv[1], sys.argv[2] if os.path.isdir(sys.argv[2]) else ""
+here, dots = sys.argv[1], sys.argv[2]
 
 # program -> its package; "optional:" one that isn't always installed (each place that runs it says why that's fine)
 PROGRAMS = {
