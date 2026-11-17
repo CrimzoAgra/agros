@@ -65,7 +65,9 @@ for name in "${gated[@]}"; do
     have=$(pacman -Q "${db[@]}" -- "$name" 2>/dev/null | cut -d' ' -f2) || continue
     [[ -n $have ]] || continue
     # (the version pacman would install: the first repo's, in pacman.conf's order)
-    new=$(LC_ALL=C pacman -Si --config "$base" "${db[@]}" -- "$name" 2>/dev/null | sed -n 's/^Version *: //p' | head -1)
+    # (read whole, then its first Version line: no early reader on pacman's pipe under pipefail)
+    new=$(LC_ALL=C pacman -Si --config "$base" "${db[@]}" -- "$name" 2>/dev/null)
+    new=$(sed -n '/^Version *: /{s///p;q;}' <<<"$new")
     [[ -n $new && $new != "$have" ]] || continue
     [[ ${new%-*} == "${have%-*}" ]] && continue  # (a rebuild of the same version)
     (($(vercmp "$new" "$have") > 0)) || continue  # (older in the repo, rolled back: pacman -Su keeps the newer one)
