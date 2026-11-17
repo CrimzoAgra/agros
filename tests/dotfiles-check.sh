@@ -125,12 +125,15 @@ for cmd in "pacman -Syu" "packagekitd" "pamac-daemon" "pacman -Sy --dbpath /tmp/
 done
 # The day AgrOS's checks last passed (the boot's copy of agros-arch-ok): said past 10 days, counted to when it was
 # fetched (the file's time); not when it's recent, nor from a copy fetched long ago that was recent then, nor garbage
-arch_ok() { echo "$1" >"$t/arch-ok"; touch -d "$2" "$t/arch-ok"; HOME=$h AGROS_ARCH_OK=$t/arch-ok PATH=$t:$PATH "$here/.local/bin/dotfiles-check" 2>&1; }
+# (dates the region's way, pt_PT's: the day in agros-arch-ok read all the same. And the file's time given as @seconds:
+# date's own output there, "sex 09 out 2026", isn't one touch -d reads back, so the file kept today's)
+arch_ok() { echo "$1" >"$t/arch-ok"; touch -d "$2" "$t/arch-ok"
+    HOME=$h AGROS_ARCH_OK=$t/arch-ok PATH=$t:$PATH LC_TIME=pt_PT.UTF-8 "$here/.local/bin/dotfiles-check" 2>&1; }
 out=$(arch_ok "$(date -ud '12 days ago' +%Y/%m/%d)" now)
 grep -qF "AgrOS's checks haven't passed for 12 days: Hyprland updates wait until they do" <<<"$out" || fail "checks not passed for 12 days not said: $out"
 out=$(arch_ok "$(date -ud '3 days ago' +%Y/%m/%d)" now)
 grep -q "checks haven't passed" <<<"$out" && fail "checks that passed 3 days ago said: $out"
-out=$(arch_ok "$(date -ud '40 days ago' +%Y/%m/%d)" "$(date -ud '39 days ago')")
+out=$(arch_ok "$(date -ud '40 days ago' +%Y/%m/%d)" "@$(date -d '39 days ago' +%s)")
 grep -q "checks haven't passed" <<<"$out" && fail "a copy not refreshed since counted to today: $out"
 out=$(arch_ok "not a date" "now")
 grep -q "checks haven't passed" <<<"$out" && fail "a copy that isn't a date said: $out"
