@@ -67,11 +67,17 @@ icons="$data/runtime/icons"
 [[ -d $icons && ! -e $icons/hicolor/scalable/apps/steam.svg ]] &&
     rm -rf "$icons" "${XDG_CACHE_HOME:-$HOME/.cache}/lutris/versions.json"
 # Real covers for games with none, a wide one or Steam's padded one (lutris-covers, from SteamGridDB with its key), in
-# the background, when the library changed since the last look
-checked="${XDG_CACHE_HOME:-$HOME/.cache}/lutris/covers-checked"
+# the background, when the library changed since the last look, or its key came since (a restore brought it back:
+# without one it did nothing)
+checked="${XDG_CACHE_HOME:-$HOME/.cache}/lutris/covers-checked" key=$HOME/.config/dots/steamgriddb.key
 # (detached: a child of this script would become Lutris's after the exec below, and a zombie once it ended)
 # (marked checked only when it got through: offline, the next start looks again)
-[[ $data/pga.db -nt $checked ]] && ( { nice "$helpers/lutris-covers" && touch "$checked"; } &>/dev/null & )
+# (one at a time, under its lock: a start while a first run over a big library still went on, minutes, started
+# another, the same requests twice, which SteamGridDB turned down as too many)
+if [[ $data/pga.db -nt $checked || $key -nt $checked ]]; then
+    mkdir -p "${checked%/*}"
+    ( { flock -n 8 || exit 0; nice "$helpers/lutris-covers" && touch "$checked"; } 8>"$checked.lock" &>/dev/null & )
+fi
 # The copy of /usr/bin/lutris loads the lutris folder next to its own (the patched one)
 # (a failure mark from another stamp goes: lutris-library reads it as "the patched Lutris isn't running")
 [[ $(cat "$out/stamp" 2>/dev/null) == "$stamp" ]] && { rm -f "$out.failed"; exec "$out/bin/lutris" "$@"; }  # an older build mixed with a newer Lutris could crash

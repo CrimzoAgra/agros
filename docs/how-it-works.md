@@ -605,7 +605,7 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
   - Started at login in its tray only (`LUTRIS_START_HIDDEN=1`)
   - Games with no proper cover (none, a wide one, or Steam's padded one: its header art on a stretched background, when
     the publisher uploaded no cover) get one from SteamGridDB: `.local/bin/lutris-covers`, run in the background when
-    the library changed. Needs a free API key (steamgriddb.com → Preferences → API) in `~/.config/dots/steamgriddb.key`,
+    the library or the key changed, one run at a time. Needs a free API key (steamgriddb.com → Preferences → API) in `~/.config/dots/steamgriddb.key`,
     not in this repo; without it nothing happens
   - Its window, closed for a game ("Minimize client when a game is launched"), doesn't come back when the game closes:
     Lutris stays in its tray

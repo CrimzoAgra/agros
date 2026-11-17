@@ -245,6 +245,15 @@ covers 0; run >/dev/null
 waitfor "$checked" || fail "the library not marked checked after lutris-covers got through"
 touch -d '+1 min' "$t/xdg/lutris/pga.db"; covers 0; XDG_DATA_HOME=$t/xdg run >/dev/null
 waitfor "$t/covers-ran" || fail "a library under XDG_DATA_HOME wasn't looked at"
+# One at a time: a start while lutris-covers still runs (a first run over a big library takes minutes) starts no other
+printf '#!/bin/sh\necho . >>%s/covers-runs\nsleep 2\nexit 1\n' "$t" >"$t/.local/bin/lutris-covers"
+touch -d '+2 min' "$t/.local/share/lutris/pga.db"
+run >/dev/null; run >/dev/null; sleep 3
+[[ $(wc -l <"$t/covers-runs") == 1 ]] || fail "lutris-covers run $(wc -l <"$t/covers-runs") times at once"
+# Its key added since the last look (a restore brought it back): looked at again, the library unchanged
+touch -d '-10 min' "$t/.local/share/lutris/pga.db"; touch -d '-5 min' "$checked"
+echo key >"$t/.config/dots/steamgriddb.key"; covers 0; run >/dev/null
+waitfor "$t/covers-ran" || fail "a key added since the last look didn't get lutris-covers run"
 
 # ...and on Lutris's main (the next release: a change there that breaks one shows here first, as Caelestia's main does in
 # caelestia-overlay); an optional one left out only warns, any other one failing is said, the store pages' fix too. Said
