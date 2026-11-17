@@ -4,7 +4,8 @@
 # agros-greeter's install ran before the installer made the account, so env names no one, and no login has written its
 # theme) the first AgrOS account, never no one ("No user set", no way to log in); in VMware with agros-vmware cage gets
 # the vmw-dmabuf shim, in another VM software OpenGL; a login screen that closes without a login falls back to greetd's
-# text login
+# text login. login-reset (the way back from a broken login screen, from a text console) puts greetd's text login into
+# hyprland-session in place, whole, and restarts greetd; --back the login screen's config; not as root, nothing changed
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
@@ -57,4 +58,27 @@ grep -qx 'user=alice soft=1' "$t/seen" && ! grep -q LD_PRELOAD= "$t/seen" || fai
 # Closed without a login (a crash after its first frame): greetd's text login
 NO_LOGIN=1 USERS=alice run >/dev/null
 grep -qx 'agreety --cmd hyprland-session' "$t/calls" || fail "no text login after the login screen closed without one"
+
+# login-reset, its greetd folder a throwaway one; root by a stand-in id ($UID0)
+mkdir -p "$t/etc/greetd" && cp "$here/packages/agros-greeter/config.toml" "$t/g/greetd-config.toml"
+sed -e "s|/etc/greetd|$t/etc/greetd|g" "$here/packages/agros-greeter/login-reset" >"$t/login-reset"
+sed -i "s|$t/etc/greetd/caelestia-greeter|$t/g|g" "$t/login-reset"
+# shellcheck disable=SC2016  # (expanded by the stand-ins)
+printf '#!/bin/sh\n[ -n "$UID0" ] && echo 0 || echo 1000\n' >"$t/bin/id"
+printf '#!/bin/sh\necho "systemctl $*" >>%s/calls\n' "$t" >"$t/bin/systemctl"
+chmod +x "$t/login-reset" "$t/bin/id" "$t/bin/systemctl"
+echo 'mine' >"$t/etc/greetd/config.toml"; rm -f "$t/calls"
+out=$("$t/login-reset") && fail "login-reset ran without root"
+[[ $out == "Run: sudo login-reset" && $(cat "$t/etc/greetd/config.toml") == mine && ! -e $t/calls ]] ||
+    fail "login-reset without root: $out"
+UID0=1 "$t/login-reset"
+[[ $(cat "$t/etc/greetd/config.toml") == "$(printf '%s\n' '[terminal]' 'vt = 1' '' '[default_session]' \
+    'command = "agreety --cmd hyprland-session"' 'user = "greeter"')" && ! -e $t/etc/greetd/config.toml.new ]] ||
+    fail "login-reset's text login: $(cat "$t/etc/greetd/config.toml")"
+grep -qx 'systemctl restart greetd' "$t/calls" || fail "greetd not restarted: $(cat "$t/calls")"
+UID0=1 "$t/login-reset" --back
+cmp -s "$t/etc/greetd/config.toml" "$here/packages/agros-greeter/config.toml" || fail "--back: $(cat "$t/etc/greetd/config.toml")"
+# (the text login's command is agros-greeter's, installed as /usr/bin/hyprland-session: uwsm's Hyprland)
+grep -qx 'exec uwsm start -e -D Hyprland hyprland.desktop' "$here/packages/agros-greeter/hyprland-session" &&
+    grep -q '"$pkgdir/usr/bin/hyprland-session"' "$here/packages/agros-greeter/PKGBUILD" || fail "hyprland-session not uwsm's Hyprland"
 echo "ok agros-greeter-run"
