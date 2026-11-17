@@ -75,9 +75,9 @@ lists, `agros-approved`, `agros-arch-ok`, each with its `.sig` where published),
 `ci/agros.asc` alone (the database's required), then `rclone` uploads the packages first and the database last, and
 only then removes what the repo no longer has: a mirror mid-update never lists a package it doesn't have. Only the
 current set is kept (R2's free 10 GB; the repo is about 190 MB). It needs the same four secrets as agros-iso's ISO
-upload, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` and `R2_BUCKET`; without them it says so (a
-warning) and does nothing. `update-gate`'s approved list, the boot's copy of `agros-arch-ok` and agros-iso's gate try
-each of `[agros]`'s servers in turn (Pages down: the mirror's).
+upload, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` and `R2_BUCKET`, set on this repo too (secrets
+are per repo); without them it says so (a warning) and does nothing. `update-gate`'s approved list, the boot's copy
+of `agros-arch-ok` and agros-iso's gate try each of `[agros]`'s servers in turn (Pages down: the mirror's).
 
 agros-iso's `pacman.conf` files have both the `SigLevel` line and the mirror. On a machine installed before them,
 `agros-system`'s install adds each under `[agros]` where it's missing (a `SigLevel` of yours stays; a `#Server =` line
@@ -1235,7 +1235,10 @@ breaks something holds back that one piece, never the rest (`.github/workflows/c
 - **AgrOS's own packages apart from the AUR's.** The `agros` job builds `packages/*` alone (no AUR code there, no
   privileges) and hands the `repo` job the packages and, as a job output, their checksums; the release signs an
   `agros-*` package only when it's that job's, byte for byte (`ci/own-check.sh`, by file name and by `.PKGINFO`): an
-  AUR build script, which runs as root in `repo`, can't slip one in to be signed with AgrOS's key
+  AUR build script, which runs as root in `repo`, can't slip one in to be signed with AgrOS's key. The other packages
+  are checked too: each name one CI meant to build (`aur/packages.txt`, quickshell-git, cachyos-calamares, or already
+  in the published, signature-checked `agros.db`: a new AUR dependency is refused until it's listed there), one file
+  per name, no `replaces`, and nothing in pacman's own settings or keyrings
 - **Signed apart from the build.** The `repo` job runs AUR build scripts (as its builder user, with passwordless
   sudo) and `test` runs what was built and the tests, so neither has a secret: the repo goes between them unsigned
   (`ci/build-repo.sh` refuses to start with a secret key at hand), with only AgrOS's public key (`ci/agros.asc`), which
