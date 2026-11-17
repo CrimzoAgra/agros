@@ -86,7 +86,8 @@ personal_drive() {
     while read -r dev rm type mnt; do
         [[ $rm == 1 && $type == part ]] || continue
         mnt=$(printf '%b' "$mnt") # (lsblk -r writes a space in it as \x20)
-        [[ -n $mnt ]] || mnt=$(udisksctl mount -b "$dev" 2>/dev/null | sed -n 's/^Mounted .* at \(.*\)$/\1/p')
+        # (udisksctl's answer, read for its folder, in English: not the region's language)
+        [[ -n $mnt ]] || mnt=$(LC_ALL=C udisksctl mount -b "$dev" 2>/dev/null | sed -n 's/^Mounted .* at \(.*\)$/\1/p')
         [[ -n $mnt && -d $mnt ]] && found+=("$mnt")
     done < <(lsblk -nrpo NAME,RM,TYPE,MOUNTPOINT 2>/dev/null)
     local d

@@ -11,4 +11,12 @@ printf '#!/bin/sh\necho "/dev/sdb 1 disk "\necho "/dev/sdb1 1 part %s"\n' "${mnt
 chmod +x "$t/bin/lsblk"
 got=$(PATH=$t/bin:$PATH R=$here bash -c 'source "$R/.local/bin/agros-personal"; personal_drive')
 [[ $got == "$mnt" ]] || fail "the mounted drive at \"$mnt\" not found (got: \"$got\")"
+# Not mounted yet: mounted with udisksctl, its folder read from its answer, in English in a Portuguese session too
+stick="$t/media/STICK"; mkdir -p "$stick"; : >"$stick/dotfiles-personal.tar.gpg"
+printf '#!/bin/sh\necho "/dev/sdc 1 disk "\necho "/dev/sdc1 1 part "\n' >"$t/bin/lsblk"
+# shellcheck disable=SC2016  # (expanded by the stand-in)
+printf '#!/bin/sh\n[ "$LC_ALL" = C ] && echo "Mounted /dev/sdc1 at %s" || echo "Montado /dev/sdc1 em %s"\n' "$stick" "$stick" >"$t/bin/udisksctl"
+chmod +x "$t/bin/udisksctl"
+got=$(PATH=$t/bin:$PATH R=$here LC_ALL=pt_PT.UTF-8 bash -c 'source "$R/.local/bin/agros-personal"; personal_drive' 2>/dev/null)
+[[ $got == "$stick" ]] || fail "the drive udisksctl mounted not found in a Portuguese session (got: \"$got\")"
 echo "ok personal-drive-space"
