@@ -21,15 +21,17 @@ for l in "$HOME"/.local/bin/* "$HOME"/.local/share/*; do
     [[ -L $l && $(readlink "$l") == "$lib"/* && ! -e $l ]] && rm -f "$l"
 done
 # Files a package update brought into /etc/skel/.config (fetch's, LibreWolf's overrides inside a folder you already
-# have) and its launcher entries (/etc/skel/.local/share/applications): copied in once, at the first login after. Never
-# over one of yours, and one you delete stays deleted (the files already offered are kept, by their path from .config,
-# a launcher by its path from home). Not the rest of ~/.local/share: lutris-library adds Lutris's covers its own way
+# have), its launcher entries (/etc/skel/.local/share/applications), LibreWolf's settings (.local/share/firefox, which
+# agros-welcome applies) and Caelestia's wallpaper in Pictures/Wallpapers: copied in once, at the first login after (an
+# account not made from /etc/skel gets them so too). Never over one of yours, and one you delete stays deleted (the
+# files already offered are kept, by their path from .config, the others by theirs from home). Not the rest of
+# ~/.local/share: lutris-library adds Lutris's covers its own way
 root=${AGROS_SKEL:-/etc/skel} state=${XDG_STATE_HOME:-$HOME/.local/state}/agros
 seen=$state/configs-seen
 mkdir -p "$state" && : >>"$seen"
 declare -A had
 while IFS= read -r n; do had[$n]=1; done <"$seen"
-for part in .config .local/share/applications; do
+for part in .config .local/share/applications .local/share/firefox Pictures/Wallpapers; do
     skel=$root/$part
     while IFS= read -r -d '' f; do
         to=$HOME/$part/${f#"$skel"/} n=${f#"$root"/}
