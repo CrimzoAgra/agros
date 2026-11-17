@@ -117,6 +117,12 @@ grep -q 'property bool sidebarShortcutActive' /etc/xdg/quickshell/caelestia/modu
 # Esc (the launcher closing) closes the utilities panel Super+K opened with it, unless hovered: Caelestia's stayed open
 launcher_closed=$(sed -n '/^        function onLauncherChanged() {$/,/^        }$/p' "$i")
 grep -q 'root.screenState.utilities = false' <<<"$launcher_closed" || fail "the launcher closing leaves the utilities panel open"
+# The bar's status icons (shell.json: the sound one on): AgrOS's list replaces Caelestia's own, so it has every icon this
+# Caelestia has (a new one not left out of the bar) and none it hasn't
+icons=$(sed -n 's/^ *roleValue: "\(.*\)"$/\1/p' /etc/xdg/quickshell/caelestia/modules/bar/components/StatusIcons.qml | LC_ALL=C sort)
+ours=$(python3 -c 'import json, sys; print(*sorted(i["id"] for i in json.load(open(sys.argv[1]))["bar"]["statusIcons"]), sep="\n")' \
+    "$here/.config/caelestia/shell.json")
+[[ -n $icons && $icons == "$ours" ]] || fail "shell.json's status icons aren't Caelestia's: $(paste -sd' ' <<<"$ours") / $(paste -sd' ' <<<"$icons")"
 # Its grey card hangs from the top border when it slides down from the top: flush with it, top corners square
 c=$dst/modules/sidebar/Content.qml
 { grep -q 'topLeftRadius: 0' "$c" && grep -q 'topRightRadius: 0' "$c" && grep -q 'anchors.topMargin: 0' "$w"; } ||
@@ -384,6 +390,9 @@ on_main() {
     grep -q 'property bool sidebarShortcutActive' "$t/head-src/modules/drawers/Interactions.qml" &&
         [[ $(grep -c 'property bool sidebarShortcutActive' "$t/head-dst/modules/drawers/Interactions.qml") == 1 ]] ||
         ahead "on Caelestia's main, the sidebar's shortcut mode not Caelestia's own"
+    # ...and the launcher closing closes the utilities panel there too (unless hovered)
+    grep -q 'root.screenState.utilities = false' <<<"$(sed -n '/^        function onLauncherChanged() {$/,/^        }$/p' \
+        "$t/head-dst/modules/drawers/Interactions.qml")" || ahead "on Caelestia's main, the launcher closing leaves the utilities panel open"
     new=$(lint_new "$t/head-src" "$t/head-dst")
     [[ -z $new ]] || ahead "on Caelestia's main, the patched QML uses what it doesn't have (qmllint): $(paste -sd' ' <<<"$new")"
 }
