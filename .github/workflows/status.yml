@@ -28,8 +28,12 @@ jobs:
             "+0000/0 17 * * 5" | "+0100/0 16 * * 5" | */) echo "go=true" >>"$GITHUB_OUTPUT" ;;
             *) echo "Not Lisbon's 17:00 today ($offset)" ;;
           esac
+      # (no token left in .git/config: the Sizes step's container, where Arch's packages' install scripts run, has the
+      # checkout; gh has the token from GH_TOKEN)
       - uses: actions/checkout@v7
         if: steps.when.outputs.go == 'true'
+        with:
+          persist-credentials: false
       # The size watch (ci/sizes.sh): what goes on the ISO and on a new install, against last week's (its baseline kept
       # in last week's issue), in an Arch container (its pacman). Failing, the issue says so; the status still goes out.
       # (The image can be days old: its keyring updated first, packages signed by a newer key refused otherwise, then
