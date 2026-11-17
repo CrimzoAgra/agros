@@ -1078,10 +1078,11 @@ brings each change; nothing to run by hand).
     too small for it (beside Windows, often Windows' own 100 MB, nearly full; fwupd checks before it writes anything)
     isn't tried at every shutdown nor said at every login: said once on the desktop ("Firmware update can't be
     installed... the boot partition (EFI) is too small for it"), and tried again only for a newer one
-    (`/var/lib/auto-update/firmware-noroom`). A UEFI or BIOS update is staged and applied at the next boot. Passim
-    (fwupd's optional LAN cache: a listener sharing its metadata over mDNS and HTTPS, which fwupd starts over D-Bus) is
-    masked once by `agros-system` (fwupd works without it, only logging that it's not there; removing `agros-system`
-    unmasks it)
+    (`/var/lib/auto-update/firmware-noroom`); only when it's the one firmware update waiting: beside others, which
+    device has no room isn't known, so it fails as any other (kept, tried again, its reason said) until it's alone. A
+    UEFI or BIOS update is staged and applied at the next boot. Passim (fwupd's optional LAN cache: a listener sharing
+    its metadata over mDNS and HTTPS, which fwupd starts over D-Bus) is masked once by `agros-system` (fwupd works
+    without it, only logging that it's not there; removing `agros-system` unmasks it)
   - **Proton builds** (yours, as you) where Steam and Lutris look for them: Steam's `compatibilitytools.d` and Lutris's
     Wine runners (`$XDG_DATA_HOME/lutris/runners/wine`, or `lutris.conf`'s `runner_dir` when named in full: a relative
     one is skipped, as what's removed must be inside it). For each family there
