@@ -415,7 +415,7 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
 - **`.local/bin/timezone-auto`**: Settings > Language & region > "Set the time zone automatically" (Caelestia's
   Settings app, `nexus-time-block.qml`; on while `~/.local/state/agros/timezone-auto` is there; off by default). Its
   zone comes from Caelestia's weather location: `lat,lon` through Open-Meteo's forecast (`timezone=auto`), a town
-  through Open-Meteo's geocoding, empty (automatic) by IP through ip-api.com, as Caelestia's weather finds you. Not
+  through Open-Meteo's geocoding, empty (automatic) by IP through ipinfo.io (HTTPS: an attacker on the network can't pick it). Not
   geoclue: it says only coordinates, and the weather location is what you picked. Run at login (`user/desktop.lua`),
   when turned on, and when the page sees the weather location change; set with `timedatectl` only when it differs.
   `agros-system`'s polkit rule (`/usr/share/polkit-1/rules.d/50-agros-timezone.rules`) lets an admin (wheel) at the
