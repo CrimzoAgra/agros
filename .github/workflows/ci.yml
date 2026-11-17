@@ -311,10 +311,12 @@ jobs:
         with:
           name: approved
           path: /tmp/approved-now
-      # AgrOS's own packages as the agros job built them, none changed or added by the repo job's AUR build scripts
+      # AgrOS's own packages as the agros job built them, none changed or added by the repo job's AUR build scripts; the
+      # rest only ones this run builds, none replacing another package or shipping pacman's keyrings
       - name: AgrOS's own packages checked
         env:
           AGROS_OWN_SUMS: ${{ needs.agros.outputs.sums }}
+          AGROS_PUBLISHED: ${{ vars.AGROS_PUBLISHED || 'https://crimzoagra.github.io/agros/x86_64' }}
         run: ci/own-check.sh out/x86_64
       - name: Held back (what broke the tests)
         if: needs.test.outputs.result != 'ok'
