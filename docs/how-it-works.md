@@ -610,7 +610,10 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
     other, a point release too, the plugin's own check refuses it with a red "Version mismatch" error on screen), and a
     notification if the build fails. On the live USB (no compiler) only that packaged build, when it matches
 - **Keys** (`user/keys.lua`):
-  - Ctrl+Shift+Esc opens btop (Task Manager; the open one if there is); Print selects an area to screenshot
+  - Ctrl+Shift+Esc opens btop (Task Manager; the open one if there is); Print selects an area to screenshot, opened
+    in swappy (`.config/swappy/config`): Save puts it in `~/Pictures/Screenshots` (swappy makes the folder), where
+    Caelestia's own screenshots go, not swappy's default `~/Desktop`, which nothing shows; Copy puts it on the
+    clipboard; either closes swappy (swappy has no copy on save)
   - Ctrl+Super+Alt+R restarts the shell
   - Scroll Lock as a real lock with its keyboard light, like Caps and Num Lock (`.local/bin/scroll-lock`: builds your
     layout's keymap with Scroll Lock on a free modifier, which Hyprland loads, and keeps the bar's icon in step with

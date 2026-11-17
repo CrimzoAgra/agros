@@ -1,0 +1,7 @@
+# swappy, the screenshot editor Print opens (Caelestia's area picker). Save puts the picture in Pictures/Screenshots
+# (made if missing), where Caelestia's own screenshots go too, not on a Desktop folder nothing shows; Copy (Ctrl+C)
+# puts it on the clipboard. Either one closes the window. A key left out keeps swappy's default
+[Default]
+save_dir=$HOME/Pictures/Screenshots
+save_filename_format=screenshot-%Y%m%d-%H%M%S.png
+early_exit=true
