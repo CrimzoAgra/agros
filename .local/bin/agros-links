@@ -96,6 +96,10 @@ if [[ ! -e $mark && -f $code ]] && jq -e 'type == "object"' "$code" >/dev/null 2
     "$(dirname "$(readlink -f "$0")")/json-edit" "$code" --indent 4 \
         'if has("window.restoreWindows") then . else .["window.restoreWindows"] = "folders" end' && touch "$mark"
 fi
+# Claude Code's sessions folder, made before its first session: VSCodium's Claude Code Usage extension reads it, and
+# showed a red "Error" (Usage refresh failed) until Claude Code had run once. Once: one you delete stays deleted
+mark=$state/claude-projects
+[[ -e $mark ]] || { mkdir -p "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects" && touch "$mark"; }
 # (in the background: Caelestia, the notification server, isn't up yet; agros-links.service keeps it alive). Marked as
 # said only once it was: one that never got through is said at the next login
 ((${#new[@]})) && { "$(dirname "$(readlink -f "$0")")/dots-warn" "AgrOS updated settings you've changed" \

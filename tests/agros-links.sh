@@ -130,4 +130,8 @@ rm -f "$mark"; echo '{"a": 1}' >"$code"; run
 # ...once: taken out by the user, it stays out
 echo '{"a": 1}' >"$code"; run
 [[ $(jq -c . "$code") == '{"a":1}' ]] || fail "window.restoreWindows added again after the user took it out"
+# Claude Code's sessions folder (the Usage extension's error without it): made once, and one deleted stays deleted
+[[ -d $t/home/.claude/projects ]] || fail "Claude Code's projects folder not made"
+rm -r "$t/home/.claude"; run
+[[ ! -e $t/home/.claude ]] || fail "Claude Code's folder, deleted, made again"
 echo "ok agros-links"
