@@ -101,8 +101,8 @@ up). Snapshots hold the system only: your home folder and its files are never ro
 
 1. **Try it.** Restart, press **Esc** as the computer starts to show the boot menu, open the snapshots and pick the one
    named `auto-update` with the date and time before the update. The system starts as it was then. It's for checking,
-   or for getting by: whatever changes in the system meanwhile is kept in memory only, and the next normal start is
-   the updated system again.
+   or for getting by: whatever changes in the system meanwhile is kept in memory only (nothing is updated there), and
+   the next normal start is the updated system again.
 2. **Keep it.** Started from that snapshot, open **Btrfs Assistant** from the app menu (it asks for your password), go
    to **Snapper**, **Browse/Restore**, pick the same snapshot and click **Restore**, then restart. The system is now
    the snapshot's for good.
