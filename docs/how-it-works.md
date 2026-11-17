@@ -1097,7 +1097,8 @@ brings each change; nothing to run by hand).
     too small for it (beside Windows, often Windows' own 100 MB, nearly full; fwupd checks before it writes anything)
     isn't tried at every shutdown nor said at every login: said once on the desktop ("Firmware update can't be
     installed... the boot partition (EFI) is too small for it"), and tried again only for a newer one
-    (`/var/lib/auto-update/firmware-noroom`); only when it's the one firmware update waiting: beside others, which
+    (`/var/lib/auto-update/firmware-noroom`; Updates' list and Update all, `update-kinds`, leave it out too); only
+    when it's the one firmware update waiting: beside others, which
     device has no room isn't known, so it fails as any other (kept, tried again, its reason said) until it's alone. A
     UEFI or BIOS update is staged and applied at the next boot. Passim (fwupd's optional LAN cache: a listener sharing
     its metadata over mDNS and HTTPS, which fwupd starts over D-Bus) is masked once by `agros-system` (fwupd works

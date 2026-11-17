@@ -203,6 +203,19 @@ out=$(FW_SKIPS=1 run firmware) && fail "a firmware update fwupd skipped (exit 0)
 [[ $out == *"Firmware not installed: UEFI dbx"* ]] || fail "a skipped firmware update not said: $out"
 out=$(run firmware) || fail "the firmware update failed: $out"
 grep -q '^fwupdmgr update -y --no-reboot-check' "$t/fw" && [[ $out == *"applied at the next restart"* ]] || fail "firmware not installed: $out"
+# ...not one the EFI partition has no room for (the shutdown's install found it: auto-update's firmware-noroom): not
+# listed, nor tried by Update all (it never fits: every run failed on it). A newer release of it is, as at shutdown
+rm -f "$t/fw-done" "$t/fw"; mkdir -p "$t/au"
+printf 'd1\tUEFI dbx\t1\t2\n' >"$t/au/firmware-noroom"
+export AUTO_UPDATE_DIR=$t/au
+[[ -z $(run --list) ]] || fail "firmware with no room on the EFI partition listed: $(run --list)"
+out=$(run firmware) || fail "the firmware update failed with only one with no room waiting: $out"
+! grep -q '^fwupdmgr update' "$t/fw" || fail "firmware with no room on the EFI partition tried again: $(cat "$t/fw")"
+printf 'd1\tUEFI dbx\t1\t1.5\n' >"$t/au/firmware-noroom"
+[[ $(run --list) == $'firmware\tUEFI dbx\t1\t2' ]] || fail "a newer firmware than the one with no room not listed: $(run --list)"
+run firmware >/dev/null || fail "a newer firmware than the one with no room not installed"
+grep -qx 'fwupdmgr update -y --no-reboot-check --no-unreported-check d1' "$t/fw" || fail "a newer firmware not tried: $(cat "$t/fw")"
+unset AUTO_UPDATE_DIR
 stub fwupdmgr 'exit 1'
 run firmware >/dev/null && fail "a failed firmware update reported success"
 rm "$t/bin/fwupdmgr"

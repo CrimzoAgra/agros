@@ -278,10 +278,15 @@ update_dev() {
 }
 
 # Firmware, through fwupd (its metadata, from LVFS, signed: refreshed at boot by auto-update): each device with one,
-# "<device id>\t<name>\t<version>\t<new version>" (auto-update's boot check reads fwupd the same way, as root)
+# "<device id>\t<name>\t<version>\t<new version>" (auto-update's boot check reads fwupd the same way, as root). Not
+# one the EFI partition has no room for (the shutdown's install found it: auto-update's firmware-noroom, the same
+# line): it never fits, so it was listed, offered every 6 hours and tried again by every Update all, which then
+# failed. A newer release of it is tried again, as at shutdown
 fw_waiting() {
+    local noroom=${AUTO_UPDATE_DIR:-/var/lib/auto-update}/firmware-noroom
     timeout 1m fwupdmgr get-updates --json --no-unreported-check --no-metadata-check 2>/dev/null |
-        jq -r '.Devices[]? | select(.Releases[0]) | [.DeviceId, .Name, .Version, .Releases[0].Version] | @tsv' 2>/dev/null
+        jq -r '.Devices[]? | select(.Releases[0]) | [.DeviceId, .Name, .Version, .Releases[0].Version] | @tsv' 2>/dev/null |
+        awk -v f="$noroom" 'BEGIN { while ((getline l <f) > 0) skip[l] } !($0 in skip)'
 }
 list_firmware() {
     command -v fwupdmgr >/dev/null || return 0
@@ -290,11 +295,15 @@ list_firmware() {
 }
 update_firmware() {
     command -v fwupdmgr >/dev/null || return 0
-    local before left
+    local before left id rc=0
     before=$(fw_waiting | cut -f1)
-    # (fwupd's own checks stand: on battery below its level it refuses. 2: nothing to update)
-    timeout 1h fwupdmgr update -y --no-reboot-check --no-unreported-check
-    case $? in 0 | 2) ;; *) return 1 ;; esac
+    # (each device waiting by its id: never one with no room, which fwupd would try again. fwupd's own checks stand: on
+    # battery below its level it refuses. 2: nothing to update)
+    for id in $before; do
+        timeout 1h fwupdmgr update -y --no-reboot-check --no-unreported-check "$id"
+        case $? in 0 | 2) ;; *) rc=1 ;; esac
+    done
+    ((!rc)) || return 1
     # Its exit says nothing of a device it skipped (it needs AC power, the battery too low) or one whose flash failed:
     # one that still offers the same update wasn't updated (a UEFI one staged for the next restart offers none)
     left=$(awk -F'\t' 'NR == FNR { b[$1]; next } $1 in b { print $2 }' <(printf '%s\n' "$before") <(fw_waiting) |
