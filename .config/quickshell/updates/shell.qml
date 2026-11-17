@@ -394,7 +394,8 @@ ShellRoot {
                                                 font.family: "CaskaydiaCove NF"
                                                 font.pixelSize: 11
                                                 color: root.c("onSurfaceVariant")
-                                                elide: Text.ElideMiddle
+                                                // (cut at the end: both versions stay, a long "asks for more access" goes)
+                                                elide: Text.ElideRight
                                             }
                                         }
                                     }
