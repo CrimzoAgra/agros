@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Updates the Flatpaks installed from a downloaded .flatpak file (e.g. ArtCraft Launcher), which have no Flatpak repo
-# to update from, from the GitHub releases their metadata links to (update-apps and the boot-time auto-update run it).
+# to update from, from the GitHub releases their metadata links to (update-kinds' flatpak, from the
+# Updates app; the boot-time auto-update's --fetch and --install-fetched).
 #   flatpak-bundle-update           update them
 #   flatpak-bundle-update --check   only list the ones with a newer version ("<app id>: update available (<old> -> <new>)")
 #   flatpak-bundle-update --install <owner/repo>   install one for the user from its latest release (agros-welcome)
