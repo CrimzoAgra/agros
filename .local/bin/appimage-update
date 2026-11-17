@@ -44,12 +44,12 @@ update() {
 status=0 found=
 for f in "$HOME"/.local/share/applications/*.desktop; do
     grep -q "^# Made by ~/.local/bin/appimage-open" "$f" || continue
-    repo=$(sed -nE 's|^X-AppImage-Website=https?://github\.com/([^/]+/[^/#?]+).*|\1|p' "$f" | head -1)
+    repo=$(sed -nE 's|^X-AppImage-Website=https?://github\.com/([^/]+/[^/#?]+).*|\1|p;T;q' "$f")
     [[ -n $repo ]] || continue
     # (one repo asked for: only that one, with its installed file, so one on the latest version is left alone)
     (($#)) && [[ ${repo%.git} != "$1" ]] && continue
     found=1
-    update "${repo%.git}" "$(sed -n 's/^X-AppImage-Path=//p' "$f" | head -1)" || status=1
+    update "${repo%.git}" "$(sed -n 's/^X-AppImage-Path=//p;T;q' "$f")" || status=1
 done
 # Not installed yet: installed now
 if (($#)) && [[ -z $found ]]; then update "$1" || status=1; fi
