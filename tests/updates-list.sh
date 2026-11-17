@@ -13,6 +13,12 @@ printf '#!/bin/sh\nprintf "system\tfoo\t1\t2\n"\n' >"$t/list" && chmod +x "$t/li
 printf '#!/bin/sh\nexit 3\n' >"$t/broken" && chmod +x "$t/broken"
 [[ $(sh -c "$cmd" "$t/broken") == "end 3" ]] || fail "a list that failed: $(sh -c "$cmd" "$t/broken")"
 [[ $(sh -c "$cmd" "$t/missing" 2>/dev/null) == "end 127" ]] || fail "a missing update-apps: $(sh -c "$cmd" "$t/missing" 2>&1)"
+# One that hangs: failed at its time limit (1 s here, not 10 minutes), the part it started in the background too (it
+# kept the output open, and the app waited on it for good)
+[[ $cmd == *"timeout 10m "* ]] || fail "the list has no time limit: $cmd"
+printf '#!/bin/sh\nsleep 60 &\nsleep 60\n' >"$t/hangs" && chmod +x "$t/hangs"
+out=$(timeout 20 sh -c "${cmd/timeout 10m /timeout 1 }" "$t/hangs") || true
+[[ $out == "end 124" ]] || fail "a list that hangs not ended at its time limit: $out"
 # ...read by the app as such: nothing listed, and said
 { grep -q 'root.listFailed = !/^end 0$/m.test(text);' "$qml" &&
     grep -q 'root.items = root.listFailed ? \[\] :' "$qml" &&
