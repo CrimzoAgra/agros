@@ -1,0 +1,15 @@
+[Unit]
+Description=Get Caelestia's first start ready (AgrOS's changes built, a first login's wallpaper and colours)
+# As the graphical session starts, alongside Hyprland's own start (not before it: nothing waits for this): at
+# Hyprland's start caelestia-start finds them done and starts the shell at once, instead of building them first while
+# the session's other windows (the live USB's installer) came up before the bar. After agros-links: it runs the
+# programs through its links
+After=agros-links.service
+PartOf=graphical-session.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/agros/bin/caelestia-start --prepare
+
+[Install]
+WantedBy=graphical-session-pre.target

@@ -6,36 +6,53 @@
 # lock: agros-welcome's build at that login waits for this one.
 # What happened is logged (~/.local/state/agros/caelestia-start.log): at login there's no terminal, and a shell that
 # didn't come up left nothing to go by
+# --prepare (caelestia-prepare.service, as the session starts, while Hyprland is still starting): only the build and
+# the first wallpaper and colours, done, so this run at Hyprland's start finds them done and starts the shell at once
 log=${XDG_STATE_HOME:-$HOME/.local/state}/agros/caelestia-start.log
 helpers=$(dirname "$(readlink -f "$0")")  # (the shared helpers, beside this)
 mkdir -p "${log%/*}"
-# (the last 200 lines kept: it's added to at every login)
-[[ -f $log ]] && tail -n 200 "$log" >"$log.tmp" && mv -f "$log.tmp" "$log"
 # Under the overlay's lock until the shell is up: an update's rebuild under way as you log in waited for, and one
-# waiting finds the shell running and hands over to caelestia-restart (not the folder swapped under it as it starts)
+# waiting finds the shell running and hands over to caelestia-restart (not the folder swapped under it as it starts).
+# The prepare run's too: this run waits for it to finish rather than build alongside it
 mkdir -p "$HOME/.config/quickshell"
 exec 9>"$HOME/.config/quickshell/caelestia.lock"
 flock 9
+# (the last 200 lines kept: it's added to at every login, twice)
+[[ -f $log ]] && tail -n 200 "$log" >"$log.tmp" && mv -f "$log.tmp" "$log"
+prepare=
+if [[ ${1:-} == --prepare ]]; then
+    prepare=1
+    # (a shell already up, from this folder: a build here would swap it under it; caelestia-overlay's own run hands
+    # that to caelestia-restart)
+    "$helpers/qs-running" /quickshell/caelestia/shell.qml && exit 0
+fi
 {
-    echo "== $(date '+%F %T')"
+    echo "== $(date '+%F %T')${prepare:+ (ahead of the desktop)}"
+    # The first time: Caelestia's wallpaper and its colours set before the shell starts (agros-welcome's mark, so it
+    # doesn't again). Set after, the shell had already shown its fallback and kept it, its colours from another
+    # wallpaper, and Qt's settings (icon theme) appeared after it had looked for them: Papirus never applied. Alongside
+    # the build (neither needs the other), waited for before the shell
+    mark=${log%/*}/wallpaper-set
+    # (a wallpaper Caelestia already has: an install from before the mark, its wallpaper picked since, kept)
+    [[ -s ${XDG_STATE_HOME:-$HOME/.local/state}/caelestia/wallpaper/path.txt ]] && touch "$mark"
+    first=
+    if [[ ! -e $mark ]]; then
+        {
+            caelestia wallpaper -f /etc/xdg/quickshell/caelestia/assets/wallpaper.webp &&
+                caelestia scheme set -n dynamic && touch "$mark" && echo "wallpaper and colours set"
+            # (the login screen's copy of them now: greeter-theme-sync at Hyprland's start ran before they were
+            # there, and the first reboot came up on a login screen with neither)
+            "$helpers/greeter-theme-sync"
+        } 9>&- &
+        first=$!
+    fi
     # Every login, not only when it's missing: a rebuild an update left waiting for a game to close was lost with the
     # session that ended first. Up to date, it's only checked (its stamp, .agros-built)
     CAELESTIA_REBUILDING=1 "$helpers/caelestia-overlay" | tail -n 3
     echo "overlay checked: exit ${PIPESTATUS[0]}"
-    # The first time: Caelestia's wallpaper and its colours set before the shell starts (agros-welcome's mark, so it
-    # doesn't again). Set after, the shell had already shown its fallback and kept it, its colours from another
-    # wallpaper, and Qt's settings (icon theme) appeared after it had looked for them: Papirus never applied
-    mark=${log%/*}/wallpaper-set
-    # (a wallpaper Caelestia already has: an install from before the mark, its wallpaper picked since, kept)
-    [[ -s ${XDG_STATE_HOME:-$HOME/.local/state}/caelestia/wallpaper/path.txt ]] && touch "$mark"
-    if [[ ! -e $mark ]]; then
-        caelestia wallpaper -f /etc/xdg/quickshell/caelestia/assets/wallpaper.webp && caelestia scheme set -n dynamic &&
-            touch "$mark" && echo "wallpaper and colours set"
-        # (the login screen's copy of them now: greeter-theme-sync at Hyprland's start ran before they were there, and
-        # the first reboot came up on a login screen with neither)
-        "$helpers/greeter-theme-sync"
-    fi
+    [[ -z $first ]] || wait "$first"
 } >>"$log" 2>&1
+[[ -z $prepare ]] || exit 0
 # (even when the build failed: Caelestia as it comes, rather than no bar at all; it daemonizes and returns)
 caelestia shell -d >>"$log" 2>&1 9>&-
 for _ in $(seq 300); do "$helpers/qs-running" /quickshell/caelestia/shell.qml && break; sleep 0.1; done

@@ -67,4 +67,25 @@ sed -i 's|touch "\$HOME/.config/quickshell/caelestia/shell.qml"|ln -sf /x "$HOME
 rm -rf "$t/home/.config/quickshell/caelestia"; : >"$t/home/started"
 run
 grep -q '^restart' "$t/home/started" && fail "a shell on Caelestia as it comes restarted again: $(cat "$t/home/started")"
+# --prepare (caelestia-prepare.service, as the session starts): the build and the first wallpaper and colours done,
+# the shell not started; the run at Hyprland's start then finds them done and only starts the shell
+printf '#!/bin/sh
+echo "Config path: /x/quickshell/caelestia/shell.qml"
+' >"$t/bin/qs"
+cp "$here/.local/bin/caelestia-start" "$t/home/.local/bin/"
+rm -rf "$t/home/.local/state" "$t/home/.config/quickshell/caelestia" "$t/home/overlay-runs"; : >"$t/home/started"
+HOME=$t/home PATH=$t/bin:$PATH "$t/home/.local/bin/caelestia-start" --prepare
+[[ $(cat "$t/home/overlay-runs") == built ]] || fail "--prepare: the overlay wasn't built"
+grep -q '^caelestia scheme set -n dynamic$' "$t/home/started" || fail "--prepare: the colours weren't set"
+grep -q 'shell -d' "$t/home/started" && fail "--prepare: the shell was started: $(cat "$t/home/started")"
+grep -q '(ahead of the desktop)' "$log" || fail "--prepare: not logged as such"
+run
+[[ $(grep -c '^caelestia wallpaper' "$t/home/started") -eq 1 ]] || fail "after --prepare: the wallpaper was set again"
+[[ $(tail -1 "$t/home/started") == "caelestia shell -d" ]] || fail "after --prepare: the shell wasn't started"
+# (the unit that runs it: packaged, wanted as the session starts, after agros-links, nothing ordered after it)
+u=$here/packages/agros-scripts/caelestia-prepare.service
+grep -qx 'ExecStart=/usr/lib/agros/bin/caelestia-start --prepare' "$u" && grep -qx 'After=agros-links.service' "$u" &&
+    grep -qx 'WantedBy=graphical-session-pre.target' "$u" && ! grep -q '^Before=' "$u" || fail "caelestia-prepare.service: $(cat "$u")"
+grep -q 'graphical-session-pre.target.wants/caelestia-prepare.service' "$here/packages/agros-scripts/PKGBUILD" ||
+    fail "agros-scripts doesn't enable caelestia-prepare.service"
 echo "ok caelestia-start"

@@ -39,4 +39,9 @@ package() {
     install -Dm644 "$startdir/agros-links.service" "$pkgdir/usr/lib/systemd/user/agros-links.service"
     install -d "$pkgdir/usr/lib/systemd/user/default.target.wants"
     ln -s ../agros-links.service "$pkgdir/usr/lib/systemd/user/default.target.wants/agros-links.service"
+    # Caelestia's first start got ready while the desktop starts (caelestia-start --prepare)
+    install -Dm644 "$startdir/caelestia-prepare.service" "$pkgdir/usr/lib/systemd/user/caelestia-prepare.service"
+    install -d "$pkgdir/usr/lib/systemd/user/graphical-session-pre.target.wants"
+    ln -s ../caelestia-prepare.service \
+        "$pkgdir/usr/lib/systemd/user/graphical-session-pre.target.wants/caelestia-prepare.service"
 }
