@@ -59,8 +59,11 @@ mkdir -p "$t/site" "$t/db/libdep-1-1"
 printf '%%FILENAME%%\nlibdep-1-1-x86_64.pkg.tar.zst\n\n%%NAME%%\nlibdep\n' >"$t/db/libdep-1-1/desc"
 (cd "$t/db" && tar -czf "$t/site/agros.db" libdep-1-1)
 gpg --batch --quiet --detach-sign -o "$t/site/agros.db.sig" "$t/site/agros.db"
-# (curl: -o's file from $SITE; with -w its HTTP code, 404 when missing; without, a missing one fails, as -f)
+# (curl: -o's file from $SITE; with -w its HTTP code, 404 when missing; without, a missing one fails, as -f. Only the
+# current copy asked for, a ?t= query past the CDN's: without one, nothing served)
 stub curl 'w=; while (($#)); do case $1 in -o) o=$2; shift ;; -w) w=1; shift ;; --retry) shift ;; https://*) u=$1 ;; esac; shift; done
+[[ $u == *"?t="[0-9]* ]] || { [[ -z $w ]] || printf 000; exit 7; }
+u=${u%%\?*}
 f=$SITE/${u#https://pub/}
 if [[ -f $f ]]; then cp "$f" "$o"; [[ -z $w ]] || printf 200; elif [[ -n $w ]]; then printf 404; else exit 22; fi'
 pub() { SITE=$t/site PATH=$t/bin:$PATH AGROS_PUBLISHED=https://pub AGROS_PUBKEY=$t/key.asc check; }
