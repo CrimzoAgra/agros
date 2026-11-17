@@ -920,7 +920,7 @@ brings each change; nothing to run by hand).
     none good, the kept list, nothing new let through. agros-iso's build and installer check it the same way
   - Checks that stop passing are said on the machine too: the boot's update keeps the day they last passed on Arch
     (`agros-arch-ok`, beside the repo; `/var/lib/agros/agros-arch-ok`, from the first of `[agros]`'s servers that
-    answers), and `dotfiles-check` says after login, once it was over 10 days old when fetched: "AgrOS's checks haven't
+    answers, taken only with a good signature by AgrOS's key, as the list is), and `dotfiles-check` says after login, once it was over 10 days old when fetched: "AgrOS's checks haven't
     passed for N days: Hyprland updates wait until they do" (a broken check, or CI no longer running). No network at
     login: a copy the boot hasn't refreshed yet is counted to when it was fetched, not to today
   - The ISO build (agros-iso's `check_gate`) stops when its Hyprland isn't approved, keeping the published ISO; the
@@ -954,7 +954,7 @@ brings each change; nothing to run by hand).
   (Arch's, CachyOS's, AgrOS's) are downloaded alone first and installed first: a key expired on the machine doesn't stop
   the rest's download for good.
   - Not on a snapshot booted from the menu (the root an overlay in RAM): nothing downloaded or installed, said in the
-    log. The day Arch last passed AgrOS's tests (`agros-arch-ok`) is taken only with AgrOS's signature
+    log
   - **AUR apps** (`packages/agros-system/auto-update-aur`, after the download; an app whose AUR maintainer
     or co-maintainers changed since its last build (a co-maintainer can push its build files too), or one its repo
     dropped (signed, now foreign), isn't built: left for Updates, where its build files can be read, and said by
