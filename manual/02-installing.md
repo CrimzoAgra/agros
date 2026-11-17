@@ -28,6 +28,9 @@ during the install, so you get the latest versions.
 
 When it's done, restart and take the USB stick out.
 
+Kept Windows? AgrOS starts straight away, with no menu. To start Windows, press **Esc** as the computer starts: the
+boot menu lists it (and the snapshots).
+
 ## Already running CachyOS?
 
 You can add AgrOS to an existing CachyOS system instead (only CachyOS: AgrOS needs packages from CachyOS's own repos,
