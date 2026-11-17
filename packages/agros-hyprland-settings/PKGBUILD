@@ -25,8 +25,9 @@ _root=$(realpath "${startdir}/../..")
 _components=(hypr fish foot fastfetch btop micro "thunar|Thunar" starship.toml uwsm spicetify)
 # Its shell started by caelestia-start: on AgrOS's changes to it from the first login (checked at every login, rebuilt
 # when out of date or missing), else it came up on Caelestia's own config (no dock, the bar laid out otherwise) and
-# jumped when agros-welcome rebuilt it and restarted it; and each start logged
-_execs_sed='s|^\( *\)hl.exec_cmd("caelestia shell -d")$|\1hl.exec_cmd("~/.local/bin/caelestia-start")|'
+# jumped when agros-welcome rebuilt it and restarted it; and each start logged. Its night light (gammastep) not started:
+# off by default, Settings > Startup turns it on (user/apps.lua)
+_execs_sed='s|^\( *\)hl.exec_cmd("caelestia shell -d")$|\1hl.exec_cmd("~/.local/bin/caelestia-start")|; /^ *hl.exec_cmd("sleep 1 && gammastep")$/d'
 # Settings that are yours to change, through the apps that write them (Caelestia's settings and weather location, the
 # dock's pins, default apps, Settings > Startup, VSCodium, Legion Control) or one machine's own (hosts/): copied into a
 # home once, never updated (one an app wrote back to an older AgrOS version would read as never edited)
@@ -67,10 +68,12 @@ package() {
         src=${c%%|*} dest=${c#*|}
         cp -r --no-preserve=ownership "$srcdir/caelestia-dots/$src" "$skel/.config/$dest"
     done
-    # Its shell started by caelestia-start (_execs_sed)
+    # Its shell started by caelestia-start, its night light not (_execs_sed)
     sed -i "$_execs_sed" "$skel/.config/hypr/hyprland/execs.lua"
     grep -q 'hl.exec_cmd("~/.local/bin/caelestia-start")' "$skel/.config/hypr/hyprland/execs.lua" ||
         { echo "Caelestia's execs.lua changed: its shell's start not found" >&2; return 1; }
+    ! grep -q gammastep "$skel/.config/hypr/hyprland/execs.lua" ||
+        { echo "Caelestia's execs.lua changed: its night light's start not taken out" >&2; return 1; }
     # 2. AgrOS's, over them
     cd "$_root"
     cp -r --no-preserve=ownership .config/. "$skel/.config/"

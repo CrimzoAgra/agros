@@ -19,7 +19,7 @@ git init -q "$d"
 printf '%s\n' '-- 1' '    hl.exec_cmd("caelestia shell -d")' >"$d/hypr/hyprland/execs.lua"
 echo accels-1 >"$d/thunar/accels.scm"
 commit "$d" one
-printf '%s\n' '-- 2' '    hl.exec_cmd("caelestia shell -d")' >"$d/hypr/hyprland/execs.lua"
+printf '%s\n' '-- 2' '    hl.exec_cmd("sleep 1 && gammastep")' '    hl.exec_cmd("caelestia shell -d")' >"$d/hypr/hyprland/execs.lua"
 echo accels-2 >"$d/thunar/accels.scm"
 commit "$d" two
 
@@ -51,6 +51,7 @@ for x in 1 2; do
         fail "execs.lua's version $x listed unchanged (never what /etc/skel has)"
 done
 grep -q 'hl.exec_cmd("~/.local/bin/caelestia-start")' "$t/pkg/etc/skel/.config/hypr/hyprland/execs.lua" || fail "execs.lua not changed"
+! grep -q gammastep "$t/pkg/etc/skel/.config/hypr/hyprland/execs.lua" || fail "the night light still started by execs.lua"
 ! grep -qE ' \.config/(caelestia/shell\.json|gone\.conf)$' "$v" || fail "yours (shell.json) or a deleted one listed: $(cat "$v")"
 [[ $(grep -c ' \.config/foo\.conf$' "$v") == 2 ]] || fail "foo.conf's versions not listed once each: $(cat "$v")"
 echo "ok skel-versions"

@@ -40,7 +40,7 @@ depends=(
     squashfs-tools                      # an AppImage's name and icon read without running it (appimage-open)
     grim slurp swappy brightnessctl ddcutil libqalculate ydotool xdg-user-dirs flatpak nodejs npm python
     python-gobject python-xlib pacman-contrib paru github-cli
-    gammastep geoclue                   # night light (Caelestia's execs.lua starts both; no location without geoclue)
+    gammastep geoclue                   # night light (Settings > Startup, off by default; no location without geoclue)
     # Games: CachyOS's gaming packages, Steam, Lutris (every store's library), Faugus, MangoHud, Gamescope
     # (agros-wine first: one Wine, CachyOS's, as the system's. Before the gaming packages, whose winetricks needs a wine:
     # pacman takes one already chosen, and Arch's isn't installed beside it)

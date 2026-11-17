@@ -37,8 +37,9 @@ automatic), set at every login without asking for your password.
 
 ## Night light
 
-After sunset the screens turn warmer by themselves, from where your PC finds you on the network. To set your location
-or the colours yourself, see `~/.config/gammastep/config.ini`.
+Off by default. Turn on **Startup > Night light** and, from your next login, the screens turn warmer after sunset,
+from where your PC finds you on the network. To set your location or the colours yourself, see
+`~/.config/gammastep/config.ini`.
 
 ## Screens
 

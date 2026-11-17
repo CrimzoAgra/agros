@@ -1087,6 +1087,13 @@
               "default": false
             },
             {
+              "key": "startup.nightlight",
+              "label": "Night light",
+              "description": "Warmer screens after sunset, from where your PC finds you on the network.",
+              "type": "bool",
+              "default": false
+            },
+            {
               "key": "startup.solaar",
               "label": "Solaar",
               "description": "In its tray (your mouse's battery): puts the mouse DPI back when the mouse reconnects.",

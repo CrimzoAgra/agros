@@ -450,8 +450,10 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
   background), and a notification says so. Run outside the desktop (SSH, a text console) or without the desktop's
   environment (no `XDG_CURRENT_DESKTOP`: the shell would start with no Qt theme), it has Hyprland run it instead, once
 - **`.local/bin/caelestia-pin`**: pin apps to the launcher or dock from a picker
-- **Night light** (`.config/gammastep/config.ini`): gammastep, which Caelestia's `execs.lua` starts at login with
-  geoclue's demo agent (both in `agros-desktop`), turns the screens warmer after sunset (6500 K by day, 4000 K at
+- **Night light** (`.config/gammastep/config.ini`): off by default. Caelestia's `execs.lua` started gammastep at every
+  login; `agros-hyprland-settings` takes that line out (`_execs_sed`) and Settings > Startup > Night light
+  (`startup.nightlight`, `user/apps.lua`) starts it instead. geoclue's demo agent (Caelestia's `execs.lua`, both in
+  `agros-desktop`) gives it the location. It turns the screens warmer after sunset (6500 K by day, 4000 K at
   night, faded in). Its location comes from geoclue (Arch's: Wi-Fi networks and then the IP, looked up on BeaconDB, its
   default since Mozilla's service closed; nothing to set). `agros-system`'s `/etc/geoclue/conf.d/90-agros.conf` lets
   gammastep have it without the agent asking at every login. Without a location (offline, nothing found) gammastep

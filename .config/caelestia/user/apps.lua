@@ -278,6 +278,10 @@ at_login("artcraft", "~/.local/bin/artcraft-silent")
 at_login("solaar", "~/.local/bin/app-launch solaar --window=hide")
 hl.on("hyprland.start", function() hl.exec_cmd("~/.local/bin/mouse-dpi") end)
 
+-- The night light (gammastep: warmer screens after sunset, ~/.config/gammastep/config.ini), when you turn it on (off
+-- at first). Caelestia's execs.lua started it at every login: taken out there (agros-hyprland-settings' _execs_sed)
+at_login("nightlight", "gammastep")
+
 -- ...and keep it there when Caelestia (the tray) restarts or crashes; Spotify shows its window when the tray goes away.
 -- tray-keeper also brings back tray icons apps like Proton VPN don't re-add themselves
 hl.on("hyprland.start", function() hl.exec_cmd("systemctl --user start tray-keeper") end)  -- a service: restarted if it crashes
