@@ -73,6 +73,9 @@ mkdir -p "$t/au" "$t/pacdb"
 echo "failed 2026-11-05 22:10 error: failed to commit transaction (conflicting files)" >"$t/au/install-result"
 : >"$t/pacdb/db.lck"
 printf '#!/bin/sh\nexit 1\n' >"$t/pgrep"; chmod +x "$t/pgrep"
+# (an administrator's account, wheel, unless a check says otherwise: what it's told to do depends on it)
+# shellcheck disable=SC2016  # (expanded by the stand-in)
+printf '#!/bin/sh\n[ "$1" = -nG ] && exec echo "${ID_GROUPS-users wheel}"\nexec /usr/bin/id "$@"\n' >"$t/id"; chmod +x "$t/id"
 chk() { HOME=$h AUTO_UPDATE_DIR=$t/au PACMAN_DB_DIR=$t/pacdb PATH=$t:$PATH "$here/.local/bin/dotfiles-check" 2>&1; }
 out=$(chk)
 grep -q "failed to install at shutdown (2026-11-05 22:10: error: failed to commit transaction" <<<"$out" ||
@@ -101,7 +104,22 @@ echo "equibop 1.1-1" >"$t/au/aur/wanted"
 printf '%s\n' 'equibop: it needs ![x](https://e.vil/i.png) <img src=x> [a](b)' >"$t/au/aur/failed"
 out=$(EQUIBOP=1.0-1 chk)
 line=$(grep "couldn.t build AUR apps" <<<"$out"); [[ -n $line && $line != *[\<\>\[\]\!]* ]] || fail "a build's text reached the notification as it is: $out"
+# (one held for its build files to be reviewed, auto-update-aur's guard: the Updates app leaves it out, so not "run
+# Updates" but update-apps in a terminal, which shows them)
+echo "equibop: its AUR maintainers changed (alice to bob): review it: run update-apps in a terminal" >"$t/au/aur/failed"
+out=$(EQUIBOP=1.0-1 chk)
+[[ $out == *"still waiting: equibop; run update-apps in a terminal"* ]] || fail "an app held for review said to be updated from Updates: $out"
 echo "a build failed" >"$t/au/aur/failed"
+# Another account (not wheel, its Updates without "Update all", update-apps refusing it): told to ask an
+# administrator, not to run Updates, nor to read the boot update's log (root:wheel 0640)
+echo "failed 2026-11-05 22:10 error: x" >"$t/au/install-result"
+out=$(ID_GROUPS=users EQUIBOP=1.0-1 chk)
+[[ $out == *"still waiting: equibop; ask an administrator to run Updates"* && $out == *"(2026-11-05 22:10: error: x): ask an administrator to run Updates"* &&
+    $out != *"auto-update.log"* ]] || fail "an account that can't update told to run Updates itself: $out"
+out=$(EQUIBOP=1.0-1 chk)
+[[ $out == *"still waiting: equibop; run Updates"* && $out == *"error: x): see /var/log/auto-update.log, or run Updates"* ]] ||
+    fail "an administrator not told to run Updates: $out"
+echo "ok 2026-11-05 22:10 " >"$t/au/install-result"
 # The held update: only what's still waiting named (Qt's installed since by Updates, Python's not)
 printf '%s\n' "qt6-base 6.9.0-1 -> 6.10.0-1" "python 3.13.7-1 -> 3.14.0-1" >"$t/au/held"
 out=$(EQUIBOP=1.0-1 chk)

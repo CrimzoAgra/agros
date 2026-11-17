@@ -27,7 +27,8 @@ and type your passphrase. Everything goes straight back where it belongs, and an
 Capri, the desktop companion, installs right after: her code is in a private GitHub repo, so she installs only for a
 GitHub login that can read it. If your GitHub login only works once you've logged out and in again, she installs at
 that next login. Lutris and Proton VPN, open in the tray as they are after logging in (Proton VPN if you set it to
-start then), are closed for it (it asks first).
+start then), are closed for it (it asks first). Proton VPN's account comes back, but not its start at login: it
+starts at login only if you turn it on, in Desktop Settings → Startup.
 
 No stick? `agros-personal` opens each app for you to sign in instead.
 
@@ -44,4 +45,5 @@ sudo passwd <name>
 The login screen then lists both accounts: click the person button next to the session's to pick one. The new
 account's first login runs AgrOS Welcome for it, as yours did. Updates are the whole computer's: they happen at boot
 and shutdown whoever logs in, and only administrators are offered **Update now**, the Updates app's **Update all**
-and the hardware apps.
+and the hardware apps. When an automatic update goes wrong, the warning after login tells another account to ask an
+administrator to run Updates.

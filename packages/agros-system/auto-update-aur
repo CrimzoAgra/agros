@@ -244,19 +244,24 @@ mapfile -t ignored < <(pacman-conf --config "$conf" IgnorePkg 2>/dev/null)
 # chose: one a signed repository installed (pacman's "Validated By": Signature; foreign only since that repository
 # dropped it, the AUR's of that name is someone else's build), or one whose AUR maintainers changed since its last build
 # here (adopted by another, or a co-maintainer added or changed: a co-maintainer can push its build files too). Those
-# wait for Updates, where its build files can be reviewed (dotfiles-check says so, from failed and wanted). The
+# wait for update-apps in a terminal, where paru shows its build files for review (the Updates app, which can't show
+# them, leaves them out; dotfiles-check says so, from failed and wanted). The
 # maintainers as one word, "<maintainer>:<co-maintainers, sorted, a comma between two>". Kept across runs: those each
 # base had at its last build here (aur-maintainers, "<base> <maintainers>": the first seen taken as they are), and a
 # change waiting (aur-maintainer-changed, "<base> <maintainers> <version installed then>"): once that version is
-# replaced (updated from Updates), the new maintainers are taken. A line from before co-maintainers were kept (no ":",
+# replaced (updated by update-apps, reviewed), the new maintainers are taken. A line from before co-maintainers were kept (no ":",
 # the maintainer alone) is compared by the maintainer alone, so the update that added them didn't hold every app back
 maint=$au/aur-maintainers changed=$au/aur-maintainer-changed
 from_repo=''
 ((${#foreign[@]} == 0)) || from_repo=$(LC_ALL=C pacman -Qi --dbpath "$db" -- "${foreign[@]}" 2>/dev/null |
     awk -F' *: ' '$1 == "Name" { n = $2 } $1 == "Validated By" && $2 ~ /Signature/ { print n }')
-# field <file> <base> <n>: word <n> of its line; set_line <file> <base> [<rest>]: its line replaced (no <rest>: removed)
+# field <file> <base> <n>: word <n> of its line; set_line <file> <base> [<rest>]: its line replaced (no <rest>: removed;
+# readable by all, whatever the umask: the Updates app's update-apps leaves out those waiting, as each user)
 field() { awk -v b="$2" -v n="$3" '$1 == b { print $n; exit }' "$1" 2>/dev/null; }
-set_line() { { awk -v b="$2" '$1 != b' "$1" 2>/dev/null; [[ -z ${3:-} ]] || echo "$2 $3"; } >"$1.new" && mv -f "$1.new" "$1"; }
+set_line() {
+    { awk -v b="$2" '$1 != b' "$1" 2>/dev/null; [[ -z ${3:-} ]] || echo "$2 $3"; } >"$1.new" && chmod 644 "$1.new" &&
+        mv -f "$1.new" "$1"
+}
 # same <maintainers kept> <maintainers now>: the same ones (a line from before co-maintainers: the maintainer alone)
 same() { [[ $1 == *:* && $1 == "$2" ]] || [[ $1 != *:* && $1 == "${2%%:*}" ]]; }
 # who <maintainers>: as said ("alice", "alice, co-maintained by bob,carol"; an orphan's "-": "no one")
@@ -269,7 +274,7 @@ who() {
 guard() {
     local was waiting
     if grep -qxF -- "$1" <<<"$from_repo"; then
-        echo "$1 came from a repository that no longer has it, and the AUR's $1 is someone else's: update it from Updates, where you can review it"
+        echo "$1 came from a repository that no longer has it, and the AUR's $1 is someone else's: review it: run update-apps in a terminal"
         return 1
     fi
     was=$(field "$maint" "$2" 2) waiting=$(field "$changed" "$2" 2)
@@ -277,19 +282,19 @@ guard() {
         # (a line from before co-maintainers: its co-maintainers now taken, so a later change to them is seen)
         [[ -z $was || $was == *:* ]] || set_line "$maint" "$2" "$3"
         # (a change that went back: the one waiting forgotten, else a later change to those same accounts, once the
-        # version installed had moved on, was taken as reviewed in Updates)
+        # version installed had moved on, was taken as reviewed in update-apps)
         [[ -z $waiting ]] || set_line "$changed" "$2"
         return 0
     fi
     if [[ -n $waiting ]] && same "$waiting" "$3" && [[ $(field "$changed" "$2" 3) != "$4" ]]; then
-        # (updated from Updates since: the new maintainers taken now, not at its build. A build here that then fails
-        # would have held it again, and a split base's next package, asked here too, found it held)
+        # (updated by update-apps since, reviewed: the new maintainers taken now, not at its build. A build here that
+        # then fails would have held it again, and a split base's next package, asked here too, found it held)
         set_line "$maint" "$2" "$3"
         set_line "$changed" "$2"
         return 0
     fi
     [[ -n $waiting ]] && same "$waiting" "$3" || set_line "$changed" "$2" "$3 $4"
-    echo "its AUR maintainers changed ($(who "$was") to $(who "$3")): update it from Updates, where you can review it"
+    echo "its AUR maintainers changed ($(who "$was") to $(who "$3")): review it: run update-apps in a terminal"
     return 1
 }
 # (pins: a rebuild of one [agros] publishes, at the version installed: what CI built and tested, never the AUR's newest,

@@ -118,8 +118,8 @@ personal_open() {
 
 # Lutris and Proton VPN start at login in their tray only (user/apps.lua: Lutris on by default, Proton VPN when turned
 # on), so a restore from the first login's notification found them open. Of the apps named, those two with no window (nor a game they started)
-# are closed for it, asked first in a terminal: nothing of theirs is lost, and they start again at the next login, which
-# the restore needs anyway. Hyprland not reachable to tell (a text console): left open, said as the others
+# are closed for it, asked first in a terminal: nothing of theirs is lost, and they start again at the next login if
+# their Startup switch is on (Proton VPN's is off at first: one started by hand doesn't), which the restore needs anyway. Hyprland not reachable to tell (a text console): left open, said as the others
 personal_close_tray() {
     local app p wins mine pids=() names=() list r
     local -A shown=()
@@ -143,7 +143,7 @@ personal_close_tray() {
     ((${#pids[@]})) || return 0
     list=$(printf '%s and ' "${names[@]}") list=${list% and }
     if [[ -t 0 ]]; then
-        read -rp "$list: open in the tray only. Close for this (they start again at your next login)? [Y/n] " r || r=n
+        read -rp "$list: open in the tray only. Close for this (they start again at your next login if they're on in Desktop Settings → Startup)? [Y/n] " r || r=n
         [[ $r == [nN]* ]] && return 0
     fi
     kill -TERM "${pids[@]}" 2>/dev/null || true
@@ -311,6 +311,12 @@ personal_restore() {
             mkdir -p "${XDG_STATE_HOME:-$HOME/.local/state}/agros" && : >"${XDG_STATE_HOME:-$HOME/.local/state}/agros/capri-at-login"
             echo "Capri is installed at your next login (your GitHub login works from then: it's in the keyring)."
         fi
+    fi
+    # Proton VPN's account is back, but not its start at login: a desktop setting, off at first (a VPN at every login is
+    # yours to choose)
+    if grep -qE '^\.config/Proton/VPN(/|$)' <<<"$list" &&
+        [[ $("$helpers/dots-settings" get startup.protonvpn 2>/dev/null) != true ]]; then
+        echo "Proton VPN starts at login only if you turn it on: Desktop Settings → Startup."
     fi
     echo "Accounts back. Log out and in (the keyring): it opens with the password you logged in with on your old PC."
 }

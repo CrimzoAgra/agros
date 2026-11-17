@@ -345,27 +345,31 @@ FOREIGN=equibop PENDING="foo 1-1 -> 2-1" "$t/auto-update-aur" "$t/db" >"$t/out" 
 maintained 'mallory<b>'
 for run in 1 2; do
     : >"$t/calls"
-    FOREIGN=equibop PENDING="foo 1-1 -> 2-1" "$t/auto-update-aur" "$t/db" >"$t/out" 2>&1 && fail "a maintainer change reported success"
-    [[ $(cat "$aur/failed") == "equibop: its AUR maintainers changed (alice to malloryb): update it from Updates, where you can review it" &&
+    # (a strict umask: what it writes for the users readable all the same)
+    (umask 077; FOREIGN=equibop PENDING="foo 1-1 -> 2-1" "$t/auto-update-aur" "$t/db") >"$t/out" 2>&1 && fail "a maintainer change reported success"
+    [[ $(cat "$aur/failed") == "equibop: its AUR maintainers changed (alice to malloryb): review it: run update-apps in a terminal" &&
         $(cat "$aur/wanted") == "equibop 1.1-1" && ! -s $aur/built ]] && ! grep -q '^git clone' "$t/calls" ||
         fail "built after its AUR maintainer changed (run $run), or not said: $(cat "$aur/failed" 2>/dev/null) / $(grep '^git' "$t/calls")"
     [[ $(cat "$t/au/aur-maintainers") == "equibop alice:" && $(cat "$t/au/aur-maintainer-changed") == "equibop malloryb: 1.0-1" ]] ||
         fail "the change waiting not kept as it was (run $run): $(cat "$t/au/aur-maintainer-changed" 2>/dev/null)"
 done
-# (updated from Updates since: its version installed another; the new maintainer taken at its next build)
+# (readable by every account: the Updates app's update-apps, as the user, leaves those waiting out of its builds)
+[[ $(stat -c %a "$t/au/aur-maintainer-changed") == 644 ]] ||
+    fail "the changes waiting not readable by the users: $(stat -c %a "$t/au/aur-maintainer-changed")"
+# (updated by update-apps since: its version installed another; the new maintainer taken at its next build)
 : >"$t/calls"
 FOREIGN_HAVE=1.0.5-1 FOREIGN=equibop PENDING="foo 1-1 -> 2-1" "$t/auto-update-aur" "$t/db" >"$t/out" 2>&1 ||
     fail "the build after an update from Updates failed: $(cat "$t/out")"
 [[ $(cat "$aur/built") == "equibop 1.1-1" && $(cat "$t/au/aur-maintainers") == "equibop malloryb:" && ! -s $t/au/aur-maintainer-changed ]] ||
-    fail "the new maintainer not taken once updated from Updates: $(cat "$t/au/aur-maintainers") / $(cat "$t/au/aur-maintainer-changed")"
+    fail "the new maintainer not taken once updated by update-apps: $(cat "$t/au/aur-maintainers") / $(cat "$t/au/aur-maintainer-changed")"
 # A signed repository's (its repository dropped it): not built from the AUR's package of that name
 : >"$t/calls"
 SIGNED=equibop FOREIGN=equibop PENDING="foo 1-1 -> 2-1" "$t/auto-update-aur" "$t/db" >"$t/out" 2>&1 && fail "a repository's package built from the AUR"
-[[ $(cat "$aur/failed") == "equibop: equibop came from a repository that no longer has it, and the AUR's equibop is someone else's: update it from Updates, where you can review it" &&
+[[ $(cat "$aur/failed") == "equibop: equibop came from a repository that no longer has it, and the AUR's equibop is someone else's: review it: run update-apps in a terminal" &&
     $(cat "$aur/wanted") == "equibop 1.1-1" ]] && ! grep -q '^git clone' "$t/calls" ||
     fail "a package its repository dropped built from the AUR, or not said: $(cat "$aur/failed" 2>/dev/null)"
 # A change that went back (the old maintainer again) forgets the one waiting: the same account's adoption later, with
-# the version installed moved on since, isn't taken as updated from Updates
+# the version installed moved on since, isn't taken as updated by update-apps
 echo "equibop alice" >"$t/au/aur-maintainers"
 echo "equibop malloryb 0.9-1" >"$t/au/aur-maintainer-changed"
 maintained alice
@@ -375,7 +379,7 @@ FOREIGN=equibop PENDING="foo 1-1 -> 2-1" "$t/auto-update-aur" "$t/db" >"$t/out" 
 maintained malloryb
 : >"$t/calls"
 FOREIGN=equibop PENDING="foo 1-1 -> 2-1" "$t/auto-update-aur" "$t/db" >"$t/out" 2>&1 && fail "a second change to the same account reported success"
-[[ $(cat "$aur/failed") == "equibop: its AUR maintainers changed (alice to malloryb): update it from Updates, where you can review it" ]] &&
+[[ $(cat "$aur/failed") == "equibop: its AUR maintainers changed (alice to malloryb): review it: run update-apps in a terminal" ]] &&
     ! grep -q '^git clone' "$t/calls" || fail "built after a second change to the same account: $(cat "$aur/failed" 2>/dev/null)"
 # A co-maintainer can push its build files too: one added, or another in its place, waits for Updates as a new
 # maintainer does (the co-maintainers sorted, so the AUR's order alone changes nothing)
@@ -387,7 +391,7 @@ for co in '"zed","bob"' '"zed","mallory"'; do
     FOREIGN=equibop PENDING="foo 1-1 -> 2-1" "$t/auto-update-aur" "$t/db" >"$t/out" 2>&1 && fail "a co-maintainer change reported success ($co)"
     now=$(tr -d '"' <<<"$co" | tr , '
 ' | sort | paste -sd,)
-    [[ $(cat "$aur/failed") == "equibop: its AUR maintainers changed (alice, co-maintained by bob to alice, co-maintained by $now): update it from Updates, where you can review it" &&
+    [[ $(cat "$aur/failed") == "equibop: its AUR maintainers changed (alice, co-maintained by bob to alice, co-maintained by $now): review it: run update-apps in a terminal" &&
         $(cat "$t/au/aur-maintainer-changed") == "equibop alice:$now 1.0-1" ]] && ! grep -q '^git clone' "$t/calls" ||
         fail "built after a co-maintainer change ($co), or not said: $(cat "$aur/failed" 2>/dev/null) / $(cat "$t/au/aur-maintainer-changed" 2>/dev/null)"
 done
@@ -396,7 +400,7 @@ echo "equibop alice:" >"$t/au/aur-maintainers"
 rm -f "$t/au/aur-maintainer-changed"
 maintained alice '"mallory"'
 FOREIGN=equibop PENDING="foo 1-1 -> 2-1" "$t/auto-update-aur" "$t/db" >"$t/out" 2>&1 && fail "a co-maintainer added reported success"
-[[ $(cat "$aur/failed") == "equibop: its AUR maintainers changed (alice to alice, co-maintained by mallory): update it from Updates, where you can review it" ]] ||
+[[ $(cat "$aur/failed") == "equibop: its AUR maintainers changed (alice to alice, co-maintained by mallory): review it: run update-apps in a terminal" ]] ||
     fail "a co-maintainer added not said: $(cat "$aur/failed" 2>/dev/null)"
 maintained alice
 FOREIGN=equibop PENDING="foo 1-1 -> 2-1" "$t/auto-update-aur" "$t/db" >"$t/out" 2>&1 || fail "a build after the co-maintainer left failed: $(cat "$t/out")"
@@ -417,10 +421,10 @@ maintained malloryb '"bob"'
 FOREIGN=equibop PENDING="foo 1-1 -> 2-1" "$t/auto-update-aur" "$t/db" >"$t/out" 2>&1 && fail "an old change waiting built"
 [[ $(cat "$t/au/aur-maintainer-changed") == "equibop malloryb 1.0-1" ]] || fail "an old change waiting rewritten: $(cat "$t/au/aur-maintainer-changed")"
 FOREIGN_HAVE=1.0.5-1 FOREIGN=equibop PENDING="foo 1-1 -> 2-1" "$t/auto-update-aur" "$t/db" >"$t/out" 2>&1 ||
-    fail "an old change waiting not taken once updated from Updates: $(cat "$t/out")"
+    fail "an old change waiting not taken once updated by update-apps: $(cat "$t/out")"
 [[ $(cat "$t/au/aur-maintainers") == "equibop malloryb:bob" && ! -s $t/au/aur-maintainer-changed ]] ||
     fail "the new maintainers not recorded after an old change waiting: $(cat "$t/au/aur-maintainers")"
-# (updated from Updates, the new maintainers taken at once: a build here that fails doesn't hold it again at the next
+# (updated by update-apps, the new maintainers taken at once: a build here that fails doesn't hold it again at the next
 # boot, nor does a split base's other package, asked about after the first, find it held)
 echo "equibop alice:" >"$t/au/aur-maintainers"
 echo "equibop malloryb: 1.0-1" >"$t/au/aur-maintainer-changed"
@@ -428,7 +432,7 @@ maintained malloryb
 FAIL_BASE=equibop FOREIGN_HAVE=1.0.5-1 FOREIGN=equibop PENDING="foo 1-1 -> 2-1" "$t/auto-update-aur" "$t/db" >"$t/out" 2>&1 &&
     fail "a failed build reported success"
 [[ $(cat "$t/au/aur-maintainers") == "equibop malloryb:" && ! -s $t/au/aur-maintainer-changed ]] ||
-    fail "the new maintainers not taken when updated from Updates: $(cat "$t/au/aur-maintainers") / $(cat "$t/au/aur-maintainer-changed")"
+    fail "the new maintainers not taken when updated by update-apps: $(cat "$t/au/aur-maintainers") / $(cat "$t/au/aur-maintainer-changed")"
 FOREIGN_HAVE=1.0.5-1 FOREIGN=equibop PENDING="foo 1-1 -> 2-1" "$t/auto-update-aur" "$t/db" >"$t/out" 2>&1 ||
     fail "held again after its build failed: $(cat "$aur/failed" 2>/dev/null)"
 echo "equibop alice:" >"$t/au/aur-maintainers"
@@ -445,7 +449,7 @@ echo "equibop alice:" >"$t/au/aur-maintainers"
 rm -f "$t/au/aur-maintainer-changed"
 stub curl "echo '{\"results\":[{\"Name\":\"equibop\",\"PackageBase\":\"equibop\",\"Version\":\"1.1-1\",\"Maintainer\":null}]}'"
 FOREIGN=equibop PENDING="foo 1-1 -> 2-1" "$t/auto-update-aur" "$t/db" >"$t/out" 2>&1 && fail "an orphaned app's change reported success"
-[[ $(cat "$aur/failed") == "equibop: its AUR maintainers changed (alice to no one): update it from Updates, where you can review it" &&
+[[ $(cat "$aur/failed") == "equibop: its AUR maintainers changed (alice to no one): review it: run update-apps in a terminal" &&
     $(cat "$t/au/aur-maintainer-changed") == "equibop -: 1.0-1" ]] ||
     fail "an orphaned app's change not said as no one: $(cat "$aur/failed" 2>/dev/null)"
 # (the builds' logs the admins' alone: what they printed names every user's AUR apps)

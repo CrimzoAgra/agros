@@ -26,13 +26,16 @@ Laptop settings and lighting are in a separate repo: **legion-control-linux**.
    in one go; nothing is installed only to be taken away again, and nothing is built during the install.
 2. Reboot and log in. At your first login, `caelestia-prepare.service` (`caelestia-start --prepare`) builds
    Caelestia's overlay and sets its wallpaper and colours before Hyprland starts, so the shell comes up at once
-   (`agros-welcome` does both if that failed, and moves the shell onto the overlay). `agros-welcome` does the rest of
+   (`agros-welcome`, which waits for the shell and then for `caelestia-start` to let go of the overlay's lock, does
+   both if that failed, and moves the shell onto the overlay). `agros-welcome` does the rest of
    what's per user: LibreWolf's settings, the Spotify, Nuvio and ArtCraft Flatpaks with Spicetify, VSCodium's
    extensions and Claude Code's plugins.
 3. **The one thing you run:** its notification offers *Restore my accounts*. Plug in your pen drive and click it, or
    run `agros-personal` ([Your accounts](#your-accounts)). Capri installs right after that, since her fork is private
    and needs your GitHub login (at the next login when gh only gets it from the keyring brought back: `dotfiles-check`
-   installs her then).
+   installs her then). The offer comes back at each login until it's answered (`~/.local/state/agros/offered`); an
+   account set up before it did (its `done` there, without the `offer-sent` mark the offer leaves) isn't offered it
+   again.
 
 The same notification offers *Install hardware apps and VMware* (`agros-welcome --system`). It installs the apps for
 the hardware that's plugged in: Boxflat (Moza), OpenRazer + Polychromatic (Razer), Solaar (Logitech),
@@ -185,7 +188,8 @@ plugged in, mounted if it isn't, or the folder you name after it), encrypted wit
 a lost drive gives nothing without it. `agros-personal` decrypts it straight into place (nothing unencrypted written
 anywhere else) and backs up what it replaces; the keyring opens with your old login password. It refuses while an app
 whose files it brings back is open, but closes Lutris and Proton VPN when they're only in the tray (they start there at
-login, Proton VPN once you turn that on), asking first in a terminal. It's never in the repo (`--save` refuses a
+login, Proton VPN once you turn that on), asking first in a terminal. Proton VPN's start at login (`startup.protonvpn`,
+off at first) isn't in the file: a restore that brought its account back says where to turn it on. It's never in the repo (`--save` refuses a
 folder inside a git repo): saved logins get past your password and 2FA, and git keeps every version. With no drive, it
 opens each app for you to sign in instead (LibreWolf's Firefox account brings bookmarks and passwords through Sync) and
 asks the weather widget's place. Save again now and then: logins expire.
@@ -415,7 +419,10 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
   `.conf` one and writes the window borders' colours to `current.conf`, which the Lua config doesn't read. The folder
   icons' colour (the CLI's forked `sudo -n papirus-folders`) is left to that last scheme run alone, through a `sudo`
   stand-in for the others (`~/.local/state/agros/folders-later`): the wallpaper's and the scheme's raced, and the
-  prepare unit's end killed them half-way. Each start logged in
+  prepare unit's end killed them half-way. That stand-in is removed once the first wallpaper and colours are set: one
+  still there marks a first time cut off between the two (the prepare unit's time limit, a power cut), so Caelestia's
+  `path.txt`, which the wallpaper wrote, isn't taken for a wallpaper you picked, and both are set again. Each start
+  logged in
   `~/.local/state/agros/caelestia-start.log`. A shell that never loads its config on the overlay's changes (Quickshell
   stays running with nothing on screen when a part can't be created: AgrOS's changes on a Caelestia or Quickshell other
   than the one CI checked) is started again without them (`caelestia-restart --without-changes`, below), not left with
@@ -962,7 +969,9 @@ brings each change; nothing to run by hand).
   (`systemd-inhibit --what=sleep:shutdown:handle-lid-switch`: logind suspends on the lid whatever sleep lock is held,
   `LidSwitchIgnoreInhibited=yes`; where polkit refuses the lid's lock, power off and sleep alone). Run in a
   terminal, it shows each AUR package's build-script changes for review first; the Updates app's "Update all" builds
-  them without that review (it lists which ones first, in its log), and sudo asks for the password in a dialog
+  them without that review (it lists which ones first, in its log), leaving out those the boot's builds hold for review
+  (`aur-maintainer-changed`'s bases, a signed repository's package now foreign: paru's `--ignore`, said with "run
+  update-apps in a terminal"; built unreviewed there, the next boot took the new maintainers as reviewed), and sudo asks for the password in a dialog
   (`.local/bin/askpass`, zenity, as `SUDO_ASKPASS`). After its `paru -Syu` it rebuilds what's built on a runtime it
   changed (the boot's list, below), and on a Qt changed since they were last built, once the runtime is in:
   `[agros]`'s own at the version installed with AgrOS's Quickshell fix (through `auto-update-aur --fetch`, as the
@@ -978,8 +987,8 @@ brings each change; nothing to run by hand).
     log
   - **AUR apps** (`packages/agros-system/auto-update-aur`, after the download; an app whose AUR maintainer
     or co-maintainers changed since its last build (a co-maintainer can push its build files too), or one its repo
-    dropped (signed, now foreign), isn't built: left for Updates, where its build files can be read, and said by
-    `dotfiles-check`): those with a newer AUR version (not in
+    dropped (signed, now foreign), isn't built: left for `update-apps` in a terminal, where paru shows its build files
+    for review (the Updates app leaves it out), and said by `dotfiles-check`): those with a newer AUR version (not in
     a repo: `paru -Qua`'s), and, when the download brings a new version of a runtime that breaks what's built on it,
     those built on it (from the AUR or `[agros]`, not a `-bin`, not rebuilt by their repo in the same download). The
     runtimes are one list, `update-kinds`' (`runtimes`, which `update-apps` uses too): Qt (`qt6-base`,
@@ -1116,7 +1125,9 @@ brings each change; nothing to run by hand).
   apps the install left out, or a firmware update that failed, and 3 shutdowns in a row with nothing installed, with the
   last one's reason (the boot's download didn't finish: only a finished one is installed; something else using pacman
   still held its lock; a soft reboot, which keeps the kernel running; with pacman's error when the download failed; on
-  battery, nearly empty: below 15%, discharging; pacman's lists couldn't be kept aside, a full disk). An install cut off
+  battery, nearly empty: below 15%, discharging; pacman's lists couldn't be kept aside, a full disk). Each says to run
+  Updates (and where to read the log) to an admin alone; another account, its Updates without "Update all" and the log
+  closed to it, is told to ask an administrator to run Updates. An install cut off
   has pacman's lists put back, and its lock removed, at the next boot or install. The boot's run (download, Flatpaks,
   AUR builds and all, everything it started: nothing it runs as a user leaves its unit) stops after 4 h; a Flatpak from
   a file isn't reinstalled with less than 35 min of that left (cut off between its removal and install, the app would be

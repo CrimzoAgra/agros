@@ -33,8 +33,13 @@ fi
     # wallpaper, and Qt's settings (icon theme) appeared after it had looked for them: Papirus never applied. Alongside
     # the build (neither needs the other), waited for before the shell
     mark=${log%/*}/wallpaper-set
-    # (a wallpaper Caelestia already has: an install from before the mark, its wallpaper picked since, kept)
-    [[ -s ${XDG_STATE_HOME:-$HOME/.local/state}/caelestia/wallpaper/path.txt ]] && touch "$mark"
+    # (the first time's stand-in sudo, below: made as it starts, gone once it's done)
+    later=${log%/*}/folders-later
+    # (a wallpaper Caelestia already has: an install from before the mark, its wallpaper picked since, kept. Not one a
+    # first time cut off left (prepare's time limit, a power cut: its wallpaper set, which writes path.txt, its colours
+    # not), its stand-in still there: that's done again, else its colours were never set)
+    [[ ! -e $later && -s ${XDG_STATE_HOME:-$HOME/.local/state}/caelestia/wallpaper/path.txt ]] && touch "$mark"
+    [[ -e $mark && -e $later ]] && { rm -f "$later/sudo"; rmdir "$later"; }
     first=
     # (set ahead of the desktop, by --prepare: set again at Hyprland's start, below)
     again=${log%/*}/scheme-again
@@ -44,14 +49,14 @@ fi
         # prepare run the unit's end killed them half-way (as root, their ln's left running). Done once, with the final
         # colour: by the scheme's run at Hyprland's start (here, or its run again after the prepare run). Left out of
         # the others by a sudo of their own, which passes anything else on
-        later=${log%/*}/folders-later
         # shellcheck disable=SC2016  # (the stand-in's own $2 and $@)
         mkdir -p "$later" && printf '%s\n' '#!/bin/sh' 'case $2 in papirus-folders | */papirus-folders) exit 0 ;; esac' 'exec /usr/bin/sudo "$@"' \
             >"$later/sudo" && chmod +x "$later/sudo"
         {
             PATH=$later:$PATH caelestia wallpaper -f /etc/xdg/quickshell/caelestia/assets/wallpaper.webp &&
-                PATH=${prepare:+$later:}$PATH caelestia scheme set -n dynamic && touch "$mark" &&
-                echo "wallpaper and colours set" && { [[ -z $prepare ]] || touch "$again"; }
+                PATH=${prepare:+$later:}$PATH caelestia scheme set -n dynamic &&
+                { [[ -z $prepare ]] || touch "$again"; } && touch "$mark" && echo "wallpaper and colours set" &&
+                { rm -f "$later/sudo"; rmdir "$later"; }
             # (the login screen's copy of them now: greeter-theme-sync at Hyprland's start ran before they were
             # there, and the first reboot came up on a login screen with neither)
             "$helpers/greeter-theme-sync"

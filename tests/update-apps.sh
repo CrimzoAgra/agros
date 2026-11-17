@@ -147,6 +147,26 @@ grep -q "couldn't be listed (paru -Qua: error: failed to get AUR info)" <<<"$out
 stub paru 'case "$*" in *-Qua*) exit 1 ;; *) echo "paru $*" >>"'"$t"'/paru" ;; esac'
 out=$(HOME=$t/home XDG_STATE_HOME=$t/state XDG_CACHE_HOME=$t/home/.cache PATH=$t/bin:$PATH "$here/.local/bin/update-apps" </dev/null 2>&1) || true
 grep -qE "couldn't be listed|built now, their build" <<<"$out" && fail "no AUR updates said as a list or a failure: $(head -5 <<<"$out")"
+# Those the boot's builds hold for review (auto-update-aur's guard: a base whose AUR maintainers changed, named by
+# its aur-maintainer-changed, its split packages too; a signed repository's package now foreign) never built
+# unreviewed from the Updates app (the next boot took those maintainers as reviewed): left out (paru's --ignore), said
+# with how to review them; the others built as before
+mkdir -p "$t/au" "$t/pacdb/local/libfoo-1-1"
+echo "foo malloryb: 1-1" >"$t/au/aur-maintainer-changed"
+printf '%%NAME%%\nlibfoo\n\n%%BASE%%\nfoo\n' >"$t/pacdb/local/libfoo-1-1/desc"
+stub pacman 'case "$1" in -Qm) printf "%s\n" "libfoo 1-1" "equibop 1.0-1" "oldrepo 1-1" ;;
+    -Qmi) printf "%s\n" "Name            : equibop" "Validated By    : None" "Name            : oldrepo" "Validated By    : Signature" ;; esac; true'
+# shellcheck disable=SC2016  # (expanded by the stand-in)
+stub paru 'case "$*" in *-Qua*) printf "%s\n" "equibop 1.0-1 -> 1.1-1" "libfoo 1-1 -> 2-1" "oldrepo 1-1 -> 2-1" ;; *) echo "paru $*" >>"'"$t"'/paru" ;; esac'
+rm -f "$t/paru"
+out=$(HOME=$t/home XDG_STATE_HOME=$t/state XDG_CACHE_HOME=$t/home/.cache AUTO_UPDATE_DIR=$t/au PACMAN_DB_DIR=$t/pacdb \
+    PATH=$t/bin:$PATH "$here/.local/bin/update-apps" </dev/null 2>&1) || true
+grep -q "AUR apps built now, their build scripts not reviewed.*: equibop$" <<<"$out" ||
+    fail "those held for review listed as built, or the others not: $(grep AUR <<<"$out")"
+grep -q "held for review .*: libfoo oldrepo\. To review them: run update-apps in a terminal" <<<"$out" ||
+    fail "those held for review not said, or not how to review them: $(grep -i held <<<"$out")"
+grep -q -- " -Su --noconfirm --ignore libfoo,oldrepo$" "$t/paru" || fail "those held for review built unreviewed: $(cat "$t/paru")"
+rm -r "$t/au" "$t/pacdb"
 # (the lid too: logind suspends on it whatever sleep lock is held, LidSwitchIgnoreInhibited=yes, but for that one)
 grep -q -- "--what=sleep:shutdown:handle-lid-switch --mode=block .*tail --pid=" "$t/inhibit" ||
     fail "the install not held against power off, sleep and the lid: $(cat "$t/inhibit" 2>/dev/null)"
