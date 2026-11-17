@@ -904,7 +904,10 @@ brings each change; nothing to run by hand).
     Quickshell, Caelestia, qtengine, qt6-m3shapes..., uses Qt's private parts and won't start on another Qt) and Python
     (a new minor version, 3.13 to 3.14: the packages with files in the old `/usr/lib/python3.13`, which the new one
     doesn't look in). Built in their dependency order (their `.SRCINFO`'s `depends`/`makedepends` on each other's
-    packages or `provides`: quickshell-git before caelestia-shell), else by name. Their
+    packages or `provides`: quickshell-git before caelestia-shell), else by name. One of `[agros]`'s rebuilt for a runtime
+    is rebuilt at the version installed (CI's, tested), not the AUR's newest: a git package's source pinned to the
+    commit in its version, another's AUR files at the commit with that version; one not found isn't built, and the
+    runtime waits, as on a failed build. Their
     build scripts are unreviewed (your choice), so they're built as an account of their own, `agros-aur` (a system
     account from `agros-system`'s `sysusers.d`: no login shell, no password, owning nothing but the run's build
     folder), never as root and never as a person (`agros-each-user --as`: `setpriv`, no PAM, so no logind session: the
