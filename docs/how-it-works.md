@@ -25,7 +25,8 @@ Laptop settings and lighting are in a separate repo: **legion-control-linux**.
    meta package, from the `[agros]` repo, alongside CachyOS's base. pacman puts in exactly the final set of packages
    in one go; nothing is installed only to be taken away again, and nothing is built during the install.
 2. Reboot and log in. At your first login, `caelestia-start` builds Caelestia's overlay and sets its wallpaper and
-   colours before the shell starts (`agros-welcome` does both if that failed, and moves the shell onto the overlay), and
+   colours before the shell starts (started as the session starts, by `caelestia-prepare.service`, so the shell comes
+   up at once; `agros-welcome` does both if that failed, and moves the shell onto the overlay), and
    `agros-welcome` does the rest of what's per user: LibreWolf's settings, the Spotify, Nuvio and ArtCraft Flatpaks with Spicetify, VSCodium's extensions
    and Claude Code's plugins.
 3. **The one thing you run:** its notification offers *Restore my accounts*. Plug in your pen drive and click it, or
@@ -84,7 +85,7 @@ of yours for the mirror counts, not added again), and its removal takes them out
 
 | Package | What it is |
 |---|---|
-| `agros-desktop` | The meta package: every package the desktop is made of (Hyprland, Caelestia, the apps, PipeWire with its JACK, fonts, themes). Hardware apps are optional |
+| `agros-desktop` | The meta package: every package the desktop is made of (Hyprland, Caelestia, the apps, PipeWire with its JACK, gvfs for Thunar's drives, USB sticks and Trash, fonts, themes). Hardware apps are optional |
 | `agros-hyprland-settings` | The settings every new account gets (`/etc/skel`): Caelestia's own configs (its dots, pinned), AgrOS's over them (everything in `.config`), launcher entries, LibreWolf settings, the wallpaper, and every version each of these has had (`/usr/share/agros/skel-versions`, from the repo's and Caelestia's git history); fonts and icons system-wide |
 | `agros-scripts` | The programs in `.local/bin` and the data they use, in `/usr/lib/agros`, linked into each home (by links in `/etc/skel` for new accounts; `agros-links` adds new ones at every login, before the desktop starts, and copies in once each config file, launcher entry, LibreWolf setting and wallpaper an update added to `/etc/skel` (or an account not made from it lacks), and updates the settings you never edited) |
 | `agros-system` | The update at every boot (downloaded and AUR apps built at boot, installed at shutdown with firmware), pacman hooks that rebuild each user's Caelestia overlay and hyprbars and check the Hyprland config, Bluetooth and the screens back on after sleep, the ananicy rule, the keyring, the night light's and time zone's permissions (geoclue, polkit), folder icons that follow the colour scheme (a sudoers rule for `papirus-folders` alone), mDNS from Avahi alone (resolved's off: the two clashed over the computer's name), UFW's logging off (once), the upstream gate (Hyprland's updates held until AgrOS's CI has checked them), the files never unpacked (NoExtract), AgrOS's name in `/etc/os-release`, a VMware VM's screen following its window (VMware's tools) |
@@ -183,8 +184,8 @@ plugged in, mounted if it isn't, or the folder you name after it), encrypted wit
 a lost drive gives nothing without it. `agros-personal` decrypts it straight into place (nothing unencrypted written
 anywhere else) and backs up what it replaces; the keyring opens with your old login password. It refuses while an app
 whose files it brings back is open, but closes Lutris and Proton VPN when they're only in the tray (they start there at
-login, Proton VPN once you turn that on), asking first in a terminal. It's never in the repo:
-saved logins get past your password and 2FA, and git keeps every version. With no drive, it opens each app for you to
+login, Proton VPN once you turn that on), asking first in a terminal. It's never in the repo (`--save` refuses a
+folder inside a git repo): saved logins get past your password and 2FA, and git keeps every version. With no drive, it opens each app for you to
 sign in instead (LibreWolf's Firefox account brings bookmarks and passwords through Sync) and asks the weather
 widget's place. Save again now and then: logins expire.
 
@@ -375,9 +376,10 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
   - Other: brightness only on built-in screens; the dashboard's calendar and weather in the system language
     (`LANG`; Caelestia's own locale dates, PR #2213, follow `LC_TIME` for a language it has no translation for, so this
     stays); no volume
-    pop-up when the shell starts or the sound device changes; a critical battery suspends instead of hibernating, and
-    so does the session menu's Hibernate (unless `shell.json`'s `session.commands.hibernate` sets another command): there's no swap to hibernate
-    into (zram only); no warnings about a missing account picture (`~/.face`)
+    pop-up when the shell starts or the sound device changes; a critical battery, and the session menu's Hibernate
+    (unless `shell.json`'s `session.commands.hibernate` sets another command), hibernate where the system can and
+    suspend where it can't (`systemctl hibernate || systemctl suspend`): an AgrOS install has no swap to hibernate into
+    (zram only), where Caelestia's call did nothing and the laptop died; no warnings about a missing account picture (`~/.face`)
 - **`.local/bin/caelestia-overlay`**: builds `~/.config/quickshell/caelestia` (Caelestia + the patches); also run by the
   pacman hook after every `caelestia-shell` or `agros-scripts` update. Nothing it's built from changed since the last
   build (Caelestia's files, the script, the patches, the Settings app's `caelestia.*` switches: one checksum, kept in
@@ -391,7 +393,10 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
   `dotfiles-check`)
 - **`.local/bin/caelestia-start`**: starts Caelestia at login (Caelestia's `execs.lua` runs it, so set by
   `agros-hyprland-settings`), running `caelestia-overlay` first (at every login: it rebuilds only what's out of date,
-  so one an update left waiting for a game is made then); each start logged in
+  so one an update left waiting for a game is made then). `caelestia-start --prepare` (`caelestia-prepare.service`,
+  `agros-scripts`' user unit in `graphical-session-pre.target`) does that build, and a first login's wallpaper and
+  colours, alongside Hyprland's own start; the run at Hyprland's start waits for it on the overlay's lock and starts
+  the shell at once (built first there, the live USB's installer window came up before the bar). Each start logged in
   `~/.local/state/agros/caelestia-start.log`. A shell that never loads its config on the overlay's changes (Quickshell
   stays running with nothing on screen when a part can't be created: AgrOS's changes on a Caelestia or Quickshell other
   than the one CI checked) is started again without them (`caelestia-restart --without-changes`, below), not left with
@@ -567,8 +572,7 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
     packaged build meanwhile (`agros-hyprbars`: the same patch, built by `hyprbars-build` in CI for the Hyprland
     there, in place of the AUR's plain one; loaded only when built for the running Hyprland, its commit in it: on any
     other, a point release too, the plugin's own check refuses it with a red "Version mismatch" error on screen), and a
-    notification if the build fails. On the live USB (no compiler)
-    that packaged build is loaded as it is
+    notification if the build fails. On the live USB (no compiler) only that packaged build, when it matches
 - **Keys** (`user/keys.lua`):
   - Ctrl+Shift+Esc opens btop (Task Manager; the open one if there is); Print selects an area to screenshot
   - Ctrl+Super+Alt+R restarts the shell
@@ -606,7 +610,7 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
   and builds the fixed shader from the game's own files
 - **`.local/bin/steam-installed-games`**: installed games, for the bar's Steam menu
 - **`.local/bin/lutris-library`**: Lutris's Games view lists every game you own on Steam, EA, Ubisoft, Epic, GOG, Battle.net and Rockstar,
-  installed first and the rest below (opening one installs it through its store). Rerun after every store sync by
+  installed first and the rest below (opening one installs it through its store). One run at a time. Rerun after every store sync by
   `.config/systemd/user/lutris-library.path`; an open Lutris shows the changes at once (the overlay's `library-refresh`
   action, asked over D-Bus; a plain Lutris once restarted). Installed Steam games join even when
   Lutris can't read the Steam library (game details private), with their covers (Steam's own copy when Lutris can't
@@ -718,7 +722,9 @@ helper a package update just brought works before `agros-links` has linked it), 
   (a lock in `~/.local/state/agros`: the boot's and Updates' worked on the same Proton folders at once). Also
   the one list of runtimes whose new version breaks what's built on them (Qt, Python's minor version) and its queries
   (`--runtime-target`, `--runtimes-now`, `--built-on`): what the boot's AUR builds and `update-apps` both rebuild
-- **`.local/bin/agros-each-user`**: runs a command as each AgrOS user (pacman hooks, the boot's update); `--list`
+- **`.local/bin/agros-each-user`**: runs a command as each AgrOS user (pacman hooks, the boot's update): only
+  AgrOS's own program, the user's link to it run from `/usr/lib/agros/bin` (a user's own file there held pacman's
+  lock, and every update), for 10 minutes at most; `--list`
   lists them; `--as <user>` runs one as that user (or the boot's AUR builds' `agros-aur`) from root with `setpriv` (never `runuser`, `su` or `sudo`: their PAM
   opens a logind session, whose processes leave the calling service's cgroup and time limit, and makes the user count
   as logged in). Either way the command runs in a session of its own, with nothing on its input and its output
@@ -805,11 +811,15 @@ helper a package update just brought works before `agros-links` has linked it), 
 - **`.config/mimeapps.list`**: default apps for file types
 - **`.local/bin/appimage-open`**: opens AppImages (`.local/share/applications/appimage-open.desktop`): installs the app
   in `~/Applications` with a launcher entry, or replaces the old version, and starts it; so an app's own Update button
-  updates it by itself. One on a drive that won't run it (a USB stick's FAT, a noexec mount) is copied there first
+  updates it by itself. One on a drive that won't run it (a USB stick's FAT, a noexec mount) is copied there first. A
+  file you open is asked about first (it runs as you), and read without running it where it can be (`unsquashfs`, from
+  `squashfs-tools` in `agros-desktop`); one whose launcher entry is another app's isn't installed
 - **`.local/bin/appimage-update`**: updates those AppImages from their GitHub releases, checked against the release's
   checksums when it has them (some, but none for the file: not installed)
 - **`.local/bin/flatpak-bundle-update`**: updates Flatpaks installed from a downloaded `.flatpak` file (no Flatpak repo,
-  e.g. ArtCraft Launcher) from their GitHub releases, checked the same way; `--check` lists the ones with a newer version
+  e.g. ArtCraft Launcher) from their GitHub releases (the repo each was installed from, else its metainfo's own link
+  the first time, kept so a later version can't point elsewhere), checked the same way and only when the file is that
+  app; `--check` lists the ones with a newer version
   (both use `.local/share/github-release/lib.sh`: the release's x86_64 file and its checksum). At boot, each user's
   own are done as that user and the system-wide ones once, as root
 - **`.local/bin/capri-update`**: installs and updates Capri: my fork (`CrimzoAgra/capri-overlay`: CapriDesktop with
@@ -847,14 +857,16 @@ brings each change; nothing to run by hand).
 - **Updates app** (`.config/quickshell/updates/`, in the Super menu; opened through `.local/bin/updates`):
   - Lists what's waiting, by app with its icon and old → new version: system and AUR apps, firmware, Flatpaks,
     AppImages, Capri, Proton builds, developer tools
-  - A list that couldn't be made (`update-apps --list` failed) says so, not "Everything is up to date"
+  - A list that couldn't be made (`update-apps --list` failed, or hung for 10 minutes) says so, not "Everything is up
+    to date"
   - "Update all" runs `update-apps`, showing its progress; shown only while something is waiting. Closed with the
     title bar; an update already running carries on (its log: `$XDG_RUNTIME_DIR/update-apps.log`), and opening it
     again and pressing "Update all" follows it
 - **Files never unpacked** (`packages/agros-system/agros-noextract.conf` at `/etc/pacman.d/agros-noextract.conf`,
   included by `pacman.conf` the same way, at install and at upgrade): pacman's `NoExtract` for what no one on AgrOS uses:
   docs and help pages (fish's and HPLIP's kept), the Nerd font styles nothing names (JetBrains Mono's Mono, Propo and NL,
-  Cascadia's Mono and Propo), Material Symbols' Outlined and Sharp, Hyprland's own wallpapers. A new install has them
+  Cascadia's Mono and Propo), Material Symbols' Outlined and Sharp, Hyprland's own wallpapers, the pointer's 11 Bibata
+  styles but the desktop's and login screen's (`Bibata-Modern-Ice`, ~295 MiB). A new install has them
   left out from its first package: agros-iso's `agros-trim.sh` puts the same list in the installed `pacman.conf`
   (marked `# agros-iso`), which agros-system's install swaps for its Include; keep the two lists the same. On a machine
   installed before, a package's go at its next update
@@ -1195,7 +1207,7 @@ the `pkgver` of a package that has a fixed one: see [How it's packaged](#how-its
 
 `tests/run.sh` runs them all (`tests/run.sh lutris-overlay` just one), each in a throwaway home, so nothing of yours is
 touched. Several run at once (one per CPU; `AGROS_TEST_JOBS=1`, one at a time), and one that fails among them runs again
-alone: only a failure there counts. A pass ends on the test's own `ok <test>` line, so one that stops early with exit 0
+alone: only a failure there counts. Each test has 10 minutes. A pass ends on the test's own `ok <test>` line, so one that stops early with exit 0
 fails. Run it after changing a script, and after Caelestia, Lutris or Hyprland updates: they check that the
 Caelestia and Lutris changes and the hyprbars patch still fit, besides the boot update (its AUR builds, firmware,
 Proton and developer tools too), the account restore, the
@@ -1234,7 +1246,9 @@ breaks something holds back that one piece, never the rest (`.github/workflows/c
   `.sig` stops it), the database made again and signed, `agros-approved` and `agros-arch-ok`; each signature checked
   against `ci/agros.asc`, then gpg's agent stopped and the key removed before anything else runs (CachyOS's keyring,
   the install check with signatures required, the upload to Pages). `tests/ci-signing.sh` checks the workflow keeps it
-  so. Moving to a new signing subkey: add it to `ci/agros.asc` (and agros-iso's `agros.asc`) and raise
+  so. The install check also resolves `agros-desktop` with CachyOS's v3 and znver4 repos above `[cachyos]`, as the
+  installer sets them on such CPUs (`ci/cpu-repos.sh`, no such CPU needed): not resolving there (their lag behind
+  Arch's), or a library at another soname than below them, is a warning, and the release goes out. Moving to a new signing subkey: add it to `ci/agros.asc` (and agros-iso's `agros.asc`) and raise
   `agros-keyring`'s `pkgver`, let machines update, then replace the secret; signing with a subkey `ci/agros.asc` lacks
   fails the release, before anything goes out.
 - **A package that doesn't build** (an AUR change, AgrOS's Quickshell patch or Calamares changes no longer fitting,
