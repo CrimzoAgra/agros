@@ -210,7 +210,7 @@ The default wallpaper is Caelestia's own (`assets/wallpaper.webp` in its shell).
 | `packages/` | The PKGBUILDs of AgrOS's packages (and their system files: units, hooks, the boot update) |
 | `aur/packages.txt`, `ci/` | The AUR packages built into `[agros]`, and the script that builds the repo |
 | `system/` | Files the system packages install (Bluetooth after sleep, the screens on after sleep, the boot video mode, the ananicy rule, the night light's location (geoclue), the time zone's permission (polkit), resolved's settings, the `papirus-folders` sudoers rule) |
-| `.config/caelestia/` | Hyprland settings (`hypr-user.lua`, `hypr-vars.lua`, `user/`) and Caelestia settings (`shell.json`) |
+| `.config/caelestia/` | Hyprland settings (`hypr-user.lua`, `hypr-vars.lua`, `user/`) and Caelestia settings (`shell.json`; `cli.json`: its command's, the screen recorder's) |
 | `.config/quickshell/` | The switcher, desktop widgets, Updates and Desktop Settings apps, their shared colours (`common/`), and the dock's pins |
 | `.local/share/caelestia-overlay/` | My changes to Caelestia's own code, patched in by `caelestia-overlay` |
 | `.local/share/caelestia-greeter/` | The login screen |
@@ -324,6 +324,12 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
     border, rounding, blur, the touchpad)
 - **`.config/caelestia/shell.json`**: Caelestia settings (AgrOS's; each account's copy changes from the Settings app,
   which puts AgrOS's value back as the default)
+- **`.config/caelestia/cli.json`**: the settings of Caelestia's command (`caelestia`). Its screen recorder
+  (`caelestia record`: Ctrl+Alt+R and the quick settings' recorder) runs gpu-screen-recorder with
+  `-fallback-cpu-encoding yes` (`record.extraArgs`): without a hardware video encoder (a VM's graphics card, VMware's)
+  it refused to start ("Recording failed"); with the option it encodes on the CPU there, and still on the graphics
+  card where it has one. A setting, not a wrapper around gpu-screen-recorder: `caelestia record` finds and stops the
+  recorder by its process name
 - **`.local/share/caelestia-overlay/`**: my changes to Caelestia, patched in by `patch.py`. A change whose code no
   longer fits a new Caelestia version is skipped, not broken; one that still fits but whose QML no longer loads (a
   renamed Caelestia component) is reported by `dotfiles-check`

@@ -1,0 +1,5 @@
+{
+    "record": {
+        "extraArgs": ["-fallback-cpu-encoding", "yes"]
+    }
+}
