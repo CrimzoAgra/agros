@@ -72,6 +72,12 @@ out=$(AGROS_EACH_USER_LIMIT=1 PATH=$t/bin:$PATH "$here/.local/bin/agros-each-use
 ((SECONDS - start < 8)) && [[ $(wc -l <"$t/late") == 2 && $out == *"late-cmd as $me still ran after 1 s: stopped"* ]] ||
     fail "a run past its time limit not stopped and said, or the next user's not run: $(cat "$t/late") / $out ($((SECONDS - start)) s)"
 gone 'sleep 37\.2' || fail "a run past its time limit left running"
+# ...a hook's own, shorter one (--limit: the hyprbars build's, a user's home able to hang it)
+rm -f "$t/late"
+out=$(PATH=$t/bin:$PATH "$here/.local/bin/agros-each-user" --limit 1 late-cmd 2>&1) && fail "a run past its --limit reported success"
+[[ $(wc -l <"$t/late") == 2 && $out == *"late-cmd as $me still ran after 1 s: stopped"* ]] ||
+    fail "a run past its --limit not stopped and said: $(cat "$t/late") / $out"
+gone 'sleep 37\.2' || fail "a run past its --limit left running"
 printf '#!/bin/sh\ntrap "" TERM\nsleep 37.1\n' >"$t/lib/bin/stubborn-cmd"
 ours stubborn-cmd "$t/u1"
 AGROS_EACH_USER_LIMIT=1 PATH=$t/bin:$PATH "$here/.local/bin/agros-each-user" stubborn-cmd 2>/dev/null && fail "a run that ignored its stop reported success"

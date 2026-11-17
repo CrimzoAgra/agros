@@ -26,6 +26,10 @@ cat >"$t/qs" <<'Q'
 #!/bin/sh
 [ "$1" = log ] && printf '%s\n' "WARN: @modules/Mine.qml[3:-1]: ReferenceError: Gone is not defined" \
     "WARN: @modules/Mine.qml[9:-1]: TypeError: Cannot read property 'actions' of null" \
+    "WARN: @modules/Mine.qml[249:-1]: TypeError: Value is undefined and could not be converted to an object" \
+    "WARN: @modules/Mine.qml[250:-1]: TypeError: Value is undefined and could not be converted to an object" \
+    "WARN: @modules/Mine.qml[251:-1]: TypeError: Value is undefined and could not be converted to an object" \
+    "WARN: @modules/Mine.qml[7:-1]: TypeError: Property 'gone' of object Icons is not a function" \
     "WARN: @modules/other/AllMine.qml[1:1]: ReferenceError: Theirs is not defined" \
     "WARN: @other/modules/Mine.qml[1:1]: ReferenceError: Theirs too is not defined"
 exit 0
@@ -33,6 +37,10 @@ Q
 out=$(HOME=$h PATH=$t:$PATH "$here/.local/bin/dotfiles-check" 2>&1)
 grep -q "ReferenceError: Gone" <<<"$out" || fail "an overlay QML error wasn't reported: $out"
 grep -q "of null" <<<"$out" && fail "a list item going away was reported: $out"
+# ...nor a window read before it has its IPC object (Workspace.qml's, upstream's line: Steam's windows coming and
+# going), even three of them before a real one; a function renamed is
+grep -q "could not be converted" <<<"$out" && fail "a window without its IPC object yet was reported: $out"
+grep -q "'gone' of object Icons is not a function" <<<"$out" || fail "a renamed function wasn't reported after transient errors: $out"
 grep -q "Theirs" <<<"$out" && fail "Caelestia's own file of a similar name blamed on the overlay: $out"
 grep -q 'no longer has "system_monitor"' <<<"$out" || fail "a missing Caelestia tag wasn't reported: $out"
 grep -q 'no longer has "todo_app"' <<<"$out" && fail "a present Caelestia tag reported missing: $out"

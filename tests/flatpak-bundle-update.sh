@@ -76,13 +76,21 @@ cat >"$t/bin/flatpak" <<F
 case "\$*" in
     list*) printf 'com.x.App\tapp-origin\tuser\ncom.x.Sys\tsys-origin\tsystem\n' ;;
     *--show-location*) echo "$t/app" ;;
+    *--show-metadata*) cat "$t/oldmeta" ;;
+    *--show-origin*) echo app-origin ;;
+    info*runtime/*) exit 1 ;;
     info*) echo '  Version: 1.0' ;;
     install*) echo "flatpak \$*" >>"$t/installs" ;;
+    remotes*) printf 'app-origin\thttps://example.com/repo\n' ;;
+    remote-modify*) echo "flatpak \$*" >>"$t/modified" ;;
     build-import-bundle*) echo "app/\${REF:-\$(basename "\$(dirname "\$2")")}/x86_64/stable" >"\$2/refs" ;;
 esac
 F
+# (the metadata of the version installed, oldmeta, and of the file's, newmeta: the same access here)
+printf '[Application]\nname=com.x.App\nruntime=org.x.Platform/x86_64/1\n\n[Context]\nshared=network;\n' >"$t/oldmeta"
+cp "$t/oldmeta" "$t/newmeta"
 # shellcheck disable=SC2016  # (the stand-in's)
-stub ostree 'case $1 in refs) cat "${2#--repo=}/refs" ;; esac'
+stub ostree 'case $1 in refs) cat "${2#--repo=}/refs" ;; cat) cat "'"$t"'/newmeta" ;; esac'
 sum=$(echo bundle | sha256sum | cut -d' ' -f1)
 cat >"$t/bin/curl" <<C
 #!/bin/sh
@@ -99,10 +107,35 @@ mkdir -p "$t/fetched"
 out=$(fbu --fetch "$t/fetched" 2>&1) || fail "--fetch failed: $out"
 [[ ! -e $t/installs && $(cut -f1,3,4 "$t/fetched/fetched") == $'user\tcom.x.App\t1.1' && $(cat "$(cut -f2 "$t/fetched/fetched")") == bundle ]] ||
     fail "--fetch didn't only download the user's own update (a system-wide one is root's, done once): $out / $(cat "$t/fetched/fetched" 2>/dev/null) / $(cat "$t/installs" 2>/dev/null)"
+# An app installed from a file that carried a repo URL (its <name>-origin remote has it, so flatpak update took the app
+# from there, past every check here): the URL emptied, as for a file without one, at the next run
+grep -qx "flatpak remote-modify --user --url= app-origin" "$t/modified" || fail "an app's origin remote kept its URL: $(cat "$t/modified" 2>/dev/null)"
+rm -f "$t/modified"
 # Another app's file in the release: not taken
 mkdir -p "$t/fetched-other"
 out=$(REF=com.evil.App fbu --fetch "$t/fetched-other" 2>&1) && fail "--fetch took another app's file: $out"
 [[ ! -s $t/fetched-other/fetched && $out == *"is com.evil.App, not com.x.App"* ]] || fail "another app's file not refused, said: $out"
+# A new version asking for more access than the one installed (your whole home, Flatpak's own bus: out of its sandbox):
+# not taken at boot (flatpak install -y would grant it unasked), said to be updated from Updates
+printf '%s\n' '[Application]' 'name=com.x.App' 'runtime=org.x.Platform/x86_64/1' '[Context]' 'shared=network;' 'filesystems=host;' \
+    '[Session Bus Policy]' 'org.freedesktop.Flatpak=talk' >"$t/newmeta"
+mkdir -p "$t/fetched-more"
+out=$(fbu --fetch "$t/fetched-more" 2>&1) && fail "--fetch took a version asking for more access: $out"
+[[ ! -s $t/fetched-more/fetched && $out == *"com.x.App: its new version asks for more access ([Context]filesystems=host, [Session Bus Policy]org.freedesktop.Flatpak=talk): update it from Updates"* ]] ||
+    fail "a version asking for more access fetched at boot, or not said: $out"
+# ...from Updates (no --fetch: you started it), installed, what it adds said in its log
+rm -f "$t/installs"
+out=$(FLATPAK_BUNDLE_HELD=1 fbu 2>&1) || true
+[[ $out == *"com.x.App: its new version asks for more access: [Context]filesystems=host, [Session Bus Policy]org.freedesktop.Flatpak=talk"* &&
+    $out == *"com.x.App: updated to 1.1"* ]] && grep -q -- '--user .*--bundle ' "$t/installs" ||
+    fail "Updates didn't install a version asking for more access, or didn't say what it adds: $out / $(cat "$t/installs" 2>/dev/null)"
+rm -f "$t/installs"
+# ...and less (a list's value gone, a "!" taking one away) isn't more: fetched at boot
+printf '%s\n' '[Application]' 'name=com.x.App' '[Context]' 'filesystems=!home;' >"$t/newmeta"
+mkdir -p "$t/fetched-less"
+out=$(fbu --fetch "$t/fetched-less" 2>&1) || fail "--fetch refused a version asking for less access: $out"
+[[ $(cut -f3 "$t/fetched-less/fetched") == com.x.App ]] || fail "a version asking for less access not fetched: $out"
+cp "$t/oldmeta" "$t/newmeta"
 # As root (the boot's own run: here in a user namespace, root in name only), the system-wide one is fetched too, but
 # only from a release with checksums
 if unshare -r true 2>/dev/null; then
@@ -119,15 +152,22 @@ if unshare -r true 2>/dev/null; then
 else
     skipped "no user namespace to be root in: the root run's system-wide fetch not run"
 fi
+rm -f "$t/installs" "$t/modified"
 out=$(fbu --install-fetched "$t/fetched" 2>&1) || fail "--install-fetched failed: $out"
-{ grep -qx "flatpak install --user -y --noninteractive --reinstall --bundle $t/fetched/com.x.App/App-x86_64.flatpak" "$t/installs" &&
+{ grep -qx "flatpak install --user -y --noninteractive --no-deps --reinstall --bundle $t/fetched/com.x.App/App-x86_64.flatpak" "$t/installs" &&
     [[ $out == *"com.x.App: updated to 1.1"* ]]; } || fail "--install-fetched didn't reinstall from the file: $out / $(cat "$t/installs")"
+# ...its runtime (not installed here) from Flathub first, never a repo the file names (flatpak install -y added that
+# as a remote unasked), and its origin remote's URL, if the file gave it one, emptied after
+[[ $(sed -n 1p "$t/installs") == "flatpak install --user -y --noninteractive flathub runtime/org.x.Platform/x86_64/1" ]] ||
+    fail "the runtime not installed from Flathub before the file: $(cat "$t/installs")"
+grep -qx "flatpak remote-modify --user --url= app-origin" "$t/modified" || fail "the origin remote's URL not emptied after the install: $(cat "$t/modified" 2>/dev/null)"
 # Two apps fetched: both reinstalled, flatpak install (which may read its stdin) not eating the list's next line
 printf '%s\n' '#!/bin/bash' "case \"\$*\" in install*) cat >/dev/null; echo \"flatpak \$*\" >>'$t/installs2' ;; esac" >"$t/bin/flatpak"
 printf 'user\t%s\tcom.x.A\t2\nsystem\t%s\tcom.x.B\t3\n' "$t/a.flatpak" "$t/b.flatpak" >"$t/fetched/fetched"
+cp "$t/oldmeta" "$t/.metadata"  # (theirs, bundle_app's copy beside the file)
 out=$(fbu --install-fetched "$t/fetched" 2>&1) || fail "--install-fetched (two apps) failed: $out"
 { [[ $(grep -c -- '--reinstall --bundle' "$t/installs2") == 2 && $out == *"com.x.A: updated to 2"* && $out == *"com.x.B: updated to 3"* ]] &&
-    grep -q -- "--system -y --noninteractive --reinstall --bundle $t/b.flatpak" "$t/installs2"; } ||
+    grep -q -- "--system -y --noninteractive --no-deps --reinstall --bundle $t/b.flatpak" "$t/installs2"; } ||
     fail "--install-fetched didn't reinstall both apps: $out / $(cat "$t/installs2" 2>/dev/null)"
 # --install: found already installed as the update finds an app's repo, among the ones installed from a file only: one
 # whose metainfo names a repo with the same start (o/app-other), or a Flathub app's that links to it, isn't it; its
@@ -149,11 +189,13 @@ printf 'com.x.Other\tother-origin\tuser\ncom.x.Flathub\tflathub\tsystem\n' >"$t/
 out=$(FLATPAK_BUNDLE_HELD=1 fbu --install o/app 2>&1) || true
 [[ $out != *"already installed"* ]] || fail "--install o/app found o/app-other or a Flathub app installed"
 # ...installed then (the release's file, for the user), its repo written down for its updates
-[[ $out == *"o/app: installed v1.1"* ]] && grep -q -- "--user -y --noninteractive --reinstall --bundle " "$t/installs3" &&
+[[ $out == *"o/app: installed v1.1"* ]] && grep -q -- "--user -y --noninteractive --no-deps --reinstall --bundle " "$t/installs3" &&
     grep -qx $'user\tcom.x.New\to/app' "$AGROS_FLATPAK_BUNDLES" ||
     fail "--install o/app: not installed, or its repo not written down: $out / $(cat "$AGROS_FLATPAK_BUNDLES" 2>/dev/null)"
 rm -f "$AGROS_FLATPAK_BUNDLES"
 meta com.x.App O/App.git; printf 'com.x.App\tapp-origin\tuser\n' >>"$t/list"
 out=$(fbu --install o/app 2>&1) || true
 [[ $out == "o/app: already installed" ]] || fail "--install o/app didn't find it installed: $out"
+out=$(fbu --install o/app.git 2>&1) || true
+[[ $out == "o/app.git: already installed" ]] || fail "--install o/app.git didn't find it installed: $out"
 echo "ok flatpak-bundle-update"

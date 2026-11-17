@@ -3,7 +3,8 @@
 # patch is in it), builds each user's hyprbars for it straight away, so the next login loads it at once instead of the
 # packaged one (agros-hyprbars, loaded only when built for that Hyprland and patch) for a minute while it builds
 # (hyprbars-build --prebuild; it does nothing when it's already built for that Hyprland and patch, and a failure leaves
-# the build at login as before)
+# the build at login as before). 5 min at most for each user (a clone and a build of a minute or two; it writes in
+# their home, which they could make it hang on) instead of 10: pacman's lock, the shutdown's install, wait on it
 [Trigger]
 Operation = Install
 Operation = Upgrade
@@ -20,4 +21,4 @@ Target = hyprlang
 [Action]
 Description = Building each user's hyprbars for the new Hyprland (hyprbars-build --prebuild)...
 When = PostTransaction
-Exec = /usr/lib/agros/bin/agros-each-user hyprbars-build --prebuild
+Exec = /usr/lib/agros/bin/agros-each-user --limit 300 hyprbars-build --prebuild

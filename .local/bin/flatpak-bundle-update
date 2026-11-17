@@ -34,18 +34,38 @@ newer() {
 }
 
 # bundle_app <file> <dir>: the app a .flatpak file installs (its ref, read by flatpak itself into a repo of its own in
-# dir, nothing installed)
+# dir, nothing installed); its metadata (the access it asks for) written beside the file, <dir>/.metadata
 bundle_app() {
     local repo ref
     repo=$(mktemp -d "$2/.ref.XXXXXX") && ostree init --repo="$repo" --mode=archive >/dev/null 2>&1 &&
         flatpak build-import-bundle "$repo" "$1" >/dev/null 2>&1 && ref=$(ostree refs --repo="$repo" 2>/dev/null) || return 1
-    ref=$(grep -m1 '^app/' <<<"$ref") && ref=${ref#app/} && [[ -n ${ref%%/*} ]] && echo "${ref%%/*}"
+    ref=$(grep -m1 '^app/' <<<"$ref") && ostree cat --repo="$repo" "$ref" /metadata >"$2/.metadata" 2>/dev/null &&
+        [[ -s $2/.metadata ]] && ref=${ref#app/} && [[ -n ${ref%%/*} ]] && echo "${ref%%/*}"
+}
+
+# access: the access a Flatpak metadata file (stdin) grants, one "[group]key=value" a line: its [Context] (each of a
+# list's values on its own), its bus policies and USB devices
+access() {
+    awk '/^\[/ { g = $0; next }
+        g ~ /^\[(Context|Session Bus Policy|System Bus Policy|USB Devices)\]$/ && !/^#/ && (i = index($0, "=")) {
+            k = substr($0, 1, i - 1); v = substr($0, i + 1); gsub(/^ +| +$/, "", k); gsub(/^ +| +$/, "", v)
+            if (g ~ /Bus Policy/) { print g k "=" v; next }
+            n = split(v, a, ";"); for (j = 1; j <= n; j++) if (a[j] != "") print g k "=" a[j]
+        }' | LC_ALL=C sort -u
+}
+
+# more_access <user|system> <app id> <new metadata>: what the new version asks for that the one installed doesn't have
+# (a "!" taking access away isn't more), ", " between; fails when the installed one's can't be read
+more_access() {
+    local old
+    old=$(flatpak info --"$1" --show-metadata "$2" 2>/dev/null) && [[ -n $old ]] || return 1
+    LC_ALL=C comm -13 <(access <<<"$old") <(access <"$3") | awk '!/=!/' | paste -sd, | sed 's/,/, /g'
 }
 
 # fetch_from <release JSON> <dir> <user|system> [app id]: download its Linux x86_64 .flatpak into dir, verified (by
 # the release's checksums, required for a system-wide one; and that it's the app given); prints "<app id>\t<path>"
 fetch_from() {
-    local url want file got need=()
+    local url want file got more need=()
     url=$(asset_url "$1" flatpak)
     [[ -n $url ]] || { echo "no Linux .flatpak in the latest release" >&2; return 1; }
     [[ $3 != system ]] || need=(required)
@@ -53,24 +73,57 @@ fetch_from() {
     file=$2/${url##*/}
     got=$(bundle_app "$file" "$2") || { echo "${url##*/}: which app it is couldn't be read, not installed" >&2; return 1; }
     [[ -z ${4:-} || $got == "$4" ]] || { echo "${url##*/} is $got, not $4: not installed" >&2; return 1; }
+    # An update asking for more access than the version installed (a release of the same app made to read your home or
+    # talk to Flatpak itself, out of its sandbox): flatpak install -y would grant it unasked. Not at boot (--fetch);
+    # from Updates, which you start, installed with what it adds said in its log
+    if [[ -n ${4:-} ]]; then
+        more=$(more_access "$3" "$4" "$2/.metadata") ||
+            { echo "$4: the access the installed version has couldn't be read, not updated" >&2; return 1; }
+        if [[ -n $more && -n $fetch ]]; then
+            echo "$4: its new version asks for more access ($more): update it from Updates, where you can review it" >&2
+            return 1
+        fi
+        [[ -z $more ]] || echo "$4: its new version asks for more access: $more" >&2
+    fi
     printf '%s\t%s\n' "$got" "$file"
 }
 
-# reinstall <user|system> <file>: the app reinstalled from that file: the app's own data (~/.var/app) stays. The old one
-# is taken out first, so sleep and power off are held off while that runs (cut off there, the app was left
+# no_origin_url <user|system> <app id>: the remote flatpak made for an app installed from a file (<name>-origin) left
+# with no URL. A file can carry one (flatpak build-bundle --repo-url): flatpak then sets it on that remote, and every
+# flatpak update (the boot's, as root for a system-wide one) took the app from there, past every check here. With no
+# URL flatpak counts the remote as disabled, as for a file without one: this script alone updates the app
+no_origin_url() {
+    local origin url
+    origin=$(flatpak info --"$1" --show-origin "$2" 2>/dev/null) && [[ $origin == *-origin ]] || return 0
+    url=$(flatpak remotes --"$1" --show-disabled --columns=name,url 2>/dev/null | awk -F'\t' -v o="$origin" '$1 == o { print $2 }')
+    [[ -z $url ]] || flatpak remote-modify --"$1" --url= "$origin" </dev/null
+}
+
+# reinstall <user|system> <file> <app id>: the app reinstalled from that file: the app's own data (~/.var/app) stays.
+# The old one is taken out first, so sleep and power off are held off while that runs (cut off there, the app was left
 # uninstalled): only here, not for the file's download before it. Usually seconds; a runtime the new version needs and
-# doesn't have yet is downloaded in it from Flathub too (the boot's update gives it 30 min). In a desktop session it
+# doesn't have yet is downloaded first from Flathub (the boot's update gives it 30 min). In a desktop session it
 # takes that hold itself; the boot's update, outside any session (logind refuses it there), takes it as root around
 # --install-fetched instead
 reinstall() {
     # Its runtime (GNOME, KDE...) comes from Flathub in the same installation: for the user, that remote must exist too
     flatpak remote-add --"$1" --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo </dev/null
-    local hold=()
+    local hold=() rt where=()
+    # The runtime its metadata names (bundle_app's copy, beside the file), from Flathub, then the file with no
+    # dependencies of its own: a file can name a repo for its runtime (build-bundle --runtime-repo), which flatpak
+    # install -y adds as a new remote unasked, every flatpak update trusting it from then on. (One installed for every
+    # account counts for the user's apps too)
+    rt=$(awk -F= '/^\[/ { g = $0 } g == "[Application]" && $1 == "runtime" { print $2 }' "${2%/*}/.metadata" 2>/dev/null)
+    [[ $rt == */*/* ]] || { echo "${2##*/}: its runtime couldn't be read, not installed" >&2; return 1; }
+    [[ $1 == user ]] || where=(--system)
+    flatpak info "${where[@]}" "runtime/$rt" >/dev/null 2>&1 ||
+        flatpak install --"$1" -y --noninteractive flathub "runtime/$rt" </dev/null || return 1
     [[ -n ${FLATPAK_BUNDLE_HELD:-} ]] ||
         ! systemd-inhibit --what=sleep:shutdown --mode=block --who="Flatpak update" --why="Reinstalling an app" true 2>/dev/null ||
         hold=(systemd-inhibit --what=sleep:shutdown --mode=block --who="Flatpak update" --why="Reinstalling ${2##*/}")
     # (no stdin: --install-fetched reads its list there, and an app after this one was lost to it)
-    "${hold[@]}" flatpak install --"$1" -y --noninteractive --reinstall --bundle "$2" </dev/null
+    "${hold[@]}" flatpak install --"$1" -y --noninteractive --no-deps --reinstall --bundle "$2" </dev/null || return 1
+    no_origin_url "$1" "$3"
 }
 
 # install_from <release JSON> <user|system> [app id]: download its Linux x86_64 .flatpak, verify it, install it (over an
@@ -78,7 +131,7 @@ reinstall() {
 install_from() {
     local tmp got ok=0
     tmp=$(mktemp -d)
-    got=$(fetch_from "$1" "$tmp" "$2" "${3:-}") && reinstall "$2" "${got#*$'\t'}" >&2 && echo "${got%%$'\t'*}" || ok=1
+    got=$(fetch_from "$1" "$tmp" "$2" "${3:-}") && reinstall "$2" "${got#*$'\t'}" "${got%%$'\t'*}" >&2 && echo "${got%%$'\t'*}" || ok=1
     rm -rf "${tmp:?}"
     return $ok
 }
@@ -118,7 +171,7 @@ if [[ ${1:-} == --install-fetched ]]; then
     # (each "<user|system>\t<file>\t<app id>\t<version>", as --fetch listed them)
     while IFS=$'\t' read -r inst file app new; do
         # (its caller holds sleep and power off: the boot's update, as root)
-        if FLATPAK_BUNDLE_HELD=1 reinstall "$inst" "$file"; then echo "$app: updated to $new"; else status=1; fi
+        if FLATPAK_BUNDLE_HELD=1 reinstall "$inst" "$file" "$app"; then echo "$app: updated to $new"; else status=1; fi
     done <"${2:?--install-fetched <dir>}/fetched"
     exit $status
 fi
@@ -126,16 +179,17 @@ fi
 if [[ ${1:-} == --install ]]; then
     # Already installed from a file (its repo found as the update below finds it): updates do the rest. The repo
     # exactly, whatever the case: owner/repo-other isn't it, nor a Flathub app whose metainfo links to it
-    : "${2:?owner/repo}"
+    # (owner/repo.git is owner/repo: repo_of's form, without .git, both compared and written down)
+    want=${2:?owner/repo} want=${want%.git}
     while IFS=$'\t' read -r app origin inst; do
         [[ $origin == *-origin ]] || continue
         repo=$(repo_of "$app" "$inst") || continue
-        [[ ${repo,,} == "${2,,}" ]] && { echo "$2: already installed"; exit 0; }
+        [[ ${repo,,} == "${want,,}" ]] && { echo "$2: already installed"; exit 0; }
     done < <(flatpak list --app --columns=application,origin,installation)
-    api=$(latest_release "$2") || { echo "$2: can't reach GitHub"; exit 1; }
+    api=$(latest_release "$want") || { echo "$2: can't reach GitHub"; exit 1; }
     # (the repo it came from written down for its updates)
     app=$(install_from "$api" user) || exit 1
-    remember user "$app" "${2%.git}"
+    remember user "$app" "$want"
     echo "$2: installed $(jq -r .tag_name <<<"$api")"
     exit
 fi
@@ -145,6 +199,8 @@ while IFS=$'\t' read -r app origin inst; do
     # (the boot's per-user downloads: a system-wide one is root's, reinstalled once by the boot's own run, as root;
     # as each user it was downloaded per user and refused at the reinstall, every boot)
     [[ -n $fetch && $inst == system && $EUID -ne 0 ]] && continue
+    # (one installed before its remote's URL was emptied at its install, no_origin_url: emptied now)
+    $check || no_origin_url "$inst" "$app"
     repo=$(repo_of "$app" "$inst") || { echo "$app: no GitHub repo among its metainfo's own links, skipped"; continue; }
     old=$(LC_ALL=C flatpak info --"$inst" "$app" | sed -n 's/^ *Version: //p')
     # No version to compare: any release would look newer, reinstalled on every run

@@ -40,6 +40,20 @@ grep -q 'plugin load' "$t/login-calls" && fail "live USB: the packaged one loade
 : >"$t/login-calls"
 live 1111111111111111111111111111111111111111 || fail "live USB, a build: failed"
 [[ ! -s $t/login-calls && ! -e $t/livehome ]] || fail "live USB: a build tried: $(cat "$t/login-calls")"
+# --prebuild (root's pacman hook, for each user, waiting on it with its lock held): AgrOS's patch as packaged (beside
+# the script), never the one in the user's home, theirs to change (a patch to the Makefile could hang the update); nor
+# their git settings (below, with the headers). Here a build for this Hyprland and AgrOS's patch is found made,
+# whatever the home's patch says (a made-up version.h: no headers needed)
+mkdir -p "$t/ph/.local/share/hyprbars" "$t/ph/.local/lib/hyprbars"
+echo 'evil' >"$t/ph/.local/share/hyprbars/hyprbars.patch"
+printf '#define %s "%s"\n' GIT_COMMIT_HASH abc GIT_TAG v0.1.0 AQUAMARINE_VERSION 0.1.0 HYPRUTILS_VERSION 0.1.0 \
+    HYPRGRAPHICS_VERSION 0.1.0 HYPRCURSOR_VERSION 0.1.0 >"$t/ph.h"
+: >"$t/ph/.local/lib/hyprbars/libhyprbars.so"
+echo "abc_aq_0.1_hu_0.1_hg_0.1_hc_0.1 $(sha256sum "$here/.local/share/hyprbars/hyprbars.patch" | cut -d' ' -f1)" \
+    >"$t/ph/.local/lib/hyprbars/built-for"
+out=$(HOME=$t/ph HYPRBARS_LIVE=$t/nolive HYPRBARS_VERSION_H=$t/ph.h "$here/.local/bin/hyprbars-build" --prebuild 2>&1) ||
+    fail "--prebuild failed: $out"
+[[ $out == *"Already built"* ]] || fail "--prebuild took the patch in the user's home, not AgrOS's: $out"
 [[ -f /usr/include/hyprland/src/version.h ]] || { echo "skip hyprbars (no Hyprland headers)"; exit 0; }
 
 # A running Hyprland older than the headers on disk
@@ -73,9 +87,15 @@ fi
 # ...and built for another: it builds, offline it gives up at once (no waiting on the network: it held pacman up)
 echo "0_aq_0.0 $sum" >"$lib/built-for"
 printf '#!/bin/sh\necho "$(basename "$0") $*" >>"%s"\nexit 1\n' "$t/calls" >"$t/bin/curl"
-cp "$t/bin/curl" "$t/bin/git"; cp "$t/bin/curl" "$t/bin/sleep"; chmod +x "$t/bin/"*
+cp "$t/bin/curl" "$t/bin/sleep"
+# (git: with the git settings it ran with, the home's own ~/.gitconfig here (a hook of the user's): not used)
+# shellcheck disable=SC2016  # (expanded by the stand-in)
+printf '#!/bin/sh\necho "git $* (settings: ${GIT_CONFIG_GLOBAL:-home})" >>"%s"\nexit 1\n' "$t/calls" >"$t/bin/git"
+printf '[core]\n\tfsmonitor = true\n' >"$t/home/.gitconfig"; chmod +x "$t/bin/"*
 out=$(HOME=$t/home PATH=$t/bin:$PATH "$here/.local/bin/hyprbars-build" --prebuild 2>&1) && fail "--prebuild offline succeeded: $out"
 grep -q "^git .*clone" "$t/calls" || fail "--prebuild didn't build for a new Hyprland: $out"
+grep -q "^git .*clone.*(settings: /dev/null)$" "$t/calls" || fail "--prebuild's clone ran with the user's git settings: $(cat "$t/calls")"
+rm "$t/home/.gitconfig"
 grep -q "^curl\|^sleep" "$t/calls" && fail "--prebuild waited for the network, or between tries: $(cat "$t/calls")"
 [[ $(cat "$lib/built-for") == "0_aq_0.0 $sum" ]] || fail "--prebuild offline changed the build's stamp"
 rm "$t/bin/curl" "$t/bin/git" "$t/bin/sleep"

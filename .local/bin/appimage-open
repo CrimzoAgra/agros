@@ -5,10 +5,10 @@ AppImages open with this (mimeapps.list), so an app's own "Update" button, which
 AppImage and opens it, updates the app by itself: the file goes to ~/Applications/<app>.AppImage in place of
 the old version (which is closed first), the launcher entry and icon come from inside the AppImage, and the
 app starts again. An AppImage without a launcher entry inside just runs. When installing (--install: appimage-update,
-not a file you open), a system package with the same launcher entry (the app installed another way
-before, e.g. from the AUR) is removed, asking for your password, so there's one copy. A file you open is asked about
-first (it runs as you), and read without running it where it can be (unsquashfs); one whose launcher entry is another
-app's (an installed app's, or a file of yours) isn't installed.
+not a file you open) the first time, a system package with the same launcher entry (the app installed another way
+before, e.g. from the AUR) is removed, asking for your password, so there's one copy; its updates must keep that
+launcher entry. A file you open is asked about first (it runs as you), and read without running it where it can be
+(unsquashfs); one whose launcher entry is another app's (an installed app's, or a file of yours) isn't installed.
 
   appimage-open <file.AppImage>             install/update and start it
   appimage-open --install <file.AppImage>   install/update only (appimage-update)
@@ -111,19 +111,46 @@ def clashing_entry(app: str, install_only: bool) -> str:
     return ""
 
 
+# (a pattern's characters for unsquashfs and --appimage-extract: in a name read from the AppImage, more of it extracted)
+GLOB = re.compile(r"[][*?\\]")
+
+
+def installed_ids(website: str) -> set[str]:
+    """The ids (lowercased) of the AppImages this installed from that GitHub repo (their entries' X-AppImage-Website):
+    an update's (appimage-update) is one of them"""
+    def norm(url: str) -> str:
+        return url.strip().removesuffix("/").removesuffix(".git").lower()
+    ids = set()
+    if not website or not os.path.isdir(ENTRIES):
+        return ids
+    for f in os.listdir(ENTRIES):
+        try:
+            text = open(f"{ENTRIES}/{f}", errors="replace").read() if f.endswith(".desktop") else ""
+        except OSError:
+            continue
+        site = re.search(r"^X-AppImage-Website=(.+)$", text, re.M)
+        if ("# Made by ~/.local/bin/appimage-open" in text and re.search(r"^X-AppImage-Path=", text, re.M)
+                and site and norm(site.group(1)) == norm(website)):
+            ids.add(f.removesuffix(".desktop").lower())
+    return ids
+
+
 def resolve(appimage: str, tmp: str, name: str, run: bool = True) -> str:
     """The extracted file <name> in tmp, with what it links to extracted too: linuxdeploy's AppImages have their launcher
-    entry and icon at the top as links into usr/share, and extracting a link extracts only the link"""
+    entry and icon at the top as links into usr/share, and extracting a link extracts only the link. "" when it ends
+    outside what was extracted (a link to /home/... or ../.., itself or through a folder that's a link: read, then copied
+    into your icons, it was a file of yours) or names a pattern"""
+    root = os.path.realpath(f"{tmp}/squashfs-root")
     path = f"{tmp}/squashfs-root/{name}"
     for _ in range(8):
         if not os.path.islink(path):
             break
         name = os.path.normpath(os.path.join(os.path.dirname(name), os.readlink(path)))
-        if name.startswith(("/", "..")):  # (outside the AppImage)
-            break
+        if name.startswith(("/", "..")) or GLOB.search(name):  # (outside the AppImage, or a pattern)
+            return ""
         extract(appimage, name, tmp, run)
         path = f"{tmp}/squashfs-root/{name}"
-    return path
+    return path if os.path.realpath(path).startswith(root + "/") else ""
 
 
 def entry_of(appimage: str, tmp: str, run: bool = True) -> tuple[str, str, str] | None:
@@ -140,7 +167,8 @@ def entry_of(appimage: str, tmp: str, run: bool = True) -> tuple[str, str, str] 
     app = desktops[0].removesuffix(".desktop")  # its own case: a package's entry and dock pins use it
     icon = ""
     name = re.search(r"^Icon=(.+)$", text, re.M)
-    if name:
+    # (an icon's name only: a path or a pattern (Icon=../../.ssh/id_ed25519, Icon=*) read outside it, or all of it)
+    if name and not re.search(r"/|\.\.", name.group(1)) and not GLOB.search(name.group(1)):
         for ext in ("png", "svg"):
             extract(appimage, f"{name.group(1)}.{ext}", tmp, run)
             found = resolve(appimage, tmp, f"{name.group(1)}.{ext}", run)
@@ -250,6 +278,15 @@ def main() -> None:
                 os.execv(src, [src])
             sys.exit(f"{src}: no launcher entry inside, not installed")
         app, text, icon = found
+        # An update (appimage-update, at boot or in Updates: that repo's AppImage installed already) only as the same app:
+        # a release naming its entry firefox.desktop took Firefox's place in the menu and as a default app, and asked to
+        # remove its package (remove_package_copy: a first install's alone)
+        before = installed_ids(os.environ.get("APPIMAGE_WEBSITE", "")) if install_only else set()
+        if before and app.lower() not in before:
+            notify("-a", "AppImage", "-i", "dialog-warning", f"{os.path.basename(src)} not installed",
+                   f"Its launcher entry is now {app}.desktop, not the app's own ({', '.join(sorted(before))})")
+            sys.exit(f"{src}: its launcher entry is now {app}.desktop, not the installed app's "
+                     f"({', '.join(sorted(before))}): not installed")
         clash = clashing_entry(app, install_only)
         if clash:
             notify("-a", "AppImage", "-i", "dialog-warning", f"{os.path.basename(src)} not installed",
@@ -294,8 +331,8 @@ def main() -> None:
         os.remove(old)
     open(f"{ENTRIES}/{app}.desktop", "w").write(text)
     subprocess.run(["update-desktop-database", ENTRIES], capture_output=True)
-    # Only when asked to install: any AppImage you open could name a package's entry (firefox.desktop...)
-    if install_only:
+    # Only when asked to install, the first time: any AppImage you open could name a package's entry (firefox.desktop...)
+    if install_only and not before:
         remove_package_copy(app)
 
     name = re.search(r"^Name=(.+)$", text, re.M)

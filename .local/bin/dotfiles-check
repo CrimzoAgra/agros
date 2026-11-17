@@ -50,7 +50,9 @@ if [[ ${1:-} == --notify && -e $capri_mark ]]; then
     elif gh auth status >/dev/null 2>&1; then
         gh auth setup-git >/dev/null 2>&1
         # shellcheck disable=SC2016  # (the inner shell's own variables)
-        setsid -f bash -c 'out=$("$1/capri-update" 2>&1) || exec "$1/dots-warn" "Capri didn'\''t install" "$(tail -1 <<<"$out")"' \
+        # (exit 2: capri-update said why in a notification itself; one is enough)
+        setsid -f bash -c 'out=$("$1/capri-update" 2>&1); rc=$?
+            ((rc == 0 || rc == 2)) || exec "$1/dots-warn" "Capri didn'\''t install" "$(tail -1 <<<"$out")"' \
             _ "$helpers" </dev/null >/dev/null 2>&1
     else
         problems+=("Capri isn't installed: GitHub has no login here (gh auth login, then capri-update)")
@@ -65,7 +67,10 @@ changed=$(find ~/.config/quickshell/caelestia -type f -name '*.qml' -printf '%P\
 qml=$([[ -n $changed ]] && timeout 5 qs log -c caelestia 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' |
     grep -E "@(${changed//./\\.})\[" |
     grep -iE 'error|unavailable|not a type|not defined|TypeError|ReferenceError' |
-    grep -v 'of null$' | head -3)  # "... of null": a list item read as it goes away (Caelestia's own too), not a rename
+    grep -vE 'of null$|Value is (null|undefined) and could not be converted to an object' | head -3)
+# (left out: "... of null", a list item read as it goes away, and "Value is undefined and could not be converted to an
+# object", a window read before it has its IPC object (Steam's coming and going): Caelestia's own lines do it too, in a
+# file here only for a block the overlay adds to it. Not a rename)
 [[ -n $qml ]] && problems+=("Caelestia changes failing to load (overlay QML): $qml")
 
 # Caelestia internals my config relies on, which it could rename (then that part stops working without an error):
