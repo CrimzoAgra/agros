@@ -4,7 +4,7 @@
 # the desktop shell at normal CPU priority, the keyring unlocked with the login password, a VMware VM's screen
 # following its window, the night light's location (geoclue), the automatic time zone without a password (polkit),
 # Hyprland's updates held until AgrOS's CI has checked them (the upstream gate), folder icons in the colour scheme's colour (papirus-folders, sudoers), mDNS from Avahi alone, UFW's logging off,
-# qView's first-run dialog off
+# qView's first-run dialog off, File Roller's first window wide enough for its file names
 pkgname=agros-system
 pkgver=0
 pkgrel=1
@@ -56,4 +56,7 @@ package() {
     # setting missing from yours here. Not in /etc/skel: qView writes its window size and recent files into yours, which
     # dotfiles-sync would then push to the repo
     install -Dm644 "$_root/system/qview/qView.conf" "$pkgdir/etc/xdg/qView/qView.conf"
+    # File Roller's first window: its own 600x480 leaves its file names about 50 px (glib2's pacman hook compiles it in)
+    install -Dm644 "$_root/system/file-roller/50-agros-file-roller.gschema.override" \
+        "$pkgdir/usr/share/glib-2.0/schemas/50-agros-file-roller.gschema.override"
 }

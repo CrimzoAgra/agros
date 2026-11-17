@@ -1,0 +1,4 @@
+# File Roller's first window: its own 600x480 leaves its Name column about 50 px (Size, Type and Modified take 550)
+[org.gnome.FileRoller.UI]
+window-width=900
+window-height=560
