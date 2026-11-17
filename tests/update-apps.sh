@@ -141,8 +141,17 @@ grep -q "couldn't be listed (paru -Qua: error: failed to get AUR info)" <<<"$out
 stub paru 'case "$*" in *-Qua*) exit 1 ;; *) echo "paru $*" >>"'"$t"'/paru" ;; esac'
 out=$(HOME=$t/home XDG_STATE_HOME=$t/state XDG_CACHE_HOME=$t/home/.cache PATH=$t/bin:$PATH "$here/.local/bin/update-apps" </dev/null 2>&1) || true
 grep -qE "couldn't be listed|built now, their build" <<<"$out" && fail "no AUR updates said as a list or a failure: $(head -5 <<<"$out")"
+# (the lid too: logind suspends on it whatever sleep lock is held, LidSwitchIgnoreInhibited=yes, but for that one)
+grep -q -- "--what=sleep:shutdown:handle-lid-switch --mode=block .*tail --pid=" "$t/inhibit" ||
+    fail "the install not held against power off, sleep and the lid: $(cat "$t/inhibit" 2>/dev/null)"
+# (the lid's lock refused, polkit's: power off and sleep held all the same)
+# shellcheck disable=SC2016
+stub systemd-inhibit 'case "$1" in *handle-lid-switch*) exit 1 ;; esac; echo "inhibit $*" >>"'"$t"'/inhibit"; while [ "${1#--}" != "$1" ]; do shift; done; exec "$@"'
+rm -f "$t/inhibit"
+HOME=$t/home XDG_STATE_HOME=$t/state XDG_CACHE_HOME=$t/home/.cache PATH=$t/bin:$PATH "$here/.local/bin/update-apps" \
+    </dev/null >/dev/null 2>&1 || true
 grep -q -- "--what=sleep:shutdown --mode=block .*tail --pid=" "$t/inhibit" ||
-    fail "the install not held against power off and sleep: $(cat "$t/inhibit" 2>/dev/null)"
+    fail "the lid's lock refused, power off and sleep not held either: $(cat "$t/inhibit" 2>/dev/null)"
 # The boot's run (auto-update active) still to download what its AUR builds need (its "downloading" mark): waited for,
 # paru not run until the mark is gone (both writing pacman's cache at once would corrupt it)
 mkdir -p "$t/au"; touch "$t/au/downloading"; rm -f "$t/paru"
