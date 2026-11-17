@@ -390,6 +390,9 @@ on_main() {
     grep -q 'property bool sidebarShortcutActive' "$t/head-src/modules/drawers/Interactions.qml" &&
         [[ $(grep -c 'property bool sidebarShortcutActive' "$t/head-dst/modules/drawers/Interactions.qml") == 1 ]] ||
         ahead "on Caelestia's main, the sidebar's shortcut mode not Caelestia's own"
+    # ...and the launcher closing closes the utilities panel there too (unless hovered)
+    grep -q 'root.screenState.utilities = false' <<<"$(sed -n '/^        function onLauncherChanged() {$/,/^        }$/p' \
+        "$t/head-dst/modules/drawers/Interactions.qml")" || ahead "on Caelestia's main, the launcher closing leaves the utilities panel open"
     new=$(lint_new "$t/head-src" "$t/head-dst")
     [[ -z $new ]] || ahead "on Caelestia's main, the patched QML uses what it doesn't have (qmllint): $(paste -sd' ' <<<"$new")"
 }
