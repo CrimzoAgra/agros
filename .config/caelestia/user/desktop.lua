@@ -25,7 +25,8 @@ hl.on("hyprland.start", function() hl.exec_cmd("~/.local/bin/bluetooth-on") end)
 -- In a VM: the screen follows its window and full screen (vm-screen-follow does nothing elsewhere)
 hl.on("hyprland.start", function() hl.exec_cmd("~/.local/bin/vm-screen-follow") end)
 
--- The time zone from your location, when Settings > Language & region says so (timezone-auto does nothing otherwise)
+-- The time zone from your location, when Caelestia's own Settings app (not Desktop Settings), Language & region page,
+-- says so (timezone-auto does nothing otherwise)
 hl.on("hyprland.start", function() hl.exec_cmd("~/.local/bin/timezone-auto") end)
 
 -- Updates: a notification with an "Update now" button when updates are waiting (~/.local/bin/update-apps; the boot

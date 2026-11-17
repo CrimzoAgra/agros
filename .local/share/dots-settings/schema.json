@@ -1272,7 +1272,7 @@
       "note": "AgrOS's logo (agros-logo)."
     },
     "caelestia-shell.services.weatherLocation": {
-      "note": "Also set by the place picker (Caelestia's Settings, Language & region), and the time zone can follow it."
+      "note": "Also set by the place picker in Caelestia's own Settings app (its Language & region page, not this app), and the time zone can follow it."
     },
     "caelestia-shell.general.idle.timeouts": {
       "note": "AgrOS's: screen off after 10 minutes, sleep after 30 (5 and 15 on battery)."

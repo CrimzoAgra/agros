@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# The time zone from where you are, while Settings > Language & region > "Set the time zone automatically" is on: the
-# weather location's (Caelestia's shell.json: "lat,lon" or a town, through Open-Meteo), or your IP's when that's
-# automatic (ipinfo.io, over HTTPS: an answer no one on the way can change). Set only when it differs, without a
-# password (agros-system's polkit rule, for admins); no network or no answer: left as it is
+# The time zone from where you are, while "Set the time zone automatically" is on (Caelestia's own Settings app, not
+# Desktop Settings: its Language & region page): the weather location's (Caelestia's shell.json: "lat,lon" or a town,
+# through Open-Meteo), or your IP's when that's automatic (ipinfo.io, over HTTPS: an answer no one on the way can
+# change). Set only when it differs, without a password (agros-system's polkit rule, for admins); no network or no
+# answer: left as it is
 #   timezone-auto           set it, if it's on (at login, and when the weather location changes)
 #   timezone-auto on | off  turn it on (and set it) or off
 flag=${XDG_STATE_HOME:-$HOME/.local/state}/agros/timezone-auto
