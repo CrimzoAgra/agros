@@ -395,34 +395,21 @@ flock "$HOME/.config/quickshell/caelestia.lock" true 2>/dev/null
 step caelestia caelestia_setup
 # The live USB (the ISO's own session): only the desktop's look, nothing downloaded, no accounts to restore
 [[ -d /run/archiso ]] && { echo "== live system: done $(date '+%F %T')"; exit 0; }
-step others others
-step librewolf librewolf_setup
-step flatpaks flatpaks
-step vscodium vscodium_setup
-# All of them done: not run at login any more (agros-welcome.service). One that failed (offline, LibreWolf open) keeps it
-# coming back until it works: the service used to stop at done-vscodium, written even when the Flatpaks had failed
-all_done=1
-for s in "${steps[@]}"; do [[ -e $st/done-$s ]] || all_done=; done
-[[ -n $all_done ]] && touch "$st/done"
-
 # The system's part (hardware apps, VMware) and your accounts: asked in one notification, run in a terminal. Sent by
 # notify-when-up once Caelestia (the notification server) takes it. Marked offered on Later or closed, or once the
 # button's restore or system part has worked: one sent to nobody, still unanswered when the session ended, or whose
 # part failed or was cancelled (sudo's password prompt closed) is offered again at the next login. Critical: it stays
 # on screen until it's answered (the first login's user may be away), and its buttons only open a terminal. Their
 # labels short, the text saying what they do: longer ones ("Restore my accounts") were cut off in the notification
-# centre, the others not shown at all
-if [[ ! -e $st/offered ]]; then
+# centre, the others not shown at all. Sent once the shell is up, before the downloads (sent after them, it came minutes
+# after the first login): a restore picked meanwhile waits for them (agros-personal: setup-running, the same files)
+offer() {
+    [[ ! -e $st/offered ]] || return 0
     touch "$st/offer-sent"
-    if [[ -n $all_done ]]; then
-        text="Everything is installed."
-    else
-        text="Some of the setup didn't finish: it's tried again at the next login (details: $st/welcome.log)."
-    fi
+    local text admin
     # (the system's part offered to an admin (wheel) only: another account can't sudo, and its terminal only failed)
-    admin=
     [[ " $(id -nG 2>/dev/null) " == *" wheel "* ]] && admin=1
-    text+=" Restore accounts: plug in your pen drive to bring back your logins, keys and browser profile."
+    text="Restore accounts: plug in your pen drive to bring back your logins, keys and browser profile."
     [[ -z $admin ]] || text+=" Hardware apps: the apps for the devices plugged in (Razer, Logitech, Moza, tablets), and VMware."
     text+=" Later: run agros-personal${admin:+, or agros-welcome --system for the hardware apps}."
     setsid -f bash -c '
@@ -436,5 +423,23 @@ if [[ ! -e $st/offered ]]; then
             *) touch "$3" ;;
         esac
     ' _ "$helpers" "$text" "$st/offered" "$admin" >/dev/null 2>&1 </dev/null
-fi
+}
+offer
+# (this run's setup going on: agros-personal's restore waits for it to end)
+echo $$ >"$st/setup-running"
+trap 'rm -f "$st/setup-running"' EXIT
+step others others
+step librewolf librewolf_setup
+step flatpaks flatpaks
+step vscodium vscodium_setup
+# All of them done: not run at login any more (agros-welcome.service). One that failed (offline, LibreWolf open) keeps it
+# coming back until it works: the service used to stop at done-vscodium, written even when the Flatpaks had failed
+all_done=1
+for s in "${steps[@]}"; do [[ -e $st/done-$s ]] || all_done=; done
+[[ -n $all_done ]] && touch "$st/done"
+rm -f "$st/setup-running"
+# (said apart from the offer, sent before the steps)
+[[ -n $all_done ]] || "$helpers/notify-when-up" -a AgrOS -i dialog-warning "AgrOS setup" \
+    "Some of the setup didn't finish: it's tried again at the next login (details: $st/welcome.log)." >/dev/null 2>&1 &
+
 echo "== done $(date '+%F %T')"

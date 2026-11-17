@@ -29,11 +29,14 @@ st=$h/.local/state/agros
 # first went through before caelestia-start took it (the first wallpaper and colours then set twice at once)
 [[ $(head -3 "$t/order" | paste -sd' ') == "qs-running qs-running flock" ]] ||
     fail "caelestia-start's lock taken before the shell was waited for: $(paste -sd' ' "$t/order")"
-# The offer (in the background), marked once sent, and not saying all is installed when a step failed
+# The offer (in the background), marked once sent
 for _ in $(seq 50); do [[ -e $st/offered ]] && break; sleep 0.1; done
 [[ -e $st/offered ]] || fail "the offer sent but not marked offered"
-grep -q "didn't finish" "$t/offer" && ! grep -q "Everything is installed" "$t/offer" ||
-    fail "a step failed, yet the offer said: $(cat "$t/offer")"
+# ...sent before the downloads, and a step that failed said in a notification of its own
+for _ in $(seq 50); do grep -qs "didn't finish" "$t/offer" && break; sleep 0.1; done
+grep -q "didn't finish" "$t/offer" || fail "a step failed, but nothing said so: $(cat "$t/offer")"
+[[ $(grep -n "Welcome to AgrOS" "$t/offer" | cut -d: -f1) -lt $(grep -n "didn't finish" "$t/offer" | cut -d: -f1) ]] ||
+    fail "the offer not sent before the setup's steps: $(cat "$t/offer")"
 # ...and not marked when no notification server took it (sent to nobody): offered again at the next login
 rm "$st/offered"; printf '#!/bin/sh\nexit 1\n' >"$sb/notify-send"
 env -i HOME="$h" PATH="$sb:/usr/bin" NOTIFY_WHEN_UP_TRIES=2 bash "$h/.local/bin/agros-welcome" >/dev/null 2>&1 </dev/null || true
@@ -77,9 +80,11 @@ touch "$st/done"; rm -f "$st/offered" "$st/offer-sent" "$t/offer"
 printf '#!/bin/sh\nprintf "%%s\\n" "$@" >>"%s"\n' "$t/offer" >"$sb/notify-send"
 env -i HOME="$h" PATH="$sb:/usr/bin" bash "$h/.local/bin/agros-welcome" >/dev/null 2>&1 </dev/null || true
 sleep 1
-[[ -e $st/offered && ! -e $t/offer ]] || fail "an account set up before this version offered again: $(cat "$t/offer" 2>/dev/null)"
+[[ -e $st/offered ]] && ! grep -qs "Welcome to AgrOS" "$t/offer" || fail "an account set up before this version offered again: $(cat "$t/offer" 2>/dev/null)"
 rm "$st/offered"; touch "$st/offer-sent"
 env -i HOME="$h" PATH="$sb:/usr/bin" bash "$h/.local/bin/agros-welcome" >/dev/null 2>&1 </dev/null || true
 for _ in $(seq 50); do [[ -e $t/offer ]] && break; sleep 0.1; done
 [[ -e $t/offer ]] || fail "an offer this version made, unanswered, not made again at the next login"
+# (the step that failed still said in the background: waited for, not writing into the test's folder as it's removed)
+for _ in $(seq 50); do grep -qs "didn't finish" "$t/offer" && break; sleep 0.1; done
 echo "ok welcome-retry"
