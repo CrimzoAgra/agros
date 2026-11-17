@@ -25,6 +25,10 @@ You don't have to think about updates.
   partition (EFI) is said once ("Firmware update can't be installed... the boot partition (EFI) is too small for
   it"), and isn't tried again until a newer one comes: installed beside Windows, that partition is often Windows' own
   small one.
+- **Some updates wait for you** to install them from the Updates app (or `update-apps` in a terminal, which shows an
+  AUR app's build script first): an AUR app whose maintainers changed since it was last built (a warning after you
+  log in names it), and an app installed from a Flatpak file (ArtCraft) whose new version asks for more access (the
+  Updates app says what it adds).
 - **A new Proton build** (GE-Proton, dwproton, in Steam or Lutris) shows up in Steam once you restart Steam, and in
   Lutris once you restart it and pick it in a game's **Configure**, **Runner options**, **Wine version** (a
   notification says so). The old one stays while a game uses it, and one you installed yourself is never removed.
