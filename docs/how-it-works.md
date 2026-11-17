@@ -1130,9 +1130,6 @@ brings each change; nothing to run by hand).
   run after CachyOS's own, `zz-agros-os-release.hook`; `ID_LIKE` keeps cachyos and arch; its removal puts the old
   name back), and, in a VMware VM, `/etc/vmware-tools/tools.conf` with `resolutionKMS` on, so VMware's tools pass a
   resized window on and `vm-screen-follow` (at login) has Hyprland take the new size
-- **`agros-system`** also: the night light's location without a prompt (`system/geoclue/agros.conf`) and the time zone
-  changed without the password by admins at the machine (`system/polkit/agros-timezone.rules`), both described under
-  Desktop and Caelestia
 - **pacman hooks** (`agros-system`, for every account through `agros-each-user`): the Caelestia overlay re-applied after
   every `caelestia-shell` update; the title bar plugin built for a new Hyprland (or a library its plugins hang on)
   straight away; the Hyprland config checked against a new Hyprland (`hypr-config-check`, its errors said by
