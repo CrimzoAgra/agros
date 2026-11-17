@@ -86,6 +86,16 @@ if [[ ! -e $mark && -f $shell ]] && has=$(jq '.bar.statusIcons != null' "$shell"
             'if .bar.statusIcons == null then .bar.statusIcons = $i else . end' && touch "$mark"
     fi
 fi
+# VSCodium starts on a new empty window, not on the last one without a folder (window.restoreWindows): a Claude Code
+# tab left open there came back at every start and asked again whether to trust your home folder (Claude Code never
+# keeps that answer for home). Its settings.json is yours (copied in once, never updated), so one from before gets the
+# setting once, only where it has none. None yet, or one jq can't read (VSCodium allows comments, jq doesn't): looked
+# at again at the next login
+code=$HOME/.config/VSCodium/User/settings.json mark=$state/vscodium-restore-windows
+if [[ ! -e $mark && -f $code ]] && jq -e 'type == "object"' "$code" >/dev/null 2>&1; then
+    "$(dirname "$(readlink -f "$0")")/json-edit" "$code" --indent 4 \
+        'if has("window.restoreWindows") then . else .["window.restoreWindows"] = "folders" end' && touch "$mark"
+fi
 # (in the background: Caelestia, the notification server, isn't up yet; agros-links.service keeps it alive). Marked as
 # said only once it was: one that never got through is said at the next login
 ((${#new[@]})) && { "$(dirname "$(readlink -f "$0")")/dots-warn" "AgrOS updated settings you've changed" \

@@ -115,4 +115,19 @@ echo '{"bar": {"y": 2}}' >"$h/caelestia/shell.json"; run
 [[ $(jq -c . "$h/caelestia/shell.json") == '{"bar":{"y":2}}' ]] || fail "the status icons added again after the user took them out"
 rm -f "$mark" "$h/caelestia/shell.json"; run
 [[ ! -e $h/caelestia/shell.json ]] || fail "a missing shell.json made, for the status icons: $(cat "$h/caelestia/shell.json")"
+# VSCodium's settings.json from before window.restoreWindows: gets it once, its other settings kept; a value of the
+# user's own kept; one with comments (jq can't read it) left byte for byte; none made where there's none
+code=$h/VSCodium/User/settings.json mark=$t/home/.local/state/agros/vscodium-restore-windows
+mkdir -p "${code%/*}"; run
+[[ ! -e $code && ! -e $mark ]] || fail "a missing VSCodium settings.json made"
+printf '{\n    // mine\n    "a": 1\n}\n' >"$code"; cp "$code" "$t/commented"; run
+cmp -s "$code" "$t/commented" && [[ ! -e $mark ]] || fail "a VSCodium settings.json with comments changed or marked done"
+echo '{"window.restoreWindows": "all"}' >"$code"; run
+[[ $(jq -r '."window.restoreWindows"' "$code") == all ]] || fail "the user's own window.restoreWindows replaced"
+rm -f "$mark"; echo '{"a": 1}' >"$code"; run
+[[ $(jq -c . "$code") == '{"a":1,"window.restoreWindows":"folders"}' ]] ||
+    fail "window.restoreWindows not added to VSCodium's settings, or its settings lost: $(cat "$code")"
+# ...once: taken out by the user, it stays out
+echo '{"a": 1}' >"$code"; run
+[[ $(jq -c . "$code") == '{"a":1}' ]] || fail "window.restoreWindows added again after the user took it out"
 echo "ok agros-links"

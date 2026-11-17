@@ -3,5 +3,6 @@
     "claudeCode.hideOnboarding": true,
     "update.mode": "none",
     "window.controlsStyle": "hidden",
+    "window.restoreWindows": "folders",
     "security.workspace.trust.untrustedFiles": "open"
 }
