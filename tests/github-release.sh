@@ -24,10 +24,13 @@ r=$(release App-aarch64.AppImage App-x86_64.AppImage App.flatpak)
 # No checksums in the release: nothing, and fine
 want=$(checksum "$r" App-x86_64.AppImage "$t/dl") || fail "a release without checksums failed"
 [[ -z $want ]] || fail "a release without checksums gave one: $want"
+# ...but refused where they're required (a system-wide install: every account runs it)
+if checksum "$r" App-x86_64.AppImage "$t/dl" required 2>/dev/null; then fail "a release without checksums passed where required"; fi
 # A list covering it: by its exact name (not the .zsync named like it), also a "*name" binary-mode line
 printf '%s  App-x86_64.AppImage.zsync\n%s *App-x86_64.AppImage\n' 0000 "$sum" >"$t/srv/SHA256SUMS"
 r=$(release App-x86_64.AppImage SHA256SUMS)
 [[ $(checksum "$r" App-x86_64.AppImage "$t/dl") == "$sum" ]] || fail "the checksum not found by its exact name"
+[[ $(checksum "$r" App-x86_64.AppImage "$t/dl" required) == "$sum" ]] || fail "the checksum not found where required"
 # The list's signatures listed before it (no hash in them): the list itself read
 echo "-----BEGIN PGP SIGNATURE-----" | tee "$t/srv/SHA256SUMS.asc" >"$t/srv/SHA256SUMS.sig"
 r=$(release App-x86_64.AppImage SHA256SUMS.asc SHA256SUMS.sig SHA256SUMS)

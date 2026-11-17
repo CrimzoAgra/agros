@@ -10,9 +10,10 @@ asset_url() {
     jq -r --arg e "$2" '[.assets[].browser_download_url | select(test("(?i)(x86[_-]64|amd64|x64).*\\." + $e + "$"))][0] // empty' <<<"$1"
 }
 
-# checksum <release JSON> <file name> <dir>: the file's SHA-256 from the release, from its own <file>.sha256 or the list
-# of every file's (SHA256SUMS, checksums.txt). Nothing when the release has no checksums; fails (not installed unchecked)
-# when it has some but none for this file (only another build's, e.g. arm64's) or they can't be fetched
+# checksum <release JSON> <file name> <dir> [required]: the file's SHA-256 from the release, from its own <file>.sha256
+# or the list of every file's (SHA256SUMS, checksums.txt). Nothing when the release has no checksums, unless required (a
+# system-wide install, which every account runs); fails (not installed unchecked) when it has some but none for this
+# file (only another build's, e.g. arm64's) or they can't be fetched
 checksum() {
     local own list
     own=$(jq -r --arg n "$2" '[.assets[].browser_download_url | select(endswith("/" + $n + ".sha256") or endswith("/" + $n + ".sha256sum"))][0] // empty' <<<"$1")
@@ -21,7 +22,11 @@ checksum() {
     list=$(jq -r '[.assets[].browser_download_url | select(test("(?i)/[^/]*(sha256sums|checksums|sha256\\.txt)[^/]*$"))
         | select(test("(?i)\\.(sig|asc|pem|minisig)$") | not)][0] // empty' <<<"$1")
     if [[ -z $own && -z $list ]]; then
-        jq -e '[.assets[].name | select(test("(?i)sha256|checksum"))] | length == 0' <<<"$1" >/dev/null && return 0
+        if jq -e '[.assets[].name | select(test("(?i)sha256|checksum"))] | length == 0' <<<"$1" >/dev/null; then
+            [[ ${4:-} == required ]] || return 0
+            echo "$2: the release has no checksums, not installed for every account" >&2
+            return 1
+        fi
         echo "$2: the release's checksums don't cover it, not installed" >&2
         return 1
     fi
