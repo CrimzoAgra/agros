@@ -77,7 +77,7 @@ done
 out=$(run); grep -qi lutris <<<"$out" || fail "the patched copy doesn't start: $out"
 # Not rebuilt while the patched Lutris runs (its folder swapped under it): only once it has closed
 before=$(cat "$t/cache/lutris-overlay/stamp")
-# (its command line as Arch's /usr/bin/lutris starts it, "#!/usr/bin/python", and as an "env python3" one does)
+# (its command line with the interpreter its first line names by path, "#!/usr/bin/python", and through "env python3")
 for py in /usr/bin/python python3; do
     (exec -a "$py $t/cache/lutris-overlay/bin/lutris" sleep 30) & fake=$!
     settings rounded_covers
