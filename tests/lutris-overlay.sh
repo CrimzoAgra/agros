@@ -77,11 +77,16 @@ done
 out=$(run); grep -qi lutris <<<"$out" || fail "the patched copy doesn't start: $out"
 # Not rebuilt while the patched Lutris runs (its folder swapped under it): only once it has closed
 before=$(cat "$t/cache/lutris-overlay/stamp")
-(exec -a "python3 $t/cache/lutris-overlay/bin/lutris" sleep 30) & fake=$!
+# (its command line as Arch's /usr/bin/lutris starts it, "#!/usr/bin/python", and as an "env python3" one does)
+for py in /usr/bin/python python3; do
+    (exec -a "$py $t/cache/lutris-overlay/bin/lutris" sleep 30) & fake=$!
+    settings rounded_covers
+    run >/dev/null
+    [[ $(cat "$t/cache/lutris-overlay/stamp") == "$before" ]] || fail "rebuilt under the running Lutris ($py)"
+    kill "$fake"; wait "$fake" 2>/dev/null || true
+    settings
+done
 settings rounded_covers
-run >/dev/null
-[[ $(cat "$t/cache/lutris-overlay/stamp") == "$before" ]] || fail "rebuilt under the running Lutris"
-kill "$fake"; wait "$fake" 2>/dev/null || true
 run >/dev/null
 [[ $(cat "$t/cache/lutris-overlay/stamp") != "$before" ]] || fail "not rebuilt once Lutris had closed"
 settings; run >/dev/null
