@@ -31,7 +31,7 @@ run mouse-dpi || fail "mouse-dpi failed without Solaar"
 # "Own", the mouse left on its profile), not read from the settings file itself
 cat >"$t/bin/solaar" <<S
 #!/bin/sh
-echo "solaar \$*" >>"$t/called"
+echo "solaar \$* [\${LC_ALL:-}]" >>"$t/called"
 case "\$1 \$3" in "show ") echo "  1: Mouse" ;; "config dpi_extended") [ -z "\$4" ] ;; esac
 exit 0
 S
@@ -41,7 +41,9 @@ for want in '""' '"800"'; do
     # shellcheck disable=SC2016  # (expanded by the stand-in)
     printf '#!/bin/sh\n[ "$1 $2" = "get input.mouse_dpi" ] && echo %s\n' "'$want'" >"$t/mdpi/dots-settings"; chmod +x "$t/mdpi/dots-settings"
     rm -f "$t/called"
-    HOME=$t PATH=$t/bin:$PATH timeout 20 "$t/mdpi/mouse-dpi" >/dev/null 2>&1 || fail "mouse-dpi failed"
+    # (a Portuguese session: Solaar asked in English all the same, its answers being read)
+    HOME=$t PATH=$t/bin:$PATH LC_ALL=pt_PT.UTF-8 timeout 20 "$t/mdpi/mouse-dpi" >/dev/null 2>&1 || fail "mouse-dpi failed"
+    grep -qv ' \[C\]$' "$t/called" && fail "Solaar run in the session's language: $(cat "$t/called")"
     if [[ $want == '""' ]]; then
         grep -q "dpi_extended X" "$t/called" && fail "a DPI set with none chosen (Own): $(cat "$t/called")"
     else
