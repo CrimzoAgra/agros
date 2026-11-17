@@ -486,9 +486,17 @@ def screens_groups():
     return groups
 
 
+# What a keyboard's media keys do (Caelestia binds them, to wpctl or its shell's media and brightness actions)
+MEDIA_KEYS = {
+    "XF86AudioMute": "Mute", "XF86AudioMicMute": "Mute the microphone", "XF86AudioRaiseVolume": "Volume up",
+    "XF86AudioLowerVolume": "Volume down", "XF86MonBrightnessUp": "Brightness up",
+    "XF86MonBrightnessDown": "Brightness down", "XF86AudioPlay": "Play / pause", "XF86AudioPause": "Play / pause",
+    "XF86AudioNext": "Next track", "XF86AudioPrev": "Previous track", "XF86AudioStop": "Stop the music"}
+
+
 def binds_group(settings, saved):
     """The shortcuts no setting changes (Caelestia's fixed ones: arrows, media keys...), from Hyprland's list, so they
-    show with the rest and a clash with one does too"""
+    show with the rest and a clash with one does too. Mouse buttons (mouse:272) are named by the Settings app"""
     mods = [(64, "SUPER"), (4, "CTRL"), (8, "ALT"), (1, "SHIFT")]
 
     def norm(keys):  # (as the Settings app compares them: modifiers in any order, any case)
@@ -507,7 +515,8 @@ def binds_group(settings, saved):
         if norm(keys) in taken or keys.startswith("switch:"):
             continue
         what = re.sub(r"^HL\.Dispatcher\((\w+)\).*|^(\w+):.*", r"\1\2", b.get("dispatcher", ""))
-        what = b.get("description") or {
+        # (a media key's command or shell action: by its key, as Hyprland lists a Lua bind's only as a number)
+        what = b.get("description") or what in ("exec_cmd", "global") and MEDIA_KEYS.get(b.get("key")) or {
             "exec_cmd": "Runs a command", "global": "A shell action", "focus": "Focus", "move": "Move the window",
             "drag": "Drag the window", "resize": "Resize the window", "function": "A desktop action"}.get(what, words(what))
         label = f"{what} ({b['key']})" if b.get("key", "").lower() in ("left", "right", "up", "down") else what

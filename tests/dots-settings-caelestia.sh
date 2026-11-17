@@ -8,7 +8,8 @@
 # "All Caelestia options" keeps the page's range; now (the app's poll) the schema's values without its
 # option lists. The other new kinds:
 # numbers kept in their range, Caelestia's variables and the screens' settings in settings.lua only once changed (a
-# screen's kept while it's unplugged), a screen's position only as WxH, its scales only those that give whole pixels
+# screen's kept while it's unplugged), a screen's position only as WxH, its scales only those that give whole pixels,
+# a screen with no description by its connector's name; the fixed shortcuts' media keys by what they do
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
@@ -96,6 +97,16 @@ ds.hyprctl = lambda *a: []
 assert ds.screens_groups()[0]["empty"] == "No screens found (Hyprland reported none)", ds.screens_groups()
 ds.hyprctl = lambda *a: None
 assert ds.screens_groups()[0]["empty"] == "No screens found (not in a Hyprland session)", ds.screens_groups()
+# The shortcuts no setting changes: a media key's command or shell action by its key (Hyprland lists a Lua bind's
+# command only as a number), not all of them lumped as "Runs a command" and "A shell action"; another command still so
+ds.hyprctl = lambda *a: [{"modmask": 0, "key": k, "dispatcher": f"HL.Dispatcher({d})", "arg": "1", "description": ""}
+                         for k, d in (("XF86AudioMute", "exec_cmd"), ("XF86AudioRaiseVolume", "exec_cmd"),
+                                      ("XF86AudioPlay", "global"), ("XF86AudioPause", "global"),
+                                      ("XF86MonBrightnessUp", "global"), ("F12", "exec_cmd"))] if a[0] == "binds" else []
+rows = {r["label"]: r["default"] for r in ds.binds_group({}, {})}
+assert rows == {"Mute": ["XF86AudioMute"], "Volume up": ["XF86AudioRaiseVolume"],
+                "Play / pause": ["XF86AudioPlay", "XF86AudioPause"], "Brightness up": ["XF86MonBrightnessUp"],
+                "Runs a command": ["F12"]}, rows
 ds.hyprctl = real_hyprctl
 
 options = ds.caelestia_options()
