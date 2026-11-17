@@ -1080,6 +1080,10 @@ def workspace_hover():
     }
 
 """)
+    # (here because this feature puts the file in the overlay) A window's icon before Hyprland has given its details
+    # (lastIpcObject comes a moment after the window): Caelestia's threw "Value is undefined" as each window opened
+    ws = swap(ws, "Icons.getAppCategoryIcon(modelData.lastIpcObject.class, ",
+              'Icons.getAppCategoryIcon(modelData.lastIpcObject?.class ?? "", ', "window icon's class")
     wss = swap_block(read("modules/bar/components/workspaces/Workspaces.qml"),
                      "        MouseArea {\n            anchors.fill: workspaces\n", "", "workspaces click area",
                      must="Hypr.focusWorkspace(")

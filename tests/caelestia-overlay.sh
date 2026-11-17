@@ -130,6 +130,9 @@ c=$dst/modules/sidebar/Content.qml
 # ...and its top stays on the border as the opening curve overshoots (an inward notch at its top-left for a moment)
 grep -q 'anchors.topMargin: -notifications.anchors.topMargin - Math.max(0, slide)' "$dst/modules/drawers/Panels.qml" ||
     fail "the sidebar's top not held on the border past the end of its opening"
+# The bar's window icons with a window Hyprland hasn't given its details yet (no lastIpcObject): no TypeError as it opens
+grep -qF 'Icons.getAppCategoryIcon(modelData.lastIpcObject?.class ?? "", "terminal")' "$dst/modules/bar/components/workspaces/Workspace.qml" ||
+    fail "the bar's window icons not guarded against a window with no details yet"
 # Window peek: its pictures in the drawers' window, its service, and the previews that set it (the dock's single
 # window and its tiles: that window; the workspace preview: its whole workspace)
 { grep -q 'PeekLayer {' "$dst/modules/drawers/ContentWindow.qml" && [[ -f $dst/modules/drawers/PeekLayer.qml && -f $dst/services/WindowPeek.qml ]] &&

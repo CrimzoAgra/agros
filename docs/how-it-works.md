@@ -347,7 +347,8 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
     - The clock's hour and minute digits line up in columns: each digit, drawn as normal, centred in a slot as wide as
       the widest (not Caelestia's per-line stretching, nor the font's same-width digits, whose 1 is drawn wider)
     - Workspaces and the tray arrow light up under the mouse like the power button; clicking the workspace you're
-      on does nothing (Caelestia opened a special workspace)
+      on does nothing (Caelestia opened a special workspace); a window's icon there no longer throws "Value is
+      undefined" as the window opens, before Hyprland has given its details
     - A collapsed tray that opens on a click (not hover) and closes on a click elsewhere on the bar or when the pointer
       leaves the bar for a window (no input grab: windows still scroll while it is open); tray icons A-Z;
       Spotify's tray icon shown; Steam's tray menu shows installed games only; right-clicking a tray icon with no
