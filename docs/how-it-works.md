@@ -413,7 +413,10 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
   `.conf` one and writes the window borders' colours to `current.conf`, which the Lua config doesn't read. The folder
   icons' colour (the CLI's forked `sudo -n papirus-folders`) is left to that last scheme run alone, through a `sudo`
   stand-in for the others (`~/.local/state/agros/folders-later`): the wallpaper's and the scheme's raced, and the
-  prepare unit's end killed them half-way. Each start logged in
+  prepare unit's end killed them half-way. That stand-in is removed once the first wallpaper and colours are set: one
+  still there marks a first time cut off between the two (the prepare unit's time limit, a power cut), so Caelestia's
+  `path.txt`, which the wallpaper wrote, isn't taken for a wallpaper you picked, and both are set again. Each start
+  logged in
   `~/.local/state/agros/caelestia-start.log`. A shell that never loads its config on the overlay's changes (Quickshell
   stays running with nothing on screen when a part can't be created: AgrOS's changes on a Caelestia or Quickshell other
   than the one CI checked) is started again without them (`caelestia-restart --without-changes`, below), not left with

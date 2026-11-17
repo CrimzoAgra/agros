@@ -15,8 +15,12 @@ mkdir -p "$HOME/.config/quickshell/caelestia" && touch "$HOME/.config/quickshell
 exit "${FAIL:-0}"
 S
 # (the wallpaper and the scheme each recolour the folder icons, as Caelestia's CLI does: sudo -n papirus-folders)
+# (the wallpaper written down where Caelestia does, path.txt; the scheme cut off, failing, with CUT set)
 # shellcheck disable=SC2016  # (expanded by the stand-ins)
-printf '#!/usr/bin/env bash\necho "caelestia $*" >>"$HOME/started"\ncase $1 in wallpaper | scheme) sudo -n papirus-folders -C "$1" -u ;; esac\n' >"$t/bin/caelestia"
+printf '#!/usr/bin/env bash\necho "caelestia $*" >>"$HOME/started"
+case $1 in wallpaper) mkdir -p "$HOME/.local/state/caelestia/wallpaper" && echo "$3" >"$HOME/.local/state/caelestia/wallpaper/path.txt" ;;
+    scheme) [[ -z ${CUT:-} ]] || exit 1 ;; esac
+case $1 in wallpaper | scheme) sudo -n papirus-folders -C "$1" -u ;; esac\n' >"$t/bin/caelestia"
 printf '#!/bin/sh\necho "$*" >>"$HOME/folders"\n' >"$t/bin/sudo"
 # (the shell up at once: not the live one looked for, nor 30 s waited where there's none, CI)
 printf '#!/bin/sh\necho "Config path: /x/quickshell/caelestia/shell.qml"\n' >"$t/bin/qs"
@@ -38,6 +42,7 @@ grep -q 'overlay checked: exit 0' "$log" || fail "first login: the build isn't l
 [[ $(cat "$t/home/folders") == "-n papirus-folders -C scheme -u" ]] ||
     fail "first login: the folder icons not recoloured once, with the scheme: $(cat "$t/home/folders")"
 [[ ! -e $t/home/.local/state/agros/scheme-again ]] || fail "first login: the colours to be set again, though Hyprland was there"
+[[ ! -e $t/home/.local/state/agros/folders-later ]] || fail "first login: the folder icons' stand-in left once done"
 
 # (with the overlay there too: a rebuild left waiting for a game, lost with the session, made at the next login)
 run
@@ -57,6 +62,17 @@ mkdir -p "$t/home/.local/state/caelestia/wallpaper"; echo /pics/mine.jpg >"$t/ho
 run
 grep -q '^caelestia wallpaper' "$t/home/started" && fail "an existing install: its wallpaper replaced"
 [[ -e $t/home/.local/state/agros/wallpaper-set ]] || fail "an existing install: no mark"
+# A first time cut off after the wallpaper (which writes path.txt) and before its colours (prepare's time limit, a power
+# cut): that path.txt not taken for a wallpaper picked since, the colours set at the next run, the stand-in gone then
+rm -r "$t/home/.local/state"; : >"$t/home/started"
+CUT=1 run
+[[ ! -e $t/home/.local/state/agros/wallpaper-set && -s $t/home/.local/state/caelestia/wallpaper/path.txt ]] ||
+    fail "test setup: the first time not cut off between the wallpaper and the colours"
+: >"$t/home/started"
+run
+grep -q '^caelestia scheme set -n dynamic$' "$t/home/started" && [[ -e $t/home/.local/state/agros/wallpaper-set ]] ||
+    fail "a first time cut off before its colours: never set: $(cat "$t/home/started")"
+[[ ! -e $t/home/.local/state/agros/folders-later ]] || fail "a first time cut off: the stand-in left once done"
 
 # Up but its config never loaded (qs ipc unanswered: Quickshell running with nothing on screen, no bar, no
 # notifications), on the overlay's changes (its shell.qml a file of its own here): handed to caelestia-restart
