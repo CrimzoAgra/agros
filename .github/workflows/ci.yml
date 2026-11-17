@@ -54,10 +54,11 @@ jobs:
           # Thunar's headers with a compiler (hyprbars and the Thunar plugin built), mkinitcpio, bubblewrap and passt
           # (the boot's AUR sandbox and its network, checked for real: the host's loopback out of its reach), uwsm (its
           # Hyprland unit, agros-vmware's drop-in checked beside it), squashfs-tools (appimage-open reads an AppImage with
-          # it): the tests that check against them
+          # it), dash (nvidia-vaapi runs its sh file in a strict POSIX shell too) and desktop-file-utils (desktop-entries
+          # validates the launchers; both only when there, said nowhere): the tests that check against them
           pkgs=(git jq python python-yaml python-gobject python-xlib python-secretstorage gnupg shellcheck sudo libnotify fish
             procps-ng util-linux which diffutils pacman-contrib file gtk3 thunar lua lutris nodejs qt6-declarative hyprland
-            base-devel mkinitcpio bubblewrap passt xdg-desktop-portal-hyprland uwsm squashfs-tools)
+            base-devel mkinitcpio bubblewrap passt xdg-desktop-portal-hyprland uwsm squashfs-tools dash desktop-file-utils)
           # (a machine id: without one systemd's install hooks warn that /etc isn't set up; and its hook that loads a
           # package's kernel modules off: no systemd running here, it fails)
           systemd-machine-id-setup >/dev/null
