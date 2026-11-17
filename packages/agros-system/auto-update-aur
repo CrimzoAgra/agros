@@ -237,15 +237,19 @@ fi
 args=()
 for p in "${foreign[@]}" "${rebuild[@]}"; do args+=(--data-urlencode "arg[]=$p"); done
 info=$(curl -fsS --connect-timeout 10 -m 120 -G "https://aur.archlinux.org/rpc/v5/info" "${args[@]}" |
-    jq -r '.results[] | [.Name, .PackageBase, .Version, (.Maintainer // "-")] | @tsv') || fail "the AUR couldn't be reached"
+    jq -r '.results[] | [.Name, .PackageBase, .Version, (.Maintainer // "-"), (.CoMaintainers // [] | sort | join(","))] | @tsv') ||
+    fail "the AUR couldn't be reached"
 mapfile -t ignored < <(pacman-conf --config "$conf" IgnorePkg 2>/dev/null)
 # The foreign apps are built unreviewed (the user's choice), but not where the AUR's package may not be the one they
 # chose: one a signed repository installed (pacman's "Validated By": Signature; foreign only since that repository
-# dropped it, the AUR's of that name is someone else's build), or one whose AUR maintainer changed since its last build
-# here (adopted by another). Those wait for Updates, where its build files can be reviewed (dotfiles-check says so, from
-# failed and wanted). Kept across runs: the maintainer each base had at its last build here (aur-maintainers, "<base>
-# <maintainer>": the first one seen taken as it is), and a change waiting (aur-maintainer-changed, "<base> <maintainer>
-# <version installed then>"): once that version is replaced (updated from Updates), the new maintainer is taken
+# dropped it, the AUR's of that name is someone else's build), or one whose AUR maintainers changed since its last build
+# here (adopted by another, or a co-maintainer added or changed: a co-maintainer can push its build files too). Those
+# wait for Updates, where its build files can be reviewed (dotfiles-check says so, from failed and wanted). The
+# maintainers as one word, "<maintainer>:<co-maintainers, sorted, a comma between two>". Kept across runs: those each
+# base had at its last build here (aur-maintainers, "<base> <maintainers>": the first seen taken as they are), and a
+# change waiting (aur-maintainer-changed, "<base> <maintainers> <version installed then>"): once that version is
+# replaced (updated from Updates), the new maintainers are taken. A line from before co-maintainers were kept (no ":",
+# the maintainer alone) is compared by the maintainer alone, so the update doesn't hold every app back once
 maint=$au/aur-maintainers changed=$au/aur-maintainer-changed
 from_repo=''
 ((${#foreign[@]} == 0)) || from_repo=$(LC_ALL=C pacman -Qi --dbpath "$db" -- "${foreign[@]}" 2>/dev/null |
@@ -253,36 +257,42 @@ from_repo=''
 # field <file> <base> <n>: word <n> of its line; set_line <file> <base> [<rest>]: its line replaced (no <rest>: removed)
 field() { awk -v b="$2" -v n="$3" '$1 == b { print $n; exit }' "$1" 2>/dev/null; }
 set_line() { { awk -v b="$2" '$1 != b' "$1" 2>/dev/null; [[ -z ${3:-} ]] || echo "$2 $3"; } >"$1.new" && mv -f "$1.new" "$1"; }
-# guard <name> <base> <maintainer> <version installed>: why not to build it unreviewed, if so (exit 1)
+# same <maintainers kept> <maintainers now>: the same ones (a line from before co-maintainers: the maintainer alone)
+same() { [[ $1 == *:* && $1 == "$2" ]] || [[ $1 != *:* && $1 == "${2%%:*}" ]]; }
+# who <maintainers>: as said ("alice", "alice, co-maintained by bob,carol")
+who() { if [[ $1 == *:?* ]]; then echo "${1%%:*}, co-maintained by ${1#*:}"; else echo "${1%%:*}"; fi; }
+# guard <name> <base> <maintainers> <version installed>: why not to build it unreviewed, if so (exit 1)
 guard() {
-    local was
+    local was waiting
     if grep -qxF -- "$1" <<<"$from_repo"; then
         echo "$1 came from a repository that no longer has it, and the AUR's $1 is someone else's: update it from Updates, where you can review it"
         return 1
     fi
-    was=$(field "$maint" "$2" 2)
-    if [[ -z $was || $was == "$3" ]]; then
-        # (a change that went back: the one waiting forgotten, else a later change to that same account, once the
+    was=$(field "$maint" "$2" 2) waiting=$(field "$changed" "$2" 2)
+    if [[ -z $was ]] || same "$was" "$3"; then
+        # (a line from before co-maintainers: its co-maintainers now taken, so a later change to them is seen)
+        [[ -z $was || $was == *:* ]] || set_line "$maint" "$2" "$3"
+        # (a change that went back: the one waiting forgotten, else a later change to those same accounts, once the
         # version installed had moved on, was taken as reviewed in Updates)
-        [[ -z $(field "$changed" "$2" 2) ]] || set_line "$changed" "$2"
+        [[ -z $waiting ]] || set_line "$changed" "$2"
         return 0
     fi
-    if [[ $(field "$changed" "$2" 2) == "$3" && $(field "$changed" "$2" 3) != "$4" ]]; then
-        set_line "$changed" "$2"  # (updated from Updates since: the new maintainer taken, recorded at its build)
+    if [[ -n $waiting ]] && same "$waiting" "$3" && [[ $(field "$changed" "$2" 3) != "$4" ]]; then
+        set_line "$changed" "$2"  # (updated from Updates since: the new maintainers taken, recorded at its build)
         return 0
     fi
-    [[ $(field "$changed" "$2" 2) == "$3" ]] || set_line "$changed" "$2" "$3 $4"
-    echo "its AUR maintainer changed ($was to $3): update it from Updates, where you can review it"
+    [[ -n $waiting ]] && same "$waiting" "$3" || set_line "$changed" "$2" "$3 $4"
+    echo "its AUR maintainers changed ($(who "$was") to $(who "$3")): update it from Updates, where you can review it"
     return 1
 }
 # (pins: a rebuild of one [agros] publishes, at the version installed: what CI built and tested, never the AUR's newest,
 # which may be untested or one CI held back. --fetch's <base>=<version>)
 declare -A bases=() held_bases=() pins=() guarded=() maintainer=()
-while IFS=$'\t' read -r name base ver m; do
+while IFS=$'\t' read -r name base ver m co; do
     [[ -n $name ]] || continue
-    # (a name as the AUR allows them; an orphan's none, "-")
+    # (names as the AUR allows them; an orphan's none, "-")
     m=${m//[^A-Za-z0-9@._+-]/}
-    m=${m:--}
+    m="${m:--}:${co//[^A-Za-z0-9@._+,-]/}"
     [[ $name =~ $name_re && $base =~ $name_re && $ver =~ ^[A-Za-z0-9.:_+~-]+$ ]] || fail "the AUR named a package oddly"
     have=$(pacman -Q "$name" 2>/dev/null | cut -d' ' -f2)
     for g in "${ignored[@]}"; do
