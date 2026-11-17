@@ -749,7 +749,8 @@ helper a package update just brought works before `agros-links` has linked it), 
 - **`.config/librewolf/librewolf/librewolf.overrides.cfg`**: LibreWolf keeps cookies, logins and history when it closes
   (it erases them on every quit by default), allows the Firefox account and Sync, and tells sites the desktop's dark
   mode (Firefox's fingerprinting protection, all of it but that, instead of Resist Fingerprinting, which always says light).
-  The default browser
+  Video decoded on the graphics card (VA-API), and no AV1 (the desktop's RTX 2060 can't decode it, so YouTube sends VP9;
+  on every machine). The default browser
 - **`.config/mimeapps.list`**: default apps for file types
 - **`.local/bin/appimage-open`**: opens AppImages (`.local/share/applications/appimage-open.desktop`): installs the app
   in `~/Applications` with a launcher entry, or replaces the old version, and starts it; so an app's own Update button
