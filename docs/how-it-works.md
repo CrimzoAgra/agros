@@ -928,9 +928,12 @@ brings each change; nothing to run by hand).
     `tests/hypr-api.sh`; against Hyprland's own Lua stubs, in handlers too: every Hyprland name and event AgrOS uses,
     the settings it reads by name, and those it makes in one-line `hl.config` calls (a multi-line one only through the
     load); the plugin built; the overlay applied); when all pass, those versions go on the approved list, published
-    beside the `[agros]` repo (`agros-approved`, "name version" without the pkgrel, earlier approvals kept). Each
-    package's version is approved on its own, not as the set it was tested in (decided: pacman's soname dependencies
-    already refuse a mix whose libraries don't fit, and a mirror a little behind isn't held for it)
+    beside the `[agros]` repo (`agros-approved`, "name version" without the pkgrel, earlier approvals kept). The
+    versions are read before anything built is in the test job (its builds run there as root and could make a later list
+    say anything) and handed on as a job output, not an artifact; the list read after the tests only takes one out (Arch
+    moved on meanwhile), never adds one. Each package's version is approved on its own, not as the set it was tested in
+    (decided: pacman's soname dependencies already refuse a mix whose libraries don't fit, and a mirror a little behind
+    isn't held for it)
   - `update-gate <pacman.conf> <out>` gives the pacman.conf to update with: without the gate's Include when every gated
     package goes to an approved version (or only a rebuild of the same one, as for a library's new soname), else as it
     is (held together, and said: "waits for AgrOS's check"); a library whose update would break a held one held with it,

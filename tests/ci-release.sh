@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
-# CI's release (.github/workflows/ci.yml): it runs only once the tests passed or held something back (the test job
-# fails on AgrOS's own break, and a release then never puts anything out), the hold applied whenever they didn't all
-# pass; the versions the tests passed with approved (none on an Arch update that broke them, a gated package not
-# installed a failure, the version without its pkgrel), added to those published before (no line that isn't one, no
-# repeat, the last 20 of each package); and the day Arch last passed today's only when it did. The steps' scripts as the
-# workflow has them, run here with pacman and curl as stand-ins
+# CI's release (.github/workflows/ci.yml): it runs only once the tests passed or held something back (the test job fails
+# on AgrOS's own break, and a release then never puts anything out), the hold applied whenever they didn't all pass; the
+# versions the tests passed with approved (none on an Arch update that broke them, a gated package not in Arch's repos a
+# failure, the version without its pkgrel), added to those published before (no line that isn't one, no repeat, the last
+# 20 of each package); and the day Arch last passed today's only when it did. This run's approvals only versions the
+# test job read before anything built was there (its gated step, a job output): the builds run as root in that job and
+# could make its later list say anything, so that list only takes versions out (one Arch moved on during the tests),
+# never adds one; no artifact carries them. The steps' scripts as the workflow has them, run here with pacman and curl
+# as stand-ins
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
@@ -29,6 +32,20 @@ if len(held) != 1 or held[0].get("if", "").replace('"', "'") != "needs.test.outp
 pub = jobs["publish"].get("needs", [])
 if "release" not in ([pub] if isinstance(pub, str) else pub):
     bad.append("the pages published without the release")
+test = jobs["test"]
+outs = test.get("outputs", {})
+if "steps.gated.outputs.gated" not in str(outs.get("gated")) or "steps.approved.outputs.approved" not in str(outs.get("approved")):
+    bad.append(f"the test job doesn't hand on the gated and approved versions as its outputs: {outs}")
+ts = test["steps"]
+gi = [i for i, s in enumerate(ts) if s.get("id") == "gated"]
+built = [i for i, s in enumerate(ts) if any(w in s.get("run", "") + s.get("uses", "") for w in ("[agros]", "download-artifact", "test-passes", "tests/run.sh"))]
+if len(gi) != 1 or not built or gi[0] > min(built):
+    bad.append("the gated versions not read before anything built is in the test job")
+if any(s.get("with", {}).get("name") == "approved" for j in jobs.values() for s in j.get("steps", [])):
+    bad.append("the approved versions carried by an artifact (one the test job's builds could replace)")
+env = next((s.get("env", {}) for s in rel["steps"] if s.get("name") == "Approved upstream versions"), {})
+if "needs.test.outputs.gated" not in str(env.get("GATED")) or "needs.test.outputs.approved" not in str(env.get("APPROVED")):
+    bad.append("the release's approvals not from the test job's outputs (GATED, APPROVED)")
 for b in bad:
     print(b)
 sys.exit(1 if bad else 0)
@@ -43,16 +60,28 @@ PY
     sed -i "s|/tmp/|$t/|g" "$3"
     [[ -s $3 ]] || fail "no step \"$2\" in the $1 job"
 }
-mkdir -p "$t/bin"
-# (pacman -Q: installed at $V, but $MISSING)
+# (pacman -Q: installed at $V, but $MISSING; -S: installed, but $MISSING not in the repos)
 # shellcheck disable=SC2016  # (expanded by the stand-in)
-printf '#!/bin/bash\n[[ $1 == -Q && $2 != "${MISSING:-}" ]] || exit 1\necho "$2 ${V:-0.58.0-2}"\n' >"$t/bin/pacman"
-chmod +x "$t/bin/pacman"
-
-# The test job's approved versions
-step test "Approved upstream versions" "$t/approve"
+stub pacman 'case $1 in
+-S) echo "$*" >>'"$t"'/installed; [[ " $* " != *" ${MISSING:-none} "* ]] ;;
+-Q) [[ $2 != "${MISSING:-}" ]] || exit 1; echo "$2 ${V:-0.58.0-2}" ;;
+*) exit 1 ;;
+esac'
 read -ra gated < <(sed -n 's/^[[:space:]]*IgnorePkg[[:space:]]*=[[:space:]]*//p' "$here/packages/agros-system/agros-gate.conf" | paste -sd' ')
 ((${#gated[@]} > 1)) || fail "test setup: no gated packages in agros-gate.conf"
+
+# The test job's gated versions, before anything built: each gated package installed from Arch's repos, read, a job
+# output ("gated<<EOF" lines)
+step test "Gated versions (before anything built is here)" "$t/gated"
+gate() { : >"$t/gh" && (cd "$here" && GITHUB_OUTPUT=$t/gh PATH=$t/bin:$PATH bash -eo pipefail "$t/gated" 2>&1); }
+out=$(gate) || fail "the gated versions not read: $out"
+[[ $(cat "$t/gh") == "$(echo 'gated<<EOF'; printf '%s 0.58.0\n' "${gated[@]}"; echo EOF)" ]] ||
+    fail "not every gated package at its version, without its pkgrel, as the job's output: $(paste -sd, "$t/gh")"
+[[ $(tail -n1 "$t/installed") == *" ${gated[*]}" ]] || fail "the gated packages not installed first: $(tail -n1 "$t/installed")"
+out=$(MISSING=${gated[1]} gate) && fail "a gated package Arch doesn't have passed: $(paste -sd, "$t/gh")"
+
+# The test job's approved versions, after the tests
+step test "Approved upstream versions" "$t/approve"
 approve() { (cd "$here" && PATH=$t/bin:$PATH bash -eo pipefail "$t/approve" 2>&1); }
 out=$(RESULT=ok approve) || fail "the approved versions not made: $out"
 [[ $(cat "$t/approved") == "$(printf '%s 0.58.0\n' "${gated[@]}")" ]] ||
@@ -66,15 +95,19 @@ out=$(RESULT=ok MISSING=${gated[1]} approve) && fail "a gated package not instal
 
 # The release's approved list: the earlier ones (as the site has them, ci/kept.sh) and this run's, merged
 step release "Approved upstream versions" "$t/merge"
-mkdir -p "$t/rel/ci" "$t/rel/out/x86_64" "$t/approved-now"
+mkdir -p "$t/rel/ci" "$t/rel/out/x86_64"
 cp "$here/ci/kept.sh" "$t/rel/ci/"
 # (the site's list: $BEFORE, or the answer $CODE)
 # shellcheck disable=SC2016
 printf '#!/bin/bash\necho "$*" >>%s/urls\nwhile [[ $1 != -o ]]; do shift; done\nprintf "%%s\n" "$BEFORE" >"$2"\nprintf %%s "${CODE:-200}"\n' "$t" >"$t/bin/curl"
 chmod +x "$t/bin/curl"
-merge() { (cd "$t/rel" && OWNER=Owner GITHUB_REPOSITORY=Owner/agros PATH=$t/bin:$PATH bash -eo pipefail "$t/merge" >/dev/null 2>&1); }
+# (this run's: $GATED, the test job's gated step's, and $APPROVED, its approved step's; both these unless given)
+now=$(printf '%s\n' 'hyprland 0.24.0' 'hyprland 0.25.0' 'aquamarine 0.10.0')
+merge() {
+    (cd "$t/rel" && OWNER=Owner GITHUB_REPOSITORY=Owner/agros RESULT=${RESULT-ok} GATED=${GATED-$now} APPROVED=${APPROVED-$now} \
+        PATH=$t/bin:$PATH bash -eo pipefail "$t/merge" >/dev/null 2>&1)
+}
 before=$(for i in $(seq 1 24); do echo "hyprland 0.$i.0"; done; echo "aquamarine 0.9.0"; echo '<html>not found</html>')
-printf '%s\n' 'hyprland 0.24.0' 'hyprland 0.25.0' 'aquamarine 0.10.0' >"$t/approved-now/approved"
 BEFORE=$before merge || fail "the approved list not merged"
 grep -Eqx 'https://Owner\.github\.io/agros/x86_64/agros-approved\?t=[0-9]+' <<<"$(sed 's/.* //' "$t/urls")" ||
     fail "the earlier list not read from this repo's site, its current copy (?t=): $(cat "$t/urls")"
@@ -84,9 +117,20 @@ got=$(cat "$t/rel/out/x86_64/agros-approved")
     fail "not the last 20 Hyprlands, each once, in order: $(grep '^hyprland ' <<<"$got" | paste -sd,)"
 [[ $(grep -v '^hyprland ' <<<"$got") == $'aquamarine 0.9.0\naquamarine 0.10.0' ]] ||
     fail "another package's approvals, or a line that isn't one: $(grep -v '^hyprland ' <<<"$got")"
-CODE=404 BEFORE='' merge && [[ $(cat "$t/rel/out/x86_64/agros-approved") == "$(cat "$t/approved-now/approved")" ]] ||
+CODE=404 BEFORE='' merge && [[ $(cat "$t/rel/out/x86_64/agros-approved") == "$now" ]] ||
     fail "not published yet: this run's approvals not the list"
 CODE=503 BEFORE='' merge && fail "the earlier list unreadable: published without them"
+# This run's only those read before anything built (GATED) that the tests passed with (APPROVED): one the build made up
+# (in APPROVED alone), one Arch moved on from during the tests (another version in each), none on a result but ok or
+# hold-agros
+approved() { CODE=404 BEFORE='' merge && cat "$t/rel/out/x86_64/agros-approved"; }
+[[ $(APPROVED=$now$'\nhyprland 9.9.9\nsudo 1.0' approved) == "$now" ]] || fail "a version the test job's builds could have made up approved"
+[[ $(GATED=$'hyprland 0.24.0\naquamarine 0.10.0' APPROVED=$'hyprland 0.25.0\naquamarine 0.10.0' approved) == 'aquamarine 0.10.0' ]] ||
+    fail "a version read before the tests, not the one they passed with, approved"
+[[ $(RESULT=hold-agros approved) == "$now" ]] || fail "a hold of AgrOS's builds (today's Arch passed) approved nothing"
+for r in hold-upstream fail ''; do
+    [[ -z $(RESULT=$r approved) ]] || fail "the tests' result ${r:-none}: approved all the same"
+done
 
 # The day Arch last passed: today's when it did (all passed, or only this run's AUR builds broke them), else the site's
 step release "The day Arch last passed" "$t/day"
