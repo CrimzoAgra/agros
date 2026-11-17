@@ -23,7 +23,7 @@ Read more in [Welcome to AgrOS](manual/01-welcome.md).
   <img alt="Latest ISO" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fsourceforge.net%2Fprojects%2Fagros-iso%2Fbest_release.json&query=%24.release.date&label=latest%20ISO&color=4c6ef5">
 </p>
 
-About 2.1 GB, and always the newest: a new ISO is built and published by itself after each change. Check it with its
+About 1.9 GB, and always the newest: a new ISO is built and published by itself after each change. Check it with its
 [.sha256](https://pub-f1a3a482900748e8b69cd81361ab96e1.r2.dev/agros-latest.iso.sha256) and
 [.sig](https://pub-f1a3a482900748e8b69cd81361ab96e1.r2.dev/agros-latest.iso.sig), put it on a USB stick and see
 [Installing](manual/02-installing.md). Slow, or want an earlier one? Every ISO, with its checksum and signature, is on
