@@ -7,8 +7,9 @@
 # - the ISO: agros-iso's package list as agros-trim.sh leaves it (run on a copy, as the build does); each of its
 #   fallbacks (a name CachyOS's list no longer has, the LTS kernel kept, NoExtract not added: its lines that end in
 #   "(agros-trim.sh)", otherwise only in the ISO build's log) said in the issue
-# - a new install: the installer's list (netinstall.yaml's selected groups, not the handheld ones). CachyOS's own
-#   pacstrap base (in its installer's package) isn't in it: the same each week, so nothing to watch
+# - a new install: the installer's list (netinstall.yaml's selected groups, whatever their platform: the cachyos
+#   branch's installer installs each one). CachyOS's own pacstrap base (in its installer's package) isn't in it: the
+#   same each week, so nothing to watch
 set -euo pipefail
 export LC_ALL=C
 out=${1:?usage: ci/sizes.sh <out dir> [<last weeks baseline>]}
@@ -55,7 +56,7 @@ python - "$p/airootfs/usr/share/agros/netinstall.yaml" >"$w/inst.list" <<'EOF'
 import sys, yaml
 def walk(g, on):
     on = g.get("selected", on)
-    if not on or g.get("platform") == "handheld":
+    if not on:
         return
     for p in g.get("packages") or []:
         print(p["name"] if isinstance(p, dict) else p)  # (Calamares takes {name, description} too)

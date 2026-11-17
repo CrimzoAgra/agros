@@ -30,11 +30,13 @@ PATH=$t/bin:$PATH "$here/.local/bin/agros-each-user" other-cmd || fail "a run of
 # (only that value: any other, 0 too, runs it)
 AGROS_NO_USER_HOOKS=0 PATH=$t/bin:$PATH "$here/.local/bin/agros-each-user" hook-cmd --prebuild || fail "a run with AGROS_NO_USER_HOOKS=0 failed"
 [[ -e $t/ran ]] || fail "not run with AGROS_NO_USER_HOOKS=0 (only 1 skips it)"
+# gone <pattern>: no process whose command line is <pattern> (grep -E, whole) left, within 5 seconds (a stop takes a
+# moment, longer beside the other tests: a fixed wait failed this now and then)
+gone() { local _; for _ in {1..50}; do grep -qxE "$1" <<<"$(ps -eo args=)" || return 0; sleep 0.1; done; return 1; }
 # --as stopped by its caller (auto-update's timeout round a user's Flatpak reinstall): the command stopped with it, though
 # in a session of its own; its exit status passed back otherwise
 PATH=$t/bin:$PATH timeout 1 "$here/.local/bin/agros-each-user" --as "$me" sleep 37.7 && fail "a timed-out --as reported success"
-sleep 0.3
-grep -qx 'sleep 37.7' <<<"$(ps -eo args=)" && fail "a command run with --as left running after its caller's timeout"
+gone 'sleep 37\.7' || fail "a command run with --as left running after its caller's timeout"
 PATH=$t/bin:$PATH "$here/.local/bin/agros-each-user" --as "$me" sh -c 'exit 3' && fail "--as lost its command's failure"
 [[ $(PATH=$t/bin:$PATH "$here/.local/bin/agros-each-user" --as "$me" echo out) == out ]] || fail "--as lost its command's output"
 # ...a command's own children too (its whole session); and the run over every user stopped with it, not on to the next
@@ -52,8 +54,7 @@ chmod +x "$t/u1/.local/bin/slow-cmd" "$t/u2/.local/bin/slow-cmd"
 start=$SECONDS
 PATH=$t/bin:$PATH timeout 1 "$here/.local/bin/agros-each-user" slow-cmd && fail "a timed-out run over the users reported success"
 ((SECONDS - start < 4)) && [[ $(wc -l <"$t/slow") == 1 ]] || fail "a stopped run over the users went on to the next one: $(cat "$t/slow")"
-sleep 0.3
-grep -qxE 'sleep 37\.[69]' <<<"$(ps -eo args=)" && fail "a stopped command, or its child, left running"
+gone 'sleep 37\.[69]' || fail "a stopped command, or its child, left running"
 # Its output from a terminal (through this's pipes) all out, in order, before the caller's next line
 # (a lot of it: the pipes still emptying when this returned, the caller's line came first)
 for _ in 1 2 3 4 5; do
@@ -66,13 +67,11 @@ done
 # ...stopped by INT or HUP the same; and what it started in a group of its own (a timeout inside it) stopped too
 for s in INT HUP; do
     PATH=$t/bin:$PATH timeout -s "$s" 1 "$here/.local/bin/agros-each-user" --as "$me" sleep 37.5 && fail "an --as stopped by $s reported success"
-    sleep 0.3
-    grep -qx 'sleep 37.5' <<<"$(ps -eo args=)" && fail "a command run with --as left running after its caller's $s"
+    gone 'sleep 37\.5' || fail "a command run with --as left running after its caller's $s"
 done
 PATH=$t/bin:$PATH timeout 1 "$here/.local/bin/agros-each-user" --as "$me" sh -c 'timeout 100 sleep 37.4; echo after' &&
     fail "a timed-out --as (a timeout inside) reported success"
-sleep 0.3
-grep -qx 'sleep 37.4' <<<"$(ps -eo args=)" && fail "a command's own timeout (a group of its own) left running after its caller's timeout"
+gone 'sleep 37\.4' || fail "a command's own timeout (a group of its own) left running after its caller's timeout"
 # Its output all out to a reader slower than the few seconds what it leaves gets (CI's terminal: the last lines lost)
 got=$({ PATH=$t/bin:$PATH "$here/.local/bin/agros-each-user" --as "$me" sh -c 'seq 100000; echo LAST'; } | { sleep 5; cat; } | grep -cx '100000\|LAST' || true)
 [[ $got == 2 ]] || fail "a command's output cut off for a slow reader"

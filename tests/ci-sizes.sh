@@ -115,7 +115,7 @@ grep -qxF '| The ISO: its packages | not worked out this week |' "$t/out/table" 
 # -Fl fails on the names in $t/nofiles) and a stand-in agros-iso
 mkdir -p "$t/bin"
 printf '%s\n' 'hyprland 65.00MiB aquamarine cairo' 'aquamarine 1.50MiB' 'cairo 1.50MiB' 'occt 30.00MiB' 'foot 2.00MiB' \
-    'vim 4.00MiB' 'broken 1.00MiB libfoo' >"$t/repo"
+    'vim 4.00MiB' 'broken 1.00MiB libfoo' 'steamdeck-thing 1.00MiB' >"$t/repo"
 : >"$t/nofiles"
 cat >"$t/bin/pacman" <<'EOF'
 #!/bin/bash
@@ -189,8 +189,8 @@ isorepo() {
     git -C "$iso" init -q
     git -C "$iso" add -A && git -C "$iso" -c user.name=t -c user.email=t@t commit -qm x
 }
-# (a selected group's packages, one as {name, description}, and its subgroups'; not an unselected group's, nor a
-# handheld one's)
+# (a selected group's packages, one as {name, description}, and its subgroups', a platform's group too (the cachyos
+# branch's installer installs each one, whatever its platform); not an unselected group's)
 yaml='- name: base
   selected: true
   packages:
@@ -217,7 +217,7 @@ names() { sed -n "s/^$1 \([^ ]*\) .*/\1/p" "$t/sout/baseline" | paste -sd' '; }
 isorepo $'# the desktop\nhyprland\nocct' "$yaml"
 sizes || fail "ci/sizes.sh failed: $(cat "$t/err")"
 [[ $(names iso) == "aquamarine cairo hyprland" ]] || fail "the ISO's packages: $(names iso)"
-[[ $(names inst) == "aquamarine cairo foot hyprland" ]] || fail "a new install's packages: $(names inst)"
+[[ $(names inst) == "aquamarine cairo foot hyprland steamdeck-thing" ]] || fail "a new install's packages: $(names inst)"
 grep -qxF '| The ISO: its packages | 3, 68 MiB installed |' "$t/sout/table" || fail "the ISO's row: $(cat "$t/sout/table")"
 grep -qxF "The ISO: not in CachyOS's list any more (renamed or dropped?): micro (agros-trim.sh)" "$t/sout/report" ||
     fail "agros-trim.sh's fallback (stderr, in colour) not said: $(cat "$t/sout/report")"
@@ -238,7 +238,7 @@ for s in "A new install: its list asks for nosuchpkg, which no repo has (the bui
 in: $r"
 done
 grep -q 'broken, which no repo has' <<<"$r" && fail "a broken dependency said to be a name no repo has: $r"
-[[ $(names inst) == "aquamarine cairo foot hyprland" ]] || fail "a new install not measured beside the unknown name: $(names inst)"
+[[ $(names inst) == "aquamarine cairo foot hyprland steamdeck-thing" ]] || fail "a new install not measured beside the unknown name: $(names inst)"
 [[ $(grep '^iso ' "$t/sout/baseline") == "$(grep '^iso ' "$t/good")" ]] ||
     fail "last week's ISO baseline not kept: $(cat "$t/sout/baseline")"
 : >"$t/nofiles"

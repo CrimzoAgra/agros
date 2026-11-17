@@ -17,6 +17,8 @@ if [[ -f /usr/lib/systemd/user/wayland-wm@.service ]] && command -v systemd-anal
     out=$(cd "$u" && SYSTEMD_UNIT_PATH="$u:" systemd-analyze --user --man=no verify "$u/wayland-wm@hyprland.desktop.service" 2>&1) ||
         fail "systemd-analyze verify: $out"
     [[ -z $out ]] || fail "systemd-analyze verify: $out"
+else
+    skipped "no uwsm or systemd-analyze: the drop-in not verified beside uwsm's unit"
 fi
 # Its ExecStartPre run as sh would (%t: a runtime folder here, vmwgfx: a file here)
 pre=$(sed -n 's/^ExecStartPre=//p' "$conf" | sed "s|%t|$t/run|g; s|/sys/module/vmwgfx|$t/vmwgfx|g; s/\\$\\$/\$/g")

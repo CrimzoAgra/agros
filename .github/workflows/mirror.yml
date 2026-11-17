@@ -1,7 +1,7 @@
 name: Mirror
 
-# The [agros] repo's second server: what GitHub Pages publishes, copied to Cloudflare R2 after each CI run that
-# succeeded (ci/mirror.sh), so a Pages outage doesn't stop every AgrOS machine's updates. pacman.conf lists Pages first,
+# The [agros] repo's second server: what GitHub Pages publishes, copied to Cloudflare R2 after each CI run on main
+# (ci/mirror.sh), so a Pages outage doesn't stop every AgrOS machine's updates. pacman.conf lists Pages first,
 # then https://pub-f1a3a482900748e8b69cd81361ab96e1.r2.dev/repo/$arch (agros-iso's pacman.conf files; agros-system's
 # install on machines installed before). The same bucket as agros-iso's ISO (agros-latest.iso at its root): the
 # repo under repo/x86_64, the current set only (R2's free 10 GB). Secrets, as agros-iso's: R2_ACCOUNT_ID,
@@ -23,11 +23,13 @@ permissions:
 
 jobs:
   mirror:
-    # (CI's runs on main that succeeded: a pull request's publish nothing)
+    # (CI's runs on main, a pull request's publish nothing. One that failed too: Pages may have been deployed before a
+    # later job failed (the ISO's start, say), and the mirror then stayed a publish behind; one that published nothing
+    # copies what's there again, rclone sending nothing that hasn't changed)
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' &&
-      github.event.workflow_run.event != 'pull_request')
+      ((github.event.workflow_run.conclusion == 'success' || github.event.workflow_run.conclusion == 'failure') &&
+      github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.event != 'pull_request')
     runs-on: ubuntu-26.04
     container:
       image: archlinux:latest

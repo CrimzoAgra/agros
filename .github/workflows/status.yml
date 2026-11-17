@@ -16,6 +16,7 @@ permissions:
 jobs:
   status:
     runs-on: ubuntu-26.04
+    timeout-minutes: 60
     steps:
       - name: Lisbon's 17:00
         id: when

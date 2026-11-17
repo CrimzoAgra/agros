@@ -83,8 +83,9 @@ lock="$h/.local/state/capri-update.lock"
 # A run fail() started again (CAPRI_UPDATE_LOCKED, the lock held on its fd 9) goes on under it, not shut out by itself
 out=$(exec 9>"$lock"; flock -n 9 && CAPRI_UPDATE_LOCKED=1 run --check)
 grep -q "v0.3.2" <<<"$out" || fail "a run started again under its own lock shut out: $out"
-flock "$lock" sleep 2 & holder=$!
-sleep 0.3
+flock "$lock" sleep 5 & holder=$!
+# (until it holds the lock, however busy the machine: a fixed wait lost the race with the other tests running)
+for _ in {1..50}; do flock -n "$lock" true || break; sleep 0.1; done
 start=$SECONDS
 out=$(run --check) || fail "--check during an update failed: $out"
 [[ -z $out && $((SECONDS - start)) -lt 2 ]] || fail "--check during an update waited or said something: $out"

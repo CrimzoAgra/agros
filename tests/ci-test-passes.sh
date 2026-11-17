@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ci/test-passes.sh: which side broke the tests. All pass on this run's [agros]: ok; those that failed pass with the
-# published [agros]: hold-agros; then on Arch as of the last good day: hold-upstream; else fail. Each pass reruns only
-# what failed before. pacman and the tests are stand-ins, which fail as $BROKEN says (built, published, today)
+# published [agros]: hold-agros; then on Arch as of the last good day: hold-upstream; else fail. Each pass runs every
+# test (what it ran: "all"). pacman and the tests are stand-ins, which fail as $BROKEN says (built, published, today)
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
@@ -17,7 +17,7 @@ printf '#!/bin/sh\nshift 2\nexec "$@"\n' >"$t/bin/runuser"
 ahead "no longer fits main"; ahead x
 ok_line test "2 left out" >"$t/main-line"
 # shellcheck disable=SC2016
-printf '#!/bin/bash\necho "$*" >>%s/ran\ntrap -p INT >>%s/int\n[[ " $BROKEN " != *" crash "* ]] || exit 3\nagros=$(sed -n "s/^Server = //p" %s/pacman.conf); arch=$(cat %s/mirrorlist)\nfor n in ${*:-hypr-api lutris}; do\n  case " $BROKEN " in *" $n@${agros##*/} "*|*" $n@today "*) [[ -n $arch && " $BROKEN " != *" $n@always "* ]] && echo "ok $n" || echo "FAIL $n: broken" ;; *" $n@main "*) sed "s/^ok test /ok $n /" %s/main-line ;; *) echo "ok $n" ;; esac\ndone\n' \
+printf '#!/bin/bash\necho "${*:-all}" >>%s/ran\ntrap -p INT >>%s/int\n[[ " $BROKEN " != *" crash "* ]] || exit 3\nagros=$(sed -n "s/^Server = //p" %s/pacman.conf); arch=$(cat %s/mirrorlist)\nfor n in ${*:-hypr-api lutris}; do\n  case " $BROKEN " in *" $n@${agros##*/} "*|*" $n@today "*) [[ -n $arch && " $BROKEN " != *" $n@always "* ]] && echo "ok $n" || echo "FAIL $n: broken" ;; *" $n@main "*) sed "s/^ok test /ok $n /" %s/main-line ;; *) echo "ok $n" ;; esac\ndone\n' \
     "$t" "$t" "$t" "$t" "$t" >"$t/repo/tests/run.sh"
 chmod +x "$t/bin/"* "$t/repo/tests/run.sh"
 # go <BROKEN> [<day>]: the result line, what ran (a line per pass)
@@ -31,28 +31,32 @@ go() {
         >/dev/null 2>&1 || true
     echo "$(cat "$t/out") | $(paste -sd'|' "$t/ran")"
 }
-[[ $(go "") == "result=ok | " ]] || fail "all passing: not ok: $(go "")"
+[[ $(go "") == "result=ok | all" ]] || fail "all passing: not ok: $(go "")"
 # (no stale database signature left for the unsigned built repo: pacman refused its new database with the old .sig)
 go "" >/dev/null
 [[ ! -e $t/sync/agros.db.sig && ! -e $t/sync/agros.files.sig && -e $t/sync/core.db ]] ||
     fail "[agros]'s old database signatures left, or another repo's file taken: $(ls "$t/sync")"
-# (the published [agros] fixes lutris: this run's AUR builds broke it; rerun alone)
-[[ $(go "lutris@built") == "result=hold-agros | |lutris" ]] || fail "broken by this run's [agros]: $(go "lutris@built")"
+# (the published [agros] fixes lutris: this run's AUR builds broke it; every test run again)
+[[ $(go "lutris@built") == "result=hold-agros | all|all" ]] || fail "broken by this run's [agros]: $(go "lutris@built")"
 grep -q 'FAIL lutris' "$t/report" || fail "the report doesn't say what failed: $(cat "$t/report")"
+# (one that passed on this run's [agros] fails on the published one, which a hold would put out beside this commit's
+# own packages: an overlay changed for the new Caelestia, on the old one): not a hold
+[[ $(go "hypr-api@built lutris@published") == "result=fail | all|all" ]] ||
+    fail "a test failing only on the published [agros] not run before holding it: $(go "hypr-api@built lutris@published")"
 # (broken on today's Arch, whatever [agros]; fine on the last good day's Arch)
-[[ $(go "hypr-api@today" 2026/11/14) == "result=hold-upstream | |hypr-api|hypr-api" ]] || fail "broken by an Arch update: $(go "hypr-api@today" 2026/11/14)"
+[[ $(go "hypr-api@today" 2026/11/14) == "result=hold-upstream | all|all|all" ]] || fail "broken by an Arch update: $(go "hypr-api@today" 2026/11/14)"
 grep -qx 'Server = https://archive.archlinux.org/repos/2026/11/14/$repo/os/$arch' "$t/mirrorlist" || fail "not on Arch's snapshot of that day: $(cat "$t/mirrorlist")"
-[[ $(go "hypr-api@today hypr-api@always" 2026/11/14) == "result=fail | |hypr-api|hypr-api" ]] || fail "AgrOS's own break not a failure"
-[[ $(go "hypr-api@today") == "result=fail | |hypr-api" ]] || fail "no last good day: not a failure"
+[[ $(go "hypr-api@today hypr-api@always" 2026/11/14) == "result=fail | all|all|all" ]] || fail "AgrOS's own break not a failure"
+[[ $(go "hypr-api@today") == "result=fail | all|all" ]] || fail "no last good day: not a failure"
 # (run.sh failing with no test named (runuser refused, run.sh cut off): not "all passed", which approves Hyprland)
-[[ $(go crash) == "result=fail | " ]] || fail "the tests not run read as all passed: $(go crash)"
+[[ $(go crash) == "result=fail | all" ]] || fail "the tests not run read as all passed: $(go crash)"
 # (upstream's next release not fitting: no failure, said in the report once, after what failed, whatever the result)
-[[ $(go "lutris@main") == "result=ok | " ]] || fail "upstream's main not fitting: not ok: $(go "lutris@main")"
+[[ $(go "lutris@main") == "result=ok | all" ]] || fail "upstream's main not fitting: not ok: $(go "lutris@main")"
 grep -qx '    AHEAD lutris: no longer fits main; x' "$t/report" || fail "upstream's main not fitting not in the report: $(cat "$t/report")"
-[[ $(go "lutris@main hypr-api@built") == "result=hold-agros | |hypr-api" ]] || fail "with upstream's main not fitting: $(go "lutris@main hypr-api@built")"
+[[ $(go "lutris@main hypr-api@built") == "result=hold-agros | all|all" ]] || fail "with upstream's main not fitting: $(go "lutris@main hypr-api@built")"
 [[ $(grep -c AHEAD "$t/report") == 1 && $(tail -n1 "$t/report") == "    AHEAD lutris: no longer fits main; x" ]] ||
     fail "upstream's main not said once, at the end: $(cat "$t/report")"
-[[ $(go "lutris@main hypr-api@today hypr-api@always" 2026/11/14) == "result=fail | |hypr-api|hypr-api" ]] ||
+[[ $(go "lutris@main hypr-api@today hypr-api@always" 2026/11/14) == "result=fail | all|all|all" ]] ||
     fail "AgrOS's own break not a failure with a test saying upstream's main doesn't fit"
 # (not in a background job, which starts with Ctrl+C ignored: dotfiles-sync-edge's Ctrl+C then never reached the sync)
 [[ ! -s $t/int ]] || fail "the tests ran with Ctrl+C ignored: $(sort -u "$t/int")"
