@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The packages in the repo to sign as CI meant to build them (CI's release job, before it signs):
+# The packages in the repo to sign as CI meant to build them (CI's release job, first, before repo-add reads them):
 #   AGROS_OWN_SUMS=<sha256sum's lines for them> [AGROS_PUBLISHED=<repo URL>] ci/own-check.sh <dir>
 # The repo job runs AUR build scripts, root through sudo, in a privileged container: one could change an agros-*
 # package there (agros-keyring: a key planted) or add one, and the release signs every package without a signature.
@@ -9,10 +9,14 @@
 # The rest must be ones the run builds: in aur/packages.txt, Quickshell or CachyOS's installer (built apart), or
 # published before (the AUR packages those need), one file each; and none may replace another package (pacman -Syu
 # swaps the system's for it unasked: sudo, say) or ship pacman's keyrings or settings. A new AUR dependency is refused
-# too, said, until aur/packages.txt lists it
+# too, said, until aur/packages.txt lists it.
+# Every package, AgrOS's own too, read first: its .PKGINFO only as makepkg writes it (ci/pkginfo.sh), as repo-add,
+# which the release runs after this, runs a line of another kind as code. Read here with bsdtar alone
 set -euo pipefail
 shopt -s nullglob
 root=$(cd "$(dirname "$0")/.." && pwd)
+# shellcheck source=pkginfo.sh
+. "$root/ci/pkginfo.sh"
 dir=${1:?usage: own-check.sh <dir>}
 sums=${AGROS_OWN_SUMS:?no sums from the agros job}
 expected=$(sed -e 's/#.*//' -e 's/[[:space:]]//g' -e 's|^.*/||' "$root/aur/packages.txt"; printf '%s\n' quickshell-git cachyos-calamares)
@@ -37,22 +41,24 @@ if [[ -n ${AGROS_PUBLISHED:-} ]]; then
     esac
 fi
 cd "$dir"
-bad=0 seen=$'\n'
+bad=0 seen=$'\n' pkgname=''  # (pkginfo's)
 for f in *.pkg.tar*; do
     [[ $f == *.sig ]] && continue
-    info=$(bsdtar -xOf "$f" .PKGINFO 2>/dev/null) || info=
-    name=$(sed -n 's/^pkgname = //p' <<<"$info")
-    if [[ $f == agros-* || $name == agros-* || -z $name ]]; then
+    # (its .PKGINFO only as makepkg writes it, the file named after it: ci/pkginfo.sh)
+    pkginfo "$f" || { bad=1; continue; }
+    name=$pkgname
+    if [[ $f == agros-* || $name == agros-* ]]; then
         want=$(awk -v f="$f" '$2 == f || $2 == "*" f { print $1; exit }' <<<"$sums")
         got=$(sha256sum <"$f" | cut -d' ' -f1)
-        [[ -n $want && $got == "$want" ]] || { echo "!! $f (${name:-no .PKGINFO}) isn't as the agros job built it: refused"; bad=1; }
+        [[ -n $want && $got == "$want" ]] || { echo "!! $f ($name) isn't as the agros job built it: refused"; bad=1; }
         continue
     fi
     grep -qxF -- "$name" <<<"$expected" ||
         { echo "!! $f: $name isn't one this run builds or published before: refused (a new AUR dependency: add it to aur/packages.txt)"; bad=1; }
-    # (one file a name, named after it: another under an expected name took the database's entry)
-    [[ $f == "$name"-* && $seen != *$'\n'"$name"$'\n'* ]] || { echo "!! $f: a second package named $name, or misnamed: refused"; bad=1; }
+    # (one file a name: another under an expected name took the database's entry)
+    [[ $seen != *$'\n'"$name"$'\n'* ]] || { echo "!! $f: a second package named $name: refused"; bad=1; }
     seen+=$name$'\n'
+    info=$(bsdtar -xOqf "$f" .PKGINFO 2>/dev/null) || info=
     rel=$(sed -n 's/^replaces = //p' <<<"$info" | paste -sd' ')
     [[ -z $rel ]] || { echo "!! $f replaces $rel: refused"; bad=1; }
     # (the whole listing read into a variable first: no early reader on a pipe)

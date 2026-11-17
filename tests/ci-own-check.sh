@@ -4,17 +4,20 @@
 # another file name), one not readable, or one of the agros job's missing, and nothing is signed. The rest only ones
 # the run builds (aur/packages.txt, Quickshell, or in the published database, its signature checked): one planted, a
 # second under an expected name, one that replaces another package or ships pacman's keyrings refused; a pacman hook
-# isn't. No sums: refused
+# isn't. Any package, AgrOS's own too, whose .PKGINFO isn't as makepkg writes it refused (pacman's repo-add, after it,
+# runs such a line as code: a key x[$(...)], a "pkgname=" line it reads and pacman doesn't, two names, a name or a
+# version with characters pacman doesn't allow, a second .PKGINFO), and one not named after it. No sums: refused
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 command -v bsdtar >/dev/null || { skipped "no bsdtar"; echo "skip ci-own-check (no bsdtar)"; exit 0; }
 r=$t/repo
 mkdir "$r"
-# pkg <file> <name> [<text>] [<more .PKGINFO lines>] [<the file it ships>]: a package of that name
+# pkg <file> <name> [<text>] [<more .PKGINFO lines>] [<the file it ships>]: a package of that name, its version the
+# file's (<name>-<version>-<arch>.pkg.tar.zst)
 pkg() {
-    local s p=${5:-data}; s=$(mktemp -d)
-    printf 'pkgname = %s\npkgver = 1-1\n%s' "$2" "${4:+$4$'\n'}" >"$s/.PKGINFO"
+    local s p=${5:-data} v=${1#"$2-"}; s=$(mktemp -d)
+    printf 'pkgname = %s\npkgver = %s\n%s' "$2" "${v%-*}" "${4:+$4$'\n'}" >"$s/.PKGINFO"
     mkdir -p "$s/$(dirname "$p")" && echo "${3:-x}" >"$s/$p"
     (cd "$s" && bsdtar -cf "$r/$1" --zstd .PKGINFO "$p")
     rm -rf "$s"
@@ -23,12 +26,15 @@ pkg agros-keyring-1-1-any.pkg.tar.zst agros-keyring
 pkg agros-hyprbars-1-1-x86_64.pkg.tar.zst agros-hyprbars && echo sig >"$r/agros-hyprbars-1-1-x86_64.pkg.tar.zst.sig"
 sums=$(cd "$r" && sha256sum agros-keyring-1-1-any.pkg.tar.zst && sha256sum -b agros-hyprbars-1-1-x86_64.pkg.tar.zst)
 pkg quickshell-git-1-1-x86_64.pkg.tar.zst quickshell-git x 'provides = quickshell'
-pkg papirus-folders-1-1-any.pkg.tar.zst papirus-folders x 'conflicts = papirus-folders-git' usr/share/libalpm/hooks/papirus-folders.hook
+pkg papirus-folders-1-1-any.pkg.tar.zst papirus-folders x $'conflict = papirus-folders-git\n# a comment\npkgdesc = Ünïcode, "quoted" $(not run)' \
+    usr/share/libalpm/hooks/papirus-folders.hook
 cp -r "$r" "$t/good"
-check() { AGROS_OWN_SUMS=$sums "$here/ci/own-check.sh" "$r" 2>&1; }
+check() { AGROS_OWN_SUMS=${SUMS:-$sums} "$here/ci/own-check.sh" "$r" 2>&1; }
 o=$(check) || fail "AgrOS's own packages as built, and the AUR's listed, refused: $o"
 # (each case on the good repo again)
-for c in changed added renamed unreadable missing planted second misnamed replaces keyrings settings; do
+qs=quickshell-git-1-1-x86_64.pkg.tar.zst
+for c in changed added renamed unreadable missing planted second misnamed replaces keyrings settings \
+    code code-spaced nospace twonames twoversions noversion charset dashname version-charset extra-dash field twopkginfo own-code; do
     rm -rf "$r" && cp -r "$t/good" "$r"
     case $c in
         changed) pkg agros-keyring-1-1-any.pkg.tar.zst agros-keyring planted ;;
@@ -42,9 +48,29 @@ for c in changed added renamed unreadable missing planted second misnamed replac
         replaces) pkg quickshell-git-1-1-x86_64.pkg.tar.zst quickshell-git x 'replaces = sudo' ;;
         keyrings) pkg quickshell-git-1-1-x86_64.pkg.tar.zst quickshell-git x '' usr/share/pacman/keyrings/evil.gpg ;;
         settings) pkg quickshell-git-1-1-x86_64.pkg.tar.zst quickshell-git x '' etc/pacman.d/hooks/evil.hook ;;
+        # (the keys bash ran as commands in repo-add's declare: never run here either)
+        code) pkg "$qs" quickshell-git x "x[\$({touch,$t/ran})] = 1" ;;
+        code-spaced) pkg "$qs" quickshell-git x "y[\$(touch\${IFS}$t/ran)]=1" ;;
+        nospace) pkg "$qs" quickshell-git x 'pkgname=agros-keyring' ;;
+        twonames) pkg "$qs" quickshell-git x 'pkgname = quickshell-git' ;;
+        twoversions) pkg "$qs" quickshell-git x 'pkgver = 1-1' ;;
+        noversion) s=$(mktemp -d) && printf 'pkgname = quickshell-git\n' >"$s/.PKGINFO" && (cd "$s" && bsdtar -cf "$r/$qs" --zstd .PKGINFO) ;;
+        charset) pkg Quickshell-git-1-1-x86_64.pkg.tar.zst Quickshell-git ;;
+        dashname) pkg -x-1-1-any.pkg.tar.zst -x ;;
+        extra-dash) pkg "$qs" quickshell-git && mv "$r/$qs" "$r/quickshell-git-1-1-x-x86_64.pkg.tar.zst" ;;
+        version-charset) pkg 'quickshell-git-1$x-1-x86_64.pkg.tar.zst' quickshell-git ;;
+        field) pkg "$qs" quickshell-git x 'PATH = /tmp/evil' ;;
+        twopkginfo) s=$(mktemp -d) && mkdir "$s/b" && printf 'pkgname = quickshell-git\npkgver = 1-1\n' >"$s/.PKGINFO" &&
+            printf 'pkgname = quickshell-git\npkgver = 1-1\nreplaces = sudo\n' >"$s/b/.PKGINFO" &&
+            bsdtar -cf "$r/$qs" --zstd -C "$s" .PKGINFO -C "$s/b" .PKGINFO ;;
+        # (AgrOS's own, as the agros job built it, its sum the agros job's: refused all the same)
+        own-code) pkg agros-keyring-1-1-any.pkg.tar.zst agros-keyring x "x[\$({touch,$t/ran})] = 1"
+            SUMS=$(cd "$r" && sha256sum agros-keyring-1-1-any.pkg.tar.zst && sha256sum -b agros-hyprbars-1-1-x86_64.pkg.tar.zst) ;;
     esac
     o=$(check) && fail "$c: passed: $o"
     [[ $o == *"!! "* ]] || fail "$c: not said: $o"
+    [[ ! -e $t/ran ]] || fail "$c: a .PKGINFO line run"
+    SUMS=
 done
 rm -rf "$r" && cp -r "$t/good" "$r"
 o=$(AGROS_OWN_SUMS='' "$here/ci/own-check.sh" "$r" 2>&1) && fail "no sums from the agros job: passed"
