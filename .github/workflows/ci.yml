@@ -320,7 +320,7 @@ jobs:
           pacman -U --noconfirm /tmp/keyring.pkg /tmp/mirrorlist.pkg
           sed -i '/^\[core\]/i [cachyos]\nInclude = /etc/pacman.d/cachyos-mirrorlist\n' /etc/pacman.conf
           pacman -Sy --noconfirm
-      - name: Install check (agros-desktop resolves in one transaction, none of what AgrOS leaves out)
+      - name: Install check (agros-desktop resolves in one transaction, none of what AgrOS leaves out; with CachyOS's CPU-optimised repos too)
         run: |
           # (with signatures required, as users have it)
           pacman-key --add ci/agros.asc
@@ -328,7 +328,11 @@ jobs:
           printf '\n[agros]\nServer = file://%s/out/x86_64\n' "$PWD" >>/etc/pacman.conf
           pacman -Sy
           pacman -S --noconfirm --print agros-desktop >/tmp/plan 2>&1 || { cat /tmp/plan; exit 1; }
-          ! grep -E '/(noctalia[^/]*|jack2|firefox|dolphin|kitty|alacritty|cachyos-hello)-[0-9]' /tmp/plan
+          # (an if, not "! grep": sh -e ignores a negated command's failure, which counted only as the step's last line)
+          if grep -E '/(noctalia[^/]*|jack2|firefox|dolphin|kitty|alacritty|cachyos-hello)-[0-9]' /tmp/plan; then exit 1; fi
+          # The same on a machine whose CPU has CachyOS's v3 or znver4 repos, which the installer puts above [cachyos]
+          # (ci/cpu-repos.sh: resolved, no such CPU needed; a library there at another soname than below it, warned)
+          ci/cpu-repos.sh v3 znver4
       - uses: actions/upload-pages-artifact@v5
         with:
           path: out
