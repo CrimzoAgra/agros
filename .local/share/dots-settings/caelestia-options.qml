@@ -1,7 +1,7 @@
 // Caelestia's options as the installed Caelestia defines them, for the Settings app's "All Caelestia options" (run by
 // dots-settings with Qt's qml tool, offscreen, in a throwaway config folder: nothing of yours is read or written).
-// Each option of its config (shell.json) and of its sizes (shell-tokens.json): its path, type, default, and whether a
-// screen's own file can't change it. Printed as one line: OPTIONS {"shell": [...], "tokens": [...]}
+// Each option of its config (shell.json) and of its sizes (shell-tokens.json): its path, type and default.
+// Printed as one line: OPTIONS {"shell": [...], "tokens": [...]}
 import QtQuick
 import Caelestia.Config
 
@@ -17,7 +17,7 @@ Item {
             if (d.isNode && d.defaultValue === undefined)
                 walk(node[k], key, out);
             else
-                out.push({ key, type: d.type, default: d.defaultValue, globalOnly: d.globalOnly });
+                out.push({ key, type: d.type, default: d.defaultValue });
         }
         return out;
     }

@@ -228,9 +228,9 @@ def enum_values():
 
 
 def caelestia_options():
-    """{"caelestia-shell": [option...], "caelestia-tokens": [...]}, each {key, type, default, globalOnly, options (a
-    choice's)}, from the installed Caelestia: read by caelestia-options.qml, kept in ~/.cache until Caelestia (or the
-    reader) changes. {} without Caelestia, Qt's qml tool, or with a Caelestia too old to describe its options: the rest
+    """{"caelestia-shell": [option...], "caelestia-tokens": [...]}, each {key, type, default, options (a choice's)},
+    from the installed Caelestia: read by caelestia-options.qml, kept in ~/.cache until Caelestia (or the reader)
+    changes. {} without Caelestia, Qt's qml tool, or with a Caelestia too old to describe its options: the rest
     still works"""
     stamp = []
     for name in ("caelestia-config.qmltypes", "libcaelestia-configplugin.so", "../lib/libcaelestia-config.so"):
@@ -313,7 +313,9 @@ def at(data, path):
 def caelestia_setting(prefix, o):
     """A setting for one of Caelestia's options: the control its type needs. Its key's prefix says the file"""
     path, t = o["key"], o["type"]
-    s = {"key": f"{prefix}.{path}", "path": path, "caelestia_default": o["default"]}
+    # (none when Caelestia gives none: JSON left the undefined value out, and the KeyError failed every page)
+    default = o.get("default")
+    s = {"key": f"{prefix}.{path}", "path": path, "caelestia_default": default}
     if t == "bool":
         s["type"] = "bool"
     elif t in ("int", "double", "qreal", "float"):
@@ -327,8 +329,8 @@ def caelestia_setting(prefix, o):
     elif "options" in o:
         s["type"] = "choice"
         s["options"] = [{"value": v, "label": words(v)} for v in o["options"]]
-        if isinstance(o["default"], int) and 0 <= o["default"] < len(o["options"]):
-            s["caelestia_default"] = o["options"][o["default"]]
+        if isinstance(default, int) and 0 <= default < len(o["options"]):
+            s["caelestia_default"] = o["options"][default]
     elif t == "QString":
         s["type"] = "text"
     else:

@@ -45,6 +45,10 @@ def shell():
         return json.load(f)
 
 
+# An option the reader gave no default for (JSON leaves an undefined value out): shown with none, not every page's
+# schema failing on it
+s = ds.caelestia_setting("caelestia-shell", {"key": "some.option", "type": "bool"})
+assert s["type"] == "bool" and s["caelestia_default"] is None, s
 # Numbers: in their range; Caelestia's variables and the screens' settings only once changed, a screen's kept unplugged
 assert run("set", "input.repeat_rate", "500", "--later").startswith("error"), "a number out of its range taken"
 assert run("set", "input.repeat_rate", "40.0", "--later") == "hypr\n"
