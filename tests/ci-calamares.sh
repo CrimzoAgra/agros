@@ -7,7 +7,7 @@ set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 b=$here/ci/build-repo.sh
-var() { sed -n "s/^ *$1=//p" "$b" | head -n1; }
+var() { sed -n "/^ *$1=/{s///p;q;}" "$b"; }
 rel=$(var calamares_rel) pin=$(var calamares_pkgbuild) src=$(var calamares_src)
 [[ $rel =~ ^[0-9]+$ && $pin =~ ^[0-9a-f]{40}$ && $src =~ ^[0-9a-f]{40}$ ]] ||
     fail "calamares_rel or the pins not found in build-repo.sh: '$rel' '$pin' '$src'"
