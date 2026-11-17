@@ -126,16 +126,17 @@ fi
 if [[ ${1:-} == --install ]]; then
     # Already installed from a file (its repo found as the update below finds it): updates do the rest. The repo
     # exactly, whatever the case: owner/repo-other isn't it, nor a Flathub app whose metainfo links to it
-    : "${2:?owner/repo}"
+    # (owner/repo.git is owner/repo: repo_of's form, without .git, both compared and written down)
+    want=${2:?owner/repo} want=${want%.git}
     while IFS=$'\t' read -r app origin inst; do
         [[ $origin == *-origin ]] || continue
         repo=$(repo_of "$app" "$inst") || continue
-        [[ ${repo,,} == "${2,,}" ]] && { echo "$2: already installed"; exit 0; }
+        [[ ${repo,,} == "${want,,}" ]] && { echo "$2: already installed"; exit 0; }
     done < <(flatpak list --app --columns=application,origin,installation)
-    api=$(latest_release "$2") || { echo "$2: can't reach GitHub"; exit 1; }
+    api=$(latest_release "$want") || { echo "$2: can't reach GitHub"; exit 1; }
     # (the repo it came from written down for its updates)
     app=$(install_from "$api" user) || exit 1
-    remember user "$app" "${2%.git}"
+    remember user "$app" "$want"
     echo "$2: installed $(jq -r .tag_name <<<"$api")"
     exit
 fi

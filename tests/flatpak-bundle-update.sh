@@ -156,4 +156,6 @@ rm -f "$AGROS_FLATPAK_BUNDLES"
 meta com.x.App O/App.git; printf 'com.x.App\tapp-origin\tuser\n' >>"$t/list"
 out=$(fbu --install o/app 2>&1) || true
 [[ $out == "o/app: already installed" ]] || fail "--install o/app didn't find it installed: $out"
+out=$(fbu --install o/app.git 2>&1) || true
+[[ $out == "o/app.git: already installed" ]] || fail "--install o/app.git didn't find it installed: $out"
 echo "ok flatpak-bundle-update"
