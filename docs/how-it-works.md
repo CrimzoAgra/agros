@@ -555,10 +555,9 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
     whatever can change their box settles: the gaps or border (Game mode on or off, the Settings app), title bars on or
     off, the space Caelestia's bar reserves (back after a shell restart); Hyprland's `config.props_refreshed`,
     `layer.opened` and `layer.closed`, which come for much else too, so each only if its box changed. Each seam is kept
-    where it was, the new gap across it; edges rounded to the nearest pixel, so on-and-off doesn't creep. X11 menus and
-    tooltips are never moved into reach: their apps place them. A pop-up keeps its own size: one wider or taller
-    than the screen opens shrunk to fit, in the middle, and one opening off it is brought within reach (not X11 menus
-    and tooltips, which their apps place)
+    where it was, the new gap across it; edges rounded to the nearest pixel, so on-and-off doesn't creep. A pop-up
+    keeps its own size, but one wider or taller than the screen opens shrunk to fit, in the middle, and one opening off
+    it is brought within reach. X11 menus and tooltips are never moved into reach: their apps place them
   - The window clicked, or picked in the dock or Alt+Tab, comes to the front; in floating mode the pointer stays
     where it is, and focus changes on a click, not on hover
   - Clicking a notification brings the app that sent it to the front (or opens it)
