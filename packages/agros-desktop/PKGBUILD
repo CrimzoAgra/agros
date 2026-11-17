@@ -4,7 +4,7 @@
 # (agros-welcome --system installs the ones for what's plugged in), as is VMware Workstation (its license forbids
 # passing it on: built from the AUR on your machine by agros-welcome --system).
 pkgname=agros-desktop
-pkgver=13
+pkgver=14
 pkgrel=1
 pkgdesc='AgrOS: Hyprland + Caelestia desktop with its apps (meta package)'
 arch=('any')
@@ -39,7 +39,9 @@ depends=(
     python-gobject python-xlib pacman-contrib paru github-cli
     gammastep geoclue                   # night light (Caelestia's execs.lua starts both; no location without geoclue)
     # Games: CachyOS's gaming packages, Steam, Lutris (every store's library), Faugus, MangoHud, Gamescope
-    mesa lib32-mesa cachyos-gaming-meta steam steam-devices lutris libayatana-appindicator wine-mono wine-gecko
+    # (agros-wine first: one Wine, CachyOS's, as the system's. Before the gaming packages, whose winetricks needs a wine:
+    # pacman takes one already chosen, and Arch's isn't installed beside it)
+    agros-wine mesa lib32-mesa cachyos-gaming-meta steam steam-devices lutris libayatana-appindicator
     python-protobuf gamescope mangohud lib32-mangohud goverlay faugus-launcher wqy-zenhei xorg-fonts-misc spirv-tools
     # Apps (the Windows ones they replace)
     equibop-bin                         # Discord, themed with your colours

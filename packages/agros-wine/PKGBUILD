@@ -1,0 +1,35 @@
+# Maintainer: Filipe Agra
+# One Wine: CachyOS's (wine-cachyos-opt, in /opt, from CachyOS's gaming packages) as the system's wine, first on the
+# PATH, and this package standing in for Arch's wine, which winetricks needs (CachyOS's gaming packages and protontricks
+# need winetricks): without it, Arch's whole wine came in beside CachyOS's, ~600 MB, with wine-mono and wine-gecko,
+# ~430 MB, for nothing Steam (Proton) or Lutris (its own runners) uses. Wine asks to fetch Mono or Gecko itself the day a
+# program needs them. No conflict with Arch's wine: a machine that has it keeps it, unused (its updates can't stop on a
+# "remove wine?" question: [agros] is the last repo, so pacman offers no replacement); new installs never get it, as
+# agros-desktop lists this before the gaming packages (pacman takes a package already chosen for a dependency it meets)
+pkgname=agros-wine
+pkgver=1
+pkgrel=1
+pkgdesc="AgrOS: CachyOS's Wine as the system's wine (Arch's not installed beside it)"
+arch=('any')
+url='https://github.com/CrimzoAgra/agros'
+license=('GPL-3.0-or-later')
+depends=('wine-cachyos-opt')
+provides=('wine')
+
+# On the PATH, first, as Flatpak does its own: for login shells (sh, bash: profile.d), fish (vendor_conf.d; AgrOS's
+# login shell, whose environment uwsm gives the desktop) and systemd user services (environment.d)
+package() {
+    install -Dm644 /dev/stdin "$pkgdir/etc/profile.d/agros-wine.sh" <<'SH'
+# CachyOS's Wine first on the PATH (agros-wine)
+case ":$PATH:" in *:/opt/wine-cachyos/bin:*) ;; *) PATH="/opt/wine-cachyos/bin:$PATH" ;; esac
+export PATH
+SH
+    install -Dm644 /dev/stdin "$pkgdir/usr/share/fish/vendor_conf.d/agros-wine.fish" <<'FISH'
+# CachyOS's Wine first on the PATH (agros-wine)
+contains /opt/wine-cachyos/bin $PATH; or set -gx PATH /opt/wine-cachyos/bin $PATH
+FISH
+    install -Dm644 /dev/stdin "$pkgdir/usr/lib/environment.d/50-agros-wine.conf" <<'ENV'
+# CachyOS's Wine first on the PATH of systemd user services (agros-wine)
+PATH=/opt/wine-cachyos/bin:${PATH}
+ENV
+}

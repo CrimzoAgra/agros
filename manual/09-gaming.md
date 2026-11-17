@@ -2,6 +2,10 @@
 
 AgrOS comes with CachyOS's gaming packages: Steam, Proton, Wine, MangoHud, Gamescope and GOverlay.
 
+There's one Wine, CachyOS's: the `wine` command, `winetricks` and Lutris's system Wine all use it. A Windows program
+you double-click (an `.exe`) opens in Faugus Launcher, which runs it with Proton. If a program needs .NET or Internet
+Explorer's engine, Wine offers to download them the first time.
+
 ## Lutris: one library for every store
 
 Lutris lists every game you own, on every store, in one place: Steam, EA, Ubisoft, Epic, GOG, Battle.net and
