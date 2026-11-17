@@ -77,7 +77,8 @@ unit=$(cat "$au/auto-update-install.service")
 { grep -qxE 'After=.*\budisks2\.service\b.*' <<<"$unit" && grep -qxE 'After=.*\bdbus\.service\b.*' <<<"$unit" &&
     grep -qx 'Wants=udisks2.service' <<<"$unit"; } || fail "the install's unit not ordered before udisks2 stops: $unit"
 # pacman: -Qu says what's waiting ($QU, exit $QU_RC; $QU_ERR on stderr); -Su installs (exit $PACMAN_RC; $PACMAN_HANG: hangs, to be cut off);
-# -Sy the boot's lists, -Suw its download ($SYUW_RC); -Si the version a package would update to ($SI_NEW)
+# -Sy the boot's lists ($SY_ERR: fails, saying it), -Suw its download ($SYUW_RC; $SUW_ERR: fails, saying it), -Sw the
+# keyrings' download first and -S their install first (exit $KEYRING_RC); -Si the version a package would update to ($SI_NEW)
 cat >"$t/bin/pacman" <<EOF
 #!/bin/sh
 case \$1 in
@@ -89,9 +90,12 @@ case \$1 in
         [ -z "\$PACMAN_HANG" ] || { echo \$\$ >"$t/hung"; exec sleep 60; }
         case " \$* " in *" agros-aur/"*) [ -z "\$PACMAN_AUR_RC" ] || { echo "error: failed to commit transaction (conflicting files)"; exit 1; } ;; esac
         [ "\${PACMAN_RC:-0}" = 0 ] || echo "error: boom"; exit \${PACMAN_RC:-0} ;;
-    -Sy) exit 0 ;;
+    -Sy) [ -z "\$SY_ERR" ] || { echo "\$SY_ERR" >&2; exit 1; }; exit 0 ;;
+    -Sw) echo "keyrings-download \$*" >>"$t/calls" ;;
+    -S) echo "pacman \$* (SNAP_PAC_SKIP=\$SNAP_PAC_SKIP)" >>"$t/calls"; exit \${KEYRING_RC:-0} ;;
     -Si) [ -z "\$SI_NEW" ] || echo "Version         : \$SI_NEW"; exit 0 ;;
     -Suw) echo "download \$*" >>"$t/calls"; [ -e "$t/au/downloading" ] && echo "download marked" >>"$t/calls"
+        [ -z "\$SUW_ERR" ] || { echo "\$SUW_ERR" >&2; exit 1; }
         exit \${SYUW_RC:-0} ;;
     # (\$SUW_BREAKS: a library's update breaking the held hyprland, until it's held too: pacman's dry run says so)
     -Sup) if [ -n "\$SUW_BREAKS" ] && ! grep -q "IgnorePkg = libfoo" "\$3"; then
@@ -327,6 +331,44 @@ QU='' QU_RC=1 "$t/auto-update" --install || fail "nothing to install failed"
 # ...and the download marks itself finished only when it is
 SYUW_RC=1 "$t/auto-update" || true
 [[ ! -e $t/au/db/complete ]] || fail "a failed download marked as finished"
+# The keyrings first: downloaded alone before the rest (one pacman.conf holds back left out), so a package signed by a
+# key the keyring here hasn't got (or has expired) failing the rest's download leaves them; installed first at shutdown,
+# on their own when the rest didn't download (the lists put back after), said with the boot's error from pacman
+sig="error: failed to commit transaction (invalid or corrupted package (PGP signature))"
+: >"$t/calls"
+QU=$'archlinux-keyring 20261001-1 -> 20261115-1
+cachyos-keyring 1-1 -> 2-1 [ignored]
+foo 1-1 -> 2-1' SUW_ERR=$sig     "$t/auto-update" || fail "the boot with the download failing on a key failed"
+[[ $(grep -E '^(keyrings-)?download -S' "$t/calls" | cut -d' ' -f1 | paste -sd' ') == "keyrings-download download" ]] &&
+    grep -qE '^keyrings-download -Sw .* -- archlinux-keyring$' "$t/calls" ||
+    fail "the keyrings not downloaded alone before the rest (nor only the one not held back): $(cat "$t/calls")"
+[[ $(cat "$t/au/db/keyrings" 2>/dev/null) == archlinux-keyring && ! -e $t/au/db/complete &&
+    $(cat "$t/au/download-failed" 2>/dev/null) == "$sig" ]] ||
+    fail "the keyrings downloaded, or the download's error, not written down: $(cat "$t/au/db/keyrings" "$t/au/download-failed" 2>&1)"
+grep -qF "$sig" "$t/log" || fail "the download's error not in the log"
+lists; rm "$t/au/db/complete"; rm -f "$t/au/skipped"; : >"$t/calls"
+"$t/auto-update" --install || fail "the install of the keyrings alone failed: $(tail -5 "$t/log")"
+[[ $(cat "$t/calls") == "pacman -S --needed --noconfirm --config $t/au/prev/gated.conf -- archlinux-keyring (SNAP_PAC_SKIP=y)" &&
+    $(cat "$t/pac/sync/core.db") == old && ! -e $t/au/installing ]] ||
+    fail "the keyrings not installed alone (the lists put back) with the rest not downloaded: $(cat "$t/calls")"
+[[ $(cut -d' ' -f3- "$t/au/skipped") == "the boot's download didn't finish ($sig): the keyrings installed first, archlinux-keyring" ]] ||
+    fail "the unfinished download not said with pacman's error and the keyrings: $(cat "$t/au/skipped")"
+# (with the rest downloaded: the keyrings first, then the rest)
+lists; : >"$t/calls"
+"$t/auto-update" --install >/dev/null || fail "the install with the keyrings first failed"
+[[ $(grep '^pacman' "$t/calls" | cut -d' ' -f1-2 | paste -sd' ') == "pacman -S pacman -Su" && $(res) == "ok "* ]] ||
+    fail "the keyrings not installed before the rest: $(cat "$t/calls")"
+# A download that failed with no keyrings to take: nothing installed, said with pacman's error
+SY_ERR="error: failed to synchronize all databases" "$t/auto-update" || fail "the boot whose lists failed failed"
+[[ ! -e $t/au/db/keyrings && $(cat "$t/au/download-failed" 2>/dev/null) == "error: failed to synchronize all databases" ]] ||
+    fail "the failed sync's error not written down, or the last keyrings kept"
+lists; rm "$t/au/db/complete"; : >"$t/calls"
+"$t/auto-update" --install || fail "the install after a failed sync failed"
+[[ ! -s $t/calls && $(cut -d' ' -f3- "$t/au/skipped") == "the boot's download didn't finish (error: failed to synchronize all databases)" ]] ||
+    fail "installed after a failed sync, or not said with its error: $(cat "$t/calls") $(cat "$t/au/skipped")"
+# ...and a download that finished: its error and keyrings gone
+"$t/auto-update" || fail "the boot's download failed"
+[[ -e $t/au/db/complete && ! -e $t/au/download-failed && ! -e $t/au/db/keyrings ]] || fail "a finished download kept the last one's error or keyrings"
 # Through the upstream gate (update-gate, the real one): a new Hyprland not yet checked by AgrOS's CI held (its pacman.conf
 # kept with the gate's Include, used for the download and the shutdown's install), said; once approved, let through
 printf '%s\n' '[options]' "Include = $t/agros-gate.conf" '' '[agros]' 'Server = https://agros.invalid/x86_64' >"$t/base.conf"

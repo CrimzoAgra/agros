@@ -163,8 +163,10 @@ if [[ ${1:-} == --install ]]; then
     done
     [[ -z $on_battery ]] || ((charge >= 15)) || skip "on battery, nearly empty ($charge percent): at a shutdown on AC power"
     # Only what a finished download brought (its mark, "complete"): one cut off (its 2 h, a shutdown during it) has
-    # lists newer than the packages it got, and installing from them would download the rest at shutdown
-    [[ -e $db/complete ]] || skip "the boot's download didn't finish"
+    # lists newer than the packages it got, and installing from them would download the rest at shutdown. But for the
+    # keyrings it got first (below). Said with pacman's error, where the boot wrote one down (download-failed)
+    unfinished() { local e; e=$(plain 2>/dev/null <"$au/download-failed"); echo "the boot's download didn't finish${e:+ ($e)}"; }
+    [[ -e $db/complete || -s $db/keyrings ]] || skip "$(unfinished)"
     # (nor while something else using pacman holds its lock: its lists would change under it)
     ! holder=$(held) || skip "something using pacman still ran ($holder)"
     # A lock left by a pacman cut off outside this (an Updates run's paru, killed by shutdown or a power cut: pacman
@@ -220,6 +222,20 @@ if [[ ${1:-} == --install ]]; then
     gated=$prev/gated.conf
     waits=$(/usr/lib/agros/bin/update-gate /etc/pacman.conf "$gated" --offline) || cp /etc/pacman.conf "$gated"
     [[ -z $waits ]] || printf "waits for AgrOS's check: %s\n" "$waits"
+    # The keyrings the boot downloaded first (keyrings), installed on their own before the rest, as Arch advises: the
+    # rest's signatures are checked with them. Not done: said, and the rest tried with the keys as they are. Without a
+    # finished download that's all, pacman's lists put back
+    if [[ -s $db/keyrings ]]; then
+        mapfile -t keys <"$db/keyrings"
+        echo "the keyrings first: ${keys[*]}"
+        say "Installing updates, don't turn the computer off..."
+        if SNAP_PAC_SKIP=y LC_ALL='' LC_MESSAGES=C pacman -S --needed --noconfirm --config "$gated" -- "${keys[@]}"; then
+            keyed=": the keyrings installed first, ${keys[*]}"
+        else
+            echo "!! the keyrings couldn't be installed first: the rest tried with the keys as they are"
+        fi
+    fi
+    [[ -e $db/complete ]] || { restore; skip "$(unfinished)${keyed:-}"; }
     qu=0
     # (in English, as the install's below: its "error:" is looked for)
     pending=$(LC_ALL='' LC_MESSAGES=C pacman -Qu --config "$gated" 2>"$prev/qu-err") || qu=$?
@@ -380,19 +396,37 @@ if [[ -e $db/db.lck ]] && ! /usr/lib/agros/bin/pacman-lock-holder "$db" >/dev/nu
     rm -f "$db/db.lck"
 fi
 # (the AUR builds made for the last download's lists with it: made again for this one's, below)
-rm -rf "$db/complete" "$aur"
+rm -rf "$db/complete" "$db/keyrings" "$au/download-failed" "$aur"
 # Through the upstream gate (update-gate): Hyprland and its libraries only to versions AgrOS's CI has checked, else
 # held (a library whose update would break one held, with it). The pacman.conf it gives for the download and the AUR
 # builds for it (the shutdown decides again, on the lists it installs from)
 gated=$au/pacman.conf
-if pacman -Sy --noconfirm --dbpath "$db" --logfile /dev/null; then
+# (pacman's errors kept apart, then added to the log: the first written down when the download didn't finish
+# (download-failed), for the shutdown's note that dotfiles-check says: an expired key, a dependency that can't be had.
+# In English: "error:" is what's looked for)
+err=$au/download-err
+if LC_ALL='' LC_MESSAGES=C pacman -Sy --noconfirm --dbpath "$db" --logfile /dev/null 2>"$err"; then
     waits=$(/usr/lib/agros/bin/update-gate /etc/pacman.conf "$gated" --dbpath "$db")
     [[ -z $waits ]] || printf "waits for AgrOS's check: %s\n" "$waits"
-    pacman -Suw --noconfirm --config "$gated" --dbpath "$db" --logfile /dev/null && touch "$db/complete"
+    # The keyrings first, on their own, where these lists have a newer one (none pacman.conf holds back): a package
+    # signed by a key the keyring here doesn't have yet, or has expired (CachyOS's users, an Arch packager's, 2026-11),
+    # fails the whole download's check, and so every shutdown's install. Downloaded alone (their own signatures
+    # checked), they're installed first at shutdown, as Arch advises, even when the rest didn't download: the next
+    # boot's download is checked with the new keys (keyrings: their names, once downloaded)
+    mapfile -t keys < <(LC_ALL=C pacman -Qu --config "$gated" --dbpath "$db" 2>/dev/null | /usr/lib/agros/bin/updates-pending |
+        awk '$1 ~ /^(archlinux|cachyos|agros)-keyring$/ { print $1 }')
+    if ((${#keys[@]})) &&
+        LC_ALL='' LC_MESSAGES=C pacman -Sw --noconfirm --config "$gated" --dbpath "$db" --logfile /dev/null -- "${keys[@]}" 2>>"$err"; then
+        printf '%s\n' "${keys[@]}" >"$db/keyrings"
+    fi
+    LC_ALL='' LC_MESSAGES=C pacman -Suw --noconfirm --config "$gated" --dbpath "$db" --logfile /dev/null 2>>"$err" &&
+        touch "$db/complete"
 else
     cp /etc/pacman.conf "$gated"
 fi
-rm -f "$au/downloading"
+cat "$err"
+[[ -e $db/complete ]] || grep -m1 '^error:' "$err" >"$au/download-failed" || rm -f "$au/download-failed"
+rm -f "$err" "$au/downloading"
 
 # Firmware (fwupd): its list of updates refreshed (LVFS's metadata, signed and checked by fwupd) and looked at; any
 # waiting said to the users (--firmware-note, in a unit of its own: it waits for a login) and installed at shutdown.
