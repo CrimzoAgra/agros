@@ -86,6 +86,53 @@ s.resume_session()
 assert posted == ["refresh_token"], "a good token renewed again"
 P
 
+# sections: a full row of covers has as much room on its right as on its left (the scrollbar, drawn over the grid on
+# the right, covered the last column's edge), and fits the window at a few widths, each width set after another (the
+# grid kept its items' old width: grown covers ran off the right edge). Drawn on GTK's own headless display (broadwayd,
+# gtk3's: the tests have no desktop), its web port on this machine only
+broadwayd --address 127.0.0.1 :57 >/dev/null 2>&1 & on_exit "kill $!"
+for _ in {1..50}; do [[ -S $XDG_RUNTIME_DIR/broadway58.socket ]] && break; sleep 0.1; done
+GDK_BACKEND=broadway BROADWAY_DISPLAY=:57 HOME=$t XDG_CACHE_HOME=$t/cache XDG_DATA_HOME=$t/.local/share XDG_CONFIG_HOME=$t/.config \
+    python3 -I - "$t/cache/lutris-overlay" <<'P' || fail "the covers' row not centred in the window"
+import sys
+sys.path.insert(0, sys.argv[1])
+import lutris.gui.application  # noqa: F401
+from gi.repository import Gtk
+from lutris.gui.views import COL_INSTALLED, COL_NAME
+from lutris.gui.views.sections import SectionedGridView
+from lutris.gui.views.store import GameStore
+from lutris.services.base import LutrisCoverartMedium
+store = GameStore(None, LutrisCoverartMedium())
+for i in range(40):
+    row = [None] * store.store.get_n_columns()
+    for c in range(len(row)):
+        kind = store.store.get_column_type(c).name
+        row[c] = {"gchararray": "", "gint": 0, "gboolean": True, "gdouble": 0.0}.get(kind, [])
+    row[0], row[1], row[COL_NAME], row[COL_INSTALLED] = str(i), f"g{i}", f"Game {i}", True
+    store.store.append(row)
+win, scrolled = Gtk.Window(), Gtk.ScrolledWindow()  # (on the headless display; as Lutris's window holds its view)
+grid = SectionedGridView(store)
+scrolled.add(grid)
+win.add(scrolled)
+for width in (1920, 900, 1356, 1700):
+    win.resize(width, 600)
+    win.show_all()
+    for _ in range(50):
+        while Gtk.events_pending():
+            Gtk.main_iteration()
+    view = grid.sections[0].view
+    # (the row as GTK lays it out with the item width given: margins, each item with its padding and its widest cell's
+    # own on both sides, the gaps between. Left out, the title's 2 px ran a row of 7 covers 28 px off the right edge)
+    ex, n, w = grid.sections[0].expander, view.get_columns(), view.get_item_width()
+    xpad = max(view.image_renderer.get_padding()[0], view.text_renderer.get_padding()[0])
+    row = 2 * view.get_margin() + n * (w + 2 * (view.get_item_padding() + xpad)) + (n - 1) * view.get_column_spacing()
+    slack = grid.get_allocated_width() - ex.get_margin_start() - ex.get_margin_end() - row  # (its visible width)
+    assert xpad > 0, "test setup: the cover cell has no padding of its own to count"
+    assert w == view.image_renderer._expected_width, ("the item width not the covers'", w)
+    assert ex.get_margin_start() == ex.get_margin_end() >= 12, "not as much room on the right as on the left"
+    assert 0 <= slack < n, (width, grid.get_allocated_width(), n, w, slack)
+P
+
 # revive_installed: a store game uninstalled in Lutris, then found installed again by its store's scan (Epic here):
 # its old entry is installed again (same id, so its playtime stays), not left "not installed"
 HOME=$t XDG_CACHE_HOME=$t/cache XDG_DATA_HOME=$t/.local/share XDG_CONFIG_HOME=$t/.config python3 -I - "$t/cache/lutris-overlay" <<'P2' || fail "an uninstalled Epic game found again isn't installed again"

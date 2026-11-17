@@ -28,7 +28,10 @@ class SectionedGridView(Gtk.Viewport):
         self.sections = []
         for installed, title in ((True, _("Installed")), (False, _("Not installed"))):
             key = "section_%s_expanded" % ("installed" if installed else "uninstalled")
-            expander = Gtk.Expander(expanded=settings.read_bool_setting(key, True), margin_start=12, margin_top=6)
+            # (as much room on the right as on the left: there the scrollbar, drawn over the grid, covered the last
+            # column's edge)
+            expander = Gtk.Expander(expanded=settings.read_bool_setting(key, True), margin_start=12, margin_end=12,
+                                    margin_top=6)
             expander.connect("notify::expanded", lambda e, _p, k=key: settings.write_setting(k, e.get_expanded()))
             view = GameGridView(self._filtered(store, installed), hide_text=hide_text)
             view.connect("game-selected", self.on_section_selected)
@@ -61,9 +64,14 @@ class SectionedGridView(Gtk.Viewport):
         for s in self.sections:
             view = s.view
             media_width, media_height = self.game_store.service_media.size
-            padding = 2 * view.get_item_padding()
+            # (each item's padding, and its widest cell's own on both sides: the title's, wrapped at the cover's width
+            # plus GTK's 2 px each side, left out, made each column 4 px wider than counted: a row of 7 ran 28 px off
+            # the right edge)
+            xpad = max((r.get_padding()[0] for r in (view.image_renderer, view.text_renderer) if r), default=0)
+            padding = 2 * (view.get_item_padding() + xpad)
             spacing = view.get_column_spacing()
-            usable = self._width - s.expander.get_margin_start() - 2 * view.get_margin() + spacing
+            usable = (self._width - s.expander.get_margin_start() - s.expander.get_margin_end() - 2 * view.get_margin()
+                      + spacing)
             # The nearest number of columns, the covers a little bigger or smaller to fill the row: no gap on the right
             columns = max(1, round(usable / (max(media_width, view.min_width) + padding + spacing)))
             width = max(view.min_width, usable // columns - spacing - padding)
@@ -71,6 +79,10 @@ class SectionedGridView(Gtk.Viewport):
                 view.image_renderer.set_expected_size(width, round(width * media_height / media_width))
             if view.text_renderer:
                 view.text_renderer.set_width(width)
+            # The grid keeps each item's width from its last layout: given here, or a new size didn't reach the row
+            # (covers grown since ran off the right edge, shrunk ones left a gap)
+            if view.get_item_width() != width:
+                view.set_item_width(width)
             if view.get_columns() != columns:
                 view.set_columns(columns)
             view.queue_resize()
