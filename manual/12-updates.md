@@ -23,8 +23,8 @@ You don't have to think about updates.
   computer next starts: don't turn it off then. On a laptop running low on battery, or unplugged when the device needs
   power, it waits for the next shutdown (a warning says so after you log in). One that doesn't fit on the boot
   partition (EFI) is said once ("Firmware update can't be installed... the boot partition (EFI) is too small for
-  it"), and isn't tried again until a newer one comes: installed beside Windows, that partition is often Windows' own
-  small one.
+  it"), and isn't tried again until a newer one comes (when it's the only firmware update waiting): installed beside
+  Windows, that partition is often Windows' own small one.
 - **Some updates wait for you** to install them from the Updates app (or `update-apps` in a terminal, which shows an
   AUR app's build script first): an AUR app whose maintainers changed since it was last built (a warning after you
   log in names it), and an app installed from a Flatpak file (ArtCraft) whose new version asks for more access (the
