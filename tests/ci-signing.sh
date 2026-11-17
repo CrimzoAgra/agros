@@ -3,7 +3,9 @@
 # a secret key at hand (the secret in its environment, an old caller's GPGKEY, a key in gpg's keyring), before it makes
 # anything; and CI's workflow (.github/workflows/ci.yml) has the key in the release job's signing step alone, after
 # every step that reads the build, with its agent stopped and keyring removed when it ends, in a container that isn't
-# privileged and has run nothing but official Arch packages' scripts by then
+# privileged and has run nothing but official Arch packages' scripts by then. AgrOS's own packages built in a job of
+# their own (agros), no AUR build script there, and the release checks the repo's agros-* packages against that job's
+# sums (ci/own-check.sh) before the key: the repo job's AUR build scripts, root there, could change them
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
@@ -32,7 +34,7 @@ bad = []
 for name, job in jobs.items():
     if name != "release" and "AGROS_GPG_KEY" in json.dumps(job):
         bad.append(f"the signing key in the {name} job")
-for name in ("repo", "test"):
+for name in ("agros", "repo", "test"):
     if "secrets." in json.dumps(jobs[name]):
         bad.append(f"a secret in the {name} job (it runs AUR build scripts or what was built)")
 rel = jobs["release"]
@@ -59,6 +61,20 @@ for name, job in jobs.items():
     text = json.dumps(job)
     if name == "release" and any(w in text for w in ("makepkg", "paru", "tests/run.sh", "test-passes")):
         bad.append("the release job runs a build or the tests")
+ag = jobs["agros"]
+build = [s for s in ag["steps"] if "build-repo.sh" in s.get("run", "")]
+if len(build) != 1 or str(build[0].get("env", {}).get("AGROS_SKIP_AUR")) != "1":
+    bad.append("the agros job doesn't build AgrOS's own packages alone (AGROS_SKIP_AUR)")
+if "privileged" in json.dumps(ag.get("container", {})) or         any(w in s.get("run", "") + json.dumps(s.get("env", {})) for s in ag["steps"] for w in ("paru", "AGROS_SKIP_OWN")):
+    bad.append("the agros job privileged, or running AUR builds")
+rb = [s for s in jobs["repo"]["steps"] if "build-repo.sh" in s.get("run", "")]
+if len(rb) != 1 or str(rb[0].get("env", {}).get("AGROS_SKIP_OWN")) != "1":
+    bad.append("the repo job builds AgrOS's own packages beside the AUR's (AGROS_SKIP_OWN)")
+own = [i for i, s in enumerate(steps) if "ci/own-check.sh" in s.get("run", "")]
+if len(own) != 1 or "needs.agros.outputs.sums" not in json.dumps(steps[own[0]].get("env", {})) or         "steps.sums.outputs.sums" not in json.dumps(ag.get("outputs", {})):
+    bad.append("the release doesn't check AgrOS's own packages against the agros job's output (ci/own-check.sh)")
+elif len(keyed) == 1 and own[0] > keyed[0]:
+    bad.append("AgrOS's own packages checked after the signing")
 for b in bad:
     print(b)
 sys.exit(1 if bad else 0)

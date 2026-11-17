@@ -33,9 +33,9 @@ permissions:
 # between them unsigned; the release job runs none of that (tests/ci-signing.sh checks this file for it)
 jobs:
   test:
-    needs: repo
-    # (the build skipped, a pull request: on the published repo)
-    if: ${{ always() && (needs.repo.result == 'success' || needs.repo.result == 'skipped') }}
+    needs: [agros, repo]
+    # (the build skipped, a pull request: on the published repo; not when AgrOS's own packages didn't build)
+    if: ${{ always() && needs.agros.result != 'failure' && (needs.repo.result == 'success' || needs.repo.result == 'skipped') }}
     outputs:
       result: ${{ steps.tests.outputs.result }}
     runs-on: ubuntu-26.04
@@ -167,18 +167,21 @@ jobs:
           name: approved
           path: /tmp/approved
 
-  repo:
-    # The [agros] pacman repo: built on every push to main and daily (what doesn't build: the published one kept,
-    # build-repo.sh), then tested and published by the jobs below. Unsigned, with no secret: it runs AUR build scripts
-    # (only AgrOS's public key, ci/agros.asc, to check the published files it keeps)
+  agros:
+    # AgrOS's own packages (packages/*), built first in a job of their own where no AUR build script runs: the repo job
+    # runs those as root in a privileged container, where one could change an agros-* package (agros-keyring: a key
+    # planted) that the release then signs. Their sums are this job's output, which no other job can change (its
+    # artifact one could replace); the release signs only these (ci/own-check.sh). Unsigned, with no secret
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    outputs:
+      sums: ${{ steps.sums.outputs.sums }}
     runs-on: ubuntu-26.04
-    timeout-minutes: 150
+    timeout-minutes: 30
     container:
       image: archlinux:latest
-      options: --privileged
     steps:
-      - name: Build tools, and CachyOS's repo (what AgrOS installs on, and paru)
+      - &build-tools
+        name: Build tools, and CachyOS's repo (what AgrOS installs on, and paru)
         run: |
           # [multilib] (Steam's 32-bit libraries), as CachyOS has it on
           grep -q '^\[multilib\]' /etc/pacman.conf || printf '\n[multilib]\nInclude = /etc/pacman.d/mirrorlist\n' >>/etc/pacman.conf
@@ -202,13 +205,54 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0  # (the packages' versions count the commits)
+          persist-credentials: false
+      - name: Build AgrOS's own packages
+        env:
+          AGROS_PUBLISHED: ${{ vars.AGROS_PUBLISHED || 'https://crimzoagra.github.io/agros/x86_64' }}
+          AGROS_SKIP_AUR: 1
+        run: |
+          git config --global --add safe.directory '*'
+          ci/build-repo.sh out/x86_64
+      - name: Their sums
+        id: sums
+        shell: bash
+        run: |
+          cd out/x86_64
+          { echo 'sums<<EOF'; for f in agros-*.pkg.tar*; do [[ $f == *.sig ]] || sha256sum "$f"; done; echo EOF; } >>"$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: agros
+          path: out/x86_64/agros-*
+
+  repo:
+    # The [agros] pacman repo: built on every push to main and daily (what doesn't build: the published one kept,
+    # build-repo.sh), then tested and published by the jobs below. AgrOS's own packages from the agros job. Unsigned,
+    # with no secret: it runs AUR build scripts (only AgrOS's public key, ci/agros.asc, to check the published files it
+    # keeps)
+    needs: agros
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 150
+    container:
+      image: archlinux:latest
+      options: --privileged
+    steps:
+      - *build-tools
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0  # (the packages' versions count the commits)
           # (no token left in .git/config for the AUR build scripts to read)
           persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          name: agros
+          path: out/x86_64
       - name: Build the repo
         env:
           # (a repo variable can point it elsewhere: the old repo's copy while this one's site is new)
           AGROS_PUBLISHED: ${{ vars.AGROS_PUBLISHED || 'https://crimzoagra.github.io/agros/x86_64' }}
           AGROS_HELD: /tmp/held/held
+          AGROS_SKIP_OWN: 1
         run: |
           git config --global --add safe.directory '*'
           mkdir -p /tmp/held && : >/tmp/held/held
@@ -228,7 +272,7 @@ jobs:
     # of it signed (ci/sign-repo.sh), the only place AgrOS's key is: a container of its own, not privileged, that never
     # runs makepkg, paru, an AUR build script, a built package or a test (repo-add reads the packages' .PKGINFO); before
     # the key only official Arch packages' install scripts (its tools), CachyOS's keyring's once the key is gone
-    needs: [repo, test]
+    needs: [agros, repo, test]
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-26.04
     timeout-minutes: 45
@@ -257,6 +301,11 @@ jobs:
         with:
           name: approved
           path: /tmp/approved-now
+      # AgrOS's own packages as the agros job built them, none changed or added by the repo job's AUR build scripts
+      - name: AgrOS's own packages checked
+        env:
+          AGROS_OWN_SUMS: ${{ needs.agros.outputs.sums }}
+        run: ci/own-check.sh out/x86_64
       - name: Held back (what broke the tests)
         if: needs.test.outputs.result != 'ok'
         env:
@@ -340,7 +389,7 @@ jobs:
   report:
     # One issue for what this run held back or didn't put out (ci/report.sh), closed once a run puts all out (Pages'
     # deploy too: a release signed but never deployed closed the issue as all out)
-    needs: [repo, test, release, publish]
+    needs: [agros, repo, test, release, publish]
     if: ${{ always() && github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
     runs-on: ubuntu-26.04
     timeout-minutes: 10
@@ -362,7 +411,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RESULT: ${{ needs.test.outputs.result }}
-          BUILD: ${{ needs.repo.result }}
+          BUILD: ${{ needs.agros.result == 'success' && needs.repo.result || needs.agros.result }}
           RELEASE: ${{ needs.release.result == 'success' && needs.publish.result || needs.release.result }}
           HELD: /tmp/held/held
           REPORT: /tmp/report/report
