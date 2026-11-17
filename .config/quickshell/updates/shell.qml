@@ -76,8 +76,11 @@ ShellRoot {
 
         running: true
         // Ends with a line of its own, with the list's exit status: with nothing to update the list is empty, and empty
-        // output never reported back (the count from before the update stayed); a list that failed said as such
-        command: ["sh", "-c", '"$0" --list; echo "end $?"', root.script]
+        // output never reported back (the count from before the update stayed); a list that failed said as such. One
+        // that hangs (a network that connects but never answers: checkupdates, paru and flatpak have no time limit of
+        // their own) fails after 10 minutes, with everything it started (timeout signals its whole process group), not
+        // "Checking" for good with no way to check again
+        command: ["sh", "-c", 'timeout 10m "$0" --list; echo "end $?"', root.script]
         stdout: StdioCollector {
             onStreamFinished: {
                 root.listFailed = !/^end 0$/m.test(text);

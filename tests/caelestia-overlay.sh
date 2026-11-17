@@ -22,6 +22,22 @@ dst=$t/.config/quickshell/caelestia skipped=$t/state/caelestia-overlay-skipped
 out=$(run) || fail "overlay failed: $(tail -3 <<<"$out")"
 grep -q '^WARNING\|Traceback' <<<"$out" && fail "patches no longer fit: $(grep '^WARNING' <<<"$out")"
 [[ -d $dst && ! -s $skipped ]] || fail "not installed"
+# A critical battery (and the session menu's Hibernate) hibernates where the system can, else suspends: the command both
+# run, with a systemctl whose hibernate works or is refused as logind refuses it without swap
+battery=$(find "$dst" -name BatteryMonitor.qml -type f)
+sleep_cmd=$(sed -n 's/^ *onTriggered: Quickshell.execDetached(\["sh", "-c", "\(.*\)"\])$/\1/p' "$battery")
+[[ -n $sleep_cmd ]] || fail "a critical battery doesn't run the hibernate-or-suspend command: $(grep -A3 'id: hibernateTimer' "$battery")"
+grep -qF "\"$sleep_cmd\"] : Config.session.commands.hibernate" "$dst/modules/session/Content.qml" ||
+    fail "the session menu's Hibernate not the same: $(grep 'commands.hibernate' "$dst/modules/session/Content.qml")"
+mkdir -p "$t/sleep-bin"
+for can in 0 1; do
+    printf '#!/bin/sh\necho "$1" >>"%s/slept"\n[ "$1" != hibernate ] || exit %s\n' "$t" "$can" >"$t/sleep-bin/systemctl"
+    chmod +x "$t/sleep-bin/systemctl"; rm -f "$t/slept"
+    PATH=$t/sleep-bin:$PATH sh -c "$sleep_cmd"
+    want=hibernate; ((can == 0)) || want=$'hibernate\nsuspend'
+    [[ $(cat "$t/slept") == "$want" ]] || fail "a critical battery with hibernation $( ((can == 0)) && echo working || echo refused): $(cat "$t/slept")"
+done
+rm -rf "$t/sleep-bin" "$t/slept"
 # The bar's reserved space changing (Hyprland has no event for it): maximised and snapped windows fitted again
 grep -q 'onExclusiveZoneChanged: Quickshell.execDetached(\["hyprctl", "eval", "dots.refit_placed_soon()"\])' "$dst/modules/drawers/Exclusions.qml" ||
     fail "the bar's space changing doesn't refit windows: $(grep -A3 'anchors.left: true' "$dst/modules/drawers/Exclusions.qml")"
@@ -246,6 +262,22 @@ grep -q '^WARNING: bar dock skipped, .*(modules/bar/components/ not found)$' <<<
     fail "a feature's folder gone not said: $(grep 'bar dock' <<<"$out")"
 grep -q 'Dock {' "$t/one/modules/bar/Bar.qml" && fail "a feature's folder gone: its other files still patched (Bar.qml's Dock)"
 rm -rf "$t/one"
+# An update that fits the anchors but changed around them: never patched over the wrong thing. A section put after the
+# weather's "coming soon" card stays (only the card is swapped, not all up to the Units comment), and a new file of the
+# overlay's that Caelestia now has its own of skips that feature (not written over Caelestia's)
+cp -r "$src" "$t/mut-src"
+sed -i 's|^        // Units$|        // Forecast\n        SectionHeader {\n            text: "agros-test-section"\n        }\n\n&|' \
+    "$t/mut-src/modules/nexus/pages/LanguageAndRegion.qml"
+grep -q agros-test-section "$t/mut-src/modules/nexus/pages/LanguageAndRegion.qml" || fail "test setup: the Units comment not found"
+echo '// Caelestia: agros-test-own' >"$t/mut-src/services/ScrollLock.qml"
+cp -as "$t/mut-src" "$t/one"
+out=$(DOTS_SETTINGS=$t/bin/dots-settings python3 "$here/.local/share/caelestia-overlay/patch.py" "$t/mut-src" "$t/one" 2>&1) || true
+grep -q '^Patched: settings: weather location picker' <<<"$out" || fail "the weather picker didn't fit with a section after it: $out"
+grep -q agros-test-section "$t/one/modules/nexus/pages/LanguageAndRegion.qml" || fail "the weather picker cut out the section after it"
+grep -q "^WARNING: Scroll Lock icon skipped, .*(services/ScrollLock.qml is Caelestia's own now)$" <<<"$out" ||
+    fail "Caelestia's own ScrollLock.qml not said: $(grep 'Scroll Lock' <<<"$out")"
+grep -q agros-test-own "$t/one/services/ScrollLock.qml" || fail "Caelestia's own ScrollLock.qml written over"
+rm -rf "$t/one" "$t/mut-src"
 # Window peek works on the dock's and the workspace preview's popouts: with one of them off it's still in, with both
 # off it's off too (said so), not a patch that no longer fits
 cat >"$t/bin/two-off" <<'S'

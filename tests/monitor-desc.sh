@@ -76,7 +76,8 @@ settings() { cd "$here" && HOME=$t EXTRA=${1:-} lua -e '
 package.path = os.getenv("HOME") .. "/.config/caelestia/?.lua;" .. package.path
 local mine = { ["screens.Fast One.scale"] = "1.5", ["screens.Fast One.enabled"] = false, ["screens.main"] = "Other One",
                ["screens.Other One.enabled"] = false, ["screens.Other One.mode"] = 7,
-               ["screens.Fast One.mode"] = "3840x2160@60.00", ["screens.Off One.mode"] = "1920x1080@60.00" }
+               ["screens.Fast One.mode"] = "3840x2160@60.00", ["screens.Off One.mode"] = "1920x1080@60.00",
+               ["screens.Off One.scale"] = "0", ["screens.Off One.position"] = "left of it" }
 local list = { { name = "DP-1", description = "Fast One", available_modes = {
                    { width = 1920, height = 1080, refresh_rate = 60.0, preferred = true },
                    { width = 1920, height = 1080, refresh_rate = 143.98 } } },
@@ -104,7 +105,9 @@ grep -qx "desc:Fast One 1920x1080@143.98 1.5 auto-right true" <<<"$out" ||
 # (a mode that isn't text, from a hand edit: left out; the second screen off would be every screen: it stays on)
 grep -qx "desc:Other One preferred auto 0x0 nil" <<<"$out" || fail "the main screen not at 0x0, or every screen off: $out"
 out=$(settings 1)
-grep -qx "desc:Off One 1920x1080@60.00 auto auto-right nil" <<<"$out" || fail "a screen that's off but listed lost its settings: $out"
+# (and a scale and position from a hand edit that Hyprland can't take left out: the rule that applied, to the main's right)
+grep -qx "desc:Off One 1920x1080@60.00 auto auto-right nil" <<<"$out" ||
+    fail "a screen that's off but listed lost its settings, or got a scale or position that isn't one: $out"
 grep -qE "^desc:( |$)" <<<"$out" && fail "a screen with no description got a desc: rule matching every screen: $out"
 # (the host file's position kept, not moved to the main one's right)
 grep -q "^desc:Named One .* auto-right" <<<"$out" && fail "the host file's position dropped for the main one's right: $out"

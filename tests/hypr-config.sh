@@ -106,6 +106,8 @@ hl = {
         end
         local blur = type(c) == "table" and c.decoration and c.decoration.blur
         if blur and blur.ignore_opacity ~= nil then CONFIG["decoration.blur.ignore_opacity"] = blur.ignore_opacity end
+        local bars = type(c) == "table" and type(c.plugin) == "table" and c.plugin.hyprbars
+        if bars and bars.bar_color then BAR_COLOR = bars.bar_color end
     end,
     get_config = function(key) return CONFIG[key] end,
     get_current_submap = function() return "" end,
@@ -314,6 +316,7 @@ for _, tag in ipairs(hidden_rules) do io.write("hidden rule tag ", tag, "\n") en
 for _, g in ipairs(unset_gestures) do io.write("gesture unset ", g, "\n") end
 for name, f in pairs(dots) do if type(f) == "function" then io.write("function ", name, "\n") end end
 if HW_CURSORS ~= nil then io.write("no_hardware_cursors ", tostring(HW_CURSORS), "\n") end
+if BAR_COLOR then io.write("bar_color ", BAR_COLOR, "\n") end
 L
 
 # One load: HOME with the given settings.lua (none if empty), the title bar plugin on or off, [one screen]
@@ -372,6 +375,18 @@ for plugin in 0 1; do
     p "peek rules dots-peek:dots-peek:0 override:false,dots-peek-back:dots-peek-back:1 override:false,dots-peek-back-see:dots-peek-back-see:0.95 override:false,dots-peek-back-see-full:dots-peek-back-see:1 override:false"
     p "peek rules after another peek 4"
 done
+# The title bars' colour from Caelestia's window opacity, kept from 0 to 1: a hand edit's 1.5 or text gave a colour
+# Hyprland can't read, or an error that stopped titlebars.lua
+grep -qx 'bar_color rgba(1f1f25f2)' <<<"$out" || fail "the title bars' colour not from the window opacity: $(grep bar_color <<<"$out")"
+vars=$t/home/.config/hypr/variables.lua
+cp "$vars" "$t/variables.orig"
+for o in '1.5:ff' '-0.5:00' '"a lot":ff'; do
+    sed -i "s/windowOpacity = [^,]*,/windowOpacity = ${o%:*},/" "$vars"
+    out=$(run_config "$good" 1) || fail "the config failed to load with a window opacity of ${o%:*}: $(tail -4 <<<"$out")"
+    grep -qx "bar_color rgba(1f1f25${o##*:})" <<<"$out" ||
+        fail "the title bars' colour with a window opacity of ${o%:*}: $(grep bar_color <<<"$out")"
+done
+cp "$t/variables.orig" "$vars"
 # Every window this config makes opaque tagged dots_opaque too: window peek fades it back to whole, not see-through
 # (then a jump to whole once its tag is off)
 bad=$(grep -h "opaque = true" "$here"/.config/caelestia/user/*.lua | grep -v "dots_opaque" | grep "window_rule" || true)
