@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # dots-settings' saved choices: a broken settings.json (not JSON, or not an object) reads as the defaults instead of
-# failing every read; a value that isn't JSON is refused with a message; a change keeps the other saved ones
+# failing every read; a value that isn't JSON, or a number that's NaN or Infinity, is refused with a message (a whole
+# number's NaN crashed it); a change keeps the other saved ones
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
@@ -33,6 +34,11 @@ def run(*args):
 
 err = run("set", b[0], "notjson", "--later")
 assert err.startswith(b[0] + ":"), f"a value that isn't JSON: {err!r}"
+n = next(k for k, s in settings.items() if s["type"] == "number" and s.get("integer") and "get" not in s)
+for odd in ("NaN", "Infinity", "-Infinity"):
+    err = run("set", n, odd, "--later")
+    assert err.startswith(n + ": a whole number"), f"{odd} for {n}: {err!r}"
+assert not ds.stored().get(n), f"a NaN or Infinity saved: {ds.stored()}"
 run("set", b[0], json.dumps(not settings[b[0]]["default"]), "--later")
 run("set", b[1], json.dumps(not settings[b[1]]["default"]), "--later")
 saved = json.load(open(ds.SETTINGS))
