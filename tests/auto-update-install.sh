@@ -70,7 +70,7 @@ grep -q 'systemd-inhibit' <<<"$unit" && fail "the boot's download blocks shutdow
     grep -qx '    "$@" rm -rf -- "$fetched"' "$t/auto-update" &&
     # (on disk: the file and the repo it's read into, in /tmp, took memory)
     grep -qx '    fetched=$("$@" mktemp -d -p /var/tmp agros-flatpak.XXXXXX) || return 0' "$t/auto-update" &&
-    [[ $(grep -c 'flatpak-bundle-update' "$t/auto-update") == 4 ]]; } ||
+    [[ $(grep -v '^ *#' "$t/auto-update" | grep -c 'flatpak-bundle-update') == 4 ]]; } ||
     fail "the boot's Flatpak reinstall not held by root around that step alone (root's and each user's): $(grep -n -A14 '^bundles() {' "$t/auto-update")"
 # Shutdown's own limit (the targets' JobTimeoutSec) longer than the install's (TimeoutStopSec), so it can't cut it off
 stop=$(sed -n 's/^TimeoutStopSec=\([0-9]*\)min$/\1/p' "$au/auto-update-install.service")

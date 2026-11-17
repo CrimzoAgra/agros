@@ -191,7 +191,7 @@ grep -q "Waiting for the update started at boot" "$t/wait-out" || fail "the wait
 rm "$t/au/downloading"
 wait || true
 # (its lists synced, then the update through the upstream gate's pacman.conf: update-gate's)
-{ grep -q -- " -Sy --noconfirm$" "$t/paru" && grep -qE -- " --config [^ ]+ -Su --noconfirm$" "$t/paru"; } ||
+{ grep -q -- " -Sy --noconfirm$" "$t/paru" && grep -qE -- " --config [^ ]+ -Su --noconfirm( --ignore [^ ]+)?$" "$t/paru"; } ||
     fail "paru not run once the boot's download was done, through the gate: $(cat "$t/paru" 2>/dev/null)"
 rm "$t/bin/sleep"
 # A newer keyring waiting (weeks offline): installed first, on its own, then the rest (a package signed with a key the
