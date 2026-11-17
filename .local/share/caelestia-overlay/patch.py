@@ -1140,8 +1140,9 @@ def window_peek():
 
 
 def sidebar_with_utilities():
-    # Super+K (Caelestia's "show all") opens the notification sidebar too, with the utilities panel joined under it
-    # (sidebar_shape)
+    # Super+K (Caelestia's "show all": the launcher, dashboard, volume slider and utilities panel) opens the notification
+    # sidebar too, with the utilities panel joined under it (sidebar_shape). The launcher closing (Esc) closes them all
+    # unless hovered: Caelestia's left the utilities panel open until the pointer moved
     shortcuts = first("modules/Shortcuts.qml", "daemons/Shortcuts.qml")
     sc = swap(read(shortcuts), "v.utilities = !(", "v.utilities = v.sidebar = !(", "show all")
     sc = swap(sc, "|| v.utilities);", "|| v.utilities || v.sidebar);", "show all")
@@ -1165,12 +1166,15 @@ def sidebar_with_utilities():
         inter = swap_block(inter, "        function onSidebarChanged() {", on_sidebar, "sidebar onSidebarChanged",
                            must="sidebarShortcutActive")
         # (and as below: back to hover control once the pointer is on it, not only in its hover trigger, which the
-        # edge-only trigger (edge_triggers) made its last few pixels; the launcher closing closes it unless it's hovered)
+        # edge-only trigger (edge_triggers) made its last few pixels; the launcher closing closes it and the utilities
+        # panel unless they're hovered)
         inter = swap(inter, "                } else if (showSidebarHover) {\n",
                      "                } else if (showSidebarHover || inRightPanel(panels.sidebar, x, y)) {\n",
                      "sidebar hovered: back to hover control")
         inter = insert(inter, "                root.sidebarShortcutActive = false;\n\n", """                if (!root.inRightPanel(root.panels.sidebar, root.mouseX, root.mouseY))
                     root.screenState.sidebar = false;
+                if (!root.inBottomPanel(root.panels.utilities, root.mouseX, root.mouseY))
+                    root.screenState.utilities = false;
 
 """)
         return {shortcuts: sc, "modules/drawers/Interactions.qml": inter}
@@ -1185,6 +1189,8 @@ def sidebar_with_utilities():
     inter = insert(inter, "                root.utilitiesShortcutActive = false;\n\n", """                root.sidebarShortcutActive = false;
                 if (!root.inRightPanel(root.panels.sidebar, root.mouseX, root.mouseY))
                     root.screenState.sidebar = false;
+                if (!root.inBottomPanel(root.panels.utilities, root.mouseX, root.mouseY))
+                    root.screenState.utilities = false;
 
 """)
     inter = insert(inter, "        function onUtilitiesChanged() {\n", on_sidebar + "\n")
