@@ -749,7 +749,7 @@ def main(args):
             sys.exit(f"{args[1]}: the value as JSON (true, \"tiling\"...)")
         if "options_cmd" in setting and not setting.get("open"):
             setting["options"] = options_from(setting["options_cmd"])  # (checked against them)
-        if setting["type"] == "number" and setting.get("integer") and isinstance(value, float) and value == int(value):
+        if setting["type"] == "number" and setting.get("integer") and isinstance(value, float) and value.is_integer():
             value = int(value)  # (35.0 from the app's slider: 35)
         problem = check(args[1], setting, value)
         if problem:
