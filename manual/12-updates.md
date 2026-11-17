@@ -17,6 +17,7 @@ You don't have to think about updates.
   says so. **Update all** in the Updates app rebuilds them the same way.
   Any other AUR app that didn't build, or that can't be installed (it clashes with another package), just keeps its
   version until the next try, the rest of the update goes in without it, and a warning after you log in names it.
+  On a laptop below 15% battery and unplugged, nothing is installed: it waits for the next shutdown.
 - **Firmware** is installed at shutdown too, but only after a notification told you it's ready, and before the
   system's updates (which wait for the next shutdown if the firmware took long). A BIOS/UEFI update is applied as the
   computer next starts: don't turn it off then. On a laptop running low on battery, or unplugged when the device needs
