@@ -30,14 +30,14 @@ Laptop settings and lighting are in a separate repo: **legion-control-linux**.
    both if that failed, and moves the shell onto the overlay). `agros-welcome` does the rest of
    what's per user: LibreWolf's settings, the Spotify, Nuvio and ArtCraft Flatpaks with Spicetify, VSCodium's
    extensions and Claude Code's plugins.
-3. **The one thing you run:** its notification offers *Restore my accounts*. Plug in your pen drive and click it, or
+3. **The one thing you run:** its notification offers *Restore accounts*. Plug in your pen drive and click it, or
    run `agros-personal` ([Your accounts](#your-accounts)). Capri installs right after that, since her fork is private
    and needs your GitHub login (at the next login when gh only gets it from the keyring brought back: `dotfiles-check`
    installs her then). The offer comes back at each login until it's answered (`~/.local/state/agros/offered`); an
    account set up before it did (its `done` there, without the `offer-sent` mark the offer leaves) isn't offered it
    again.
 
-The same notification offers *Install hardware apps and VMware* (`agros-welcome --system`). It installs the apps for
+The same notification offers *Hardware apps* (`agros-welcome --system`). It installs the apps for
 the hardware that's plugged in: Boxflat (Moza), OpenRazer + Polychromatic (Razer), Solaar (Logitech),
 OpenTabletDriver (tablets), the Legion's camera switch and, with an NVIDIA card, `agros-nvidia`. It also builds VMware
 Workstation from the AUR, because its license forbids passing it on.

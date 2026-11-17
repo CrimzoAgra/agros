@@ -22,7 +22,7 @@ GB, so use a stick with room for it.
 
 ## Restoring them (after installing)
 
-Click **Restore my accounts** in the notification after your first login, or run `agros-personal`. Plug in the stick
+Click **Restore accounts** in the notification after your first login, or run `agros-personal`. Plug in the stick
 and type your passphrase. Everything goes straight back where it belongs, and anything it replaces is backed up first.
 Capri, the desktop companion, installs right after: her code is in a private GitHub repo, so she installs only for a
 GitHub login that can read it. If your GitHub login only works once you've logged out and in again, she installs at
