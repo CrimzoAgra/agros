@@ -2,11 +2,14 @@
 # Sourced by build-repo.sh: the published repo's packages kept in place of this run's. A package that didn't build held
 # back, the published one kept (hold); one whose rebuild would only be thrown away not built (reused); this run's new
 # AUR builds swapped for the published ones (hold_new, --hold-new). Uses its $out, $work, $keyring, $AGROS_PUBLISHED,
-# asb and the held array (each "<name>: <why>")
+# asb and the held array (each "<name>: <why>"); sets $stamp, build-repo.sh's keep_published's too
 # shellcheck disable=SC2154  # ($out, $work, $keyring, asb: build-repo.sh's)
 # verify_sig <sig> <file>: a good signature by AgrOS's key, checked against $keyring (ci/agros.asc's key) alone, with
 # gpgv: no other key, the builder's keyring neither (the AUR build scripts', it may hold anything)
 verify_sig() { gpgv --keyring "$keyring" "$1" "$2" >/dev/null 2>&1; }
+# (?t= on each fetch of the published repo: Pages' CDN keeps a copy up to 10 minutes after a deploy, an older
+# database, or a 404 from before a file was published; the query asks for the current one, as mirror.sh's fetch)
+stamp=$(date +%s)
 hold() { held+=("$1: $2"); echo "!! $1: $2: the published one kept"; carry_over "$1" || exit 1; }
 # The published database, read once; field <desc> <NAME>: a field of a package's entry in it
 pubdb=$work/pubdb
@@ -14,8 +17,8 @@ field() { awk -v f="%$2%" '$0 == f { on = 1; next } /^%/ { on = 0 } on && NF' "$
 pub_db() {
     [[ -d $pubdb ]] && return 0
     [[ -n ${AGROS_PUBLISHED:-} ]] || { echo "!! no published repo to keep packages from"; return 1; }
-    curl -fsSL --retry 3 --max-time 120 -o "$work/pub.db" "$AGROS_PUBLISHED/agros.db" &&
-        curl -fsSL --retry 3 --max-time 60 -o "$work/pub.db.sig" "$AGROS_PUBLISHED/agros.db.sig" &&
+    curl -fsSL --retry 3 --max-time 120 -o "$work/pub.db" "$AGROS_PUBLISHED/agros.db?t=$stamp" &&
+        curl -fsSL --retry 3 --max-time 60 -o "$work/pub.db.sig" "$AGROS_PUBLISHED/agros.db.sig?t=$stamp" &&
         verify_sig "$work/pub.db.sig" "$work/pub.db" &&
         mkdir -p "$pubdb" && bsdtar -xf "$work/pub.db" -C "$pubdb" ||
         { echo "!! the published database couldn't be read or verified"; rm -rf "$pubdb"; return 1; }
@@ -47,8 +50,8 @@ carry_over() {
     out_has "$1" && return 0
     pub_db && desc=$(pub_desc "$1") || { echo "!! $1: none published to keep"; return 1; }
     f=$(field "$desc" FILENAME)
-    curl -fsSL --retry 3 --max-time 600 -o "$out/$f" "$AGROS_PUBLISHED/$f" &&
-        curl -fsSL --retry 3 --max-time 60 -o "$out/$f.sig" "$AGROS_PUBLISHED/$f.sig" &&
+    curl -fsSL --retry 3 --max-time 600 -o "$out/$f" "$AGROS_PUBLISHED/$f?t=$stamp" &&
+        curl -fsSL --retry 3 --max-time 60 -o "$out/$f.sig" "$AGROS_PUBLISHED/$f.sig?t=$stamp" &&
         verify_sig "$out/$f.sig" "$out/$f" ||
         { echo "!! $f: the published copy couldn't be read or verified"; rm -f "$out/$f" "$out/$f.sig"; return 1; }
     chown builder: "$out/$f" "$out/$f.sig"

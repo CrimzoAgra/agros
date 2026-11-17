@@ -57,6 +57,12 @@ gpg --batch --quiet -u "$key" --detach-sign "$pub/agros.db"
 # (built here: a newer built-dep)
 pkg "$out" built-dep 2-1
 export AGROS_PUBLISHED=file://$pub
+# (curl itself, but only the current copy asked for, a ?t= query past Pages' CDN's: without one, a failure)
+real=$(type -P curl)
+mkdir "$t/curl"
+printf '#!/bin/bash\nfor a; do [[ $a != file://* || $a == *"?t="[0-9]* ]] || exit 22; done\nexec %q "$@"\n' "$real" >"$t/curl/curl"
+chmod +x "$t/curl/curl"
+export PATH=$t/curl:$PATH
 asb() { "$@"; }
 chown() { :; }  # (the builder account, CI's)
 held=()

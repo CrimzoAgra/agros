@@ -18,13 +18,16 @@ sums=${AGROS_OWN_SUMS:?no sums from the agros job}
 expected=$(sed -e 's/#.*//' -e 's/[[:space:]]//g' -e 's|^.*/||' "$root/aur/packages.txt"; printf '%s\n' quickshell-git cachyos-calamares)
 if [[ -n ${AGROS_PUBLISHED:-} ]]; then
     # (the published database's names, its signature checked against AgrOS's key alone; none yet, a 404: the list)
+    # (?t=: Pages' CDN keeps a copy up to 10 minutes after a deploy, and an older database beside a newer signature
+    # failed the check, the release stopped; the query asks for the current one, as mirror.sh's fetch)
     h=$(mktemp -d)
     trap 'rm -rf "$h"' EXIT
-    code=$(curl -sS --retry 3 -o "$h/db" -w '%{http_code}' "$AGROS_PUBLISHED/agros.db") || code=000
+    stamp=$(date +%s)
+    code=$(curl -sS --retry 3 -o "$h/db" -w '%{http_code}' "$AGROS_PUBLISHED/agros.db?t=$stamp") || code=000
     case $code in
         404) ;;
         200)
-            { curl -fsS --retry 3 -o "$h/db.sig" "$AGROS_PUBLISHED/agros.db.sig" &&
+            { curl -fsS --retry 3 -o "$h/db.sig" "$AGROS_PUBLISHED/agros.db.sig?t=$stamp" &&
                 gpg --homedir "$h" --batch --quiet --dearmor -o "$h/key.gpg" <"${AGROS_PUBKEY:-$root/ci/agros.asc}" &&
                 gpgv --keyring "$h/key.gpg" "$h/db.sig" "$h/db" >/dev/null 2>&1 &&
                 mkdir "$h/x" && bsdtar -xf "$h/db" -C "$h/x"; } ||

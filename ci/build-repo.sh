@@ -165,12 +165,13 @@ keep_published() {
     local f=$1 code
     # Not published yet (404): a new version. Anything else (Pages down, a timeout): stopped here, not a rebuild
     # published under a name users already have
-    # (--retry: a timeout or a 5xx from Pages tried again; a 404 isn't)
-    code=$(curl -sSL --retry 3 --max-time 300 -o "$work/pub" -w '%{http_code}' "$AGROS_PUBLISHED/$f" 2>/dev/null) ||
+    # (--retry: a timeout or a 5xx from Pages tried again; a 404 isn't. ?t=, published.sh's stamp: a 404 Pages' CDN
+    # kept from before the file was published read as not published, and a rebuild went out under its name)
+    code=$(curl -sSL --retry 3 --max-time 300 -o "$work/pub" -w '%{http_code}' "$AGROS_PUBLISHED/$f?t=$stamp" 2>/dev/null) ||
         code=000
     [[ $code == 404 ]] && return 0
     [[ $code == 200 ]] || { echo "!! $f: the published copy couldn't be read (HTTP $code)"; exit 1; }
-    curl -fsSL --retry 3 --max-time 60 -o "$work/pub.sig" "$AGROS_PUBLISHED/$f.sig" ||
+    curl -fsSL --retry 3 --max-time 60 -o "$work/pub.sig" "$AGROS_PUBLISHED/$f.sig?t=$stamp" ||
         { echo "!! $f: the published copy's signature couldn't be read"; exit 1; }
     verify_sig "$work/pub.sig" "$work/pub" ||
         { echo "!! $f: the published copy's signature doesn't check out"; exit 1; }

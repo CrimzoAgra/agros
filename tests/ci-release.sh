@@ -76,8 +76,8 @@ merge() { (cd "$t/rel" && OWNER=Owner GITHUB_REPOSITORY=Owner/agros PATH=$t/bin:
 before=$(for i in $(seq 1 24); do echo "hyprland 0.$i.0"; done; echo "aquamarine 0.9.0"; echo '<html>not found</html>')
 printf '%s\n' 'hyprland 0.24.0' 'hyprland 0.25.0' 'aquamarine 0.10.0' >"$t/approved-now/approved"
 BEFORE=$before merge || fail "the approved list not merged"
-grep -qx 'https://Owner.github.io/agros/x86_64/agros-approved' <<<"$(sed 's/.* //' "$t/urls")" ||
-    fail "the earlier list not read from this repo's site: $(cat "$t/urls")"
+grep -Eqx 'https://Owner\.github\.io/agros/x86_64/agros-approved\?t=[0-9]+' <<<"$(sed 's/.* //' "$t/urls")" ||
+    fail "the earlier list not read from this repo's site, its current copy (?t=): $(cat "$t/urls")"
 want=$(for i in $(seq 6 25); do echo "hyprland 0.$i.0"; done)
 got=$(cat "$t/rel/out/x86_64/agros-approved")
 [[ $(grep '^hyprland ' <<<"$got") == "$want" ]] ||

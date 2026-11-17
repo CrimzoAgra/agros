@@ -138,9 +138,10 @@ jobs:
           runuser -u ci -- git config --global --add safe.directory '*'
           mkdir -p /tmp/report
           if [ -d /tmp/built/x86_64 ]; then
-            # (what this run built; the day Arch last passed the tests, published beside the repo)
+            # (what this run built; the day Arch last passed the tests, published beside the repo. ?t=: the current
+            # one, not a copy Pages' CDN keeps up to 10 minutes after a deploy)
             site=https://crimzoagra.github.io/agros/x86_64
-            day=$(curl -fsS --retry 3 "$site/agros-arch-ok" 2>/dev/null) || day=
+            day=$(curl -fsS --retry 3 "$site/agros-arch-ok?t=$(date +%s)" 2>/dev/null) || day=
             ci/test-passes.sh file:///tmp/built/x86_64 "$site" "$day"
           else
             runuser -u ci -- env DOTS_BUILD_TESTS=1 tests/run.sh
