@@ -2,7 +2,7 @@
 # The camera switch's saved position (camera-switchd, its state file in a stand-in folder): written whole (beside it,
 # then renamed over it: never an empty file), and read as on only when it says on, anything else (off, empty, broken,
 # none) off; the udev rule reads it the same way (on, or the camera taken out). Its notification run as the user's own
-# group (the account's, not the bus file's)
+# group (the account's, not the bus file's), and never waited on by the switch
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
@@ -39,6 +39,16 @@ cs.subprocess.run = run
 cs.notify(True)
 sp = [c for c in calls if c[0] == "setpriv"]
 assert len(sp) == 1 and sp[0][1:3] == [f"--reuid={uid}", f"--regid={pwd.getpwuid(uid).pw_gid}"], sp
+# The switch never waits on its notification (one that hangs, a frozen desktop's bus, held its next move: the camera
+# left on with the switch off): the positions queued for the announcer, in order
+import time
+cs.subprocess.run = lambda *a, **k: time.sleep(6)
+start = time.monotonic()
+cs.apply(True, announce=True)
+cs.apply(False, announce=True)
+assert time.monotonic() - start < 5, "the switch waited on its notification"
+assert [cs.said.get_nowait(), cs.said.get_nowait()] == [True, False], "the positions not queued in order"
+assert open(cs.STATE).read() == "off"
 P
 rule=$(grep -o "RUN+=\"[^\"]*\"" "$here/packages/agros-camera-switch/90-agros-camera-switch.rules")
 sh_cmd=${rule#*-c \'}; sh_cmd=${sh_cmd%\'\"}
