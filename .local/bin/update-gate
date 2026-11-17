@@ -82,13 +82,28 @@ fi
 for try in 1 2 3 4 5 6; do
     ((try < 6)) || { echo "update-gate: the update still can't be worked out (pacman says why as it runs)" >&2; break; }
     dry=$(LC_ALL=C pacman -Sup --config "$out" "${db[@]}" --print-format '%n' 2>&1) && break
-    held=$(sed -nE "s/^:: installing ([^ ]+) .*breaks dependency '[^']*' required by ([^ ]+)\$/\\1 \\2/p" <<<"$dry" |
-        while read -r lib by; do grep -qxF -- "$by" <<<"$(pacman-conf --config "$out" IgnorePkg)" && echo "$lib $by"; done | sort -u)
+    breaks=$(sed -nE "s/^:: installing ([^ ]+) .*breaks dependency '[^']*' required by ([^ ]+)\$/\\1 \\2/p" <<<"$dry")
+    ignored=$(pacman-conf --config "$out" IgnorePkg)
+    held=$(while read -r lib by; do [[ -n $lib ]] && grep -qxF -- "$by" <<<"$ignored" && echo "$lib $by"; done <<<"$breaks" | sort -u)
+    # (a gated one, approved, whose update would break one not held: a package of AgrOS's built for the old series, its
+    # rebuild not published yet, as agros-hyprbars' hyprland<0.58 for an approved 0.58. The whole set waits for that
+    # rebuild, by the gate's Include, rather than the whole update failing on it, the kernel's too)
+    waiting=$(while read -r lib by; do
+        [[ -n $lib ]] && grep -qxF -- "$lib" <<<"$(printf '%s\n' "${gated[@]}")" && ! grep -qxF -- "$by" <<<"$ignored" &&
+            echo "$lib $by"
+    done <<<"$breaks" | sort -u)
     # (and any other one rebuilt against a held library's new version: it waits too)
     needs=$(sed -nE "s/^:: unable to satisfy dependency '[^']*' required by ([^ ]+)\$/\\1/p" <<<"$dry" | sort -u)
-    [[ -n $held || -n $needs ]] || { echo "update-gate: pacman's dry run failed (it says why as it runs): $(grep -m1 . <<<"$dry")" >&2; break; }
+    [[ -n $held || -n $waiting || -n $needs ]] ||
+        { echo "update-gate: pacman's dry run failed (it says why as it runs): $(grep -m1 . <<<"$dry")" >&2; break; }
     [[ -z $held ]] || while read -r lib by; do echo "$lib (held with $by: its update would break it)"; done <<<"$held"
+    [[ -z $waiting ]] || while read -r lib by; do echo "$lib (waits for $by's rebuild: its update would break it)"; done <<<"$waiting"
     [[ -z $needs ]] || while read -r pkg; do echo "$pkg (held: its update needs something not to be had yet)"; done <<<"$needs"
-    sed -i "/^\\[options\\]/a IgnorePkg = $({ cut -d' ' -f1 <<<"$held"; echo "$needs"; } | grep . | sort -u | paste -sd' ')" "$out"
+    if [[ -n $waiting ]]; then
+        grep -qE "^[[:space:]]*Include[[:space:]]*=[[:space:]]*${gate//./\\.}[[:space:]]*(#.*)?\$" "$out" ||
+            sed -i "/^\\[options\\]/a $inc" "$out"
+    fi
+    ign=$({ cut -d' ' -f1 <<<"$held"; echo "$needs"; } | grep . | sort -u | paste -sd' ')
+    [[ -z $ign ]] || sed -i "/^\\[options\\]/a IgnorePkg = $ign" "$out"
 done
 exit 0
