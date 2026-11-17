@@ -406,7 +406,9 @@ gated=$au/pacman.conf
 # In English: "error:" is what's looked for)
 err=$au/download-err
 if LC_ALL='' LC_MESSAGES=C pacman -Sy --noconfirm --dbpath "$db" --logfile /dev/null 2>"$err"; then
-    waits=$(/usr/lib/agros/bin/update-gate /etc/pacman.conf "$gated" --dbpath "$db")
+    # (it failing: pacman.conf as it is, the gate's Include in it, as the shutdown and Updates do; not the last boot's
+    # copy, made for older lists, which let a newer Hyprland, not checked yet, through)
+    waits=$(/usr/lib/agros/bin/update-gate /etc/pacman.conf "$gated" --dbpath "$db") || cp /etc/pacman.conf "$gated"
     [[ -z $waits ]] || printf "waits for AgrOS's check: %s\n" "$waits"
     # The keyrings first, on their own, where these lists have a newer one (none pacman.conf holds back): a package
     # signed by a key the keyring here doesn't have yet, or has expired (CachyOS's users, an Arch packager's, 2026-11),
