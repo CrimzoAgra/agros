@@ -138,8 +138,9 @@ case $s in
     *) echo "caelestia-restart: Caelestia started but its config didn't load (qs log -c caelestia)"; rc=3 ;;
 esac
 exec 9>&-
-# A rebuild's skipped changes (or the changes left out) said now, the new shell (the notification server) up: said during the build, with it
-# stopped, it went to nobody (dots-warn: its notifications come up just after it shows in qs list)
+# A rebuild's skipped changes (or the changes left out) said now, the new shell (the notification server) up: said
+# during the build, with it stopped, it went to nobody (dots-warn: its notifications come up just after it shows in qs
+# list)
 skipped=${XDG_STATE_HOME:-$HOME/.local/state}/caelestia-overlay-skipped
 # (in the background: dots-warn tries for a minute when the shell never came up, and the caller waited on it. In a
 # scope of its own: run by the after-game waiter, this is its unit's main process, and its end killed the unit's
