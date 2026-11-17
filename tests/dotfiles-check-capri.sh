@@ -34,6 +34,9 @@ sleep 0.5; [[ ! -e $t/ran ]] || fail "Capri installed twice: $(cat "$t/ran")"
 # Her install failing: said
 : >"$mark"; CAPRI_RC=1 check --notify >/dev/null
 ran $'capri-update\nwarn Capri didn\'t install capri: cant clone it' || fail "a failed install not said: $(cat "$t/ran" 2>/dev/null)"
+# ...once: one capri-update said in a notification itself (exit 2) not said again
+: >"$mark"; CAPRI_RC=2 check --notify >/dev/null
+ran capri-update && sleep 0.5 && [[ $(cat "$t/ran") == capri-update ]] || fail "a failed install capri-update said said twice: $(cat "$t/ran" 2>/dev/null)"
 # gh with no login: said, once
 : >"$mark"; out=$(GH_RC=1 check --notify)
 grep -q "Capri isn't installed: GitHub has no login here" <<<"$out" || fail "gh with no login not said: $out"

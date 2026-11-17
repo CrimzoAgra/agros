@@ -7,6 +7,8 @@
 #                         boot)
 #   capri-update --check  only fetch and say whether an update is waiting ("capri: update available (<version>)":
 #                         update-kinds' list, and its --boot run, auto-update's, instead of the update)
+# Exit 1 when it failed, 2 when it failed and said so in a notification itself (dotfiles-check's install at login then
+# adds none of its own)
 # Built in ~/.local/share/capri/<build>/ and switched to only once it passes check_build (built, Electron there, her
 # types checked, her tests); ~/.local/share/capri/current points at the build ~/.local/bin/capri starts. If my changes
 # no longer merge with a new release, or its check fails, it's said once (notification, dotfiles-check), that
@@ -114,8 +116,9 @@ if ! out=$(git fetch --prune upstream 'refs/tags/v*:refs/tags/v*' 2>&1); then
         paste -sd';' >"$failed.new"
     { tail -n +2 "$failed" 2>/dev/null | grep -v "^The original's release tag "; echo "$why"; } >>"$failed.new"
     mv "$failed.new" "$failed"
-    if $check; then echo "capri: $why"; else warn "Capri not updated" "$why"; fi
-    exit 1
+    if $check; then echo "capri: $why"; exit 1; fi
+    warn "Capri not updated" "$why"
+    exit 2
 fi
 # (fetched again after that tag was taken out: said no more; what else is written down stays)
 # (here-strings, read whole: grep -q quitting early got the pipe's writer a SIGPIPE, which pipefail took for no match)
@@ -191,7 +194,7 @@ fail() {
     fi
     if [[ -n $have ]]; then warn "Capri not updated" "$1 She stays on the version she has."
     else warn "Capri not installed" "$1"; fi
-    exit 1
+    exit 2
 }
 # flaky <why>: what may go by itself (a download cut off) is tried again next time, as fail's "again"; failing the same
 # way a third run in a row with the same combination, it's that combination's own (fail: not tried again, another
