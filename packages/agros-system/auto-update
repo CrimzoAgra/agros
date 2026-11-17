@@ -501,7 +501,8 @@ fi
 bundles() {
     local fetched
     command -v flatpak >/dev/null && [[ -x /usr/lib/agros/bin/flatpak-bundle-update ]] || return 0
-    fetched=$("$@" mktemp -d) || return 0
+    # (on disk, /var/tmp: the file and the repo it's read into, about twice the app's size, in /tmp took memory)
+    fetched=$("$@" mktemp -d -p /var/tmp agros-flatpak.XXXXXX) || return 0
     "$@" /usr/lib/agros/bin/flatpak-bundle-update --fetch "$fetched"
     if [[ -s $fetched/fetched ]] && ((SECONDS > 4 * 3600 - 35 * 60)); then
         echo "Flatpaks from a file: too little of the run's time left to reinstall them, at the next boot"

@@ -181,10 +181,11 @@ reinstall() {
 }
 
 # install_from <release JSON> <user|system> [app id]: download its Linux x86_64 .flatpak, verify it, install it (over an
-# older one); prints the app id
+# older one); prints the app id. (In your cache, on disk, as update-apps' builds: the file and the repo it's read into,
+# about twice the app's size, in /tmp took memory)
 install_from() {
     local tmp got ok=0
-    tmp=$(mktemp -d)
+    mkdir -p "${XDG_CACHE_HOME:-$HOME/.cache}" && tmp=$(mktemp -d "${XDG_CACHE_HOME:-$HOME/.cache}/agros-flatpak.XXXXXX") || return 1
     got=$(fetch_from "$1" "$tmp" "$2" "${3:-}") && reinstall "$2" "${got#*$'\t'}" "${got%%$'\t'*}" >&2 && echo "${got%%$'\t'*}" || ok=1
     rm -rf "${tmp:?}"
     return $ok

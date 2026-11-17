@@ -16,7 +16,7 @@ newer 0.1.34-alpha 0.1.33 || fail "0.1.34-alpha not newer than 0.1.33"
 ! newer 0.1.9 0.1.10 || fail "0.1.9 counted as newer than 0.1.10"
 # (the repos written down: the test's own list, not your home's)
 export AGROS_FLATPAK_BUNDLES=$t/bundles
-fbu() { PATH=$t/bin:$PATH "$here/.local/bin/flatpak-bundle-update" "$@"; }
+fbu() { HOME=$t/home PATH=$t/bin:$PATH "$here/.local/bin/flatpak-bundle-update" "$@"; }
 # A release with no Linux .flatpak (yet: its files still uploading, or none for Linux) isn't announced as an update
 # that then fails to install (flatpak and curl stubbed: a bundle on 1.0, its repo's latest release 1.1, Windows only)
 mkdir -p "$t/bin" "$t/app/files/share/metainfo"
@@ -83,7 +83,7 @@ case "\$*" in
     install*) echo "flatpak \$*" >>"$t/installs" ;;
     remotes*) printf 'app-origin\thttps://example.com/repo\nflathub\thttps://dl.flathub.org/repo/\n' ;;
     remote-modify*) echo "flatpak \$*" >>"$t/modified"; [ -z "\${MODIFY_FAILS:-}" ] ;;
-    build-import-bundle*) echo "app/\${REF:-\$(basename "\$(dirname "\$2")")}/x86_64/stable" >"\$2/refs" ;;
+    build-import-bundle*) echo "\$2" >>"$t/imported"; echo "app/\${REF:-\$(basename "\$(dirname "\$2")")}/x86_64/stable" >"\$2/refs" ;;
     build-bundle*) echo "flatpak \$*" >>"$t/bundled"; echo bundle >"\$4" ;;
 esac
 F
@@ -160,6 +160,9 @@ out=$(REF=com.x.App FLATPAK_BUNDLE_HELD=1 fbu 2>&1) || true  # (a temp folder he
 [[ $out == *"com.x.App: its new version asks for more access: [Context]filesystems=host, [Session Bus Policy]org.freedesktop.Flatpak=talk"* &&
     $out == *"com.x.App: updated to 1.1"* ]] && grep -q -- '--user .*--bundle ' "$t/installs" ||
     fail "Updates didn't install a version asking for more access, or didn't say what it adds: $out / $(cat "$t/installs" 2>/dev/null)"
+# ...its download and the repo it's read into in your cache, on disk (in /tmp they took memory), gone after
+[[ $(tail -1 "$t/imported") == "$t/home/.cache/agros-flatpak."*/.ref.* && -z $(ls -A "$t/home/.cache") ]] ||
+    fail "Updates' download not in the cache, or left there: $(tail -1 "$t/imported") / $(ls -A "$t/home/.cache")"
 rm -f "$t/installs"
 # ...and less (a list's value gone, a "!" taking one away) isn't more: fetched at boot
 printf '%s\n' '[Application]' 'name=com.x.App' '[Context]' 'filesystems=!home;' >"$t/newmeta"
