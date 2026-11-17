@@ -1034,6 +1034,14 @@ pop.at, pop.size = { x = -540, y = 400 }, { x = 3000, y = 200 }
 for _, fn in ipairs(handlers["window.open"] or {}) do fn(pop) end
 r = result()
 check("a wide popup: as wide as the screen's free part, in the middle", r.w .. "," .. r.x .. "," .. r.h, a.w .. "," .. a.x .. ",200")
+-- ...and a modal dialog opens floating, so it's one of those (Hyprland's own float needs a parent, which one shown
+-- before its window appeared lacks: qView's first-run Welcome was stretched and cascaded behind it)
+local modal_floats = false
+for _, r in ipairs(WINDOW_RULES) do
+    local only_modal = r.match.modal == true and next(r.match, next(r.match)) == nil
+    if only_modal and r.float == true then modal_floats = true end
+end
+check("a modal dialog: floats", modal_floats, true)
 -- An X11 menu or tooltip (Caelestia's xwl_popup tag): no title bar counted, and left where its app put it
 local menu = { address = "0x28", class = "steam", title = "", floating = true, fullscreen = 0, pid = 1, tags = { "xwl_popup*" },
                workspace = ws(1), monitor = SCREENS[1], at = { x = 100, y = 45 }, size = { x = 300, y = 200 }, focus_history_id = 8 }

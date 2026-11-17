@@ -884,6 +884,11 @@ local function fit_popup(win)
     local w, h = math.min(win.size.x, full.w), math.min(win.size.y, full.h)
     place(win, { x = full.x + (full.w - w) / 2, y = full.y + (full.h - h) / 2, w = w, h = h })
 end
+-- A modal dialog floats, so it opens at its own size (fit_popup), never stretched and cascaded like a main window.
+-- Hyprland floats a dialog that has a parent itself; one shown before its parent window has appeared has none (qView's
+-- first-run Welcome came out at the standard size, behind the picture it was opened for). Its window objects don't
+-- say modal: only a rule's match does
+hl.window_rule({ match = { modal = true }, float = true })
 local function on_open(win, retried)
     if win and win.floating and not retried then return fit_popup(win) end
     -- (fullscreen: 2, or 3 maximised and fullscreen, as focus_window's; 1 is only maximised)

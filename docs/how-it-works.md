@@ -539,8 +539,9 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
     `~/.local/state/window-mode`), also on Super+Alt+Space, for every workspace. Switching to floating places windows
     like new ones: maximised windows stay maximised, the rest cascade from the middle at the standard size
   - New windows open in the middle at one standard size: 60% of the screen's height, in a maximised window's shape
-    (dialogs and pop-ups keep their own size); several opened in a row cascade down and right from there, one title bar
-    apart, as on Windows
+    (dialogs and pop-ups keep their own size: Hyprland floats those with a parent window, `user/windows.lua` every
+    modal one, by a rule, as one shown before its parent window has appeared has none); several opened in a row
+    cascade down and right from there, one title bar apart, as on Windows
   - A Steam game shows in the dock under its own name and icon (Steam's shortcut for it), as in the switchers
   - Super+M minimises: the window stays in the dock, dimmed; clicking it, Alt+Tab or Super+Alt+M brings it back.
     Alt+Tab away from a fullscreen window (a game) minimises it, as on Windows; it comes back fullscreen
