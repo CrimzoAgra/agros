@@ -113,6 +113,31 @@ git -C "$t/src" apply --check "$here/.local/share/hyprbars/hyprbars.patch" || fa
 # (their main: said, not a failure)
 git -C "$t/src" checkout -q origin/HEAD && git -C "$t/src" apply --check "$here/.local/share/hyprbars/hyprbars.patch" 2>/dev/null ||
     ahead "the patch no longer applies to hyprland-plugins' main"
+# The bar resizes its window one way only, the patch's resizeEdgeAt (its edges, windows.lua's drag hooks): a resize
+# hyprbars starts of its own on main (upstream's startTopEdgeResize, after v0.57.0, took the presses resizeEdgeAt turned
+# down) is said, unless the patch shadows it. resizers <ref>: "file:function" of each resize start in the patched
+# hyprbars, the shadowed ones left out
+resizers() {
+    git -C "$t/src" checkout -q -f "$1" && git -C "$t/src" apply "$here/.local/share/hyprbars/hyprbars.patch" 2>/dev/null || return 1
+    python3 -I - "$t/src/hyprbars" <<'PY' || return 1
+import glob, os, re, sys
+for f in sorted(glob.glob(os.path.join(sys.argv[1], "*.cpp"))):
+    text = open(f, encoding="utf-8").read()
+    shadowed = set(re.findall(r"const auto (\w+) = \[\]\(auto&&\.\.\.\) \{ return false; \};", text))
+    func = None
+    for line in text.splitlines():
+        if m := re.match(r"[A-Za-z].*?(\w+)\([^;]*\)\s*(?:const\s*)?\{\s*$", line):
+            func = m[1]  # (the function a line is in: the last definition started at the line's start)
+        if "beginDragTarget" in line and "MBIND_RESIZE" in line and func not in shadowed:
+            print(f"{os.path.basename(f)}:{func}")
+PY
+    git -C "$t/src" reset -q --hard
+}
+tag_resizers=$(resizers "$ref") || fail "the resize check failed on hyprland-plugins $ref"
+if main_resizers=$(resizers origin/HEAD); then
+    new=$(comm -13 <(sort -u <<<"$tag_resizers") <(sort -u <<<"$main_resizers"))
+    [[ -z $new ]] || ahead "hyprbars on hyprland-plugins' main starts a resize the patch doesn't own: $(paste -sd' ' <<<"$new")"
+fi
 
 # Built, as hyprbars-build builds it (this series' version, patched; g++ by name), against the installed headers
 if [[ -n ${DOTS_BUILD_TESTS:-} ]]; then
