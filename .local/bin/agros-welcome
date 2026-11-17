@@ -82,8 +82,6 @@ system_part() {
         getent group "$g" >/dev/null || groupadd -r "$g"
         gpasswd -a "$user" "$g" >/dev/null
     fi
-    mkdir -p "$(getent passwd "$user" | cut -d: -f6)/.local/state/agros"
-    touch "$(getent passwd "$user" | cut -d: -f6)/.local/state/agros/system-done"
     echo "Done."
 }
 
