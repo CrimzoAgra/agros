@@ -21,8 +21,12 @@ fetch() {
     tmp=$(mktemp -d) || return 1
     trap 'rm -rf "$tmp"' EXIT
     # get <file> [optional]: 0 fetched; 1 not published (404), when optional; 2 failed, said
+    # (?t=: Pages' CDN keeps a copy up to 10 minutes after a deploy, and an older database with its packages still
+    # cached mirrored the last publish, said as done; the query asks for the current one, as agros-iso's ISO build does)
+    local stamp
+    stamp=$(date +%s)
     get() {
-        code=$(curl -sS --retry 3 --connect-timeout 20 -m 600 -o "$dir/$1" -w '%{http_code}' "$site/$1") || code=000
+        code=$(curl -sS --retry 3 --connect-timeout 20 -m 600 -o "$dir/$1" -w '%{http_code}' "$site/$1?t=$stamp") || code=000
         [[ $code == 200 ]] && return 0
         rm -f "$dir/$1"
         [[ $code == 404 && -n ${2:-} ]] && return 1
