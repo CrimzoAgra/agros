@@ -7,7 +7,9 @@
 set -uo pipefail
 usage="usage: kept.sh <url> <file>"
 url=${1:?$usage} file=${2:?$usage}
-code=$(curl -sS --retry 3 -o "$file" -w '%{http_code}' "$url") || code=000
+# (?t=: Pages' CDN keeps a copy up to 10 minutes after a deploy, and an older list put out again lost that run's
+# approvals; the query asks for the current one, as mirror.sh's fetch)
+code=$(curl -sS --retry 3 -o "$file" -w '%{http_code}' "$url?t=$(date +%s)") || code=000
 case $code in
     200) ;;
     404) : >"$file" ;;
