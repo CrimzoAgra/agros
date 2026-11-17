@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Lutris with the changes in ~/.local/share/lutris-overlay (patch.py, sections.py):
+# Lutris with the changes in ~/.local/share/lutris-overlay (patch.py, with sections.py, signin.py, rockstar.py):
 #   - the grid splits into collapsible "Installed" and "Not installed" sections
 #   - the Games view shows the icon of each game's store in its cover's bottom-right corner
 #   - every cover in the Games view the same size; "Hide game from library" for uninstalled games too
@@ -10,7 +10,8 @@
 #   - games with no proper cover get one from SteamGridDB (lutris-covers)
 # First on the PATH, so the launcher, menu entries and lutris: links all start this. The patched copy is built into
 # ~/.cache/lutris-overlay (links to the installed files, the changed ones copied) the first time after Lutris or the
-# changes update. If a change no longer fits a new Lutris, it starts unchanged and says so (once)
+# changes update. If a change no longer fits a new Lutris, it starts unchanged and says so (the build tried
+# again a day later, and said again while it still fails)
 # Lutris not installed (removed): nothing to start, and no "your changes are off" for a copy of nothing
 [[ -x /usr/bin/lutris ]] || { echo "Lutris isn't installed" >&2; exit 1; }
 overlay="$HOME/.local/share/lutris-overlay"

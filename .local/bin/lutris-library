@@ -1,11 +1,11 @@
 #!/usr/bin/python3 -I
-# Lutris's Games view lists only its library, and games from a store (Steam, EA, Ubisoft, Epic, GOG) join it only once
-# installed. Add the rest as uninstalled entries: the view then shows installed games first and the others below, and
-# opening one installs it through its store like from the store's own list.
+# Lutris's Games view lists only its library, and games from a store (Steam, EA, Ubisoft, Epic, GOG, Battle.net,
+# Rockstar) join it only once installed. Add the rest as uninstalled entries: the view then shows installed games first
+# and the others below, and opening one installs it through its store like from the store's own list.
 # - Installed Steam games join even when Lutris can't read the Steam library (a private profile: Overwatch)
 # - A game on more than one store shows once: an installed copy, else the Steam one, else the first. The others go to
 #   Lutris's Hidden category (sidebar)
-# - The store launchers (EA App, Ubisoft Connect, Battle.net, Epic, GOG Galaxy, Rockstar) are listed under Launchers in
+# - The store launchers (EA App, Ubisoft Connect, Battle.net, Epic, GOG Galaxy, Rockstar, Steam) are listed under Launchers in
 #   the sidebar, installed or not: opening one there installs it through Lutris (lutris-overlay keeps them out of the
 #   Games view)
 # Run by lutris-library.path whenever Lutris's database changes (a store sync), and by agros-welcome. An open Lutris

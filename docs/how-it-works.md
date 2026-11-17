@@ -569,7 +569,7 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
   (`steam-start`),
   and builds the fixed shader from the game's own files
 - **`.local/bin/steam-installed-games`**: installed games, for the bar's Steam menu
-- **`.local/bin/lutris-library`**: Lutris's Games view lists every game you own on Steam, EA, Ubisoft, Epic and GOG,
+- **`.local/bin/lutris-library`**: Lutris's Games view lists every game you own on Steam, EA, Ubisoft, Epic, GOG, Battle.net and Rockstar,
   installed first and the rest below (opening one installs it through its store). Rerun after every store sync by
   `.config/systemd/user/lutris-library.path`; an open Lutris shows the changes at once (the overlay's `library-refresh`
   action, asked over D-Bus; a plain Lutris once restarted). Installed Steam games join even when
