@@ -158,11 +158,13 @@ if [[ ${1:-} == --install ]]; then
         if ((fw == 0 || fw == 2)) && [[ -z $left ]]; then
             echo "firmware: installed (a UEFI or BIOS update applies at the next boot)"
             rm -f "$au/firmware" "$au/firmware-told" "$au/firmware-failed" "$au/firmware-noroom"
-        elif grep -q 'does not have sufficient space' "$au/firmware-out"; then
+        elif ((${#ids[@]} == 1)) && grep -q 'does not have sufficient space' "$au/firmware-out"; then
             # The EFI partition too small for it (fwupd checks before it writes anything): beside Windows, often
             # Windows' own 100 MB, nearly full. It never fits, so not tried again at every shutdown and said at every
             # login (dotfiles-check, firmware-failed): said once, at the next boot's login, as that (--firmware-note,
-            # firmware-told gone), and tried again only for a newer one (firmware-noroom: this one)
+            # firmware-told gone), and tried again only for a newer one (firmware-noroom: this one). Only for one
+            # device alone: with others beside it, which one has no room isn't known, and another skipped for its own
+            # reason (AC power) would wait with it, said as having no room. Those fail as any, until it's left alone
             echo "!! firmware: not installed, the EFI partition is too small for it"
             mv -f "$au/firmware-told" "$au/firmware-noroom"
             rm -f "$au/firmware-failed"
