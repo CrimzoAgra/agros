@@ -34,8 +34,27 @@ sleep 2
 [[ ! -e $st/offered ]] || fail "an offer that reached no notification server marked offered"
 [[ -e $st/done-flatpaks ]] && fail "test setup: the Flatpaks step didn't fail"
 [[ -e $st/done-vscodium ]] && fail "the VSCodium step marked done with its extension's install failed (offline): never tried again"
-cond=$(sed -n 's/^ConditionPathExists=!%S\///p' "$here/packages/agros-welcome/agros-welcome.service")
-[[ -e $h/.local/state/$cond ]] && fail "the Flatpaks step failed, but $cond is there: agros-welcome.service never starts again to retry it"
+# The service starts again at a login while any of its conditions holds (all "|!": a file missing), as systemd reads
+# triggering conditions: a step not done yet, or the offer not answered yet
+unit=$(cat "$here/packages/agros-welcome/agros-welcome.service")
+mapfile -t conds < <(sed -n 's/^ConditionPathExists=//p' <<<"$unit")
+for c in "${conds[@]}"; do [[ $c == '|!%S/'* ]] || fail "a condition that isn't one of either (|!): $c"; done
+((${#conds[@]})) || fail "agros-welcome.service has no conditions: it runs at every login"
+runs() { local c; for c in "${conds[@]}"; do [[ -e $h/.local/state/${c#|!%S/} ]] || return 0; done; return 1; }
+runs || fail "the Flatpaks step failed, but agros-welcome.service never starts again to retry it (${conds[*]})"
+saved=$(ls "$st")
+touch "$st/done"
+runs || fail "an offer not answered yet (no offered), but agros-welcome.service never starts again to make it"
+touch "$st/offered"
+runs && fail "all done and the offer answered, yet agros-welcome.service starts at every login"
+rm "$st/done"
+runs || fail "the offer answered but a step not done, yet agros-welcome.service never starts again to retry it"
+rm "$st/offered"
+[[ $(ls "$st") == "$saved" ]] || fail "test setup: the state not put back"
+# Kept active once its script exits: the offer's notification waits for its answer in the background, in the unit, and
+# a unit that ended killed it (its buttons did nothing, never marked offered); logging out still stops it (PartOf)
+grep -qx 'RemainAfterExit=yes' <<<"$unit" && grep -qx 'PartOf=graphical-session.target' <<<"$unit" ||
+    fail "agros-welcome.service ends when its script does (the offer's waiter killed with it), or outlives the session: $unit"
 # ...but not for good: an extension that's gone from its store failed the step at every login. The third login in a
 # row it fails, it counts as done (the Flatpaks, offline, still not)
 # (few tries for the offer that fails: not a minute's notify-when-up left running in the background after the test)
