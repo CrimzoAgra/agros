@@ -65,4 +65,15 @@ pac pre_remove; pac post_remove >/dev/null
     'Server = https://crimzoagra.github.io/agros/$arch' '' '[core]' 'Include = /etc/pacman.d/mirrorlist')" ]] ||
     fail "pacman.conf after the removal: $(cat "$conf")"
 [[ $(cat "$r/etc/pam.d/passwd") == 'password required pam_unix.so' ]] || fail "the keyring's line left in passwd's PAM"
+
+# Its files in /etc are backup files (one you edited kept at an upgrade, every commit being one), but for those that
+# reach every machine as they are: the upstream gate, the NoExtract list, the sudoers rule (and its folder)
+backup=$(cd "$here/packages/agros-system" && startdir=$PWD bash -c '. ./PKGBUILD && printf "%s\n" "${backup[@]}"')
+[[ -n $backup ]] || fail "agros-system's backup= not read"
+etc=$(grep -o '"$pkgdir/etc/[^"]*"' "$here/packages/agros-system/PKGBUILD" | sed 's|^"$pkgdir/||; s|"$||')
+[[ -n $etc ]] || fail "agros-system's files in /etc not found in its PKGBUILD"
+for f in $etc; do
+    case $f in etc/pacman.d/agros-gate.conf | etc/pacman.d/agros-noextract.conf | etc/sudoers.d | etc/sudoers.d/*) continue ;; esac
+    grep -qxF -- "$f" <<<"$backup" || fail "agros-system's /$f isn't a backup file: an edit of yours lost at every upgrade"
+done
 echo "ok agros-system-install"

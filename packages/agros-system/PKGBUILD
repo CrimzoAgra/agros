@@ -17,7 +17,9 @@ depends=('agros-scripts' 'pacman-contrib' 'bluez' 'bluez-utils' 'gnome-keyring' 
          'iproute2' 'fwupd' 'base-devel' 'bubblewrap' 'passt' 'git' 'jq')
 optdepends=('snapper: a snapshot before each update' 'ananicy-cpp: the shell rule')
 install=agros-system.install
-backup=('etc/vmware-tools/tools.conf')
+# (settings of /etc yours to change: an edited one kept at upgrade, AgrOS's new one beside it as .pacnew. Not the gate,
+# the NoExtract list or the sudoers rule: those reach every machine as they are)
+backup=('etc/vmware-tools/tools.conf' 'etc/geoclue/conf.d/90-agros.conf' 'etc/ananicy.d/99-agros/agros.rules')
 _root=$(realpath "${startdir}/../..")
 
 pkgver() {
