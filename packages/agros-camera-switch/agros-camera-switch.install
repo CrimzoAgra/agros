@@ -1,8 +1,11 @@
 # (AGROS_ROOT: another root, the tests' throwaway one; / when pacman runs this)
 _r=${AGROS_ROOT:-}
+# The saved position made, then the daemon on and started now: agros-welcome --system installs this on a running
+# desktop, where only enabling it left the switch doing nothing until a restart (in the installer's chroot, systemctl
+# only enables it)
 post_install() {
     systemd-tmpfiles --create /usr/lib/tmpfiles.d/agros-camera-switch.conf >/dev/null 2>&1 || true
-    systemctl enable camera-switch.service >/dev/null 2>&1 || true
+    systemctl enable --now camera-switch.service >/dev/null 2>&1 || true
 }
 # The running one restarted on the new version, by systemd's own hooks once the transaction is over: marked here, then
 # its daemon-reload (the new unit read) and its enqueue-marked (the restart). A restart from here ran on the old unit
