@@ -10,11 +10,14 @@
 #   hyprbars-build          build it now
 #   hyprbars-build --login  what titlebars.lua runs as Hyprland starts: load my build if it was made for this
 #                           Hyprland and this patch; after a Hyprland update or a patch change, load the packaged one
-#                           (agros-hyprbars: this patch, built in CI for its Hyprland) at once and rebuild mine in the
-#                           background, swapping it in when done (a notification if that fails)
+#                           (agros-hyprbars: this patch, built in CI for its Hyprland) at once when it was built for
+#                           this Hyprland (none loaded meanwhile otherwise), and rebuild mine in the background,
+#                           swapping it in when done
+#                           (a notification if that fails)
 #   hyprbars-build --prebuild  build it for the Hyprland just installed, without loading it, so the next login has it
 #                           at once (the pacman hook packages/agros-system/agros-hyprbars-prebuild.hook runs it on a
-#                           Hyprland update; Hyprland needn't be running)
+#                           Hyprland update, one of its libraries', and an agros-scripts one: a new patch; Hyprland
+#                           needn't be running)
 set -euo pipefail
 helpers=$(dirname "$(readlink -f "$0")")  # (the shared helpers, beside this)
 patch="$HOME/.local/share/hyprbars/hyprbars.patch"
