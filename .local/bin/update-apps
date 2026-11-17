@@ -21,9 +21,26 @@ helpers=$(dirname "$(readlink -f "$0")")  # (the shared helpers, beside this: no
 # Your password once, from a dialog when there's no terminal (the Updates app); sudo keeps it for the whole run
 # AUR build scripts shown for review when run in a terminal; the Updates app has no input to page through them with
 # (its log is all it shows), so from there AUR updates are built WITHOUT that review (--skipreview: paru would wait on a
-# pager no one sees). Which ones it builds is said first, in that log
+# pager no one sees). Which ones it builds is said first, in that log; those the boot's builds hold for review are left
+# out (held_aur)
 paru=(paru --sudoloop)
 [[ -t 0 ]] || { export SUDO_ASKPASS=$helpers/askpass; paru+=(--sudoflags -A --skipreview); }
+au_dir=${AUTO_UPDATE_DIR:-/var/lib/auto-update}
+# held_aur: the AUR apps the boot's builds hold until their build files are reviewed (auto-update-aur's guard), one
+# name a line: those whose base's AUR maintainers changed (its aur-maintainer-changed, "<base> <maintainers> <version>"
+# a line, root's but readable by all: 0644 in a 0755 folder), and those a signed repository installed that dropped them
+# since (the AUR's of that name someone else's). Built unreviewed here, the next boot took those maintainers as reviewed
+held_aur() {
+    local bases n v b
+    bases=" $(awk '{ printf "%s ", $1 }' "$au_dir/aur-maintainer-changed" 2>/dev/null) "
+    # (a split base's packages by the base pacman wrote down for each)
+    while read -r n v; do
+        b=$(sed -n '/^%BASE%$/{n;p;q;}' "${PACMAN_DB_DIR:-/var/lib/pacman}/local/$n-$v/desc" 2>/dev/null)
+        [[ $bases == *" ${b:-$n} "* ]] && echo "$n"
+    done < <(pacman -Qm 2>/dev/null)
+    LC_ALL=C pacman -Qmi 2>/dev/null | awk -F' *: ' '$1 == "Name" { n = $2 } $1 == "Validated By" && $2 ~ /Signature/ { print n }'
+}
+held=()
 
 # The AUR apps built on a runtime (update-kinds' list: Qt, whose private parts Quickshell, Caelestia's own library and
 # qtengine use, so they hold only for the exact Qt they were built with; Python's minor version, whose modules folder
@@ -54,6 +71,9 @@ qt_rebuild() {
     for p in $("$helpers/update-kinds" --built-on <<<"$changes"); do
         [[ $p != *-bin ]] || continue
         if grep -qxF -- "$p" <<<"$(pacman -Slq agros 2>/dev/null)"; then agros+=("$p")
+        elif [[ " ${held[*]} " == *" $p "* ]]; then
+            echo "!! $p wasn't rebuilt for the new runtime: held for review (to review it, run update-apps in a terminal)"
+            rc=1
         elif pacman -Qm "$p" >/dev/null 2>&1; then pkgs+=("aur/$p"); fi
     done
     if ((${#pkgs[@]} + ${#agros[@]})); then
@@ -64,8 +84,8 @@ qt_rebuild() {
             awk '{ print ($0 == "quickshell-git" ? 0 : $0 == "caelestia-shell" ? 2 : 1), $0 }' | sort | cut -d' ' -f2)
         ((${#agros[@]} == 0)) || rebuild_agros "${agros[@]}" || rc=1
         ((${#pkgs[@]} == 0)) || "${paru[@]}" -S --rebuild --noconfirm "${pkgs[@]}" || rc=1
-        ((rc == 0)) || return 1
     fi
+    ((rc == 0)) || return 1
     qt_now >"$qt_stamp"
 }
 # rebuild_agros <name>...: [agros]'s own (built there from the AUR, AgrOS's fix added: aur-agros-patch) rebuilt as the
@@ -181,21 +201,23 @@ echo "== System and AUR apps"
 # The boot's own downloads first (both fetching the same package into the cache at once would corrupt it): while it
 # holds its lists' lock, or marks it's downloading (downloading: from the start of its run to the end of its download,
 # then again around its AUR builds' own; not through the Flatpaks, nor the builds, which can take long)
-au_dir=${AUTO_UPDATE_DIR:-/var/lib/auto-update}
 downloading() { systemctl is-active -q auto-update 2>/dev/null && [[ -e $au_dir/db/db.lck || -e $au_dir/downloading ]]; }
 downloading && echo "Waiting for the update started at boot to finish downloading..."
 while downloading; do sleep 5; done
 qt_mark
 if [[ ! -t 0 ]]; then
+    mapfile -t held < <(held_aur | sort -u)
     # (paru -Qua: "<name> <old> -> <new>" each, exit 1 when none; failing (the AUR not reached), its error instead)
     qua=$(LC_ALL=C paru -Qua 2>&1)
     qua_rc=$?
-    aur=$(grep -F ' -> ' <<<"$qua" | "$helpers/updates-pending" | awk '{print $1}' | paste -sd' ')
+    aur=$(grep -F ' -> ' <<<"$qua" | "$helpers/updates-pending" | awk -v h=" ${held[*]} " 'index(h, " " $1 " ") == 0 { print $1 }' | paste -sd' ')
     if ((qua_rc)) && [[ -n $qua ]] && grep -qvF ' -> ' <<<"$qua"; then
         echo "The AUR apps about to be built, their build scripts not reviewed, couldn't be listed (paru -Qua: $(grep -vF ' -> ' <<<"$qua" | head -1))"
     elif [[ -n $aur ]]; then
         echo "AUR apps built now, their build scripts not reviewed (update-apps in a terminal shows them first): $aur"
     fi
+    ((${#held[@]} == 0)) ||
+        echo "Not updated, held for review (their AUR maintainers changed, or the repository they came from dropped them): ${held[*]}. To review them: run update-apps in a terminal, which shows what their build scripts changed before building them"
 fi
 # Power off and sleep held off while pacman installs (and the AUR apps build): killed by shutdown, pacman leaves its
 # lock behind, and every install after it fails on that. Held by a process of its own, ended after (or with this).
@@ -225,7 +247,10 @@ if "${paru[@]}" -Sy --noconfirm; then
         "${paru[@]}" --config "$gated" -S --needed --noconfirm "${keys[@]}" ||
             { echo "!! The keyrings couldn't be installed first: the rest tried with the keys as they are"; status=1; }
     fi
-    "${paru[@]}" --config "$gated" -Su --noconfirm || status=1
+    # (those held for review left out: --ignore, a comma between two)
+    ignore=()
+    ((${#held[@]} == 0)) || ignore=(--ignore "$(IFS=,; echo "${held[*]}")")
+    "${paru[@]}" --config "$gated" -Su --noconfirm "${ignore[@]}" || status=1
 else
     status=1
 fi

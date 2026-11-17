@@ -960,7 +960,9 @@ brings each change; nothing to run by hand).
   (`systemd-inhibit --what=sleep:shutdown:handle-lid-switch`: logind suspends on the lid whatever sleep lock is held,
   `LidSwitchIgnoreInhibited=yes`; where polkit refuses the lid's lock, power off and sleep alone). Run in a
   terminal, it shows each AUR package's build-script changes for review first; the Updates app's "Update all" builds
-  them without that review (it lists which ones first, in its log), and sudo asks for the password in a dialog
+  them without that review (it lists which ones first, in its log), leaving out those the boot's builds hold for review
+  (`aur-maintainer-changed`'s bases, a signed repository's package now foreign: paru's `--ignore`, said with "run
+  update-apps in a terminal"; built unreviewed there, the next boot took the new maintainers as reviewed), and sudo asks for the password in a dialog
   (`.local/bin/askpass`, zenity, as `SUDO_ASKPASS`). After its `paru -Syu` it rebuilds what's built on a runtime it
   changed (the boot's list, below), and on a Qt changed since they were last built, once the runtime is in:
   `[agros]`'s own at the version installed with AgrOS's Quickshell fix (through `auto-update-aur --fetch`, as the
@@ -976,8 +978,8 @@ brings each change; nothing to run by hand).
     log
   - **AUR apps** (`packages/agros-system/auto-update-aur`, after the download; an app whose AUR maintainer
     or co-maintainers changed since its last build (a co-maintainer can push its build files too), or one its repo
-    dropped (signed, now foreign), isn't built: left for Updates, where its build files can be read, and said by
-    `dotfiles-check`): those with a newer AUR version (not in
+    dropped (signed, now foreign), isn't built: left for `update-apps` in a terminal, where paru shows its build files
+    for review (the Updates app leaves it out), and said by `dotfiles-check`): those with a newer AUR version (not in
     a repo: `paru -Qua`'s), and, when the download brings a new version of a runtime that breaks what's built on it,
     those built on it (from the AUR or `[agros]`, not a `-bin`, not rebuilt by their repo in the same download). The
     runtimes are one list, `update-kinds`' (`runtimes`, which `update-apps` uses too): Qt (`qt6-base`,

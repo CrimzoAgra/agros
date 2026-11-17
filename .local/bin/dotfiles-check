@@ -116,9 +116,14 @@ held=$([[ -s $au/held ]] && behind "$au/held")
 # the rest installs without them. Not beside the held update (the same failure), and only while one it meant to build
 # ("<name> <version>" in wanted) is still older than that, those named: Updates built it since, or the run failed
 # before it planned any (the AUR out of reach: nothing known to be waiting, the next boot tries again), nothing to say
+# (one held for its build files to be reviewed, auto-update-aur's guard: the Updates app leaves it out too, update-apps
+# in a terminal shows them)
 aur_left=$([[ -z $held && -s $au/aur/failed && -s $au/aur/wanted ]] && behind "$au/aur/wanted")
+aur_do="run Updates"
+grep -qF "review it: run update-apps in a terminal" "$au/aur/failed" 2>/dev/null &&
+    aur_do="run update-apps in a terminal (it shows their build scripts to review first)"
 [[ -n $aur_left ]] &&
-    problems+=("The automatic update couldn't build AUR apps ($(plain <"$au/aur/failed" | paste -sd';' | sed 's/;/; /g')): still waiting: $aur_left; run Updates")
+    problems+=("The automatic update couldn't build AUR apps ($(plain <"$au/aur/failed" | paste -sd';' | sed 's/;/; /g')): still waiting: $aur_left; $aur_do")
 # AUR apps the shutdown's install left out, pacman refusing them (a conflict, a file conflict, a missing dependency:
 # auto-update's "<when> <pacman's error>", then "<name> <version>" each): said while one isn't at that version yet
 if read -r aiwhen aiat aiwhy 2>/dev/null <"$au/aur-install-failed"; then

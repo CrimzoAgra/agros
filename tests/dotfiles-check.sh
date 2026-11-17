@@ -101,6 +101,11 @@ echo "equibop 1.1-1" >"$t/au/aur/wanted"
 printf '%s\n' 'equibop: it needs ![x](https://e.vil/i.png) <img src=x> [a](b)' >"$t/au/aur/failed"
 out=$(EQUIBOP=1.0-1 chk)
 line=$(grep "couldn.t build AUR apps" <<<"$out"); [[ -n $line && $line != *[\<\>\[\]\!]* ]] || fail "a build's text reached the notification as it is: $out"
+# (one held for its build files to be reviewed, auto-update-aur's guard: the Updates app leaves it out, so not "run
+# Updates" but update-apps in a terminal, which shows them)
+echo "equibop: its AUR maintainers changed (alice to bob): review it: run update-apps in a terminal" >"$t/au/aur/failed"
+out=$(EQUIBOP=1.0-1 chk)
+[[ $out == *"still waiting: equibop; run update-apps in a terminal"* ]] || fail "an app held for review said to be updated from Updates: $out"
 echo "a build failed" >"$t/au/aur/failed"
 # The held update: only what's still waiting named (Qt's installed since by Updates, Python's not)
 printf '%s\n' "qt6-base 6.9.0-1 -> 6.10.0-1" "python 3.13.7-1 -> 3.14.0-1" >"$t/au/held"
