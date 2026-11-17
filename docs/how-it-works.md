@@ -165,7 +165,8 @@ With the Windows ones they replace in brackets:
 - File Roller + 7-Zip (WinRAR, 7-Zip; Extract/Compress in Thunar's right-click menu)
 - VSCodium, VS Code's open-source build (with your extensions), LibreOffice (Microsoft Office), qBittorrent, AntiMicroX
   (JoyToKey)
-- Text Editor (Notepad), qView (Photos), mpv (Media Player)
+- Text Editor (Notepad), qView (Photos), mpv (Media Player; with mpv-mpris, so the Now Playing widget, the dashboard
+  and the media keys see it)
 - VMware Workstation (`agros-welcome --system`: the AUR package, its installer from a copy on archive.org, as Broadcom
   gives it only to signed-in users; checked against the package's checksum)
 - HP Deskjet 1050 J410: HP's Linux driver (HPLIP), printing and scanning; add the printer in Print Settings once it's
