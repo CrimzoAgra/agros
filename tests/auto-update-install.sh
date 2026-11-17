@@ -649,6 +649,15 @@ grep -qE "fwupdtool|--firmware-note" "$t/calls" && fail "a firmware update with 
 grep -q "^notify .*Firmware update ready System Firmware" "$t/calls" || fail "a newer firmware update not said: $(cat "$t/calls")"
 lists; : >"$t/calls"; "$t/auto-update" --install >/dev/null
 grep -q fwupdtool "$t/calls" || fail "a newer firmware update not tried, after one with no room: $(cat "$t/calls")"
+# (with another device's beside it: which has no room isn't known, and the other may have been skipped for a reason of
+# its own (AC power), so both fail as any: kept, tried again, the failure said)
+FW2='{"Devices":[{"DeviceId":"abc123","Name":"System Firmware","Version":"1.0","Releases":[{"Version":"1.2"}]},
+ {"DeviceId":"def456","Name":"Dock","Version":"2.0","Releases":[{"Version":"2.1"}]}]}'
+FW=$FW2 "$t/auto-update"; cp "$t/au/firmware" "$t/au/firmware-told"
+lists; : >"$t/calls"; FWTOOL_RC=1 FW_NOROOM=1 "$t/auto-update" --install >/dev/null
+[[ $(wc -l <"$t/au/firmware-told") == 2 && -s $t/au/firmware-failed && ! -e $t/au/firmware-noroom ]] ||
+    fail "two firmware updates, one with no room, both put off as having no room"
+rm -f "$t/au/firmware-failed"
 FW=$FW "$t/auto-update"; cp "$t/au/firmware" "$t/au/firmware-told"
 # Too little of the install's time left: firmware not started; after a firmware update that took long, the packages put
 # off to the next shutdown (counted)
