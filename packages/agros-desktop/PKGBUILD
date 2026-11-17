@@ -4,7 +4,7 @@
 # (agros-welcome --system installs the ones for what's plugged in), as is VMware Workstation (its license forbids
 # passing it on: built from the AUR on your machine by agros-welcome --system).
 pkgname=agros-desktop
-pkgver=14
+pkgver=15
 pkgrel=1
 pkgdesc='AgrOS: Hyprland + Caelestia desktop with its apps (meta package)'
 arch=('any')
@@ -35,6 +35,7 @@ depends=(
     # Desktop tools the configs and scripts use
     thunar thunar-archive-plugin file-roller 7zip gnome-text-editor qview mpv zenity libnotify wl-clipboard cliphist
     agros-thunar-usage                  # Thunar's status bar: a bar of how full the folder's drive is
+    gvfs gvfs-mtp                       # Thunar's drives (USB drives, phones) in its side bar, and its Trash
     grim slurp swappy brightnessctl ddcutil libqalculate ydotool xdg-user-dirs flatpak nodejs npm python
     python-gobject python-xlib pacman-contrib paru github-cli
     gammastep geoclue                   # night light (Caelestia's execs.lua starts both; no location without geoclue)
@@ -42,7 +43,8 @@ depends=(
     # (agros-wine first: one Wine, CachyOS's, as the system's. Before the gaming packages, whose winetricks needs a wine:
     # pacman takes one already chosen, and Arch's isn't installed beside it)
     agros-wine mesa lib32-mesa cachyos-gaming-meta steam steam-devices lutris libayatana-appindicator
-    python-protobuf gamescope mangohud lib32-mangohud goverlay faugus-launcher wqy-zenhei xorg-fonts-misc spirv-tools
+    python-protobuf gamescope mangohud lib32-mangohud goverlay faugus-launcher spirv-tools
+    wqy-zenhei xorg-fonts-misc          # games' fonts (CachyOS's gaming apps list them: Steam's CJK text, X's core fonts)
     # Apps (the Windows ones they replace)
     equibop-bin                         # Discord, themed with your colours
     spicetify-cli spicetify-marketplace-bin  # Spotify's theme (Spotify itself: a Flatpak, agros-welcome)

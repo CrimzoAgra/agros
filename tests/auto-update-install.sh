@@ -37,6 +37,7 @@ sed -e "s|/var/lib/auto-update|$t/au|g" -e "s|/var/lib/pacman|$t/pac|g" -e "s|/v
     -e "s|\${AGROS_EACH_USER:-/usr/lib/agros/bin/agros-each-user}|$t/bin/agros-each-user|" \
     -e "s|/usr/lib/agros/auto-update-aur|$t/auto-update-aur|g; s|/usr/lib/agros/auto-update |$t/auto-update |g" \
     -e "s|/usr/lib/agros/bin/|$here/.local/bin/|g" -e "s|/sys/class/power_supply|$t/ps|" \
+    -e "s|/var/lib/agros/|$t/agros/|g" -e "s|/usr/share/pacman/keyrings/agros.gpg|$t/agros.gpg|g" \
     "$au/auto-update" >"$t/auto-update"
 sed -e "s|/var/lib/auto-update|$t/au|g" -e "s|/usr/lib/agros/auto-update-aur|$t/auto-update-aur|g" \
     -e "s|/usr/lib/agros/bin/|$here/.local/bin/|g" "$au/auto-update-aur" >"$t/auto-update-aur"
@@ -135,6 +136,8 @@ cat >"$t/bin/findmnt" <<EOF
 case "\$*" in
     "--fstab -n -o TARGET $t/boot") [ -z "\$FSTAB_BOOT" ] || echo "$t/boot" ;;
     *FSTYPE*"--mountpoint $t/boot") echo "\${BOOT_FSTYPE:-vfat}" ;;
+    # (the root's: \$ROOT_FSTYPE, overlay a booted snapshot's)
+    "-no FSTYPE /") echo "\${ROOT_FSTYPE:-btrfs}" ;;
 esac
 exit 0
 EOF
@@ -643,4 +646,58 @@ grep -q fwupdtool "$t/calls" && ! grep -q '^pacman -Su' "$t/calls" && grep -q "f
 for _ in {1..25}; do "$t/auto-update" --install >/dev/null; done
 n=$(grep -c '^===== .* --install =====$' "$t/log")
 ((n >= 19 && n <= 21)) || fail "the log not trimmed to its last runs: $n"
+# ...root's and the admins' alone (every account's update output in it), one made before closed too
+chmod 644 "$t/log"
+"$t/auto-update" --install >/dev/null
+[[ $(stat -c %a "$t/log") == 640 ]] || fail "the log open to every account: $(stat -c %a "$t/log")"
+
+# A booted snapshot (its root an overlay in RAM), or the live USB: neither the boot's download nor the shutdown's
+# install (all of it gone at the next boot), said in the log
+for run in "" --install; do
+    lists; : >"$t/calls"; : >"$t/log"
+    ROOT_FSTYPE=overlay QU="foo 1-1 -> 2-1" "$t/auto-update" $run >/dev/null || fail "a booted snapshot's run ($run) failed"
+    [[ ! -s $t/calls && ! -e $t/au/downloading ]] && grep -q "runs from a snapshot (or the live USB)" "$t/log" ||
+        fail "a booted snapshot's run ($run) updated, or didn't say why not: $(cat "$t/calls") / $(cat "$t/log")"
+done
+
+# The day AgrOS's checks last passed (agros-arch-ok, beside the [agros] repo): taken only with a good signature by
+# AgrOS's key beside it (a key of the test's own, where the script reads agros-keyring's); one with none, or by
+# another key, as if that server didn't answer, said, the next one tried; none good, the copy kept as it was
+export GNUPGHOME=$t/gnupg
+mkdir -m700 "$GNUPGHOME"
+for k in agros other; do
+    gpg --batch --quiet --passphrase '' --quick-gen-key "$k <$k@agros.invalid>" ed25519 sign never >/dev/null 2>&1
+done
+gpg --batch --export agros@agros.invalid >"$t/agros.gpg" 2>/dev/null
+[[ -s $t/agros.gpg ]] || fail "test setup: no key made"
+# shellcheck disable=SC2016  # (expanded by the stand-ins)
+printf '#!/bin/sh\n[ "$*" = "--repo agros Server" ] && printf "%%s\n" https://one.invalid/x86_64 https://two.invalid/x86_64\nexit 0\n' >"$t/bin/pacman-conf"
+# (curl: each server's day, one.invalid's 2026/11/10, two.invalid's 2026/11/12, its .sig as $SIG_ONE / $SIG_TWO say:
+# good (the default), none (a 404), other (by another key); anything else as before)
+# shellcheck disable=SC2016
+cat >"$t/bin/curl" <<'C'
+#!/bin/bash
+url=${*: -1}
+case $url in *agros-arch-ok*) ;; *) exit 0 ;; esac
+case $url in https://one.invalid/*) day=2026/11/10 sig=${SIG_ONE:-good} ;; *) day=2026/11/12 sig=${SIG_TWO:-good} ;; esac
+while [[ $1 != -o ]]; do shift; done
+[[ $url == *.sig ]] || { printf '%s\n' "$day" >"$2"; exit 0; }
+case $sig in
+    none) exit 22 ;;
+    other) printf '%s\n' "$day" | gpg --batch --yes -u other@agros.invalid --detach-sign -o "$2" 2>/dev/null ;;
+    *) printf '%s\n' "$day" | gpg --batch --yes -u agros@agros.invalid --detach-sign -o "$2" 2>/dev/null ;;
+esac
+C
+chmod +x "$t/bin/pacman-conf" "$t/bin/curl"
+: >"$t/log"; "$t/auto-update"
+[[ $(cat "$t/agros/agros-arch-ok" 2>/dev/null) == 2026/11/10 ]] || fail "a well signed agros-arch-ok not taken: $(cat "$t/agros/agros-arch-ok" 2>&1)"
+for bad in none other; do
+    : >"$t/log"; SIG_ONE=$bad "$t/auto-update"
+    [[ $(cat "$t/agros/agros-arch-ok") == 2026/11/12 ]] && grep -q "agros-arch-ok has no good signature by AgrOS's key (https://one.invalid/x86_64/agros-arch-ok.sig)" "$t/log" ||
+        fail "agros-arch-ok signed $bad taken, or not said: $(cat "$t/agros/agros-arch-ok") / $(grep arch-ok "$t/log")"
+done
+echo 2026/11/01 >"$t/agros/agros-arch-ok"
+SIG_ONE=none SIG_TWO=other "$t/auto-update"
+[[ $(cat "$t/agros/agros-arch-ok") == 2026/11/01 && ! -e $t/agros/agros-arch-ok.new && ! -e $t/agros/agros-arch-ok.new.sig ]] ||
+    fail "the copy kept not as it was with no good signature anywhere: $(cat "$t/agros/agros-arch-ok"; ls "$t/agros")"
 echo "ok auto-update-install"

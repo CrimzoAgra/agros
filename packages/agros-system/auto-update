@@ -9,14 +9,26 @@
 log=/var/log/auto-update.log
 # (the last 20 runs kept: every boot's download and every shutdown's pacman output are added to it. Not by the firmware
 # note, which runs beside the boot's run). Written beside it and renamed over it: on a full disk, written over in place,
-# the whole log was lost, when it's what says why nothing installs
+# the whole log was lost, when it's what says why nothing installs.
+# Root's and the admins' (wheel) alone: it has every account's update output, their apps and where they are. Nothing
+# run as a user reads it (dotfiles-check reads the notes in /var/lib/auto-update, and points admins here)
+private() { chgrp wheel "$1" 2>/dev/null; chmod 640 "$1"; }
 if [[ ${1:-} != --firmware-note ]] && [[ -s $log ]]; then
     kept=$(awk 'function run() { return /^===== / && !/^===== done / } NR == FNR { runs += run(); next } run() { n++ } n > runs - 20' "$log" "$log") &&
-        { printf '%s\n' "$kept" >"$log.new" && mv -f "$log.new" "$log"; }
+        { : >"$log.new" && private "$log.new" && printf '%s\n' "$kept" >"$log.new" && mv -f "$log.new" "$log"; }
     rm -f "$log.new"
 fi
+# (a log made before, open to every account, closed too)
+: >>"$log" && private "$log"
 exec >>"$log" 2>&1
 echo "===== $(date) ${1:-} ====="
+# A snapshot booted from the boot menu (its root an overlay in RAM: agros-boot's snapshot-overlay, grub-btrfs's or
+# Limine's), or the live USB: what this downloaded or installed, its lists and notes too, would be gone at the next boot,
+# the time and the download wasted. Nothing done, said
+if [[ $(findmnt -no FSTYPE / 2>/dev/null) == overlay ]]; then
+    echo "the system runs from a snapshot (or the live USB), its changes in RAM: nothing updated, none of it would be kept"
+    exit 0
+fi
 
 # The download's own package lists (as checkupdates does): synced into pacman's own, the system would be on newer lists
 # than packages all session, and installing any one package then a partial upgrade. Its lock is its own too, so pacman
@@ -378,14 +390,26 @@ fi
 
 # The day AgrOS's checks last passed on Arch (agros-arch-ok, which its CI publishes beside the [agros] repo; Hyprland's
 # updates wait while they fail), kept for dotfiles-check, which says so after login when it's over 10 days old. Each of
-# [agros]'s servers in turn; none answering, the copy kept as it is (its file's time: when it was fetched)
+# [agros]'s servers in turn; none answering, the copy kept as it is (its file's time: when it was fetched). Taken only
+# with a good signature by AgrOS's key beside it (agros-arch-ok.sig, checked with gpgv against agros-keyring's key
+# alone, as update-gate takes its list): none, or a bad one (a mirror or a network in between that changed it, to hide
+# that the checks stopped passing), and that server counts as not answering, said
 archok=/var/lib/agros/agros-arch-ok
+keyring=/usr/share/pacman/keyrings/agros.gpg
+mkdir -p "${archok%/*}"
 while read -r server; do
-    day=$(curl -fsS --connect-timeout 10 -m 30 "$server/agros-arch-ok" 2>/dev/null) || continue
+    curl -fsS --connect-timeout 10 -m 30 -o "$archok.new" "$server/agros-arch-ok" 2>/dev/null || continue
+    day=$(head -c 100 "$archok.new" 2>/dev/null)
     [[ $day =~ ^[0-9]{4}/[0-9]{2}/[0-9]{2}$ ]] || continue
-    mkdir -p "${archok%/*}" && echo "$day" >"$archok.new" && chmod 644 "$archok.new" && mv -f "$archok.new" "$archok"
+    if ! curl -fsS --connect-timeout 10 -m 30 -o "$archok.new.sig" "$server/agros-arch-ok.sig" 2>/dev/null ||
+        ! gpgv --keyring "$keyring" "$archok.new.sig" "$archok.new" >/dev/null 2>&1; then
+        echo "agros-arch-ok has no good signature by AgrOS's key ($server/agros-arch-ok.sig): not taken"
+        continue
+    fi
+    echo "$day" >"$archok.new" && chmod 644 "$archok.new" && mv -f "$archok.new" "$archok"
     break
 done < <(pacman-conf --repo agros Server 2>/dev/null)
+rm -f "$archok.new" "$archok.new.sig"
 
 # system and CachyOS gaming packages, the NVIDIA driver too: downloaded now, installed at shutdown (only once this
 # finished: its mark, complete).

@@ -37,10 +37,13 @@ case "$1" in
     -Qu) printf "%s\n" "$PENDING" ;;
     -Qmq) printf "%s\n" $foreign ;;
     -Slq) printf "%s\n" ${AGROS_PKGS:-} ;;
-    -Qi) echo "Name            : qt6-base"; echo "Required By     : quickshell-git  darkly-bin  kconfig"; echo "Optional For    : None" ;;
+    # (the foreign ones asked about at once, after --: those a signed repository installed, $SIGNED)
+    -Qi) if [ "${4:-}" = -- ]; then shift 4; for n; do echo "Name            : $n"
+             case " ${SIGNED:-} " in *" $n "*) echo "Validated By    : SHA-256 Sum  Signature" ;; *) echo "Validated By    : None" ;; esac; echo; done; exit 0; fi
+         echo "Name            : qt6-base"; echo "Required By     : quickshell-git  darkly-bin  kconfig"; echo "Optional For    : None" ;;
     -Qoq) [ "${@: -1}" = /usr/lib/python3.13/ ] && printf "%s\n" python ${QOQ:-python-foo} python-repo ;;
     -Q) case " ${AGROS_PKGS:-} " in *" $2 "*) echo "$2 $AGROS_HAVE"; exit 0 ;; esac
-        case " $foreign " in *" $2 "*) echo "$2 $( [ "$2" = quickshell-git ] && echo 0.3-1 || echo 1.0-1 )" ;; *) exit 1 ;; esac ;;
+        case " $foreign " in *" $2 "*) echo "$2 $( [ "$2" = quickshell-git ] && echo 0.3-1 || echo "${FOREIGN_HAVE:-1.0-1}" )" ;; *) exit 1 ;; esac ;;
     -T) echo "pacman $*" >>'"$t"'/calls; [ -n "${NEED:-}" ] && echo "$NEED"; true ;;
     -Sw) echo "pacman $*" >>'"$t"'/calls; echo "download $( [ -e '"$t"'/au/downloading ] && echo marked || echo unmarked)" >>'"$t"'/calls ;;
     -Sp) if [ -n "${SP_UNSAT:-}" ] && [ "${@: -1}" = "$SP_UNSAT" ]; then
@@ -328,6 +331,43 @@ reason() {
 [[ $(SP_NOTFOUND=1 SP_BARE=1 reason "hyprtoolkit>=9") == "python-foo: hyprtoolkit, which it needs, is in the repos only at an older version than it needs" ]] ||
     fail "a dependency the repos have only older said as missing: $(cat "$aur/failed")"
 stub pacman-conf '[ "$1" = CacheDir ] && echo '"$t/cache/"'; true'
+# The AUR's foreign apps built unreviewed, but not one whose AUR maintainer changed since its last build here (adopted by
+# another), nor one a signed repository installed (foreign since that repository dropped it: the AUR's of that name is
+# someone else's): said (failed), still in wanted (dotfiles-check names it), and left for Updates, where it can be
+# reviewed. Once updated from there, the new maintainer taken. The first maintainer seen: taken as it is
+maintained() { stub curl "echo '{\"results\":[{\"Name\":\"equibop\",\"PackageBase\":\"equibop\",\"Version\":\"1.1-1\",\"Maintainer\":\"$1\"}]}'"; }
+rm -f "$t/au/aur-maintainers" "$t/au/aur-maintainer-changed"
+maintained alice
+: >"$t/calls"
+FOREIGN=equibop PENDING="foo 1-1 -> 2-1" "$t/auto-update-aur" "$t/db" >"$t/out" 2>&1 || fail "the first build of equibop failed: $(cat "$t/out")"
+[[ $(cat "$aur/built") == "equibop 1.1-1" && $(cat "$t/au/aur-maintainers") == "equibop alice" ]] ||
+    fail "equibop's maintainer not recorded at its build: $(cat "$t/au/aur-maintainers" 2>/dev/null)"
+maintained 'mallory<b>'
+for run in 1 2; do
+    : >"$t/calls"
+    FOREIGN=equibop PENDING="foo 1-1 -> 2-1" "$t/auto-update-aur" "$t/db" >"$t/out" 2>&1 && fail "a maintainer change reported success"
+    [[ $(cat "$aur/failed") == "equibop: its AUR maintainer changed (alice to malloryb): update it from Updates, where you can review it" &&
+        $(cat "$aur/wanted") == "equibop 1.1-1" && ! -s $aur/built ]] && ! grep -q '^git clone' "$t/calls" ||
+        fail "built after its AUR maintainer changed (run $run), or not said: $(cat "$aur/failed" 2>/dev/null) / $(grep '^git' "$t/calls")"
+    [[ $(cat "$t/au/aur-maintainers") == "equibop alice" && $(cat "$t/au/aur-maintainer-changed") == "equibop malloryb 1.0-1" ]] ||
+        fail "the change waiting not kept as it was (run $run): $(cat "$t/au/aur-maintainer-changed" 2>/dev/null)"
+done
+# (updated from Updates since: its version installed another; the new maintainer taken at its next build)
+: >"$t/calls"
+FOREIGN_HAVE=1.0.5-1 FOREIGN=equibop PENDING="foo 1-1 -> 2-1" "$t/auto-update-aur" "$t/db" >"$t/out" 2>&1 ||
+    fail "the build after an update from Updates failed: $(cat "$t/out")"
+[[ $(cat "$aur/built") == "equibop 1.1-1" && $(cat "$t/au/aur-maintainers") == "equibop malloryb" && ! -s $t/au/aur-maintainer-changed ]] ||
+    fail "the new maintainer not taken once updated from Updates: $(cat "$t/au/aur-maintainers") / $(cat "$t/au/aur-maintainer-changed")"
+# A signed repository's (its repository dropped it): not built from the AUR's package of that name
+: >"$t/calls"
+SIGNED=equibop FOREIGN=equibop PENDING="foo 1-1 -> 2-1" "$t/auto-update-aur" "$t/db" >"$t/out" 2>&1 && fail "a repository's package built from the AUR"
+[[ $(cat "$aur/failed") == "equibop: equibop came from a repository that no longer has it, and the AUR's equibop is someone else's: update it from Updates, where you can review it" &&
+    $(cat "$aur/wanted") == "equibop 1.1-1" ]] && ! grep -q '^git clone' "$t/calls" ||
+    fail "a package its repository dropped built from the AUR, or not said: $(cat "$aur/failed" 2>/dev/null)"
+# (the builds' logs the admins' alone: what they printed names every user's AUR apps)
+[[ $(stat -c %a "$aur/log") == 750 ]] || fail "the builds' logs open to every account: $(stat -c %a "$aur/log")"
+rm -f "$t/au/aur-maintainers" "$t/au/aur-maintainer-changed"
+
 # The AUR out of reach: said
 stub curl 'exit 7'
 PENDING="foo 1-1 -> 2-1" "$t/auto-update-aur" "$t/db" >/dev/null && fail "the AUR out of reach reported success"
