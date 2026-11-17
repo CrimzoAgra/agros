@@ -50,17 +50,46 @@ qt_rebuild() {
             [[ ${old[i + 1]:-none} != none && ${new[i + 1]} != none ]] && changes+=$'\n'"${new[i]} ${old[i + 1]} -> ${new[i + 1]}"
         done
     fi
+    local agros=() rc=0
     for p in $("$helpers/update-kinds" --built-on <<<"$changes"); do
         [[ $p != *-bin ]] || continue
-        pacman -Qm "$p" >/dev/null 2>&1 || grep -qxF -- "$p" <<<"$(pacman -Slq agros 2>/dev/null)" || continue
-        pkgs+=("aur/$p")
+        if grep -qxF -- "$p" <<<"$(pacman -Slq agros 2>/dev/null)"; then agros+=("$p")
+        elif pacman -Qm "$p" >/dev/null 2>&1; then pkgs+=("aur/$p"); fi
     done
-    if ((${#pkgs[@]})); then
+    if ((${#pkgs[@]} + ${#agros[@]})); then
         command -v paru >/dev/null || { echo "!! A runtime (Qt, Python) was updated, but there's no paru to rebuild what's built on it with"; return 1; }
-        echo "A runtime (Qt, Python) was updated: rebuilding what's built on it: ${pkgs[*]#aur/}"
-        "${paru[@]}" -S --rebuild --noconfirm "${pkgs[@]}" || return 1
+        echo "A runtime (Qt, Python) was updated: rebuilding what's built on it: ${agros[*]} ${pkgs[*]#aur/}"
+        # (CI's order: Quickshell first, Caelestia's shell last, built on it)
+        mapfile -t agros < <(printf '%s\n' "${agros[@]}" | sed '/^$/d' |
+            awk '{ print ($0 == "quickshell-git" ? 0 : $0 == "caelestia-shell" ? 2 : 1), $0 }' | sort | cut -d' ' -f2)
+        ((${#agros[@]} == 0)) || rebuild_agros "${agros[@]}" || rc=1
+        ((${#pkgs[@]} == 0)) || "${paru[@]}" -S --rebuild --noconfirm "${pkgs[@]}" || rc=1
+        ((rc == 0)) || return 1
     fi
     qt_now >"$qt_stamp"
+}
+# rebuild_agros <name>...: [agros]'s own (built there from the AUR, AgrOS's fix added: aur-agros-patch) rebuilt as the
+# boot's rebuild does them, through auto-update-aur --fetch: the AUR's build files of the version installed (what CI built
+# and tested), AgrOS's fix added, the sources checked. paru -S's would be the AUR's newest, without the fix
+rebuild_agros() {
+    local p base have tmp rc=0 done=' '
+    # (in your cache, on disk: a build in /tmp takes memory)
+    mkdir -p "${XDG_CACHE_HOME:-$HOME/.cache}" && tmp=$(mktemp -d "${XDG_CACHE_HOME:-$HOME/.cache}/agros-rebuild.XXXXXX") ||
+        return 1
+    for p; do
+        base=$(curl -fsS --connect-timeout 10 -m 60 -G https://aur.archlinux.org/rpc/v5/info --data-urlencode "arg[]=$p" |
+            jq -r '.results[0].PackageBase // empty' 2>/dev/null)
+        [[ $base =~ ^[A-Za-z0-9@_+][A-Za-z0-9@._+-]*$ ]] || { echo "!! $p: not found on the AUR (offline?), not rebuilt"; rc=1; continue; }
+        [[ $done != *" $base "* ]] || continue
+        done+="$base "
+        have=$(pacman -Q "$p" 2>/dev/null | cut -d' ' -f2)
+        "${AUTO_UPDATE_AUR:-/usr/lib/agros/auto-update-aur}" --fetch "$tmp" "$base${have:+=$have}" ||
+            { echo "!! $base: its build files of $have, with AgrOS's fix, couldn't be had: not rebuilt"; rc=1; continue; }
+        # (its sources already fetched and checked there: not again)
+        (cd "$tmp/$base" && SRCDEST=$tmp/src/$base "${paru[@]}" -Ui --noconfirm) || rc=1
+    done
+    rm -rf "${tmp:?}"
+    return $rc
 }
 case ${1:-} in
     # (never failing: no stamp written, the next run writes it)
