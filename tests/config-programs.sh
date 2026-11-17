@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # What the desktop's configs run is there: every program the Hyprland config (hl.exec_cmd, its login starts, io.popen),
-# the user units (Exec*=) and the Quickshell apps (command:, execDetached) run. One of ~/.local/bin is a script in
+# the user units (Exec*=), the Quickshell apps (command:, execDetached) and Caelestia's settings (the Super menu's
+# actions) run. One of ~/.local/bin is a script in
 # .local/bin; any other comes with a package agros-desktop installs, or the base system (the table below: a new one is
 # added there with its package, one no longer run taken out). Every unit Lua starts is in .config/systemd/user, and
 # the apps the default apps and the dock's pins name are installed. A package dropped from agros-desktop, or a script
@@ -9,7 +10,7 @@ set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 python3 -I - "$here" <<'P'
-import glob, os, re, shlex, sys
+import glob, json, os, re, shlex, sys
 here = sys.argv[1]
 
 # program -> its package; "optional:" one that isn't always installed (each place that runs it says why that's fine)
@@ -19,6 +20,7 @@ PROGRAMS = {
     "protonvpn-app": "proton-vpn-gtk-app", "qs": "quickshell-git", "readlink": "coreutils", "setsid": "util-linux",
     "sh": "bash", "sleep": "coreutils", "systemctl": "systemd", "tail": "coreutils", "cat": "coreutils",
     "rm": "coreutils", "mkdir": "coreutils", "mv": "coreutils", "env": "coreutils", "timeout": "coreutils",
+    "caelestia": "caelestia-cli", "loginctl": "systemd",
     # (the widgets' GPU meter: only with NVIDIA's driver loaded, which brings it)
     "nvidia-smi": "optional:nvidia-utils",
     # (its login start is off by default: agros-welcome --system installs it with a Logitech device plugged in)
@@ -102,9 +104,9 @@ def programs(line, where):
         first = False
         if w == "case":
             in_case = "word"; continue
-        if w in BUILTINS or w.startswith("$") or w[:1].isdigit() or w == "X" or w.startswith("X/"):
+        m = re.fullmatch(r"(?:~|\$HOME|\$\{HOME\}|%h|X)/\.local/bin/([\w.+-]+)", w)
+        if not m and (w in BUILTINS or w.startswith("$") or w[:1].isdigit() or w == "X" or w.startswith("X/")):
             continue  # (the shell's own, or a variable's: not known here)
-        m = re.fullmatch(r"(?:~|\$HOME|%h|X)/\.local/bin/([\w.+-]+)", w)
         name = m.group(1) if m else os.path.basename(w) if w.startswith("/") else w
         # (a bare name in .local/bin is that script: ~/.local/bin comes first on the desktop's PATH)
         if m and not os.path.isfile(f"{here}/.local/bin/{name}"):
@@ -161,6 +163,23 @@ for f in sorted(glob.glob(f"{here}/.config/quickshell/**/*.qml", recursive=True)
         args = [a for a in arguments(src, m.end() - 1, "]")]
         if args and args[0] != "X":
             programs(shlex.join(args), f"{rel}:{line}")
+
+# Caelestia's settings (shell.json): its Super menu's actions and idle steps. Not the ones Caelestia does itself
+# (autocomplete, setMode, its session verbs: suspend, logout..., also as "systemctl <verb>")
+VERBS = {"autocomplete", "setmode", "logout", "suspend", "suspendthenhibernate", "hibernate", "poweroff", "reboot"}
+def shell_json(node, where):
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if key in {"command", "idleAction", "returnAction"} and isinstance(value, list) and value:
+                verb = value[1] if value[0] in {"systemctl", "loginctl"} and len(value) == 2 else value[0]
+                if re.sub(r"[-_]", "", verb).lower() not in VERBS:
+                    programs(shlex.join(value), f"{where} ({key})")
+            else:
+                shell_json(value, where)
+    elif isinstance(node, list):
+        for value in node:
+            shell_json(value, where)
+shell_json(json.load(open(f"{here}/.config/caelestia/shell.json")), ".config/caelestia/shell.json")
 
 # The apps the default apps (mimeapps.list) and the dock's pins name: a launcher entry of the repo's, of a package
 # agros-desktop installs, or of a Flatpak agros-welcome installs (by what it's installed from)
