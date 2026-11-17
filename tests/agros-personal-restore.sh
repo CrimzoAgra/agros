@@ -55,6 +55,9 @@ echo SECRET-EA >"$old/Games/ea-app/drive_c/users/steamuser/AppData/Local/EADeskt
 echo c >"$old/Games/ea-app/drive_c/users/steamuser/AppData/Local/EADesktop/Cache/c"  # (a launcher's folder is whole)
 printf 'game:\n  prefix: %s/Games/ea-app\n' "$old" >"$old/.local/share/lutris/games/ea-app-1.yml"
 mkdir -p "$t/gitdrive/.git"; run "$old" personal_save x "$t/gitdrive" >/dev/null 2>&1 && fail "saved into a git repo"
+git init -q "$t/gitrepo"; mkdir "$t/gitrepo/sub"
+run "$old" personal_save x "$t/gitrepo/sub" >/dev/null 2>&1 && fail "saved into a folder inside a git repo"
+[[ ! -e $t/gitrepo/sub/dotfiles-personal.tar.gpg ]] || fail "the file left in a folder inside a git repo"
 run "$old" personal_save >/dev/null || fail "--save-personal failed"
 file=$drive/dotfiles-personal.tar.gpg
 [[ -s $file ]] || fail "nothing on the drive"
