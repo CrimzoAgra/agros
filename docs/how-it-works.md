@@ -858,8 +858,11 @@ helper a package update just brought works before `agros-links` has linked it), 
   the first time, kept so a later version can't point elsewhere), checked the same way and only when the file is that
   app; `--check` lists the ones with a newer version. A new version asking for more access (its sandbox permissions,
   its metadata read by GLib as flatpak reads it; one GLib can't read counts as more)
-  is held at boot for Updates, which installs it and says what it adds; the `-origin` remote a bundle makes has its
-  URL emptied (a bundle names it: `flatpak update` would otherwise follow it), and a missing runtime comes from Flathub
+  is held at boot for Updates, which installs it and says what it adds. A file can name a repo URL for its
+  `-origin` remote, which `flatpak update` would follow past these checks: the file installed is made again
+  (`flatpak build-bundle`) from what flatpak read of it, with no URL nor runtime repo, and every `-origin` remote's
+  URL is emptied before each `flatpak update` (`--no-origin-urls`: auto-update's as root, `update-kinds`' as each
+  user; one left, that installation isn't updated). A missing runtime comes from Flathub
   (both use `.local/share/github-release/lib.sh`: the release's x86_64 file and its checksum). At boot, each user's
   own are done as that user and the system-wide ones once, as root
 - **`.local/bin/capri-update`**: installs and updates Capri: my fork (`CrimzoAgra/capri-overlay`: CapriDesktop with

@@ -68,7 +68,7 @@ grep -q 'systemd-inhibit' <<<"$unit" && fail "the boot's download blocks shutdow
     grep -q '^ *timeout 30m systemd-inhibit --what=sleep:shutdown --mode=block ' <<<"$(grep -B2 -- '--install-fetched "$fetched"' "$t/auto-update")" &&
     grep -qx 'bundles' "$t/auto-update" && grep -qx '    bundles "$each_user" --as "$user"' "$t/auto-update" &&
     grep -qx '    "$@" rm -rf -- "$fetched"' "$t/auto-update" &&
-    [[ $(grep -c 'flatpak-bundle-update' "$t/auto-update") == 3 ]]; } ||
+    [[ $(grep -c 'flatpak-bundle-update' "$t/auto-update") == 4 ]]; } ||
     fail "the boot's Flatpak reinstall not held by root around that step alone (root's and each user's): $(grep -n -A14 '^bundles() {' "$t/auto-update")"
 # Shutdown's own limit (the targets' JobTimeoutSec) longer than the install's (TimeoutStopSec), so it can't cut it off
 stop=$(sed -n 's/^TimeoutStopSec=\([0-9]*\)min$/\1/p' "$au/auto-update-install.service")
@@ -459,7 +459,7 @@ FETCHED=1 "$t/auto-update-late" || true
 # Root's own pass (the system-wide Flatpaks): its helper run as root itself (not through --as), the reinstall under the
 # hold as the users' is (the helper and the hold noted, in a copy of the script)
 # shellcheck disable=SC2016  # (expanded by the stand-ins)
-printf '#!/bin/sh\necho "fbu $*" >>%s/calls\n[ "$1" != --fetch ] || [ -z "${FETCHED:-}" ] || echo app >"$2/fetched"\n' "$t" >"$t/bin/fbu"
+printf '#!/bin/sh\necho "fbu $*" >>%s/calls\n[ "$1" != --fetch ] || [ -z "${FETCHED:-}" ] || echo app >"$2/fetched"\n[ "$1" != --no-origin-urls ] || [ -z "${NO_EMPTY:-}" ]\n' "$t" >"$t/bin/fbu"
 # shellcheck disable=SC2016
 printf '#!/bin/sh\necho held >>%s/calls\nwhile [ "${1#--}" != "$1" ]; do shift; done\nexec "$@"\n' "$t" >"$t/bin/hold-noted"
 chmod +x "$t/bin/fbu" "$t/bin/hold-noted"
@@ -467,10 +467,20 @@ sed -e "s|$here/.local/bin/flatpak-bundle-update|$t/bin/fbu|g" -e "s|systemd-inh
     "$t/auto-update" >"$t/auto-update-root"
 chmod +x "$t/auto-update-root"
 : >"$t/calls"
+# (and root's flatpak update after its apps from a file had their -origin remotes' URLs emptied, flatpak noted)
+cp "$t/bin/flatpak" "$t/flatpak-quiet"
+# shellcheck disable=SC2016
+printf '#!/bin/sh\n[ "$1" != update ] || echo "flatpak $*" >>%s/calls\n' "$t" >"$t/bin/flatpak"
 FETCHED=1 "$t/auto-update-root" || fail "the boot with system-wide Flatpaks from a file failed"
-root=$(grep -E '^(fbu|held)' "$t/calls" | sed -n '1,3{s/ [^ ]*$//;p}')
-[[ $root == $'fbu --fetch\nheld\nfbu --install-fetched' ]] ||
-    fail "the system-wide Flatpaks not fetched and reinstalled by root under the hold: $(cat "$t/calls")"
+root=$(grep -E '^(fbu|held|flatpak)' "$t/calls" | sed -n '1,5{s| /[^ ]*$||;p}')
+[[ $root == $'fbu --no-origin-urls system user\nflatpak update -y --noninteractive\nfbu --fetch\nheld\nfbu --install-fetched' ]] ||
+    fail "the system-wide Flatpaks not updated after their -origin URLs were emptied, then fetched and reinstalled by root under the hold: $(cat "$t/calls")"
+# ...an -origin remote's URL that couldn't be emptied: no flatpak update, said
+: >"$t/calls"; : >"$t/log"
+NO_EMPTY=1 "$t/auto-update-root" || fail "the boot with an -origin remote's URL left failed"
+! grep -q '^flatpak update' "$t/calls" && grep -q 'Flatpaks not updated: an app installed from a file kept the URL' "$t/log" ||
+    fail "Flatpaks updated with an -origin remote's URL left: $(cat "$t/calls")"
+mv -f "$t/flatpak-quiet" "$t/bin/flatpak"
 
 # An install cut off at shutdown (pacman killed mid-way): the next boot puts pacman's lists back, and its lock
 lists

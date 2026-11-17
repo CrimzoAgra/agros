@@ -355,13 +355,24 @@ for kind; do
         flatpak)
             command -v flatpak >/dev/null || continue  # (none on this machine: nothing to update, not a problem)
             echo; echo "== Flatpaks"
-            if $boot; then
-                timeout 30m flatpak update --user -y --noninteractive
-            else
-                timeout 1h flatpak update -y
-                rc=$?
-                "$helpers/flatpak-bundle-update" && ((!rc))  # (and those from a downloaded file)
-            fi ;;
+            # Each installation's apps from a file first have their -origin remote's URL emptied (flatpak-bundle-update
+            # --no-origin-urls): flatpak update took one from the URL its file named, past that script's checks. One
+            # that couldn't be (the system's password prompt cancelled): that installation not updated. At boot the
+            # user's alone (root does the system's)
+            rc=0
+            for inst in user system; do
+                $boot && [[ $inst == system ]] && continue
+                if ! "$helpers/flatpak-bundle-update" --no-origin-urls "$inst"; then
+                    echo "!! Flatpaks ($inst installation) not updated: an app installed from a file kept the URL its file named"
+                    rc=1
+                elif $boot; then
+                    timeout 30m flatpak update --user -y --noninteractive || rc=1
+                else
+                    timeout 1h flatpak update --"$inst" -y || rc=1
+                fi
+            done
+            $boot || "$helpers/flatpak-bundle-update" || rc=1  # (and those from a downloaded file)
+            ((!rc)) ;;
         appimage) echo; echo "== AppImages"; "$helpers/appimage-update" ;;
         capri)
             [[ -e $capri_current ]] || continue

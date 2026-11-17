@@ -10,6 +10,9 @@
 #   flatpak-bundle-update --install-fetched <dir>    reinstall from those (the boot's update: it holds sleep and power
 #                                                    off as root around this step alone, logind refusing it to a user
 #                                                    outside a session)
+#   flatpak-bundle-update --no-origin-urls <user|system>...   every app installed from a file has its -origin remote's
+#                                                    URL emptied (no_origin_urls), before any flatpak update; fails
+#                                                    when one couldn't be
 # Takes the latest release's Linux x86_64 .flatpak, checked against the release's SHA256SUMS when it has one (a
 # system-wide one only when it has one), and only when the file is that app (its ref). Each app's repo is the one it was
 # installed from (--install), else its metainfo's own link to it the first time it's looked for (repo_of), written down
@@ -34,13 +37,22 @@ newer() {
 }
 
 # bundle_app <file> <dir>: the app a .flatpak file installs (its ref, read by flatpak itself into a repo of its own in
-# dir, nothing installed); its metadata (the access it asks for) written beside the file, <dir>/.metadata
+# dir, nothing installed); its metadata (the access it asks for) written beside the file, <dir>/.metadata. The file is
+# then made again from that repo, <dir>/<app id>.flatpak (the one downloaded removed), with no repo URL nor runtime repo
+# in it (build-bundle's --repo-url, --runtime-repo): installed from the file as downloaded, flatpak set the URL it names
+# on the app's -origin remote, and a flatpak update (the boot's, as root) could take the app from there before
+# no_origin_url emptied it, past every check here
 bundle_app() {
-    local repo ref
+    local repo ref id arch branch
     repo=$(mktemp -d "$2/.ref.XXXXXX") && ostree init --repo="$repo" --mode=archive >/dev/null 2>&1 &&
         flatpak build-import-bundle "$repo" "$1" >/dev/null 2>&1 && ref=$(ostree refs --repo="$repo" 2>/dev/null) || return 1
     ref=$(grep -m1 '^app/' <<<"$ref") && ostree cat --repo="$repo" "$ref" /metadata >"$2/.metadata" 2>/dev/null &&
-        [[ -s $2/.metadata ]] && ref=${ref#app/} && [[ -n ${ref%%/*} ]] && echo "${ref%%/*}"
+        [[ -s $2/.metadata ]] || return 1
+    IFS=/ read -r _ id arch branch <<<"$ref"
+    # (its id names the file made: an id's characters alone)
+    [[ $id =~ ^[A-Za-z0-9_.-]+$ && $id != .* && -n $arch && -n $branch ]] || return 1
+    rm -f "$1"
+    flatpak build-bundle --arch="$arch" "$repo" "$2/$id.flatpak" "$id" "$branch" >/dev/null 2>&1 && echo "$id"
 }
 
 # keyfile <access|runtime>: a Flatpak metadata file (stdin) read by GLib's own GKeyFile, as flatpak reads it. An awk of
@@ -113,7 +125,7 @@ fetch_from() {
         fi
         [[ -z $more ]] || echo "$4: its new version asks for more access: $more" >&2
     fi
-    printf '%s\t%s\n' "$got" "$file"
+    printf '%s\t%s\n' "$got" "$2/$got.flatpak"
 }
 
 # no_origin_url <user|system> <app id>: the remote flatpak made for an app installed from a file (<name>-origin) left
@@ -125,6 +137,20 @@ no_origin_url() {
     origin=$(flatpak info --"$1" --show-origin "$2" 2>/dev/null) && [[ $origin == *-origin ]] || return 0
     url=$(flatpak remotes --"$1" --show-disabled --columns=name,url 2>/dev/null | awk -F'\t' -v o="$origin" '$1 == o { print $2 }')
     [[ -z $url ]] || flatpak remote-modify --"$1" --url= "$origin" </dev/null
+}
+
+# no_origin_urls <user|system>: every <name>-origin remote of that installation left with no URL, as no_origin_url
+# does for one app: run before every flatpak update (auto-update's, update-kinds'), which took an app installed from a
+# file before this made it again (bundle_app), or by hand, from the URL its file named. Fails when one couldn't be
+# emptied (a password prompt cancelled, for the system's): the caller doesn't update that installation then
+no_origin_urls() {
+    local remotes name url rc=0
+    remotes=$(flatpak remotes --"$1" --show-disabled --columns=name,url 2>/dev/null) || return 1
+    while IFS=$'\t' read -r name url; do
+        [[ $name == *-origin && -n $url ]] || continue
+        flatpak remote-modify --"$1" --url= "$name" </dev/null || rc=1
+    done <<<"$remotes"
+    return $rc
 }
 
 # reinstall <user|system> <file> <app id>: the app reinstalled from that file: the app's own data (~/.var/app) stays.
@@ -139,8 +165,8 @@ reinstall() {
     local hold=() rt where=()
     # The runtime its metadata names (bundle_app's copy, beside the file), from Flathub, then the file with no
     # dependencies of its own: a file can name a repo for its runtime (build-bundle --runtime-repo), which flatpak
-    # install -y adds as a new remote unasked, every flatpak update trusting it from then on. (One installed for every
-    # account counts for the user's apps too)
+    # install -y adds as a new remote unasked, every flatpak update trusting it from then on (bundle_app's file names
+    # none; --no-deps all the same). (One installed for every account counts for the user's apps too)
     rt=$(keyfile runtime 2>/dev/null <"${2%/*}/.metadata")
     [[ $rt == */*/* ]] || { echo "${2##*/}: its runtime couldn't be read, not installed" >&2; return 1; }
     [[ $1 == user ]] || where=(--system)
@@ -194,6 +220,12 @@ repo_of() {
     remember "$2" "$1" "$repo"
     echo "$repo"
 }
+
+if [[ ${1:-} == --no-origin-urls ]]; then
+    shift
+    for inst; do no_origin_urls "$inst" || status=1; done
+    exit $status
+fi
 
 if [[ ${1:-} == --install-fetched ]]; then
     # (each "<user|system>\t<file>\t<app id>\t<version>", as --fetch listed them)

@@ -207,6 +207,30 @@ stub fwupdmgr 'exit 1'
 run firmware >/dev/null && fail "a failed firmware update reported success"
 rm "$t/bin/fwupdmgr"
 
+# --- Flatpaks: each installation's -origin remotes (an app installed from a file) have their URL emptied before its
+# flatpak update (flatpak-bundle-update --no-origin-urls), else flatpak took the app from the URL its file named; one
+# that couldn't be ($MODIFY_FAILS: the system's password prompt cancelled) leaves that installation not updated. At
+# boot the user's alone (root does the system's)
+# shellcheck disable=SC2016  # (expanded by the stand-in)
+stub flatpak 'echo "flatpak $*" >>'"$t"'/fp
+case $1 in
+    remotes) printf "app-origin\thttps://example.com/repo\nflathub\thttps://dl.flathub.org/repo/\n" ;;
+    remote-modify) [ -z "${MODIFY_FAILS:-}" ] || [ "$2" != --system ] || exit 1 ;;
+esac
+exit 0'
+run flatpak >/dev/null || fail "the Flatpaks' update failed"
+[[ $(grep -E '^flatpak (remote-modify|update)' "$t/fp") == $'flatpak remote-modify --user --url= app-origin\nflatpak update --user -y\nflatpak remote-modify --system --url= app-origin\nflatpak update --system -y' ]] ||
+    fail "a flatpak update before its -origin remotes' URLs were emptied: $(cat "$t/fp")"
+rm -f "$t/fp"
+out=$(MODIFY_FAILS=1 run flatpak) && fail "the Flatpaks' update succeeded with a system -origin remote's URL left: $out"
+[[ $out == *"Flatpaks (system installation) not updated"* ]] && grep -qx 'flatpak update --user -y' "$t/fp" &&
+    ! grep -q '^flatpak update --system' "$t/fp" || fail "the system's Flatpaks updated with an -origin remote's URL left: $out / $(cat "$t/fp")"
+rm -f "$t/fp"
+run --boot flatpak >/dev/null || fail "the boot's Flatpak update failed"
+[[ $(grep -E '^flatpak (remote-modify|update)' "$t/fp") == $'flatpak remote-modify --user --url= app-origin\nflatpak update --user -y --noninteractive' ]] ||
+    fail "the boot's Flatpak update not the user's alone, after its -origin remotes' URLs were emptied: $(cat "$t/fp")"
+stub flatpak 'true'
+
 # --- Developer tools: only those there; npm's global packages only with its prefix in your home
 # shellcheck disable=SC2016
 stub npm 'echo "npm $*" >>'"$t"'/dev; case "$*" in "config get prefix") echo "$NPM_PREFIX" ;; "outdated -g --json") echo "{\"pnpm\":{\"current\":\"9.0.0\",\"latest\":\"10.1.0\"}}" ;; esac'

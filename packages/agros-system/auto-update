@@ -482,7 +482,16 @@ fi
 # installed from a downloaded file (Nuvio, ArtCraft), as that user; then their AppImages, Capri's check, Proton builds
 # and developer tools (update-kinds, as Updates runs them)
 # (each given up on after half an hour: a stalled one held shutdown off for as long as it hung)
-command -v flatpak >/dev/null && timeout 30m flatpak update -y --noninteractive
+# Root's apps from a file (system-wide, and root's own) first have their -origin remote's URL emptied
+# (flatpak-bundle-update --no-origin-urls): flatpak update, as root, took one from the URL its file named, past that
+# script's checks. Not emptied: not updated
+if command -v flatpak >/dev/null; then
+    if /usr/lib/agros/bin/flatpak-bundle-update --no-origin-urls system user; then
+        timeout 30m flatpak update -y --noninteractive
+    else
+        echo "!! Flatpaks not updated: an app installed from a file kept the URL its file named"
+    fi
+fi
 # Flatpaks installed from a file (bundles [runner...]: the system-wide ones as root, once; each user's own as them,
 # below): downloaded first (nothing held), then reinstalled (old one out first) with sleep and power off held for that
 # step alone: by root, here (logind refuses a user that hold outside a session). Usually seconds; a runtime the new

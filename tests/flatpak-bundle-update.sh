@@ -81,9 +81,10 @@ case "\$*" in
     info*runtime/*) exit 1 ;;
     info*) echo '  Version: 1.0' ;;
     install*) echo "flatpak \$*" >>"$t/installs" ;;
-    remotes*) printf 'app-origin\thttps://example.com/repo\n' ;;
-    remote-modify*) echo "flatpak \$*" >>"$t/modified" ;;
+    remotes*) printf 'app-origin\thttps://example.com/repo\nflathub\thttps://dl.flathub.org/repo/\n' ;;
+    remote-modify*) echo "flatpak \$*" >>"$t/modified"; [ -z "\${MODIFY_FAILS:-}" ] ;;
     build-import-bundle*) echo "app/\${REF:-\$(basename "\$(dirname "\$2")")}/x86_64/stable" >"\$2/refs" ;;
+    build-bundle*) echo "flatpak \$*" >>"$t/bundled"; echo bundle >"\$4" ;;
 esac
 F
 # (the metadata of the version installed, oldmeta, and of the file's, newmeta: the same access here)
@@ -107,9 +108,21 @@ mkdir -p "$t/fetched"
 out=$(fbu --fetch "$t/fetched" 2>&1) || fail "--fetch failed: $out"
 [[ ! -e $t/installs && $(cut -f1,3,4 "$t/fetched/fetched") == $'user\tcom.x.App\t1.1' && $(cat "$(cut -f2 "$t/fetched/fetched")") == bundle ]] ||
     fail "--fetch didn't only download the user's own update (a system-wide one is root's, done once): $out / $(cat "$t/fetched/fetched" 2>/dev/null) / $(cat "$t/installs" 2>/dev/null)"
+# ...and the file made again from what flatpak read of it, with no repo URL nor runtime repo for flatpak to set on its
+# remote (the file as downloaded gone): that file's the one installed
+{ [[ $(cut -f2 "$t/fetched/fetched") == "$t/fetched/com.x.App/com.x.App.flatpak" && ! -e $t/fetched/com.x.App/App-x86_64.flatpak ]] &&
+    grep -qx "flatpak build-bundle --arch=x86_64 $t/fetched/com.x.App/\.ref\.[A-Za-z0-9]* $t/fetched/com.x.App/com.x.App.flatpak com.x.App stable" "$t/bundled"; } ||
+    fail "the file not made again with no URL in it: $(cat "$t/fetched/fetched") / $(cat "$t/bundled" 2>/dev/null)"
 # An app installed from a file that carried a repo URL (its <name>-origin remote has it, so flatpak update took the app
 # from there, past every check here): the URL emptied, as for a file without one, at the next run
 grep -qx "flatpak remote-modify --user --url= app-origin" "$t/modified" || fail "an app's origin remote kept its URL: $(cat "$t/modified" 2>/dev/null)"
+rm -f "$t/modified"
+# --no-origin-urls (before every flatpak update: auto-update's, update-kinds'): every -origin remote's URL emptied in
+# the installations given, no other remote's (Flathub's); one that couldn't be (a password prompt cancelled) fails
+out=$(fbu --no-origin-urls user system 2>&1) || fail "--no-origin-urls failed: $out"
+[[ $(cat "$t/modified") == $'flatpak remote-modify --user --url= app-origin\nflatpak remote-modify --system --url= app-origin' ]] ||
+    fail "--no-origin-urls didn't empty the -origin remotes alone: $(cat "$t/modified")"
+MODIFY_FAILS=1 fbu --no-origin-urls system >/dev/null 2>&1 && fail "--no-origin-urls succeeded with a URL left"
 rm -f "$t/modified"
 # Another app's file in the release: not taken
 mkdir -p "$t/fetched-other"
@@ -172,7 +185,7 @@ else
 fi
 rm -f "$t/installs" "$t/modified"
 out=$(fbu --install-fetched "$t/fetched" 2>&1) || fail "--install-fetched failed: $out"
-{ grep -qx "flatpak install --user -y --noninteractive --no-deps --reinstall --bundle $t/fetched/com.x.App/App-x86_64.flatpak" "$t/installs" &&
+{ grep -qx "flatpak install --user -y --noninteractive --no-deps --reinstall --bundle $t/fetched/com.x.App/com.x.App.flatpak" "$t/installs" &&
     [[ $out == *"com.x.App: updated to 1.1"* ]]; } || fail "--install-fetched didn't reinstall from the file: $out / $(cat "$t/installs")"
 # ...its runtime (not installed here) from Flathub first, never a repo the file names (flatpak install -y added that
 # as a remote unasked), and its origin remote's URL, if the file gave it one, emptied after
