@@ -160,7 +160,12 @@ for _, m in ipairs(hl.get_monitors({ all = true }) or {}) do
         end
         mode = found and mode or nil
     end
-    local position = type(s.position) == "string" and s.position ~= "" and s.position or nil
+    -- (the same for a position not in the Settings app's form, WxH, and a scale far outside its list: settings.lua has
+    -- the screens' as saved in settings.json, a hand edit unchecked, and a rule Hyprland can't read is a config error
+    -- here, before the lid's switch below)
+    local position = type(s.position) == "string" and s.position:match("^%d+x%d+$") or nil
+    local scale = tonumber(s.scale)
+    scale = scale and scale >= 0.5 and scale <= 4 and scale or nil
     -- A main screen: it at 0x0, the others where the host file puts them (not at 0x0: that's the main's now), else to
     -- its right
     local placed = applied.position ~= nil and applied.position ~= "auto" and applied.position ~= "0x0"
@@ -173,7 +178,7 @@ for _, m in ipairs(hl.get_monitors({ all = true }) or {}) do
         for k, v in pairs(applied) do rule[k] = v end
         rule.output = "desc:" .. m.description
         rule.mode = mode or rule.mode or "preferred"
-        rule.scale = tonumber(s.scale) or rule.scale or "auto"
+        rule.scale = scale or rule.scale or "auto"
         rule.position = position or rule.position or "auto"
         rule.disabled = set_off[m.name] or nil
         if rule.disabled then off[m.name] = rule.output end
