@@ -16,6 +16,7 @@ pos() { grep -nx -- "$1" <<<"$deps" | cut -d: -f1; }
 w=$here/packages/agros-wine/PKGBUILD
 (   # shellcheck source=../packages/agros-wine/PKGBUILD
     . "$w"
+    # shellcheck disable=SC2154  # (the PKGBUILD's, sourced above)
     [[ " ${provides[*]} " == *" wine "* && -z ${conflicts[*]:-} && -z ${replaces[*]:-} && " ${depends[*]} " == *" wine-cachyos-opt "* ]] ||
         fail "agros-wine doesn't stand in for wine alone: provides ${provides[*]}, conflicts ${conflicts[*]:-}, replaces ${replaces[*]:-}"
     pkgdir=$t/pkg package
