@@ -36,6 +36,7 @@ These install when you choose **Install hardware apps and VMware** after your fi
 | Boxflat | Moza racing wheels (instead of Pit House) |
 | OpenTabletDriver | Drawing tablets |
 | The camera switch | The Lenovo Legion's webcam switch |
+| The NVIDIA driver loaded early | An NVIDIA graphics card (the boot splash comes up on it) |
 | VMware Workstation | Virtual machines |
 
 ## Installing more
