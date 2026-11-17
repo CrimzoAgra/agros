@@ -33,7 +33,8 @@ start() {
         pids+=("$(cat "$t/game.pid")")
     fi
 }
-alive() { kill -0 "$(cat "$t/$1.pid")" 2>/dev/null; }
+# (a zombie is gone too: in CI's container, process 1 doesn't reap the stand-ins it inherits)
+alive() { [[ $(awk '$1 == "State:" {print $2}' "/proc/$(cat "$t/$1.pid")/status" 2>/dev/null) == [^Z]* ]]; }
 close() { PATH=$t/bin:$PATH bash -c 'source "$1"; personal_close_tray "${@:2}"' _ "$here/.local/bin/agros-personal" "$@" </dev/null; }
 
 # In their tray (no window): both closed, said
