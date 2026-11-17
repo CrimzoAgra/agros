@@ -28,6 +28,10 @@ want=$(checksum "$r" App-x86_64.AppImage "$t/dl") || fail "a release without che
 printf '%s  App-x86_64.AppImage.zsync\n%s *App-x86_64.AppImage\n' 0000 "$sum" >"$t/srv/SHA256SUMS"
 r=$(release App-x86_64.AppImage SHA256SUMS)
 [[ $(checksum "$r" App-x86_64.AppImage "$t/dl") == "$sum" ]] || fail "the checksum not found by its exact name"
+# The list's signatures listed before it (no hash in them): the list itself read
+echo "-----BEGIN PGP SIGNATURE-----" | tee "$t/srv/SHA256SUMS.asc" >"$t/srv/SHA256SUMS.sig"
+r=$(release App-x86_64.AppImage SHA256SUMS.asc SHA256SUMS.sig SHA256SUMS)
+[[ $(checksum "$r" App-x86_64.AppImage "$t/dl" 2>/dev/null) == "$sum" ]] || fail "the list's signature read for the list"
 # A list for another build only: refused, not installed unchecked
 printf '%s  App-aarch64.AppImage\n' "$sum" >"$t/srv/SHA256SUMS"
 if checksum "$r" App-x86_64.AppImage "$t/dl" 2>/dev/null; then fail "a checksum list without this file passed"; fi

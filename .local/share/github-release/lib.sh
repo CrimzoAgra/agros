@@ -16,7 +16,10 @@ asset_url() {
 checksum() {
     local own list
     own=$(jq -r --arg n "$2" '[.assets[].browser_download_url | select(endswith("/" + $n + ".sha256") or endswith("/" + $n + ".sha256sum"))][0] // empty' <<<"$1")
-    list=$(jq -r '[.assets[].browser_download_url | select(test("(?i)/[^/]*(sha256sums|checksums|sha256\\.txt)[^/]*$"))][0] // empty' <<<"$1")
+    # (not the list's own signature, SHA256SUMS.asc or checksums.txt.sig, listed before it: no hash in it, the update
+    # was refused)
+    list=$(jq -r '[.assets[].browser_download_url | select(test("(?i)/[^/]*(sha256sums|checksums|sha256\\.txt)[^/]*$"))
+        | select(test("(?i)\\.(sig|asc|pem|minisig)$") | not)][0] // empty' <<<"$1")
     if [[ -z $own && -z $list ]]; then
         jq -e '[.assets[].name | select(test("(?i)sha256|checksum"))] | length == 0' <<<"$1" >/dev/null && return 0
         echo "$2: the release's checksums don't cover it, not installed" >&2
