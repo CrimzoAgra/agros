@@ -173,8 +173,9 @@ keep_published() {
         echo "-- $f: the rebuild published (built against other libraries, Qt or Python than the published one)"
         return 0
     fi
-    # (the fixed versions: agros-desktop, agros-welcome, agros-keyring, agros-nvidia; not compiled ones, whose build
-    # differs with each compiler: agros-vmware's and agros-thunar-usage's versions count the commits that touch them)
+    # (the fixed versions: agros-desktop, agros-welcome, agros-keyring, agros-nvidia, agros-wine; not compiled ones,
+    # whose build differs with each compiler: agros-vmware's, agros-thunar-usage's and agros-hyprbars' versions count
+    # the commits that touch what they're built from, so a change to them is always a new version)
     # One versioned by the commits (a pkgver()) differs only if built differently from the same commit: a build that
     # isn't reproducible (it read something besides the repo), stopped here too rather than published over or hidden
     if [[ $f == agros-*-any.pkg.tar.zst && $(contents "$work/pub") != "$(contents "$f")" ]]; then
@@ -333,6 +334,26 @@ SH
             "$((calamares_rel + 1))) calamares_sum=$sum ;; (ci/build-repo.sh)"
         exit 1
     }
+    # calamares_modules <package>: each module its settings' sequences name (a "module@instance" by its module) built
+    # into it. Calamares' CMake leaves out a module whose library is missing, saying nothing (cachyos-staging's gucc,
+    # without the cachyos-installer library), and the installer then stops at that step
+    calamares_modules() {
+        local d m n=0 missing=()
+        d=$(mktemp -d)
+        bsdtar -xf "$1" -C "$d" || { rm -rf "$d"; return 1; }
+        for m in $(find "$d" -name 'settings*.conf' -path '*calamares*' -exec awk '
+            /^sequence:/ { on = 1; next }
+            on && /^[^[:space:]#-]/ { on = 0 }
+            on && /^[[:space:]]*-[[:space:]]*[A-Za-z0-9_.-]+(@[A-Za-z0-9_.-]+)?[[:space:]]*$/ {
+                sub(/^[[:space:]]*-[[:space:]]*/, ""); sub(/[@[:space:]].*/, ""); print }' {} + | sort -u); do
+            n=$((n + 1))
+            [[ -f $d/usr/lib/calamares/modules/$m/module.desc ]] || missing+=("$m")
+        done
+        rm -rf "$d"
+        # (the build taken out: the published one kept in its place, hold)
+        ((n)) || { echo "!! ${1##*/}: no settings with a sequence of modules in it"; rm -f "$1" "$1.sig"; return 1; }
+        ((${#missing[@]} == 0)) || { echo "!! ${1##*/}: its settings name modules it wasn't built with: ${missing[*]}"; rm -f "$1" "$1.sig"; return 1; }
+    }
     # (CachyOS's own pkgrel with a dot already: not raised, and AgrOS's build would have CachyOS's version)
     # (it not building, AgrOS's changes no longer fitting: the published one held)
     (cd "$work/cachyos-pkgbuilds/cachyos-calamares" &&
@@ -345,7 +366,8 @@ SH
         # (no prepare() to add them to: CachyOS's installer built without them, its checks with them, published as AgrOS's)
         { grep -qxF '    patch -Np1 -i "$startdir/calamares-layout.patch"' PKGBUILD ||
             { echo "!! cachyos-calamares: no prepare() { line for AgrOS's changes"; false; }; } &&
-        { reused "$PWD" || asb env PKGDEST="$out" makepkg -s --noconfirm; }) ||
+        { reused "$PWD" || asb env PKGDEST="$out" makepkg -s --noconfirm; } &&
+        calamares_modules "$out"/cachyos-calamares-[0-9]*.pkg.tar.zst) ||
         hold cachyos-calamares "CachyOS's installer didn't build with AgrOS's changes (the build's log above)"
 fi
 cp "$work/makepkg.conf" /etc/makepkg.conf
