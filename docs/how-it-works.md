@@ -935,9 +935,10 @@ brings each change; nothing to run by hand).
   the rest's download for good.
   - Not on a snapshot booted from the menu (the root an overlay in RAM): nothing downloaded or installed, said in the
     log. The day Arch last passed AgrOS's tests (`agros-arch-ok`) is taken only with AgrOS's signature
-  - **AUR apps** (`packages/agros-system/auto-update-aur`, after the download; an app whose AUR maintainer changed
-    since its last build, or one its repo dropped (signed, now foreign), isn't built: left for Updates, where its build
-    files can be read, and said by `dotfiles-check`): those with a newer AUR version (not in
+  - **AUR apps** (`packages/agros-system/auto-update-aur`, after the download; an app whose AUR maintainer
+    or co-maintainers changed since its last build (a co-maintainer can push its build files too), or one its repo
+    dropped (signed, now foreign), isn't built: left for Updates, where its build files can be read, and said by
+    `dotfiles-check`): those with a newer AUR version (not in
     a repo: `paru -Qua`'s), and, when the download brings a new version of a runtime that breaks what's built on it,
     those built on it (from the AUR or `[agros]`, not a `-bin`, not rebuilt by their repo in the same download). The
     runtimes are one list, `update-kinds`' (`runtimes`, which `update-apps` uses too): Qt (`qt6-base`, `qt6-declarative`: any new version; what needs them,
