@@ -401,7 +401,12 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
   `agros-scripts`' user unit in `graphical-session-pre.target`, which uwsm starts Hyprland after) does that build, and
   a first login's wallpaper and colours, before Hyprland starts (at most a minute: then Hyprland starts and the run
   there does what's left), so the run at Hyprland's start starts the shell at once (built there, the live USB's
-  installer window came up before the bar). Each start logged in
+  installer window came up before the bar). Colours set there, before Hyprland, are set again by the run at Hyprland's
+  start, beside the shell's start (`scheme-again`): with no Hyprland to ask, Caelestia's CLI takes the config for a
+  `.conf` one and writes the window borders' colours to `current.conf`, which the Lua config doesn't read. The folder
+  icons' colour (the CLI's forked `sudo -n papirus-folders`) is left to that last scheme run alone, through a `sudo`
+  stand-in for the others (`~/.local/state/agros/folders-later`): the wallpaper's and the scheme's raced, and the
+  prepare unit's end killed them half-way. Each start logged in
   `~/.local/state/agros/caelestia-start.log`. A shell that never loads its config on the overlay's changes (Quickshell
   stays running with nothing on screen when a part can't be created: AgrOS's changes on a Caelestia or Quickshell other
   than the one CI checked) is started again without them (`caelestia-restart --without-changes`, below), not left with
@@ -718,6 +723,8 @@ helper a package update just brought works before `agros-links` has linked it), 
   an upgrade's too, `-Sup`, but not with `-y`/`--refresh` or `-c`/`--clean`, which take the lock) doesn't, nor one on
   another database
   (`-b`/`--dbpath`, or another system's, `-r`/`--root`; a plain pacman is on `/var/lib/pacman`'s)
+- **`.local/bin/battery-low`**: whether the computer runs on a battery nearly empty (off its charger, below 15%; the
+  computer's own batteries, not a mouse's): the shutdown's install (`auto-update`) and `update-apps` install nothing then
 - **`.local/bin/updates-pending`**: the updates waiting from a `pacman -Qu`/`paru -Qua` list, those `pacman.conf` holds
   back left out (`update-apps`, `update-kinds`, `auto-update`, `auto-update-aur`)
 - **`.local/bin/update-kinds`**: the kinds of update, how each is listed (`--list`, what the Updates app shows: system,
@@ -864,6 +871,8 @@ brings each change; nothing to run by hand).
     AppImages, Capri, Proton builds, developer tools
   - A list that couldn't be made (`update-apps --list` failed, or hung for 10 minutes) says so, not "Everything is up
     to date"
+  - An account that isn't an admin (not in `wheel`: it can't sudo) sees the list with "An administrator has to install
+    these updates", and no "Update all"
   - "Update all" runs `update-apps`, showing its progress; shown only while something is waiting. Closed with the
     title bar; an update already running carries on (its log: `$XDG_RUNTIME_DIR/update-apps.log`), and opening it
     again and pressing "Update all" follows it
@@ -922,7 +931,12 @@ brings each change; nothing to run by hand).
   `update-kinds` runs: firmware with fwupd, Flatpaks, AppImages, Capri, Proton builds, developer tools), like at boot.
   `--list` is what the Updates app shows (`update-kinds --list`); every 6 hours (`update-check.timer`) it checks, and when
   updates are waiting a notification's "Update now" opens the Updates app and starts (an admin's, in `wheel`: an
-  account that can't sudo isn't offered it, nor `agros-welcome`'s system part; the boot's update covers it). Run in a
+  account that can't sudo isn't offered it, nor `agros-welcome`'s system part, and `update-apps` itself refuses it;
+  the boot's update covers it). Not on a battery nearly empty (`battery-low`, the boot update's check too: below 15%,
+  discharging). The keyrings first, on their own, when a newer one waits (as the boot's: a package signed with a key
+  the keyring lacks failed the whole update). Power off, sleep and the lid held off while it installs
+  (`systemd-inhibit --what=sleep:shutdown:handle-lid-switch`: logind suspends on the lid whatever sleep lock is held,
+  `LidSwitchIgnoreInhibited=yes`; where polkit refuses the lid's lock, power off and sleep alone). Run in a
   terminal, it shows each AUR package's build-script changes for review first; the Updates app's "Update all" builds
   them without that review (it lists which ones first, in its log), and sudo asks for the password in a dialog
   (`.local/bin/askpass`, zenity, as `SUDO_ASKPASS`). After its `paru -Syu` it rebuilds what's built on a runtime it
@@ -1037,7 +1051,11 @@ brings each change; nothing to run by hand).
     own checks stand (on battery below its level, or without AC power, it skips the device); its exit says nothing of
     a skipped device (nor, in 2.1, of a failed flash), so a device still offering the same update after it (`fwupdtool
     get-updates`) wasn't updated: tried at the next shutdown, said by `dotfiles-check` with fwupd's reason (Updates
-    checks the same after its `fwupdmgr update`); that note goes once nothing's waiting. A UEFI or BIOS update is
+    checks the same after its `fwupdmgr update`); that note goes once nothing's waiting. One fwupd refuses because the
+    EFI partition is too small for it (beside Windows, often Windows' own 100 MB, nearly full; fwupd checks before it
+    writes anything) isn't tried at every shutdown nor said at every login: said once on the desktop ("Firmware update
+    can't be installed... the boot partition (EFI) is too small for it"), and tried again only for a newer one
+    (`/var/lib/auto-update/firmware-noroom`). A UEFI or BIOS update is
     staged and applied at the next boot. Passim (fwupd's optional LAN cache: a listener sharing its metadata over mDNS
     and HTTPS, which fwupd starts over D-Bus) is masked once by `agros-system` (fwupd works without it, only logging
     that it's not there; removing `agros-system` unmasks it)
