@@ -217,7 +217,7 @@ claude_notify_hook() {
 librewolf_setup() {
     local settings="$HOME/.local/share/firefox/settings.js" prof pid
     command -v librewolf >/dev/null && [[ -f $settings ]] || return 0
-    pgrep -x librewolf >/dev/null && { echo "LibreWolf is open: its settings are applied at the next login"; return 1; }
+    pgrep -u "$UID" -x librewolf >/dev/null && { echo "LibreWolf is open: its settings are applied at the next login"; return 1; }
     prof=$("$helpers/firefox-bookmarks-export" --profile 2>/dev/null)
     if [[ -z $prof ]]; then
         librewolf --headless about:blank >/dev/null 2>&1 &

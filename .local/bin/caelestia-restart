@@ -55,7 +55,7 @@ if "$helpers/game-focus" --game-open 2>/dev/null; then
 fi
 # Spotify shows its window the moment the tray goes away: if it's hidden in the tray, have that window open
 # out of sight (the silent rules in ~/.config/caelestia/user/apps.lua; tray-keeper minimises it and turns them off)
-if pgrep -f com.spotify.Client >/dev/null && ! hyprctl clients -j | jq -e 'any(.[]; .class | ascii_downcase == "spotify")' >/dev/null; then
+if pgrep -u "$UID" -f com.spotify.Client >/dev/null && ! hyprctl clients -j | jq -e 'any(.[]; .class | ascii_downcase == "spotify")' >/dev/null; then
     hyprctl eval 'dots.spotify_silent_set(true)' >/dev/null
     # (off again if no new shell comes up: no tray-keeper then to turn them off, its window kept out of sight for good)
     trap '[[ -n ${up:-} ]] || hyprctl eval "dots.spotify_silent_set(false)" >/dev/null' EXIT

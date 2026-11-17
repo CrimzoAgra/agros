@@ -96,18 +96,19 @@ personal_drive() {
     return 0
 }
 
-# The apps it's for that are open (their files change under them, or theirs would overwrite these)
+# The apps it's for that are open, yours (their files change under them, or theirs would overwrite these; another
+# account's use its own files)
 personal_open() {
     local p
-    for p in librewolf equibop spotify protonvpn-app steam; do pgrep -x "$p" >/dev/null && echo "$p"; done
-    pgrep -f '(^|/)lutris( |$)' >/dev/null && echo lutris
+    for p in librewolf equibop spotify protonvpn-app steam; do pgrep -u "$UID" -x "$p" >/dev/null && echo "$p"; done
+    pgrep -u "$UID" -f '(^|/)lutris( |$)' >/dev/null && echo lutris
     # (its list read whole: grep -q quitting early got flatpak a SIGPIPE, which pipefail took for not open)
     grep -qx com.nuvio.media.desktop <<<"$(flatpak ps --columns=application 2>/dev/null)" && echo nuvio
     return 0
 }
 
 # Claude Code running (restoring only: saving copies its files first)
-personal_claude_open() { pgrep -x claude >/dev/null && echo "Claude Code"; return 0; }
+personal_claude_open() { pgrep -u "$UID" -x claude >/dev/null && echo "Claude Code"; return 0; }
 
 # agros-personal --save: your logins on this PC onto your pen drive
 personal_save() {
