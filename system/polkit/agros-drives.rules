@@ -1,0 +1,7 @@
+// An internal drive mounted without the password by an admin at the machine: agros-drives mounts the games drives at
+// every login, where a prompt would come out of nowhere (the file manager mounts them without it too)
+polkit.addRule(function(action, subject) {
+    if (action.id == "org.freedesktop.udisks2.filesystem-mount-system" && subject.local && subject.active &&
+        subject.isInGroup("wheel"))
+        return polkit.Result.YES;
+});

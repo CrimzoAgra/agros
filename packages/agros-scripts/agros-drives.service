@@ -1,0 +1,10 @@
+[Unit]
+Description=Mount the internal drives nothing mounts yet and add the Steam libraries on them to Steam
+# (no ordering: nothing at login waits for a drive to spin up; Steam is started later, by you)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/agros/bin/agros-drives
+
+[Install]
+WantedBy=default.target

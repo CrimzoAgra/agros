@@ -91,8 +91,8 @@ of yours for the mirror counts, not added again), and its removal takes them out
 |---|---|
 | `agros-desktop` | The meta package: every package the desktop is made of (Hyprland, Caelestia, the apps, PipeWire with its JACK, gvfs for Thunar's drives, USB sticks and Trash, fonts, themes). Hardware apps are optional |
 | `agros-hyprland-settings` | The settings every new account gets (`/etc/skel`): Caelestia's own configs (its dots, pinned), AgrOS's over them (everything in `.config`), launcher entries, LibreWolf settings, the wallpaper, and every version each of these has had (`/usr/share/agros/skel-versions`, from the repo's and Caelestia's git history); fonts and icons system-wide |
-| `agros-scripts` | The programs in `.local/bin` and the data they use, in `/usr/lib/agros`, linked into each home (by links in `/etc/skel` for new accounts; `agros-links` adds new ones at every login, before the desktop starts, and copies in once each config file, launcher entry, LibreWolf setting and wallpaper an update added to `/etc/skel` (or an account not made from it lacks), and updates the settings you never edited) |
-| `agros-system` | The update at every boot (downloaded and AUR apps built at boot, installed at shutdown with firmware), pacman hooks that rebuild each user's Caelestia overlay and hyprbars and check the Hyprland config, Bluetooth and the screens back on after sleep, the ananicy rule, the keyring, the night light's and time zone's permissions (geoclue, polkit), folder icons that follow the colour scheme (a sudoers rule for `papirus-folders` alone), mDNS from Avahi alone (resolved's off: the two clashed over the computer's name), UFW's logging off (once), the upstream gate (Hyprland's updates held until AgrOS's CI has checked them), the files never unpacked (NoExtract), AgrOS's name in `/etc/os-release`, a VMware VM's screen following its window (VMware's tools) |
+| `agros-scripts` | The programs in `.local/bin` and the data they use, in `/usr/lib/agros`, linked into each home (by links in `/etc/skel` for new accounts; `agros-links` adds new ones at every login, before the desktop starts, and copies in once each config file, launcher entry, LibreWolf setting and wallpaper an update added to `/etc/skel` (or an account not made from it lacks), and updates the settings you never edited; `agros-drives` mounts the games drives and adds their Steam libraries at every login) |
+| `agros-system` | The update at every boot (downloaded and AUR apps built at boot, installed at shutdown with firmware), pacman hooks that rebuild each user's Caelestia overlay and hyprbars and check the Hyprland config, Bluetooth and the screens back on after sleep, the ananicy rule, the keyring, the night light's and time zone's permissions (geoclue, polkit), an admin mounting an internal drive without the password (polkit, for `agros-drives`), folder icons that follow the colour scheme (a sudoers rule for `papirus-folders` alone), mDNS from Avahi alone (resolved's off: the two clashed over the computer's name), UFW's logging off (once), the upstream gate (Hyprland's updates held until AgrOS's CI has checked them), the files never unpacked (NoExtract), AgrOS's name in `/etc/os-release`, a VMware VM's screen following its window (VMware's tools) |
 | `agros-greeter` | The Caelestia-style login screen for greetd, its PAM service following the system's, `login-reset` |
 | `agros-boot` | The hidden boot menu in AgrOS's GRUB theme (`grub-theme/`, its pictures and fonts made by `make.sh`), the faster splash with shutdown titles, no text at boot or shutdown (behind the splash), screens in their best mode from boot |
 | `agros-hyprbars` | The title bar plugin, hyprbars, with AgrOS's patch, built in CI for the Hyprland there (in place of the AUR's plain one): the live USB's, and an installed system's until its account's own build is made |
@@ -210,7 +210,7 @@ The default wallpaper is Caelestia's own (`assets/wallpaper.webp` in its shell).
 |---|---|
 | `packages/` | The PKGBUILDs of AgrOS's packages (and their system files: units, hooks, the boot update) |
 | `aur/packages.txt`, `ci/` | The AUR packages built into `[agros]`, and the script that builds the repo |
-| `system/` | Files the system packages install (Bluetooth after sleep, the screens on after sleep, the boot video mode, the ananicy rule, the night light's location (geoclue), the time zone's permission (polkit), resolved's settings, the `papirus-folders` sudoers rule, qView's defaults: no first-run Welcome dialog, at `/etc/xdg/qView/qView.conf`; File Roller's first window wide enough for its file names, a gschema override) |
+| `system/` | Files the system packages install (Bluetooth after sleep, the screens on after sleep, the boot video mode, the ananicy rule, the night light's location (geoclue), the time zone's and internal drives' permissions (polkit), resolved's settings, the `papirus-folders` sudoers rule, qView's defaults: no first-run Welcome dialog, at `/etc/xdg/qView/qView.conf`; File Roller's first window wide enough for its file names, a gschema override) |
 | `.config/caelestia/` | Hyprland settings (`hypr-user.lua`, `hypr-vars.lua`, `user/`) and Caelestia settings (`shell.json`; `cli.json`: its command's, the screen recorder's) |
 | `.config/quickshell/` | The switcher, desktop widgets, Updates and Desktop Settings apps, their shared colours (`common/`), and the dock's pins |
 | `.local/share/caelestia-overlay/` | My changes to Caelestia's own code, patched in by `caelestia-overlay` |
@@ -658,6 +658,17 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
   starts (`steam-start`),
   and builds the fixed shader from the game's own files
 - **`.local/bin/steam-installed-games`**: installed games, for the bar's Steam menu
+- **`.local/bin/agros-drives`**: the games drives ready at login, their Steam libraries in Steam. A user service
+  (`agros-scripts`' `agros-drives.service`, at every login) mounts each internal partition with a Linux filesystem
+  (btrfs, ext4, XFS, F2FS) nothing mounts yet through udisks, at `/run/media/<you>/<label>`, as the file manager would:
+  never the system's own, a removable drive, NTFS/exFAT (Proton's games don't run from them) or one `/etc/fstab` lists
+  (its own mount, or `noauto`); a btrfs over two partitions is mounted once. `agros-system`'s polkit rule
+  (`50-agros-drives.rules`) lets an admin at the machine mount an internal drive without the password, so no prompt
+  comes out of nowhere at login. Then each Steam library on those drives (a folder with `steamapps`, up to 3 folders
+  down) missing from Steam's `libraryfolders.vdf` is added; one Steam lists under another folder (its `contentid` the
+  same: the drive's label changed, or it was mounted elsewhere) gets the new folder, its games kept. Only added to,
+  never removed from, and not while Steam is open (it writes its own list over this one when it closes: the next login
+  adds them). The system's Steam only: Flathub's doesn't see `/run/media` without an override
 - **`.local/bin/lutris-library`**: Lutris's Games view lists every game you own on Steam, EA, Ubisoft, Epic, GOG,
   Battle.net and Rockstar, installed first and the rest below (opening one installs it through its store). One run at a
   time. Rerun after every store sync by `.config/systemd/user/lutris-library.path`; an open Lutris shows the changes at
