@@ -692,7 +692,7 @@
             {
               "key": "caelestia-shell.utilities.enabled",
               "label": "Quick settings",
-              "description": "Super+K."
+              "description": "The screen's bottom-right corner, or Super+K with the other panels."
             },
             {
               "key": "caelestia-shell.utilities.cards.quickToggles",

@@ -22,7 +22,7 @@ the search bar checks for updates.
 ## Notifications
 
 Pop-ups appear in the corner. To see older ones, move the pointer to the top edge of the screen above them, or press
-**Super+K**. Click a notification to go to the app that sent it. **Ctrl+Alt+C** clears them all.
+**Super+N** (**Super+K** opens them with every other panel). Click a notification to go to the app that sent it. **Ctrl+Alt+C** clears them all.
 
 ## Desktop widgets
 

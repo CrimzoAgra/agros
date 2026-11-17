@@ -28,7 +28,8 @@ says where AgrOS relies on it.
 
 ## Caelestia's own settings
 
-The quick-settings panel (**Super+K**) holds sound, network and Bluetooth.
+The quick-settings panel (the screen's bottom-right corner, or **Super+K** with the other panels) holds sound,
+network and Bluetooth.
 
 Caelestia's Settings app, under **Language & region**, has the weather location too. Turn on **Set the time
 zone automatically** and the time zone follows the weather location (or your internet connection, when that's

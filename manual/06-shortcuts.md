@@ -65,7 +65,8 @@ another window, or press **Ctrl+Alt+Esc**, to have them back.
 | Ctrl+Super+Space | Play / pause |
 | Ctrl+Super+= / - | Next / previous track |
 | Super+Shift+M | Mute |
-| Super+K | Notifications and quick settings |
+| Super+K | Every panel at once: the app launcher, dashboard, notifications and quick settings (Esc closes them) |
+| Super+N | Notifications |
 | Ctrl+Alt+C | Clear notifications |
 | Ctrl+Super+Alt+R | Restart the shell, if it misbehaves |
 | Shift+Space | Put Capri away / bring her back (once she's installed; not while a game or a fullscreen window has the focus) |
