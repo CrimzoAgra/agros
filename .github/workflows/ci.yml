@@ -28,11 +28,14 @@ permissions:
   contents: read
 
 # On main: the repo built first (repo), then tested (test: on what it built; when some fail, which side broke them, and
-# that held back alone, ci/test-passes.sh), then what passed signed and put out (release), and said (report: one issue).
+# that held back alone, ci/test-passes.sh), then what passed put together (release), signed and put out (sign), and
+# said (report: one issue).
 # A pull request or another branch: only the tests, on the published repo.
-# AgrOS's signing key (the AGROS_GPG_KEY secret) is only ever in the release job's signing step: repo runs AUR build
-# scripts (as its builder user, with sudo), test runs what was built and the tests, so neither has it and the repo goes
-# between them unsigned; the release job runs none of that (tests/ci-signing.sh checks this file for it)
+# AgrOS's signing key (the AGROS_GPG_KEY secret) is only ever in the sign job's signing step: repo runs AUR build
+# scripts (as its builder user, with sudo), test runs what was built and the tests, and release reads the packages with
+# pacman's repo-add (which runs a .PKGINFO line of the wrong kind as code: ci/pkginfo.sh), so none has it and the repo
+# goes between them unsigned; the sign job, a container of its own, runs none of that before the key, only gpg with it
+# (tests/ci-signing.sh checks this file for it)
 jobs:
   test:
     needs: [agros, repo]
@@ -114,7 +117,7 @@ jobs:
           pacman-key --add ci/agros.asc
           pacman-key --lsign-key BFE9289F7759E521AE60CFCD23B6096B42D05E1E
           # (signatures checked when there (the published repo's, a kept package's), not required: this run's new builds are
-          # unsigned until the release job signs what passed)
+          # unsigned until the sign job signs what passed)
           printf '\n[agros]\nSigLevel = Optional TrustedOnly\nServer = https://crimzoagra.github.io/agros/$arch\n' >>/etc/pacman.conf
           pacman -Sy --noconfirm --needed caelestia-shell
           # (the dots' commit agros-hyprland-settings pins)
@@ -292,11 +295,11 @@ jobs:
           path: /tmp/held
 
   release:
-    # What passed the tests put out: this run's new AUR builds swapped for the published ones when they, or an Arch
-    # update, broke the tests (build-repo.sh --hold-new); the approved Hyprland list; the day Arch last passed. Then all
-    # of it signed (ci/sign-repo.sh), the only place AgrOS's key is: a container of its own, not privileged, that never
-    # runs makepkg, paru, an AUR build script, a built package or a test (repo-add reads the packages' .PKGINFO); before
-    # the key only official Arch packages' install scripts (its tools), CachyOS's keyring's once the key is gone
+    # What passed the tests made ready to put out, unsigned: this run's new AUR builds swapped for the published ones
+    # when they, or an Arch update, broke the tests (build-repo.sh --hold-new); the database made (ci/repo-db.sh); the
+    # approved Hyprland list; the day Arch last passed. No secret: pacman's repo-add reads the packages' .PKGINFO here,
+    # and runs a line of the wrong kind as code (ci/own-check.sh refuses such a package first, ci/repo-db.sh again). The
+    # sign job signs what this leaves
     needs: [agros, repo, test]
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-26.04
@@ -323,7 +326,8 @@ jobs:
           name: held-build
           path: /tmp/held
       # AgrOS's own packages as the agros job built them, none changed or added by the repo job's AUR build scripts; the
-      # rest only ones this run builds, none replacing another package or shipping pacman's keyrings
+      # rest only ones this run builds, none replacing another package or shipping pacman's keyrings; every one's
+      # .PKGINFO as makepkg writes it. First: nothing before it reads a package
       - name: AgrOS's own packages checked
         env:
           AGROS_OWN_SUMS: ${{ needs.agros.outputs.sums }}
@@ -377,6 +381,35 @@ jobs:
           cat /tmp/approved-before - <<<"$now" | grep -E '^[a-z0-9@._+-]+ [A-Za-z0-9.:_+~]+$' |
             awk '!seen[$0]++' | tac | awk '++n[$1] <= 20' | tac >out/x86_64/agros-approved
           cat out/x86_64/agros-approved
+      # The database, from the packages as they now are (the repo job's own never goes out): each one's .PKGINFO checked
+      # again before repo-add reads it (those a hold brought back too), and the database read back against them
+      - name: The database
+        run: ci/repo-db.sh out/x86_64
+      - uses: actions/upload-artifact@v7
+        with:
+          name: unsigned
+          path: out
+
+  sign:
+    # The release signed (ci/sign-repo.sh) and put out: the only place AgrOS's key is. A job of its own, so a container
+    # of its own: in the release's, where repo-add read the packages, whatever a package's .PKGINFO started (a process
+    # waiting for the key, a gpg or a ci/ script changed, root's own files) would still be there, and no step can be
+    # sure to clear it. Not privileged; before the key only the checkout and the release's files, which gpg signs as
+    # files, reading no package; once the key is gone, Arch's and CachyOS's install scripts, the install check, Pages'
+    # upload
+    needs: release
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    container:
+      image: archlinux:latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          name: unsigned
+          path: out
       # Signed: each new package (one kept as published keeps its signature), the database, the approved list and the
       # day Arch last passed (update-gate and agros-iso check the list's .sig against AgrOS's key). The secret (AgrOS's
       # primary key or a signing subkey of it, either) in this step alone
@@ -390,6 +423,12 @@ jobs:
           trap 'gpgconf --kill all; rm -rf "$(gpgconf --list-dirs homedir)"' EXIT
           echo "$AGROS_GPG_KEY" | gpg --batch --import
           ci/sign-repo.sh out/x86_64
+      - name: Tools (the install check's)
+        run: |
+          grep -q '^\[multilib\]' /etc/pacman.conf || printf '\n[multilib]\nInclude = /etc/pacman.d/mirrorlist\n' >>/etc/pacman.conf
+          sed -i 's/^#*DownloadUser.*/#DownloadUser = alpm/' /etc/pacman.conf
+          pacman-key --init
+          pacman -Syu --noconfirm
       - name: CachyOS's repo (the install check resolves AgrOS as installed)
         run: |
           m=https://mirror.cachyos.org/repo/x86_64/cachyos
@@ -427,7 +466,7 @@ jobs:
   report:
     # One issue for what this run held back or didn't put out (ci/report.sh), closed once a run puts all out (Pages'
     # deploy too: a release signed but never deployed closed the issue as all out)
-    needs: [agros, repo, test, release, publish]
+    needs: [agros, repo, test, release, sign, publish]
     if: ${{ always() && github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
     runs-on: ubuntu-26.04
     timeout-minutes: 10
@@ -456,14 +495,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RESULT: ${{ needs.test.outputs.result }}
           BUILD: ${{ needs.agros.result == 'success' && needs.repo.result || needs.agros.result }}
-          RELEASE: ${{ needs.release.result == 'success' && needs.publish.result || needs.release.result }}
+          RELEASE: ${{ needs.release.result != 'success' && needs.release.result || needs.sign.result != 'success' && needs.sign.result || needs.publish.result }}
           HELD: /tmp/held/held
           REPORT: /tmp/report/report
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: ci/report.sh
 
   publish:
-    needs: release
+    needs: sign
     runs-on: ubuntu-26.04
     timeout-minutes: 15
     permissions:

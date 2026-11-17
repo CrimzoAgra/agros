@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Builds the [agros] pacman repo: AgrOS's own packages (packages/*, by makepkg), the AUR packages AgrOS uses
 # (aur/packages.txt, with the AUR packages they need, by paru into a local repo) and CachyOS's installer, rebuilt. All
-# unsigned: it runs AUR build scripts, so AgrOS's signing key is never here (CI's release job signs what passed the
+# unsigned: it runs AUR build scripts, so AgrOS's signing key is never here (CI's sign job signs what passed the
 # tests, ci/sign-repo.sh, in a container that ran none of this); it refuses to run with a secret key at hand.
 # Run in an Arch container, as root (it makes a "builder" user for makepkg):
 #   ci/build-repo.sh <out dir>           the repo in <out dir> (agros.db, agros.files, the packages)
@@ -53,8 +53,7 @@ chown builder: "$work/agros/packages/agros-keyring/"agros*
 { pacman-key --add "$keyring" && pacman-key --lsign-key "$fpr"; } >/dev/null 2>&1 ||
     echo "!! AgrOS's key not added to pacman's keyring (pacman-key --init first?)"
 
-# make_db [--held]: the database of the packages here (after a hold: each one as it is, none checked against the
-# published ones again)
+# make_db: the database of the packages here
 make_db() {
     local pkgs f
     # Every package here, whatever its compression or none (an AUR PKGBUILD may set its own PKGEXT: one left out of the database
@@ -62,7 +61,7 @@ make_db() {
     shopt -s nullglob
     pkgs=(*.pkg.tar?(.zst|.xz|.gz|.bz2|.lz4|.lzo|.lrz|.Z))
     shopt -u nullglob
-    if [[ -n ${AGROS_PUBLISHED:-} && ${1:-} != --held ]]; then
+    if [[ -n ${AGROS_PUBLISHED:-} ]]; then
         for f in "${pkgs[@]}"; do
             # (those checked after their build, above, or in CI's agros job)
             [[ $f == agros-*-any.pkg.tar.zst || ( -n ${AGROS_SKIP_OWN:-} && $f == agros-* ) ]] || keep_published "$f"
@@ -82,12 +81,12 @@ held=()
 # shellcheck source=published.sh
 . "$root/ci/published.sh"
 # --hold-new (CI, when the tests found this run's new AUR builds broke them): each package here that is neither AgrOS's
-# own nor the published file swapped for the published one (one never published: left out), the database made again;
-# nothing built. AGROS_HOLD_WHY: why, said for each one in $AGROS_HELD
+# own nor the published file swapped for the published one (one never published: left out); nothing built, and no
+# database made: the release makes it next, each package's .PKGINFO checked first (ci/repo-db.sh), the published ones
+# brought back here too. AGROS_HOLD_WHY: why, said for each one in $AGROS_HELD
 if [[ ${2:-} == --hold-new ]]; then
     cd "$out"
     hold_new "${AGROS_HOLD_WHY:-its new build held back}"
-    make_db --held
     if ((${#held[@]})); then printf '%s\n' "${held[@]}"; fi >>"${AGROS_HELD:-/dev/null}"
     exit 0
 fi

@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
-# Signs the [agros] repo ci/build-repo.sh made, unsigned (CI's release job, in a container that never ran makepkg, paru,
-# an AUR build script, a built package or a test; AgrOS's secret key imported for this step alone, gone after it):
+# Signs the [agros] repo CI's release job put together, unsigned (CI's sign job: a container of its own that never ran
+# makepkg, paru, an AUR build script, a built package, a test, or repo-add; AgrOS's secret key imported for this step
+# alone, gone after it):
 #   ci/sign-repo.sh <dir>
 # Each package without a signature gets one; one with a good signature by AgrOS's key keeps it (a published file kept
-# as it was); one with any other .sig stops it (none should have one: never signed over). The database made again once
-# they are (repo-add: it reads the packages' .PKGINFO, runs nothing of theirs), and signed; the
-# upstream gate's list (agros-approved) and the day Arch last passed (agros-arch-ok) signed beside it.
+# as it was); one with any other .sig stops it (none should have one: never signed over). The database as the release
+# job made it (ci/repo-db.sh: pacman's repo-add runs a package's .PKGINFO line of the wrong kind as code, so it runs
+# there, never beside the key; this reads no package, gpg signs them as files), its four files signed; the upstream
+# gate's list (agros-approved) and the day Arch last passed (agros-arch-ok) signed beside it.
 # The key: the secret one in gpg's keyring, AgrOS's (ci/agros.asc's primary key, or a signing subkey of it: gpg picks
 # the one it has the secret of); every signature made checked against ci/agros.asc alone after, so a secret that isn't
 # AgrOS's, or a new subkey agros.asc doesn't have yet (clients couldn't check it), stops here, before anything goes out
@@ -31,6 +33,10 @@ cd "$dir"
 pkgs=(*.pkg.tar?(.zst|.xz|.gz|.bz2|.lz4|.lzo|.lrz|.Z))
 ((${#pkgs[@]})) || { echo "!! No packages in $dir"; exit 1; }
 # (all checked before any is signed: one refused stops it with nothing signed)
+db=(agros.db agros.db.tar.gz agros.files agros.files.tar.gz)
+for f in "${db[@]}"; do
+    [[ -f $f && ! -L $f ]] || { echo "!! $f isn't here as a plain file (ci/repo-db.sh makes it): refused"; exit 1; }
+done
 unsigned=()
 for f in "${pkgs[@]}"; do
     # (only plain files: a link would sign whatever it points at)
@@ -44,14 +50,8 @@ done
 for f in "${unsigned[@]}"; do sign "$f"; done
 kept=$((${#pkgs[@]} - ${#unsigned[@]})) signed=${#unsigned[@]}
 echo "-- $signed packages signed, $kept kept with their published signature"
-# The database (GitHub Pages serves no symlinks: its names as real files, each signed)
-rm -f agros.db agros.db.tar.gz agros.files agros.files.tar.gz agros.db*.sig agros.files*.sig agros.db.tar.gz.old agros.files.tar.gz.old
-repo-add -q agros.db.tar.gz "${pkgs[@]/#/./}"
-for f in agros.db agros.files; do
-    [[ ! -L $f ]] || cp --remove-destination "$(readlink -f "$f")" "$f"
-    sign "$f.tar.gz"
-    sign "$f"
-done
+# The database, its names as plain files (GitHub Pages serves no symlinks)
+for f in "${db[@]}"; do sign "$f"; done
 echo "-- the database signed"
 for f in agros-approved agros-arch-ok; do
     if [[ -e $f ]]; then sign "$f" && echo "-- $f signed"; fi

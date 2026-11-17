@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
-# AgrOS's signing key never where AUR build scripts, built packages or tests run: ci/build-repo.sh refuses to start with
-# a secret key at hand (the secret in its environment, an old caller's GPGKEY, a key in gpg's keyring), before it makes
-# anything; and CI's workflow (.github/workflows/ci.yml) has the key in the release job's signing step alone, after
-# every step that reads the build, with its agent stopped and keyring removed when it ends, in a container that isn't
-# privileged and has run nothing but official Arch packages' scripts by then. AgrOS's own packages built in a job of
-# their own (agros), no AUR build script there, and the release checks the repo's agros-* packages against that job's
-# sums (ci/own-check.sh) before the key: the repo job's AUR build scripts, root there, could change them
+# AgrOS's signing key never where AUR build scripts, built packages, tests or pacman's repo-add run: ci/build-repo.sh
+# refuses to start with a secret key at hand (the secret in its environment, an old caller's GPGKEY, a key in gpg's
+# keyring), before it makes anything; and CI's workflow (.github/workflows/ci.yml) has the key in the sign job's signing
+# step alone: a job of its own (a container of its own: nothing the release job's repo-add could have left running or
+# changed is there), not privileged, that runs nothing before the key but the checkout and the release's files, never
+# repo-add or anything that reads a package (repo-add runs a .PKGINFO line of the wrong kind as code), with gpg's agent
+# stopped and the keyring removed when the step ends. AgrOS's own packages built in a job of their own (agros), no AUR
+# build script there, and the release checks the repo's agros-* packages against that job's sums, and every package's
+# .PKGINFO, (ci/own-check.sh) before anything there reads them; its database made by ci/repo-db.sh, after the hold
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
@@ -32,18 +34,29 @@ import json, sys, yaml
 jobs = yaml.safe_load(open(sys.argv[1]))["jobs"]
 bad = []
 for name, job in jobs.items():
-    if name != "release" and "AGROS_GPG_KEY" in json.dumps(job):
+    if name != "sign" and "AGROS_GPG_KEY" in json.dumps(job):
         bad.append(f"the signing key in the {name} job")
-for name in ("agros", "repo", "test"):
+for name in ("agros", "repo", "test", "release"):
     if "secrets." in json.dumps(jobs[name]):
-        bad.append(f"a secret in the {name} job (it runs AUR build scripts or what was built)")
-rel = jobs["release"]
-if "privileged" in json.dumps(rel.get("container", {})):
-    bad.append("the release job's container privileged")
-steps = rel["steps"]
+        bad.append(f"a secret in the {name} job (it runs AUR build scripts, what was built, or repo-add)")
+sg = jobs.get("sign")
+if not sg:
+    bad.append("no sign job")
+    sg = {"steps": []}
+needs = sg.get("needs", [])
+if "release" not in ([needs] if isinstance(needs, str) else needs):
+    bad.append("the sign job doesn't wait for the release job")
+for name in ("release", "sign"):
+    if "privileged" in json.dumps(jobs.get(name, {}).get("container", {})):
+        bad.append(f"the {name} job's container privileged")
+text = json.dumps(sg)
+for w in ("repo-add", "build-repo.sh", "repo-db.sh", "own-check.sh", "makepkg", "paru", "tests/run.sh", "test-passes"):
+    if w in text:
+        bad.append(f"the sign job runs {w} (the key's job reads no package)")
+steps = sg["steps"]
 keyed = [i for i, s in enumerate(steps) if "AGROS_GPG_KEY" in json.dumps(s)]
 if len(keyed) != 1:
-    bad.append(f"the key in {len(keyed)} of the release job's steps, not one")
+    bad.append(f"the key in {len(keyed)} of the sign job's steps, not one")
 else:
     k = keyed[0]
     run = steps[k].get("run", "")
@@ -52,29 +65,41 @@ else:
     if not ("trap " in run and "gpgconf --kill all" in run and "rm -rf" in run and run.index("trap ") < run.index("--import")):
         bad.append("the key's step doesn't stop gpg's agent and remove the keyring when it ends (a trap before the import)")
     for i, s in enumerate(steps):
-        text = json.dumps(s)
-        if i > k and ("build-repo.sh" in text or "download-artifact" in text):
-            bad.append(f"step {i} reads the build after it was signed: {s.get('name') or s.get('uses')}")
-        if i < k and ("pacman -U" in text or "cachyos" in text.lower()):
-            bad.append(f"step {i}, before the key, runs packages' scripts besides Arch's: {s.get('name')}")
-for name, job in jobs.items():
-    text = json.dumps(job)
-    if name == "release" and any(w in text for w in ("makepkg", "paru", "tests/run.sh", "test-passes")):
-        bad.append("the release job runs a build or the tests")
+        uses = s.get("uses", "")
+        if i < k and ("run" in s or not uses.startswith(("actions/checkout@", "actions/download-artifact@"))):
+            bad.append(f"step {i}, before the key, runs something besides the checkout and the release's files: {s.get('name') or uses}")
+        if i > k and "download-artifact" in uses:
+            bad.append(f"step {i} reads files after they were signed: {s.get('name') or uses}")
+    got = [s.get("with", {}).get("name") for s in steps[:k] if "download-artifact" in s.get("uses", "")]
+    if got != ["unsigned"]:
+        bad.append(f"the sign job signs other files than the release job's (unsigned): {got}")
+if any(w in json.dumps(jobs["release"]) for w in ("makepkg", "paru", "tests/run.sh", "test-passes")):
+    bad.append("the release job runs a build or the tests")
 ag = jobs["agros"]
 build = [s for s in ag["steps"] if "build-repo.sh" in s.get("run", "")]
 if len(build) != 1 or str(build[0].get("env", {}).get("AGROS_SKIP_AUR")) != "1":
     bad.append("the agros job doesn't build AgrOS's own packages alone (AGROS_SKIP_AUR)")
-if "privileged" in json.dumps(ag.get("container", {})) or         any(w in s.get("run", "") + json.dumps(s.get("env", {})) for s in ag["steps"] for w in ("paru", "AGROS_SKIP_OWN")):
+if "privileged" in json.dumps(ag.get("container", {})) or \
+        any(w in s.get("run", "") + json.dumps(s.get("env", {})) for s in ag["steps"] for w in ("paru", "AGROS_SKIP_OWN")):
     bad.append("the agros job privileged, or running AUR builds")
 rb = [s for s in jobs["repo"]["steps"] if "build-repo.sh" in s.get("run", "")]
 if len(rb) != 1 or str(rb[0].get("env", {}).get("AGROS_SKIP_OWN")) != "1":
     bad.append("the repo job builds AgrOS's own packages beside the AUR's (AGROS_SKIP_OWN)")
-own = [i for i, s in enumerate(steps) if "ci/own-check.sh" in s.get("run", "")]
-if len(own) != 1 or "needs.agros.outputs.sums" not in json.dumps(steps[own[0]].get("env", {})) or         "steps.sums.outputs.sums" not in json.dumps(ag.get("outputs", {})):
+# The release: own-check.sh before any step that reads a package (the hold's build-repo.sh, repo-db.sh: repo-add), the
+# database made by repo-db.sh after the hold, and that what the sign job gets
+rs = jobs["release"]["steps"]
+idx = lambda w: [i for i, s in enumerate(rs) if w in s.get("run", "")]
+own, hold, db = idx("ci/own-check.sh"), idx("build-repo.sh"), idx("ci/repo-db.sh")
+if len(own) != 1 or "needs.agros.outputs.sums" not in json.dumps(rs[own[0]].get("env", {})) or \
+        "steps.sums.outputs.sums" not in json.dumps(ag.get("outputs", {})):
     bad.append("the release doesn't check AgrOS's own packages against the agros job's output (ci/own-check.sh)")
-elif len(keyed) == 1 and own[0] > keyed[0]:
-    bad.append("AgrOS's own packages checked after the signing")
+elif any(i < own[0] for i in hold + db + idx("repo-add") + idx("bsdtar")):
+    bad.append("the release reads the packages before ci/own-check.sh checked them")
+if len(db) != 1 or any(i > db[0] for i in hold):
+    bad.append("the release's database not made by ci/repo-db.sh once, after the hold")
+up = [s.get("with", {}) for s in rs if "upload-artifact" in s.get("uses", "")]
+if not any(u.get("name") == "unsigned" and u.get("path") == "out" for u in up):
+    bad.append("the release doesn't hand the sign job its repo (the unsigned artifact)")
 for b in bad:
     print(b)
 sys.exit(1 if bad else 0)

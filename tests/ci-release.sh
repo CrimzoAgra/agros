@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # CI's release (.github/workflows/ci.yml): it runs only once the tests passed or held something back (the test job fails
-# on AgrOS's own break, and a release then never puts anything out), the hold applied whenever they didn't all pass; the
-# versions the tests passed with approved (none on an Arch update that broke them, a gated package not in Arch's repos a
-# failure, the version without its pkgrel), added to those published before (no line that isn't one, no repeat, the last
-# 20 of each package); and the day Arch last passed today's only when it did. This run's approvals only versions the
-# test job read before anything built was there (its gated step, a job output): the builds run as root in that job and
-# could make its later list say anything, so that list only takes versions out (one Arch moved on during the tests),
-# never adds one; no artifact carries them. The steps' scripts as the workflow has them, run here with pacman and curl
-# as stand-ins
+# on AgrOS's own break, and a release then never puts anything out), the hold applied whenever they didn't all pass,
+# then signed (the sign job) and only then published; the versions the tests passed with approved (none on an Arch
+# update that broke them, a gated package not in Arch's repos a failure, the version without its pkgrel), added to those
+# published before (no line that isn't one, no repeat, the last 20 of each package); and the day Arch last passed
+# today's only when it did. This run's approvals only versions the test job read before anything built was there (its
+# gated step, a job output): the builds run as root in that job and could make its later list say anything, so that list
+# only takes versions out (one Arch moved on during the tests), never adds one; no artifact carries them. The steps'
+# scripts as the workflow has them, run here with pacman and curl as stand-ins
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
@@ -29,9 +29,9 @@ if any(w in cond for w in ("always()", "failure()", "cancelled()")):
 held = [s for s in rel["steps"] if "--hold-new" in s.get("run", "")]
 if len(held) != 1 or held[0].get("if", "").replace('"', "'") != "needs.test.outputs.result != 'ok'":
     bad.append("the release doesn't hold back new builds whenever the tests didn't all pass on them")
-pub = jobs["publish"].get("needs", [])
-if "release" not in ([pub] if isinstance(pub, str) else pub):
-    bad.append("the pages published without the release")
+listed = lambda n: [n] if isinstance(n, str) else n
+if "sign" not in listed(jobs["publish"].get("needs", [])) or "release" not in listed(jobs.get("sign", {}).get("needs", [])):
+    bad.append("the pages published without the release, or unsigned (publish needs sign, sign needs release)")
 test = jobs["test"]
 outs = test.get("outputs", {})
 if "steps.gated.outputs.gated" not in str(outs.get("gated")) or "steps.approved.outputs.approved" not in str(outs.get("approved")):

@@ -1,24 +1,15 @@
 #!/usr/bin/env bash
-# ci/sign-repo.sh (CI's release job, the only place AgrOS's secret key is): each package without a signature signed,
-# one kept as published keeping its own, the database made again after, from every package, and signed
-# under both its names, the upstream gate's list and Arch's last good day signed; a package with a .sig that isn't
-# AgrOS's, a link, a secret key that isn't AgrOS's, or a subkey ci/agros.asc lacks: stopped, nothing signed over. With
-# the primary key and with a subkey-only secret (as AGROS_GPG_KEY will be). Keys of the test's own; repo-add a stand-in
-# (what it was given, and which packages had their .sig by then)
+# ci/sign-repo.sh (CI's sign job, the only place AgrOS's secret key is): each package without a signature signed,
+# one kept as published keeping its own, the database as the release job made it (ci/repo-db.sh) signed under both its
+# names, unchanged, the upstream gate's list and Arch's last good day signed; repo-add never run (it runs a package's
+# .PKGINFO line of the wrong kind as code: never beside the key). A package with a .sig that isn't AgrOS's, a link, a
+# database file missing or a link, a secret key that isn't AgrOS's, or a subkey ci/agros.asc lacks: stopped, nothing
+# signed over. With the primary key and with a subkey-only secret (as AGROS_GPG_KEY will be). Keys of the test's own
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
-mkdir -p "$t/bin"
-# shellcheck disable=SC2016  # (expanded by the stand-in)
-cat >"$t/bin/repo-add" <<'S'
-#!/bin/bash
-[[ $1 == -q ]] && shift
-db=$1; shift
-for p; do [[ -e $p.sig ]] && echo "$p signed" || echo "$p unsigned"; done >"$db"
-f=${db/.db./.files.}; cp "$db" "$f"
-ln -sf "$db" "${db%.tar.gz}"; ln -sf "$f" "${f%.tar.gz}"
-S
-chmod +x "$t/bin/repo-add"
+# (a repo-add that says it ran)
+stub repo-add "touch $t/repo-add-ran"
 # key <home> <name>: a key of its own in <home>; its fingerprint
 key() {
     mkdir -m700 "$1"
@@ -33,7 +24,8 @@ GNUPGHOME=$t/agros gpg --batch --export "$fpr" >"$t/agros.gpg" 2>/dev/null
 # (its first signing subkey: the published files' signer, whichever subkey is newer later)
 sub1=$(GNUPGHOME=$t/agros gpg --batch --with-colons --list-secret-keys "$fpr" 2>/dev/null | awk -F: '$1 == "fpr" { f = $10 } END { print f }')
 good() { gpgv --keyring "$t/agros.gpg" "$1.sig" "$1" >/dev/null 2>&1; }
-# repo: new builds, one kept as published (its signature AgrOS's), the gate's files, an old database
+# repo: new builds, one kept as published (its signature AgrOS's), the gate's files, the database ci/repo-db.sh made
+# (an old signature beside it)
 repo() {
     rm -rf "$t/repo" && mkdir "$t/repo"
     local p
@@ -42,7 +34,9 @@ repo() {
     cp "$t/repo/kept-1-1-x86_64.pkg.tar.zst.sig" "$t/kept.sig"
     echo 'hyprland 0.58.0' >"$t/repo/agros-approved"
     echo 2026/11/16 >"$t/repo/agros-arch-ok"
-    echo old >"$t/repo/agros.db" && echo old >"$t/repo/agros.db.sig"
+    local f
+    for f in agros.db agros.db.tar.gz agros.files agros.files.tar.gz; do echo "the $f" >"$t/repo/$f"; done
+    echo old >"$t/repo/agros.db.sig"
 }
 sign() { GNUPGHOME=$1 AGROS_PUBKEY=${ASC:-$t/agros.asc} PATH=$t/bin:$PATH "$here/ci/sign-repo.sh" "$t/repo" 2>&1; }
 
@@ -60,10 +54,10 @@ for home in agros sub; do
     done
     cmp -s "$t/kept.sig" "$t/repo/kept-1-1-x86_64.pkg.tar.zst.sig" || fail "$home: a package kept as published signed over"
     [[ $out == *"2 packages signed, 1 kept"* ]] || fail "$home: not said what was signed: $out"
-    # (made again after the signing, every package signed by then; under its plain names as files, not links)
-    [[ $(sort "$t/repo/agros.db") == $'./kept-1-1-x86_64.pkg.tar.zst signed\n./new-1-1-x86_64.pkg.tar.zst signed\n./other-2-1-any.pkg.tar.xz signed' ]] ||
-        fail "$home: the database not made again from every package, signed first: $(cat "$t/repo/agros.db")"
-    [[ ! -L $t/repo/agros.db && ! -L $t/repo/agros.files ]] || fail "$home: the database's names left as links"
+    # (the database as given, not made again: repo-add never run here)
+    [[ $(cat "$t/repo/agros.db") == "the agros.db" && $(cat "$t/repo/agros.files.tar.gz") == "the agros.files.tar.gz" ]] ||
+        fail "$home: the database changed: $(cat "$t/repo/agros.db")"
+    [[ ! -e $t/repo-add-ran ]] || fail "$home: repo-add run beside the key"
 done
 # A key whose primary key signs, with no signing subkey (AgrOS's key as it is now)
 mkdir -m700 "$t/prim"
@@ -78,19 +72,21 @@ for f in new-1-1-x86_64.pkg.tar.zst agros.db agros-approved; do
         grep -q "VALIDSIG $pfpr .* $pfpr\$" <<<"$st" || fail "$f not signed by the primary key: $st"
 done
 
-# Refused, nothing signed over: a package with another key's .sig, or a bad one; a link
+# Refused, nothing signed over: a package with another key's .sig, or a bad one; a link; the database missing, or a link
 key "$t/other" Other >/dev/null
-for bad in other garbage link; do
+for bad in other garbage link nodb dblink; do
     repo
     case $bad in
         other) GNUPGHOME=$t/other gpg --batch --quiet --detach-sign "$t/repo/new-1-1-x86_64.pkg.tar.zst" 2>/dev/null ;;
         garbage) echo x >"$t/repo/new-1-1-x86_64.pkg.tar.zst.sig" ;;
         link) ln -s /etc/hostname "$t/repo/link-1-1-any.pkg.tar.zst" ;;
+        nodb) rm "$t/repo/agros.files.tar.gz" ;;
+        dblink) rm "$t/repo/agros.files" && ln -s agros.files.tar.gz "$t/repo/agros.files" ;;
     esac
     cp "$t/repo/new-1-1-x86_64.pkg.tar.zst.sig" "$t/before.sig" 2>/dev/null || rm -f "$t/before.sig"
     out=$(sign "$t/agros") && fail "$bad: signed all the same: $out"
     [[ $out == *refused* ]] || fail "$bad: not said: $out"
-    [[ $(cat "$t/repo/agros.db") == old ]] || fail "$bad: the database made all the same"
+    [[ ! -e $t/repo/agros.db.sig || $(cat "$t/repo/agros.db.sig") == old ]] || fail "$bad: the database signed all the same"
     [[ ! -e $t/repo/other-2-1-any.pkg.tar.xz.sig ]] || fail "$bad: another package signed before it stopped"
     [[ ! -e $t/before.sig ]] || cmp -s "$t/before.sig" "$t/repo/new-1-1-x86_64.pkg.tar.zst.sig" || fail "$bad: its .sig signed over"
 done

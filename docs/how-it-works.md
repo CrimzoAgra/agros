@@ -950,7 +950,7 @@ brings each change; nothing to run by hand).
     log says what waits ("waits for AgrOS's check"). A version older in the repo than installed (a rollback) doesn't
     count: pacman keeps the newer one. The list is fetched from each of `[agros]`'s servers in turn (Pages, then the
     mirror) and kept for when none can be reached; never fetched, nothing new. It's taken only with a good signature by
-    AgrOS's key beside it (`agros-approved.sig`, CI's release job signs it; checked with `gpgv` against
+    AgrOS's key beside it (`agros-approved.sig`, CI's sign job signs it; checked with `gpgv` against
     `agros-keyring`'s key file alone, `/usr/share/pacman/keyrings/agros.gpg`): with none, or a bad one (a mirror or a
     network in between that changed it), that server's is as if it couldn't be reached, said ("no good signature by
     AgrOS's key"), and the next one is tried: none good, the kept list, nothing new let through. agros-iso's build and
@@ -1315,21 +1315,34 @@ breaks something holds back that one piece, never the rest (`.github/workflows/c
   are checked too: each name one CI meant to build (`aur/packages.txt`, quickshell-git, cachyos-calamares, or already
   in the published, signature-checked `agros.db`: a new AUR dependency is refused until it's listed there), one file
   per name, no `replaces`, and nothing in pacman's own settings or keyrings
+- **No package read as code.** pacman's `repo-add` reads each package's `.PKGINFO` line by line with bash's `declare`:
+  a line whose key is `x[$(command)]` runs that command, and `pkgname=x` (no spaces), which pacman itself ignores, is
+  read too, the last one winning, so a package passing as one name could be listed under another. An AUR build
+  script, root in `repo`, can write any `.PKGINFO`. So before anything in the release reads a package, `own-check.sh`
+  refuses every one, AgrOS's own too, whose `.PKGINFO` isn't as makepkg writes it (`ci/pkginfo.sh`): only makepkg's
+  `<field> = <value>` lines and comments, one `pkgname` and one `pkgver` in pacman's characters, a single `.PKGINFO`,
+  the file named after them. The database is then made by `ci/repo-db.sh` (after the hold, which brings back published
+  packages: each checked again), and read back as pacman reads it: one entry a package, its folder, name, version and
+  file what that package's `.PKGINFO` says, else nothing goes out
 - **Signed apart from the build.** The `repo` job runs AUR build scripts (as its builder user, with passwordless
-  sudo) and `test` runs what was built and the tests, so neither has a secret: the repo goes between them unsigned
-  (`ci/build-repo.sh` refuses to start with a secret key at hand), with only AgrOS's public key (`ci/agros.asc`), which
-  the published files it keeps are checked against and `agros-keyring` is made from. The `release` job, a container of
-  its own that runs none of that, puts the release together, then signs it in one step, the only one with
-  `AGROS_GPG_KEY` (`ci/sign-repo.sh`): each new package (one kept as published keeps its signature; one with any other
-  `.sig` stops it), the database made again and signed, `agros-approved` and `agros-arch-ok`; each signature checked
-  against `ci/agros.asc`, then gpg's agent stopped and the key removed before anything else runs (CachyOS's keyring,
-  the install check with signatures required, the upload to Pages). `tests/ci-signing.sh` checks the workflow keeps it
-  so. The install check also resolves `agros-desktop` with CachyOS's v3 and znver4 repos above `[cachyos]`, as the
-  installer sets them on such CPUs (`ci/cpu-repos.sh`, no such CPU needed): not resolving there (their lag behind
-  Arch's), or a library at another soname than below them, is a warning, and the release goes out. Changing the signing
-  key: add the new one to `ci/agros.asc` (and agros-iso's `agros.asc`) and raise `agros-keyring`'s `pkgver`, let
-  machines update, then replace the secret; signing with a key `ci/agros.asc` lacks fails the release, before anything
-  goes out.
+  sudo), `test` runs what was built and the tests, and `release` runs `repo-add` on the packages, so none has a
+  secret: the repo goes between them unsigned (`ci/build-repo.sh` refuses to start with a secret key at hand), with
+  only AgrOS's public key (`ci/agros.asc`), which the published files it keeps are checked against and `agros-keyring`
+  is made from. The `release` job puts the release together (the hold, the database, the approved list, the day Arch
+  last passed) and hands it on as an artifact; the `sign` job, a job of its own and so a fresh container (anything a
+  package had started or changed in the release's container isn't there: steps of one job share it, and no step can be
+  sure to clear it), signs it in one step, the only one with `AGROS_GPG_KEY` (`ci/sign-repo.sh`), with nothing before
+  it but the checkout and that artifact, and gpg alone reading the files: each new package (one kept as published
+  keeps its signature; one with any other `.sig` stops it), the database as the release made it (`agros.db`,
+  `agros.files` and their `.tar.gz` names), `agros-approved` and `agros-arch-ok`; each signature checked against
+  `ci/agros.asc`, then gpg's agent stopped and the key removed before anything else runs (Arch's and CachyOS's
+  install scripts, the install check with signatures required, the upload to Pages). `tests/ci-signing.sh` checks the
+  workflow keeps it so. The install check also resolves `agros-desktop` with CachyOS's v3 and znver4 repos above
+  `[cachyos]`, as the installer sets them on such CPUs (`ci/cpu-repos.sh`, no such CPU needed): not resolving there
+  (their lag behind Arch's), or a library at another soname than below them, is a warning, and the release goes out.
+  Changing the signing key: add the new one to `ci/agros.asc` (and agros-iso's `agros.asc`) and raise
+  `agros-keyring`'s `pkgver`, let machines update, then replace the secret; signing with a key `ci/agros.asc` lacks
+  fails the release, before anything goes out.
 - **A package that doesn't build** (an AUR change, AgrOS's Quickshell patch or Calamares changes no longer fitting,
   Calamares built without a module its settings name, a download that failed): the published one is kept, its
   signature checked, with the packages of the repo it needs (`ci/published.sh`); the rest goes out. None published yet:

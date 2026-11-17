@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# cpu-repos.sh <level>...: agros-desktop resolved as on an AgrOS machine of each CachyOS CPU level (CI's release job,
+# cpu-repos.sh <level>...: agros-desktop resolved as on an AgrOS machine of each CachyOS CPU level (CI's sign job,
 # after its install check, which has [cachyos] alone). On a CPU that has the level, the installer (Calamares'
 # detect-architecture) puts CachyOS's optimised repos above [cachyos] and Arch's: v3 ([cachyos-v3], [cachyos-core-v3],
 # [cachyos-extra-v3]) or znver4 (the same with -znver4, x86_64_v4 packages). Each level's pacman.conf is the system's
 # with those repos before [cachyos] and their architecture allowed, its databases in a folder of their own (the
 # system's untouched); no CPU of that level needed, nothing installed. agros-desktop not resolving there fails this,
-# said in plain lines: its caller decides whether that's an error (CI's release job: a warning).
+# said in plain lines: its caller decides whether that's an error (CI's sign job: a warning).
 # A library those repos build at another soname than the repo below them still resolves, and breaks at run time
 # (cachyos-extra-v3's old libplacebo once Arch's ffmpeg needed libplacebo.so=387, November 2026: mpv broke on v3
 # machines): said as a warning (and in the run's summary), not a failure, as it isn't AgrOS's to fix

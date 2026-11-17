@@ -5,7 +5,8 @@
 # notifies of each (the repo's watchers: its owner), and the Friday status lists it while it's open. From the report
 # job, gh with GH_TOKEN (issues: write). Environment:
 #   RESULT   the tests' (ci/test-passes.sh): ok, hold-agros, hold-upstream, fail; empty: they didn't run
-#   BUILD    the build job's result (success, failure...); RELEASE the release job's, or Pages' deploy's after it
+#   BUILD    the build job's result (success, failure...); RELEASE the release job's, the sign job's after it, or
+#            Pages' deploy's after that
 #   HELD     a file: what was held back, "<name>: <why>" each (build-repo.sh's AGROS_HELD)
 #   REPORT   a file: the tests' report (test-passes.sh's AGROS_TEST_REPORT)
 #   RUN_URL  this run's page
