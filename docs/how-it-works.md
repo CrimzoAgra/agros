@@ -741,10 +741,11 @@ helper a package update just brought works before `agros-links` has linked it), 
   can't do, like `/plugin`. Its plugins (installed by `agros-welcome`, `CLAUDE_PLUGINS` in
   `.local/bin/agros-welcome`): [ponytail](https://github.com/DietrichGebert/ponytail) (minimal code; needs
   Node.js) and Addy Osmani's [agent-skills](https://github.com/addyosmani/agent-skills), each at its repo's latest version (not pinned: what they are at your first login). `.local/bin/claude-notify`: a notification when it finishes an answer (its Stop hook, added to `~/.claude/settings.json` by `agros-welcome` too)
-- **`.local/share/firefox/`**: LibreWolf bookmarks (toolbar, `bookmarks.html`, Firefox's format) and the settings Firefox Sync doesn't
-  carry (`settings.js`: privacy, new tab, theme, toolbar layout, sidebar; add a `user_pref` line to keep another),
-  the Lagoon theme with the Linux system theme off (a new profile gets Lagoon installed from addons.mozilla.org by `agros-welcome`),
-  and the new tab's background picture (`newtab-wallpaper.jpg`). All updated by `dotfiles-sync`
+- **`.local/share/firefox/`**: the LibreWolf settings Firefox Sync doesn't carry (`settings.js`: privacy, new tab,
+  theme, toolbar layout, sidebar; add a `user_pref` line to keep another; its values refreshed from LibreWolf by
+  `dotfiles-sync`), the Lagoon theme with the Linux system theme off (a new profile gets Lagoon installed from
+  addons.mozilla.org by `agros-welcome`), and the new tab's background picture (`newtab-wallpaper.jpg`). Not your
+  bookmarks: they're personal, in your LibreWolf profile on the pen drive (`bookmarks.html` is kept out of the repo)
 - **`.config/librewolf/librewolf/librewolf.overrides.cfg`**: LibreWolf keeps cookies, logins and history when it closes
   (it erases them on every quit by default), allows the Firefox account and Sync, and tells sites the desktop's dark
   mode (Firefox's fingerprinting protection, all of it but that, instead of Resist Fingerprinting, which always says light).
