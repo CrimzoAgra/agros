@@ -65,7 +65,7 @@ its removal taking it out.
 
 The second server is a mirror on Cloudflare R2 (the bucket agros-iso's ISO is downloaded from, under `repo/x86_64`), so
 a GitHub Pages outage doesn't stop every machine's updates: pacman tries Pages first and the mirror only when Pages
-fails. `.github/workflows/mirror.yml` fills it after each CI run on `main` that succeeded (and by hand): `ci/mirror.sh`
+fails. `.github/workflows/mirror.yml` fills it after each CI run on `main`, also one that failed after Pages was deployed (and by hand): `ci/mirror.sh`
 downloads what Pages publishes (the database and `agros.files` with their `.tar.gz` copies, every package the database
 lists, `agros-approved`, `agros-arch-ok`, each with its `.sig` where published), checks every signature against
 `ci/agros.asc` alone (the database's required), then `rclone` uploads the packages first and the database last, and
@@ -992,8 +992,8 @@ brings each change; nothing to run by hand).
   - **Firmware** (fwupd): its metadata refreshed (LVFS, signed) and checked at boot (nothing said when offline or
     none). Any waiting is said on each user's desktop ("Firmware update ready... installed when you shut down or
     restart", once someone's logged in to a desktop: `agros-each-user --notify-wait`) and installed at the next shutdown
-    only then, before the packages (a flash cut off could leave a device unusable; a package install cut off is put
-    back), by `fwupdtool update --assume-yes` (fwupd's daemon can't be started at shutdown). Never under a time limit
+    only then, before the packages (a flash cut off could leave a device unusable; a package install cut off is taken
+    up again at the next shutdown, with the snapshot to go back to), by `fwupdtool update --assume-yes` (fwupd's daemon can't be started at shutdown). Never under a time limit
     of its own (one sent it SIGTERM mid-flash; only fwupd's queries have one): the install's unit has 60 min, firmware
     starts only with 55 of them left, and the packages start only with their 30 left, else wait for the next shutdown
     (counted, as below); a flash still writing at the unit's 60 min has hung. The install's unit is ordered after udisks2 and the system bus (fwupd finds the EFI
@@ -1033,12 +1033,13 @@ brings each change; nothing to run by hand).
   "Update all" builds them without that review (it lists which ones first, in its log; it asks for your password in a
   dialog). After its `paru -Syu` it rebuilds what's built on a runtime it changed (the boot's same list: Quickshell,
   Caelestia, qtengine for a new Qt; the AUR's Python packages for a new Python minor version), and on a Qt changed
-  since they were last built: the AUR's newest, once the runtime is in (not at the version installed, nor with AgrOS's
-  Quickshell fix, as the boot's). Log: `/var/log/auto-update.log` (its last 20 runs kept);
+  since they were last built, once the runtime is in: `[agros]`'s own at the version installed with AgrOS's Quickshell fix
+  (through `auto-update-aur --fetch`, as the boot's), the AUR's others at their newest. Log: `/var/log/auto-update.log` (its last 20 runs kept);
   `dotfiles-check` says an install at shutdown that failed or was held back (until one goes through), AUR builds, AUR
   apps the install left out, or a firmware update that failed, and 3 shutdowns in a row with nothing installed, with the last one's reason (the boot's
   download didn't finish: only a finished one is installed; something else using pacman still held its lock; a soft
-  reboot, which keeps the kernel running). An install cut off has pacman's lists put back, and its lock removed, at the
+  reboot, which keeps the kernel running; on battery, nearly empty: below 15%, discharging; pacman's lists couldn't be
+  kept aside, a full disk). An install cut off has pacman's lists put back, and its lock removed, at the
   next boot or install. The boot's run (download, Flatpaks, AUR builds and all, everything it started: nothing it runs
   as a user leaves its unit) stops after 4 h; a Flatpak from a file isn't reinstalled with less than 35 min of that
   left (cut off between its removal and install, the app would be gone). The Updates app waits only for its downloads. The install has 60 min (shutdown's own limit is made 75 min for it); `paccache.timer` keeps pacman's
@@ -1218,7 +1219,7 @@ breaks something holds back that one piece, never the rest (`.github/workflows/c
   signature checked, with the packages of the repo it needs (`ci/published.sh`); the rest goes out. None published yet:
   the build fails. The AUR packages and CachyOS's installer are built without compiler warnings (theirs, not AgrOS's);
   AgrOS's own packages keep them.
-- **Tests that fail** (`ci/test-passes.sh`) are run again to see which side broke them: with the published `[agros]`
+- **Tests that fail** (`ci/test-passes.sh`): all the tests are run again, to see which side broke them: with the published `[agros]`
   (they pass: this run's new AUR builds broke them, swapped for the published ones by `build-repo.sh --hold-new`; the
   new Hyprland still approved), then on Arch as of the last day the tests passed on it (its archive's snapshot; the day
   published as `agros-arch-ok`): they pass, an Arch update broke them (its Hyprland not approved, the new AUR builds
