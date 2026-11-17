@@ -993,10 +993,11 @@ ShellRoot {
                                         Layout.alignment: Qt.AlignHCenter
                                         text: day.d ? root.weatherIcon(day.d.weather_code[day.modelData], true) : "cloud"
                                     }
+                                    // The low (greyed), then the high: the dashboard's order ("16° / 18°")
                                     Label {
                                         Layout.alignment: Qt.AlignHCenter
                                         textFormat: Text.StyledText
-                                        text: day.d ? Math.round(day.d.temperature_2m_max[day.modelData]) + "° <font color='#8f8aa8'>" + Math.round(day.d.temperature_2m_min[day.modelData]) + "°</font>" : "--° --°"
+                                        text: day.d ? "<font color='#8f8aa8'>" + Math.round(day.d.temperature_2m_min[day.modelData]) + "°</font> " + Math.round(day.d.temperature_2m_max[day.modelData]) + "°" : "--° --°"
                                         font.pixelSize: 12
                                     }
                                 }
