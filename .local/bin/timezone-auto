@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # The time zone from where you are, while Settings > Language & region > "Set the time zone automatically" is on: the
 # weather location's (Caelestia's shell.json: "lat,lon" or a town, through Open-Meteo), or your IP's when that's
-# automatic (ip-api.com, as Caelestia's weather does). Set only when it differs, without a password (agros-system's
-# polkit rule, for admins); no network or no answer: left as it is
+# automatic (ipinfo.io, over HTTPS: an answer no one on the way can change). Set only when it differs, without a
+# password (agros-system's polkit rule, for admins); no network or no answer: left as it is
 #   timezone-auto           set it, if it's on (at login, and when the weather location changes)
 #   timezone-auto on | off  turn it on (and set it) or off
 flag=${XDG_STATE_HOME:-$HOME/.local/state}/agros/timezone-auto
@@ -23,7 +23,7 @@ elif [[ $place ]]; then
     zone=$(get -G --data-urlencode "name=$place" -d count=1 https://geocoding-api.open-meteo.com/v1/search |
         jq -r '.results[0].timezone // empty' 2>/dev/null)
 else
-    zone=$(get 'http://ip-api.com/json?fields=timezone' | jq -r '.timezone // empty' 2>/dev/null)
+    zone=$(get https://ipinfo.io/json | jq -r '.timezone // empty' 2>/dev/null)
 fi
 # (an answer off the network: only a zone name goes on to timedatectl, which checks it's a real one)
 [[ $zone =~ ^[A-Za-z0-9_+-]+(/[A-Za-z0-9_+-]+)*$ ]] || exit 0

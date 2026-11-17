@@ -29,7 +29,7 @@ ANSWER='{"timezone": "Europe/Madrid"}' run || fail "off: it failed"
 [[ ! -e $t/set && ! -e $t/asked ]] || fail "off: it looked up or set the zone"
 ANSWER='{"timezone": "Europe/Madrid"}' run on || fail "on: it failed"
 set_to Europe/Madrid || fail "on, automatic location: the IP's zone wasn't set"
-grep -q ip-api.com "$t/asked" || fail "automatic location: not looked up by IP"
+grep -q ' https://ipinfo.io/json$' "$t/asked" || fail "automatic location: not looked up by IP, over HTTPS: $(cat "$t/asked")"
 ANSWER='{"timezone": "Europe/Lisbon"}' run
 [[ ! -e $t/set ]] || fail "the zone it already is was set again"
 ANSWER='' run || fail "no network: it failed"
