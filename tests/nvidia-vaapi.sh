@@ -32,7 +32,8 @@ env_of() {
     env -u LIBVA_DRIVER_NAME -u NVD_BACKEND -u MOZ_DISABLE_RDD_SANDBOX "$sh" -c \
         '. "$1"; echo "${LIBVA_DRIVER_NAME-}|${NVD_BACKEND-}|${MOZ_DISABLE_RDD_SANDBOX-}|${_nv-}"' _ "$t/env.sh"
 }
-shells=(sh); command -v dash >/dev/null && shells+=(dash)
+shells=(sh)
+if command -v dash >/dev/null; then shells+=(dash); else skipped "no dash here: the strict POSIX sh not checked"; fi
 expect() {
     local s
     for s in "${shells[@]}"; do [[ $(env_of "$s") == "$1" ]] || fail "$2 ($s): $(env_of "$s")"; done

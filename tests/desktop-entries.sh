@@ -5,6 +5,7 @@
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
+command -v desktop-file-validate >/dev/null || skipped "no desktop-file-validate here: the entries not validated"
 for f in "$here"/.local/share/applications/*.desktop; do
     if command -v desktop-file-validate >/dev/null; then
         out=$(desktop-file-validate "$f" 2>&1) || fail "${f##*/} isn't a valid desktop entry: $out"
