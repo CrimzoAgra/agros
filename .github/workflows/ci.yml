@@ -402,12 +402,15 @@ jobs:
       issues: write
     steps:
       - uses: actions/checkout@v7
+      # (each only from a job that ran: a skipped one made none, and the missing artifact showed as an error on the run)
       - uses: actions/download-artifact@v8
+        if: needs.release.result != 'skipped'
         continue-on-error: true
         with:
           name: held
           path: /tmp/held
       - uses: actions/download-artifact@v8
+        if: needs.test.result != 'skipped'
         continue-on-error: true
         with:
           name: report
