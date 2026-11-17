@@ -29,6 +29,7 @@ EOF
 chmod +x "$t/Demo-x86_64.AppImage"
 cp "$t/Demo-x86_64.AppImage" "$t/again.AppImage"  # (installing moves it: a copy for the second home below)
 cp "$t/Demo-x86_64.AppImage" "$t/stick.AppImage"  # (and one on a drive that won't run it, below)
+cp "$t/Demo-x86_64.AppImage" "$t/orig.AppImage"  # (and one kept as it is, for the later cases)
 export NOTIFY_WHEN_UP_TRIES=1  # (its notifications in the background: not tried for a minute after the test)
 for c in pacman notify-send update-desktop-database sudo pkexec; do printf '#!/bin/sh\nexit 1\n' >"$t/bin/$c"; done
 # (zenity: asked to run a file opened, noted; "Run" unless $NO)
@@ -150,7 +151,7 @@ printf '[Desktop Entry]\nName=Outside\nExec=outside\nType=Application\n' >"$t/ou
 ln -s "$t/outside.desktop" "$t/esc-img/demo.desktop"
 ln -s ../../../../../../../../../../../../../.."$t/outside.desktop" "$t/up-img/demo.desktop"
 for img in esc-img up-img; do
-    cp "$t/Demo-x86_64.AppImage" "$t/$img.AppImage"
+    cp "$t/orig.AppImage" "$t/$img.AppImage"
     out=$(IMG=$t/$img HOME=$t/$img-home PATH=$t/bin:$PATH python3 "$here/.local/bin/appimage-open" --install "$t/$img.AppImage" 2>&1) &&
         fail "a launcher entry linked out of the AppImage ($img) installed: $out"
     [[ $out == *"no launcher entry inside"* && ! -e $t/$img-home/.local/share/applications/demo.desktop ]] ||
@@ -159,7 +160,7 @@ done
 echo secret >"$t/secret.png"; echo png >"$t/icon-img/demo.png"
 for icon in "$(printf '../%.0s' {1..20})${t#/}/secret" 'd?mo' 'dem[o]'; do
     printf '[Desktop Entry]\nName=Demo\nExec=demo\nIcon=%s\nType=Application\n' "$icon" >"$t/icon-img/demo.desktop"
-    cp "$t/Demo-x86_64.AppImage" "$t/icon.AppImage"; rm -rf "$t/icon-home"
+    cp "$t/orig.AppImage" "$t/icon.AppImage"; rm -rf "$t/icon-home"
     IMG=$t/icon-img HOME=$t/icon-home PATH=$t/bin:$PATH python3 "$here/.local/bin/appimage-open" --install "$t/icon.AppImage" >/dev/null 2>&1 ||
         fail "an AppImage with Icon=$icon not installed"
     [[ -z $(ls -A "$t/icon-home/.local/share/icons" 2>/dev/null) ]] && grep -qxF "Icon=$icon" "$t/icon-home/.local/share/applications/demo.desktop" ||
@@ -170,7 +171,7 @@ done
 # nothing asked to be removed; the same app's update installed, its package's copy not asked about again (a first
 # install's alone)
 upd() {  # upd <image> [env...]: the repo's new release installed by appimage-update
-    cp "$t/Demo-x86_64.AppImage" "$t/upd.AppImage"; rm -f "$t/ran"
+    cp "$t/orig.AppImage" "$t/upd.AppImage"; rm -f "$t/ran"
     env IMG="$1" "${@:2}" APPIMAGE_WEBSITE=https://github.com/o/demo HOME=$t/upd-home PATH=$t/bin:$PATH \
         python3 "$here/.local/bin/appimage-open" --install "$t/upd.AppImage" 2>&1
 }

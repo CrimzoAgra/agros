@@ -125,7 +125,7 @@ out=$(fbu --fetch "$t/fetched-more" 2>&1) && fail "--fetch took a version asking
     fail "a version asking for more access fetched at boot, or not said: $out"
 # ...from Updates (no --fetch: you started it), installed, what it adds said in its log
 rm -f "$t/installs"
-out=$(FLATPAK_BUNDLE_HELD=1 fbu 2>&1) || true
+out=$(REF=com.x.App FLATPAK_BUNDLE_HELD=1 fbu 2>&1) || true  # (a temp folder here, not one named after the app)
 [[ $out == *"com.x.App: its new version asks for more access: [Context]filesystems=host, [Session Bus Policy]org.freedesktop.Flatpak=talk"* &&
     $out == *"com.x.App: updated to 1.1"* ]] && grep -q -- '--user .*--bundle ' "$t/installs" ||
     fail "Updates didn't install a version asking for more access, or didn't say what it adds: $out / $(cat "$t/installs" 2>/dev/null)"
