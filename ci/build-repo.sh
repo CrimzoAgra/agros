@@ -159,18 +159,20 @@ contents() {
             print $1, "type=" a["type"], "mode=" a["mode"], "link=" a["link"], "sha256=" a["sha256digest"]
         }' | sort
 }
-# The published file kept for <file>, when its version is already published (a 404: not yet, a new version)
+# The published file kept for <file>, when its version is already published: the published database (signed, read once)
+# lists it, else it's a new version. Not asked of Pages by its file: a file not there yet came back as a 503 as often as
+# a 404, for minutes at a time, and the build stopped (a 404 could also be the CDN's from before it was published, and a
+# rebuild went out under a name users already have)
 # shellcheck disable=SC2154  # ($stamp: published.sh's)
 keep_published() {
-    local f=$1 code
-    # Not published yet (404): a new version. Anything else (Pages down, a timeout): stopped here, not a rebuild
-    # published under a name users already have
-    # (--retry: a timeout or a 5xx from Pages tried again, for 2 minutes: Pages answers a file not there yet with a
-    # 503 now and then, several in a row, outlasting curl's default 7 s, and the build stopped; a 404 isn't. ?t=, published.sh's stamp: a 404 Pages' CDN
-    # kept from before the file was published read as not published, and a rebuild went out under its name)
+    local f=$1 code d listed=
+    pub_db || exit 1
+    for d in "$pubdb"/*/desc; do [[ $(field "$d" FILENAME) == "$f" ]] && { listed=1; break; }; done
+    [[ -n $listed ]] || return 0
+    # Listed: read, or stopped here (Pages down, a timeout), not a rebuild published under its name
+    # (--retry: a timeout or a 5xx from Pages tried again, for 2 minutes; ?t=: published.sh's stamp, the current copy)
     code=$(curl -sSL --retry 8 --retry-delay 15 --max-time 300 -o "$work/pub" -w '%{http_code}' "$AGROS_PUBLISHED/$f?t=$stamp" 2>/dev/null) ||
         code=000
-    [[ $code == 404 ]] && return 0
     [[ $code == 200 ]] || { echo "!! $f: the published copy couldn't be read (HTTP $code)"; exit 1; }
     curl -fsSL --retry 8 --retry-delay 15 --max-time 60 -o "$work/pub.sig" "$AGROS_PUBLISHED/$f.sig?t=$stamp" ||
         { echo "!! $f: the published copy's signature couldn't be read"; exit 1; }

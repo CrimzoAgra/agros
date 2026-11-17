@@ -3,7 +3,7 @@
 # its version keeps the published file (its signature checked, AgrOS's key alone), unless a compiled one is built
 # against another Python (published rebuilt); one of AgrOS's own whose contents changed (a file, a mode, a dependency;
 # not the build's time) with its version not raised stops the build, said how to fix it; the published copy not
-# readable or not signed by AgrOS's key stops it too; a 404 is a new version. The installer's checksum: the build stops
+# readable or not signed by AgrOS's key stops it too; one the published database doesn't list is a new version. The installer's checksum: the build stops
 # when its swaps, patch or pins change under the same calamares_rel. The installer built: each module its settings'
 # sequence names in it, or it's taken out (the published one held). curl a stand-in (the published repo in $t/pub)
 set -euo pipefail
@@ -22,7 +22,17 @@ gpg --batch --quiet --export agros@agros.invalid >"$keyring" 2>/dev/null
 # shellcheck disable=SC2034  # (read by build-repo.sh's functions)
 work=$t/work out=$t/out root=$t/root
 mkdir -p "$work" "$out" "$t/pub" "$t/bin" "$root/packages/agros-foo" "$root/packages/agros-bar"
-eval "$(sed -n '/^verify_sig() /p; /^stamp=/p' "$here/ci/published.sh")"
+eval "$(sed -n '/^verify_sig() /p; /^stamp=/p; /^field() /p' "$here/ci/published.sh")"
+# (the published database, as published.sh's pub_db reads it: each package in $t/pub listed by its file name)
+pubdb=$t/pubdb
+pub_db() {
+    local p
+    rm -rf "$pubdb" && mkdir -p "$pubdb"
+    for p in "$t"/pub/*.pkg.tar.zst; do
+        [[ -e $p ]] && mkdir "$pubdb/${p##*/}" && printf '%%FILENAME%%\n%s\n' "${p##*/}" >"$pubdb/${p##*/}/desc"
+    done
+    return 0
+}
 sed -n '/^built_against() {$/,/^}$/p; /^contents() {$/,/^}$/p; /^keep_published() {$/,/^}$/p' "$b" >"$t/fns"
 # shellcheck disable=SC1091
 . "$t/fns"
@@ -88,11 +98,17 @@ pkg "$t/pub" "$bar" "${base[@]}"
 pkg "$out" "$bar" 'file = usr/share/agros/a other'
 o=$(keep "$bar") && fail "a package versioned by the commits, built differently: kept as published"
 [[ $o == *"packages/agros-bar doesn't build reproducibly"* ]] || fail "a build that isn't reproducible not said: $o"
-# Not published yet: a new version, the build kept as it is
+# Not published yet (not in the published database): a new version, the build kept as it is, Pages not asked for it
+# (it answered a file not there yet with 503s for minutes, and the build stopped)
 pkg "$out" agros-new-2-1-any.pkg.tar.zst 'file = usr/share/agros/n x'
 cp "$out/agros-new-2-1-any.pkg.tar.zst" "$t/new"
-keep agros-new-2-1-any.pkg.tar.zst >/dev/null && cmp -s "$out/agros-new-2-1-any.pkg.tar.zst" "$t/new" ||
-    fail "a new version not kept as built"
+(export CODE=503; keep agros-new-2-1-any.pkg.tar.zst >/dev/null) && cmp -s "$out/agros-new-2-1-any.pkg.tar.zst" "$t/new" ||
+    fail "a new version not kept as built (Pages answering 503)"
+# Published (in the database) but the CDN still answers 404 (its copy from before): stopped, not a rebuild published
+# under a name users already have
+pkg "$out" "$foo" "${base[@]}"
+o=$(export CODE=404; keep "$foo") && fail "a published file the CDN answered 404 for: built over"
+[[ $o == *"couldn't be read (HTTP 404)"* ]] || fail "a published file the CDN answered 404 for: not said: $o"
 # The published copy unreadable (Pages down), or not signed by AgrOS's key (another key; tampered): stopped
 pkg "$out" "$foo" "${base[@]}"
 o=$(export CODE=503; keep "$foo") && fail "the published copy unreadable: built over"
