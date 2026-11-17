@@ -48,6 +48,7 @@ import re
 import subprocess
 import sys
 import tempfile
+from fractions import Fraction
 
 HOME = pwd.getpwuid(os.getuid()).pw_dir  # not $HOME: run as you from root (sudo, su), it may be root's
 SCHEMA = f"{HOME}/.local/share/dots-settings/schema.json"
@@ -428,13 +429,25 @@ def hyprctl(*args):
 SCALES = ["1", "1.25", "1.5", "1.6", "1.75", "2"]
 
 
+def scales(width, height, keep=None):
+    """The scales Hyprland takes for a screen's mode: those that give it a whole size in pixels both ways (it refuses
+    1.75 on 1920x1080, 1.5 on 2560x1600); every one with no mode known. keep: the one set, listed all the same"""
+    fits = [s for s in SCALES if not (width and height) or all((n / Fraction(s)).denominator == 1 for n in (width, height))]
+    if isinstance(keep, str) and keep and keep not in fits:
+        try:
+            fits = sorted([*fits, keep], key=float)
+        except ValueError:
+            pass  # (not a number: not one to show)
+    return fits
+
+
 def screens_groups():
     """The connected screens' settings (on or off ones), by their full description: one machine's own screens, so its
     serial too (two of one model each have theirs). Read by user/monitors.lua; empty means as AgrOS sets it"""
     monitors = [m for m in hyprctl("monitors", "all") or [] if m.get("description") and m.get("name") != "FALLBACK"]
     if not monitors:
         return [{"title": "Screens", "settings": [], "empty": "No screens found (not in a Hyprland session)"}]
-    groups = []
+    groups, saved = [], stored()
     for m in monitors:
         d = m["description"]
         modes = list(dict.fromkeys(x.removesuffix("Hz") for x in m.get("availableModes", [])))
@@ -450,8 +463,9 @@ def screens_groups():
                                                                   for x in modes]},
             {"key": f"screens.{d}.scale", "label": "Scale", "type": "choice", "default": "", "apply": "hypr",
              "description": "How big everything is drawn on it. Automatic: from its size and resolution.",
-             "options": [{"value": "", "label": "Automatic"}] + [{"value": x, "label": f"{float(x):.0%}"}
-                                                                  for x in SCALES]},
+             "options": [{"value": "", "label": "Automatic"}] + [
+                 {"value": x, "label": f"{float(x):.0%}"}
+                 for x in scales(m.get("width"), m.get("height"), saved.get(f"screens.{d}.scale"))]},
             # (checked here: a typo reached Hyprland's monitor rule)
             {"key": f"screens.{d}.position", "label": "Position", "type": "text", "default": "", "apply": "hypr",
              "placeholder": "Automatic", "pattern": r"(\d+x\d+)?", "format": "whole pixels as WxH, like 1920x0",

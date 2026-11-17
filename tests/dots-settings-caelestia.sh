@@ -8,7 +8,7 @@
 # "All Caelestia options" keeps the page's range; now (the app's poll) the schema's values without its
 # option lists. The other new kinds:
 # numbers kept in their range, Caelestia's variables and the screens' settings in settings.lua only once changed (a
-# screen's kept while it's unplugged), a screen's position only as WxH
+# screen's kept while it's unplugged), a screen's position only as WxH, its scales only those that give whole pixels
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
@@ -66,6 +66,23 @@ pos = "screens.Some Screen 1.position"
 for bad in ('"1920x"', '"1920,0"', '"a1920x0"', '"1920.5x0"', '"-1920x0"', '"0x-1080"'):
     assert run("set", pos, bad, "--later").startswith("error"), f"position {bad} taken"
 assert run("set", pos, '"1920x0"', "--later") == "hypr\n" and run("set", pos, '""', "--later") == "hypr\n"
+# A screen's scales: only those that give it a whole size in pixels (Hyprland refuses the others: 1.75 on 1920x1080),
+# the one set kept all the same (set before, or for another mode)
+scale = "screens.Some Screen 1.scale"
+
+
+def offered():
+    return [o["value"] for o in ds.all_settings(ds.schema(lists=False))[scale]["options"]]
+
+
+assert "1.75" not in offered() and "1.5" in offered() and "2" in offered(), offered()
+assert run("set", scale, '"1.75"', "--later").startswith("error"), "a scale Hyprland refuses taken"
+assert run("set", scale, '"1.25"', "--later") == "hypr\n", "a scale that fits refused"
+saved = json.load(open(ds.SETTINGS))
+saved[scale] = "1.75"
+json.dump(saved, open(ds.SETTINGS, "w"))
+assert offered() == ["", "1", "1.25", "1.5", "1.6", "1.75", "2"], f"the scale set no longer offered: {offered()}"
+assert json.loads(run("get", scale)) == "1.75", "the scale set read as the default"
 ds.hyprctl = real_hyprctl
 
 options = ds.caelestia_options()
