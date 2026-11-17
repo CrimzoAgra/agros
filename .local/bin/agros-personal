@@ -129,7 +129,7 @@ personal_close_tray() {
     for p in $wins; do
         while [[ $p =~ ^[0-9]+$ ]] && ((p > 1)) && [[ -z ${shown[$p]-} ]]; do
             shown[$p]=1
-            p=$(awk '$1 == "PPid:" {print $2}' "/proc/$p/status" 2>/dev/null)
+            p=$(awk '$1 == "PPid:" {print $2}' "/proc/$p/status" 2>/dev/null) || p=  # (gone since: no parent)
         done
     done
     for app in "$@"; do
