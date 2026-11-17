@@ -1131,7 +1131,8 @@ ShellRoot {
                                                     readonly property string kind: modelData.type
                                                     // (JSON and pictures: under the label, the row's whole width)
                                                     readonly property bool wide: kind === "json" || kind === "image"
-                                                    readonly property bool changed: modelData.default !== undefined && !modelData.get && !modelData.readonly && JSON.stringify(value) !== JSON.stringify(modelData.default)
+                                                    readonly property bool resettable: modelData.default !== undefined && !modelData.get && !modelData.readonly
+                                                    readonly property bool changed: resettable && JSON.stringify(value) !== JSON.stringify(modelData.default)
                                                     readonly property var control: ({
                                                             bool: boolControl,
                                                             choice: (modelData.options?.length ?? 0) > 7 || modelData.open ? dropControl : choiceControl,
@@ -1281,9 +1282,13 @@ ShellRoot {
                                                             opacity: row.modelData.readonly && row.kind !== "keys" ? 0.5 : 1
                                                         }
 
-                                                        // Back to the default
+                                                        // Back to the default. Its place kept while there's nothing to
+                                                        // reset: shown only then, it pushed the control left under the
+                                                        // pointer, and a second click on + hit this instead
                                                         IconButton {
-                                                            visible: row.changed
+                                                            visible: row.resettable
+                                                            opacity: row.changed ? 1 : 0
+                                                            enabled: row.changed
                                                             icon: "restart_alt"
                                                             onClicked: root.set(row.modelData.key, row.modelData.default)
                                                         }
