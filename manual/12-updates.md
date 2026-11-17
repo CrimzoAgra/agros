@@ -63,7 +63,7 @@ you. When one breaks something, only that piece waits; the rest keeps updating.
 | changes an AUR app so the tests fail | swaps the new build back for the published one | keeps the version that works |
 | changes its next release (Caelestia's, Lutris's or Hyprland's main branch) so AgrOS's changes won't fit | says so in the `held` issue, as a heads-up, and publishes as usual | isn't affected: the release is checked once it comes |
 | (AgrOS's own change fails its tests) | publishes nothing | doesn't change |
-| changes its ISO | merges it into AgrOS's ISO by itself each day, if it merges cleanly, brings back nothing AgrOS removed, adds no KDE, keeps AgrOS's installer, and the ISO still builds | isn't affected: it updates from the repos above |
+| changes its ISO | merges it into AgrOS's ISO by itself each day, if it merges cleanly, brings back nothing AgrOS removed, adds no KDE, keeps AgrOS's installer, changes nothing that runs as root or decides what's trusted, and the ISO still builds | isn't affected: it updates from the repos above |
 | changes its ISO in a way that can't be merged by itself | opens a pull request saying what changed and why | isn't affected; the ISO stays as it is until it's merged |
 
 A held Hyprland update isn't listed in the Updates app; the update log says it "waits for AgrOS's check".
