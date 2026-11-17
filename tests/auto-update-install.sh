@@ -14,7 +14,7 @@ set -euo pipefail
 mkdir -p "$t/bin" "$t/pac/sync" "$t/au/db/sync"
 # The script as agros-system installs it (agros-scripts' helpers, pacman-lock-holder and wait-online, from here)
 au=$here/packages/agros-system
-# (the AgrOS users: just this one. --as: mktemp run, update-kinds and flatpak-bundle-update noted, not run (they'd
+# (the AgrOS users: just this one. --as: mktemp and rm run, update-kinds and flatpak-bundle-update noted, not run (they'd
 # update this machine's own); update-kinds hands $KINDS_NOTE back on fd 3, flatpak-bundle-update --fetch finds
 # something with $FETCHED. --notify and --notify-wait noted; --notify-wait tells someone, but with $NOBODY)
 # shellcheck disable=SC2016  # (expanded by the stand-in)
@@ -23,7 +23,7 @@ printf '#!/bin/bash\ncalls=%s/calls\n%s\n' "$t" 'case $1 in
     --as) shift 2; echo "as $*" >>"$calls"; while [ "$1" = --fd ]; do shift 2; done
         [ -z "${TWO_USERS:-}" ] || ! IFS= read -r -t 1 line || echo "stdin $line" >>"$calls"
         case "$*" in
-            mktemp*) exec "$@" ;;
+            mktemp* | "rm -rf -- "*) exec "$@" ;;
             *update-kinds*) [ -z "${KINDS_NOTE:-}" ] || printf "%s\n" "$KINDS_NOTE" >&3 ;;
             *--fetch*) [ -z "${FETCHED:-}" ] || echo app >"${@: -1}/fetched" ;;
         esac ;;
@@ -59,6 +59,7 @@ grep -q 'systemd-inhibit' <<<"$unit" && fail "the boot's download blocks shutdow
     ! grep -q systemd-inhibit <<<"$(grep -- '--fetch "$fetched"' "$t/auto-update")" &&
     grep -q '^ *timeout 30m systemd-inhibit --what=sleep:shutdown --mode=block ' <<<"$(grep -B2 -- '--install-fetched "$fetched"' "$t/auto-update")" &&
     grep -qx 'bundles' "$t/auto-update" && grep -qx '    bundles "$each_user" --as "$user"' "$t/auto-update" &&
+    grep -qx '    "$@" rm -rf -- "$fetched"' "$t/auto-update" &&
     [[ $(grep -c 'flatpak-bundle-update' "$t/auto-update") == 3 ]]; } ||
     fail "the boot's Flatpak reinstall not held by root around that step alone (root's and each user's): $(grep -n -A14 '^bundles() {' "$t/auto-update")"
 # Shutdown's own limit (the targets' JobTimeoutSec) longer than the install's (TimeoutStopSec), so it can't cut it off
