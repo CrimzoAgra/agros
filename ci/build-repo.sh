@@ -161,6 +161,7 @@ contents() {
         }' | sort
 }
 # The published file kept for <file>, when its version is already published (a 404: not yet, a new version)
+# shellcheck disable=SC2154  # ($stamp: published.sh's)
 keep_published() {
     local f=$1 code
     # Not published yet (404): a new version. Anything else (Pages down, a timeout): stopped here, not a rebuild
