@@ -165,4 +165,21 @@ for icon in "$(printf '../%.0s' {1..20})${t#/}/secret" 'd?mo' 'dem[o]'; do
     [[ -z $(ls -A "$t/icon-home/.local/share/icons" 2>/dev/null) ]] && grep -qxF "Icon=$icon" "$t/icon-home/.local/share/applications/demo.desktop" ||
         fail "an icon taken by Icon=$icon: $(ls "$t/icon-home/.local/share/icons" 2>/dev/null)"
 done
+# An update (appimage-update: --install with the repo's APPIMAGE_WEBSITE, its AppImage installed already) only as the
+# same app: a release whose launcher entry is now firefox.desktop (an installed app's, its package's) not installed,
+# nothing asked to be removed; the same app's update installed, its package's copy not asked about again (a first
+# install's alone)
+upd() {  # upd <image> [env...]: the repo's new release installed by appimage-update
+    cp "$t/Demo-x86_64.AppImage" "$t/upd.AppImage"; rm -f "$t/ran"
+    env IMG="$1" "${@:2}" APPIMAGE_WEBSITE=https://github.com/o/demo HOME=$t/upd-home PATH=$t/bin:$PATH \
+        python3 "$here/.local/bin/appimage-open" --install "$t/upd.AppImage" 2>&1
+}
+upd "$t/img" OWNER= >/dev/null || fail "the first install from a repo failed"
+mkdir -p "$t/ff-img"; printf '[Desktop Entry]\nName=Firefox\nExec=firefox\nType=Application\n' >"$t/ff-img/firefox.desktop"
+echo '[Desktop Entry]' >"$t/sys/applications/firefox.desktop"
+out=$(upd "$t/ff-img" OWNER=firefox) && fail "an update renaming its launcher entry to firefox.desktop installed: $out"
+[[ $out == *"now firefox.desktop, not the installed app's (demo)"* && ! -e $t/upd-home/.local/share/applications/firefox.desktop &&
+    ! -e $t/ran ]] || fail "an update taking another app's launcher entry not refused, or a package removal asked: $out / $(cat "$t/ran" 2>/dev/null)"
+upd "$t/img" OWNER=demo-bin >/dev/null || fail "the same app's update not installed"
+[[ ! -e $t/ran ]] || fail "an update asked to remove a package again: $(cat "$t/ran")"
 echo "ok appimage-open"
