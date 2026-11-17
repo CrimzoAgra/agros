@@ -47,6 +47,10 @@ grep -qx 'user=alice soft=' "$t/seen" || fail "no user shown with env naming non
 # No account at all: started all the same, no one named
 USERS='' run
 grep -qx 'user= soft=' "$t/seen" || fail "no accounts: $(cat "$t/seen")"
+# No env at all (removed by hand): started all the same, the first account (sh's "." of a missing file ended it)
+rm -f "$t/g/env" "$t/seen"
+USERS=alice "$t/run"
+grep -qx 'user=alice soft=' "$t/seen" || fail "no env: the login screen not started: $(cat "$t/seen" 2>/dev/null)"
 # VMware's driver with agros-vmware's shim: cage with it; another VM: software OpenGL, no shim
 mkdir "$t/vmwgfx" && : >"$t/lib/vmw-dmabuf.so"
 VM=1 USERS=alice run
