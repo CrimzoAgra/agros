@@ -46,6 +46,11 @@ bash -n "$t/auto-update" || fail "the generated auto-update doesn't parse"
 if command -v shellcheck >/dev/null; then
     out=$(shellcheck -s bash "$t/auto-update") || fail "shellcheck on the generated auto-update: $out"
 fi
+# The upstream gate failing, at boot as at shutdown: pacman.conf as it is (its Include holds Hyprland), never the copy an
+# earlier run made for older lists (a newer Hyprland, not checked yet, let through)
+gates=$(grep '/update-gate ' "$au/auto-update")
+[[ $(wc -l <<<"$gates") == 2 && $(grep -c '|| cp /etc/pacman.conf "$gated"$' <<<"$gates") == 2 ]] ||
+    fail "a run through the upstream gate without its fallback: $gates"
 # The boot's download (only that: the install is at shutdown) holds off neither power off nor sleep
 unit=$(cat "$au/auto-update.service")
 [[ $(grep '^ExecStart=' <<<"$unit") == "ExecStart=/usr/lib/agros/auto-update" ]] ||
