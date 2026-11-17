@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # lutris-covers' cover checks on made-up pictures: Steam's padded cover is caught, a real one isn't, a corrupt or wide
 # one needs a new cover (no network: nothing is downloaded); a turned-down key stops the run, it, offline, 429 and 5xx
-# exit 1; a permanent error marks the game tried
+# exit 1; a permanent error marks the game tried; an empty cover file doesn't count as one
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
@@ -65,5 +65,16 @@ def forbidden(game):
     raise ValueError("not a PNG or JPEG")
 covers.find_cover = forbidden
 assert covers.main() == 0 and open(covers.TRIED).read().split() == ["a", "b"], open(covers.TRIED).read()
+# An empty cover file (a download Lutris cut off): asked all the same, not skipped for good; the cover saved and the
+# empty one of the other kind taken away (Lutris could pick it)
+import contextlib
+os.makedirs(f"{t}/coverart", exist_ok=True)
+open(f"{t}/coverart/c.jpg", "wb").close()
+png = b"\x89PNG\r\n\x1a\n" + b"x" * 10
+covers.find_cover = lambda game: "https://x/c.png"
+covers.urllib.request.urlopen = lambda *a, **k: contextlib.nullcontext(types.SimpleNamespace(read=lambda: png))
+sys.modules["lutris.database.games"] = types.SimpleNamespace(get_games=lambda: [{"slug": "c"}])
+assert covers.main() == 0, "a game with an empty cover not asked"
+assert open(f"{t}/coverart/c.png", "rb").read() == png and not os.path.exists(f"{t}/coverart/c.jpg"), os.listdir(f"{t}/coverart")
 P
 echo "ok lutris-covers"

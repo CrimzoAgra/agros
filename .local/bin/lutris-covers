@@ -102,7 +102,9 @@ def main():
         tried = set()
     for game in get_games():
         slug = game["slug"]
-        if slug in tried or any(os.path.exists(f"{covers}/{slug}.{ext}") for ext in ("jpg", "png")):
+        # (an empty one, a download Lutris cut off, is as good as none: it kept the game from ever being asked)
+        files = (f"{covers}/{slug}.{ext}" for ext in ("jpg", "png"))
+        if slug in tried or any(os.path.isfile(f) and os.path.getsize(f) for f in files):
             continue
         if not needs_cover(StoreItem(game, None, medium)):
             continue
@@ -119,6 +121,10 @@ def main():
                 with open(f"{covers}/{slug}.{ext}.part", "wb") as f:
                     f.write(data)
                 os.replace(f"{covers}/{slug}.{ext}.part", f"{covers}/{slug}.{ext}")
+                # (an empty one of the other kind taken away: Lutris could pick it over this one)
+                other = f"{covers}/{slug}.{'jpg' if ext == 'png' else 'png'}"
+                if os.path.isfile(other) and not os.path.getsize(other):
+                    os.remove(other)
                 print(f"{slug}: {url}")
             else:
                 print(f"{slug}: none on SteamGridDB")
