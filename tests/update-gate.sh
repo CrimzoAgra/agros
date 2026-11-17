@@ -121,10 +121,12 @@ out=$(HAVE_hyprland=0.57.2-1 NEW_hyprland=0.58.0-1 OFFLINE=1 NEEDS=1 gate)
 HAVE_hyprland=0.57.2-1 NEW_hyprland=0.57.2-1 APPROVED='hyprland 0.57.2' gate --dbpath "$t/db" >/dev/null
 grep -q "^curl .*https://agros.invalid/x86_64/agros-approved$" "$CALLS" && [[ -z $(grep "^pacman" "$CALLS" | grep -v -- "--dbpath $t/db") ]] ||
     fail "not the list beside [agros], or a pacman run without the --dbpath: $(cat "$CALLS")"
-# --offline (the shutdown's install): the kept list only, nothing fetched
-: >"$CALLS"
-out=$(HAVE_hyprland=0.57.2-1 NEW_hyprland=0.59.0-1 APPROVED='hyprland 0.59.0' gate --offline)
+# --offline (the shutdown's install): the kept list only, nothing fetched (and no list file of its own to remove: not a
+# .sig in the folder it runs from)
+: >"$CALLS"; mkdir "$t/cwd"; : >"$t/cwd/.sig"
+out=$(cd "$t/cwd" && HAVE_hyprland=0.57.2-1 NEW_hyprland=0.59.0-1 APPROVED='hyprland 0.59.0' gate --offline)
 [[ -n $out ]] && ! grep -q '^curl' "$CALLS" || fail "--offline fetched the list, or let through what the kept one doesn't: $out"
+[[ -e $t/cwd/.sig ]] || fail "--offline removed a .sig file from the folder it ran in"
 # Older in the repo than installed (rolled back): no wait (pacman -Su keeps the newer one), the rest not held for it
 out=$(HAVE_hyprland=0.58.1-1 NEW_hyprland=0.58.0-1 OFFLINE=1 gate)
 [[ -z $out ]] && open || fail "a rollback in the repo held the set: $out"
