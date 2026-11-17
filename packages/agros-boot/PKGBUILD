@@ -9,7 +9,9 @@ pkgdesc='AgrOS boot: hidden boot menu, faster splash, screens in their best mode
 arch=('any')
 url='https://github.com/CrimzoAgra/agros'
 license=('GPL-3.0-or-later')
-depends=('plymouth' 'noto-fonts' 'os-prober' 'ntfs-3g' 'v4l-utils' 'python' 'efibootmgr' 'mkinitcpio')
+# (CachyOS's splash themes, splash-theme's source: CachyOS's installer installed them with its base packages until its
+# cachyos branch, which leaves the splash to a package-list group AgrOS's list doesn't take)
+depends=('plymouth' 'cachyos-plymouth-bootanimation' 'cachyos-plymouth-theme' 'noto-fonts' 'os-prober' 'ntfs-3g' 'v4l-utils' 'python' 'efibootmgr' 'mkinitcpio')
 optdepends=('snapper: snapshots before updates, listed in the boot menu'
             'snap-pac: snapshots around pacman transactions'
             'grub-btrfs: snapshots in the GRUB menu')

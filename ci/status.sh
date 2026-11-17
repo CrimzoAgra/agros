@@ -107,6 +107,17 @@ if c=$(gh api "repos/CachyOS/CachyOS-PKGBUILDS/commits?path=cachyos-calamares&pe
 else
     problems+=("CachyOS's installer recipe couldn't be read: whether it changed since AgrOS's pin not checked")
 fi
+# ...and its code (calamares_src, on the recipe's branch, cachyos): new commits there since, how many (their staging
+# branch, which their own ISO builds, is the cachyos branch plus what comes next: a move there shows up here in time)
+csrc=$(sed -n 's/^ *calamares_src=//p' "$here/ci/build-repo.sh")
+if c=$(gh api "repos/CachyOS/cachyos-calamares/compare/$csrc...cachyos" \
+    -q '"\(.ahead_by) \(.base_commit.commit.committer.date[:10])"' 2>/dev/null) && [[ -n $c ]]; then
+    read -r n since <<<"$c"
+    ((n == 0)) ||
+        problems+=("CachyOS's installer has $n new commit(s) on its cachyos branch since AgrOS's pin (${csrc:0:8}, $since): look at them, then move calamares_src on (ci/build-repo.sh)")
+else
+    problems+=("CachyOS's installer code couldn't be read: whether it changed since AgrOS's pin not checked")
+fi
 # The size watch: each thing it found needs a look; it not having run, too, with its log (or the next week's finds
 # nothing to compare with: last week's baseline kept then). (Its table says it ran, not its baseline: a first week
 # whose sets pacman couldn't work out has none, and what pacman said goes in the issue)

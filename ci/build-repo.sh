@@ -279,11 +279,14 @@ if [[ -z ${AGROS_SKIP_AUR:-} ]]; then
         6) calamares_sum=025bcfdf8226 ;;
         7) calamares_sum=720cf57ae6f7 ;;
     esac
-    # CachyOS's recipe as AgrOS last checked it (a commit of CachyOS-PKGBUILDS), not its newest: a change of theirs
-    # reaches AgrOS's installer only once looked at, with this moved on and calamares_rel raised. (Their 5c2ef554, a
-    # new name and the cachyos branch, whose installer has no platform: kernels, would have put the handheld kernel on
-    # every install.) The weekly status (ci/status.sh) says when theirs has moved on
-    calamares_pkgbuild=8630282e004ea3a0711d30cbff3329a7b86a6229
+    # CachyOS's recipe as AgrOS last checked it (a commit of CachyOS-PKGBUILDS), and the installer's code at the commit
+    # AgrOS last checked on that recipe's branch (calamares_src, for the recipe's #branch=), not their newest: a change of
+    # theirs reaches AgrOS's installer only once looked at, these moved on and calamares_rel raised. (Their 5c2ef554
+    # moved the recipe to the cachyos branch and a new name, cachyos-calamares, unannounced; AgrOS followed once its
+    # package list had no handheld group left, as that branch's installer installs every group, platform: or not.)
+    # The weekly status (ci/status.sh) says when either has moved on
+    calamares_pkgbuild=5c2ef55475c0a4b6a200582f007999ceeac3dc91
+    calamares_src=6d6b96fc0069de682a2e055a071e4880335155be
     # (not fetched: its build below finds no folder, and the published one is held)
     { asb git clone -q --no-checkout --depth 1 --filter=blob:none --sparse https://github.com/CachyOS/CachyOS-PKGBUILDS.git "$work/cachyos-pkgbuilds" &&
         (cd "$work/cachyos-pkgbuilds" && asb git fetch -q --depth 1 --filter=blob:none origin "$calamares_pkgbuild" &&
@@ -332,10 +335,12 @@ SH
     (cd "$work/cachyos-pkgbuilds/cachyos-calamares" &&
         { grep -q '^pkgrel=[0-9]*$' PKGBUILD || { echo "!! cachyos-calamares: its pkgrel isn't a plain number"; false; }; } &&
         asb sed -i "s/^pkgrel=\([0-9]*\)$/pkgrel=\1.$calamares_rel/" PKGBUILD &&
+        asb sed -i "s|^\(source=(calamares::\"git+\${url}.git\)#branch=cachyos\")$|\1#commit=$calamares_src\")|" PKGBUILD &&
+        { grep -q "#commit=$calamares_src\")$" PKGBUILD || { echo "!! cachyos-calamares: its source isn't the cachyos branch any more"; false; }; } &&
         asb cp "$work/calamares-layout.patch" . &&
         asb sed -i -e "/^prepare() {/{n;r $work/calamares-labels" -e '}' PKGBUILD &&
         { reused "$PWD" || asb env PKGDEST="$out" makepkg -s --noconfirm; }) ||
-        hold cachyos-calamares-next "CachyOS's installer didn't build with AgrOS's changes (the build's log above)"
+        hold cachyos-calamares "CachyOS's installer didn't build with AgrOS's changes (the build's log above)"
 fi
 cp "$work/makepkg.conf" /etc/makepkg.conf
 

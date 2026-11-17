@@ -9,7 +9,8 @@ mkdir -p "$t/bin"
 # (gh's answers as JSON, its -q run on them by jq, as the real one does: the queries are checked too)
 # shellcheck disable=SC2016
 cpin=$(sed -n 's/^ *calamares_pkgbuild=//p' "$here/ci/build-repo.sh")
-sed -e "s|@T@|$t|g" -e "s|@PIN@|$cpin|g" >"$t/bin/gh" <<'GH'
+csrc=$(sed -n 's/^ *calamares_src=//p' "$here/ci/build-repo.sh")
+sed -e "s|@T@|$t|g" -e "s|@PIN@|$cpin|g" -e "s|@SRC@|$csrc|g" >"$t/bin/gh" <<'GH'
 #!/bin/bash
 echo "gh $*" >>@T@/gh.log
 q=. p=
@@ -54,8 +55,13 @@ case "$*" in
   # (CachyOS's installer recipe: the newest commit on it, AgrOS's pin unless it has moved on)
   "api repos/CachyOS/CachyOS-PKGBUILDS/commits?path=cachyos-calamares"*)
     [[ $STATE == *gh-down* ]] && exit 1
-    sha=@PIN@; [[ $STATE == *calamares-moved* ]] && sha=5c2ef554aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    sha=@PIN@; [[ $STATE == *calamares-moved* ]] && sha=9999abcdaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
     json "[{\"sha\": \"$sha\", \"commit\": {\"committer\": {\"date\": \"2026-11-17T08:10:48Z\"}}}]" ;;
+  # (...and its code: new commits on the cachyos branch since AgrOS's pinned one, none unless it has moved on)
+  "api repos/CachyOS/cachyos-calamares/compare/@SRC@...cachyos "*)
+    [[ $STATE == *gh-down* ]] && exit 1
+    n=0; [[ $STATE == *calamares-src-moved* ]] && n=6
+    json "{\"ahead_by\": $n, \"base_commit\": {\"commit\": {\"committer\": {\"date\": \"2026-11-16T20:00:00Z\"}}}}" ;;
   "issue list --label status --state all"*) cat @T@/lastbody 2>/dev/null; true ;;
   "issue list --label status"*) echo 7 ;;
   "issue create"*) for a; do [[ $p == --body-file ]] && cp "$a" @T@/body; p=$a; done ;;
@@ -117,10 +123,16 @@ done
 grep -qF "| Caelestia's dots | pinned ${dots:0:7}, upstream couldn't be read |" "$t/body" || fail "the dots' upstream not read said: $(cat "$t/body")"
 grep -qxF -- "- CachyOS's installer recipe couldn't be read: whether it changed since AgrOS's pin not checked" "$t/body" ||
     fail "CachyOS's installer recipe not read not said: $(cat "$t/body")"
-# (CachyOS's installer recipe moved on past AgrOS's pin: a look needed)
-go "calamares-moved"
-grep -qxF -- "- CachyOS changed its installer's recipe (cachyos-calamares, 5c2ef554, 2026-11-17) since AgrOS's pin (${cpin:0:8}): look at it, then move calamares_pkgbuild on (ci/build-repo.sh)" "$t/body" ||
+grep -qxF -- "- CachyOS's installer code couldn't be read: whether it changed since AgrOS's pin not checked" "$t/body" ||
+    fail "CachyOS's installer code not read not said: $(cat "$t/body")"
+# (CachyOS's installer recipe, or its code, moved on past AgrOS's pins: a look needed; neither said when they haven't)
+go "calamares-moved calamares-src-moved"
+grep -qxF -- "- CachyOS changed its installer's recipe (cachyos-calamares, 9999abcd, 2026-11-17) since AgrOS's pin (${cpin:0:8}): look at it, then move calamares_pkgbuild on (ci/build-repo.sh)" "$t/body" ||
     fail "CachyOS's installer recipe moving on not said: $(cat "$t/body")"
+grep -qxF -- "- CachyOS's installer has 6 new commit(s) on its cachyos branch since AgrOS's pin (${csrc:0:8}, 2026-11-16): look at them, then move calamares_src on (ci/build-repo.sh)" "$t/body" ||
+    fail "CachyOS's installer code moving on not said: $(cat "$t/body")"
+go ""
+grep -q "CachyOS's installer\|CachyOS changed its installer" "$t/body" && fail "CachyOS's installer said to have moved when it hasn't: $(cat "$t/body")"
 go "arch-down"
 grep -q "approved list" "$t/body" && fail "a readable approved list said unreadable: $(cat "$t/body")"
 # (the ISO held by the upstream gate: GitHub's success, said; one already published isn't)
