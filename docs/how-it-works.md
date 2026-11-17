@@ -723,8 +723,8 @@ helper a package update just brought works before `agros-links` has linked it), 
   hides it at logind's PrepareForShutdown, holding a delay lock until Hyprland has taken that up; a shutdown called off
   after that brings it back), `keyring-default`, `bluetooth-on`, `vm-screen-follow` (in a VM), `timezone-auto` (when on), the update check timer, and `dotfiles-check`
   after 30 s
-- **`.config/autostart/`**: CachyOS's welcome app, Geoclue's demo agent (Caelestia starts it already) and Polychromatic's
-  own autostart off (OpenRazer's service applies the
+- **`.config/autostart/`**: Geoclue's demo agent (Caelestia starts it already) and Polychromatic's own autostart
+  off (OpenRazer's service applies the
   lighting). Turning one on or off in the Settings app changes your copy here; `dotfiles-sync` commits it if it's in the repo
   already, else `dotfiles-sync add` it
 
