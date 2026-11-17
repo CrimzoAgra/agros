@@ -13,8 +13,9 @@
 #                           (agros-hyprbars: this patch, built in CI for its Hyprland) at once when it was built for
 #                           this Hyprland (none loaded meanwhile otherwise), and rebuild mine in the background,
 #                           swapping it in when done (a notification if that fails)
-#   hyprbars-build --prebuild  build it for the Hyprland just installed, without loading it, so the next login has it
-#                           at once (the pacman hook packages/agros-system/agros-hyprbars-prebuild.hook runs it on a
+#   hyprbars-build --prebuild  build it for the Hyprland just installed (with AgrOS's patch as packaged), without
+#                           loading it, so the next login has it at once (the pacman hook
+#                           packages/agros-system/agros-hyprbars-prebuild.hook runs it on a
 #                           Hyprland update, one of its libraries', and an agros-scripts one: a new patch; Hyprland
 #                           needn't be running)
 set -euo pipefail
@@ -42,6 +43,13 @@ fi
 # Rebuilt when either changes: a Hyprland update (or a rebuild against new aquamarine/hyprutils/...: its ABI hash), or
 # a new version of the patch
 if [[ ${1:-} == --prebuild ]]; then
+    # Run for each user by root's pacman hook, which waits on it with its lock held (the shutdown's install too): AgrOS's
+    # own patch, beside this (/usr/lib/agros/share; the repo's, for agros-hyprbars' build), not the one in the user's
+    # home (theirs to change: a patch to the Makefile could make the build hang and hold every update up), nor their
+    # git settings (a hook of theirs run by the clone). A patch of their own is built at their login, as them (its hash
+    # differs, so the stamp written here is no match for it)
+    patch=$helpers/../share/hyprbars/hyprbars.patch
+    export GIT_CONFIG_GLOBAL=/dev/null
     # the Hyprland installed, from its headers: its ABI hash made the way Hyprland makes it (PluginAPI.hpp: the commit,
     # then each library's major.minor), the same as `hyprctl version`'s abiHash once it runs
     h=${HYPRBARS_VERSION_H:-/usr/include/hyprland/src/version.h}  # (the test: Hyprland main's)
