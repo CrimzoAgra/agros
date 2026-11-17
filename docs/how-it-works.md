@@ -918,9 +918,13 @@ brings each change; nothing to run by hand).
   `update-kinds` runs: firmware with fwupd, Flatpaks, AppImages, Capri, Proton builds, developer tools), like at boot.
   `--list` is what the Updates app shows (`update-kinds --list`); every 6 hours (`update-check.timer`) it checks, and when
   updates are waiting a notification's "Update now" opens the Updates app and starts (an admin's, in `wheel`: an
-  account that can't sudo isn't offered it, nor `agros-welcome`'s system part; the boot's update covers it). With no terminal (the Updates
-  app), sudo asks for the password in a dialog (`.local/bin/askpass`, zenity, as `SUDO_ASKPASS`). VSCodium's own
-  updater (which only opens the website) is off
+  account that can't sudo isn't offered it, nor `agros-welcome`'s system part; the boot's update covers it). Run in a
+  terminal, it shows each AUR package's build-script changes for review first; the Updates app's "Update all" builds
+  them without that review (it lists which ones first, in its log), and sudo asks for the password in a dialog
+  (`.local/bin/askpass`, zenity, as `SUDO_ASKPASS`). After its `paru -Syu` it rebuilds what's built on a runtime it
+  changed (the boot's list, below), and on a Qt changed since they were last built, once the runtime is in:
+  `[agros]`'s own at the version installed with AgrOS's Quickshell fix (through `auto-update-aur --fetch`, as the
+  boot's), the AUR's others at their newest. VSCodium's own updater (which only opens the website) is off
 - **The boot update** (`agros-system`: `packages/agros-system/auto-update`, for every account): updates everything at
   every boot. Then: Flatpaks (system-wide and yours), AppImages, Proton builds and developer tools (`update-kinds
   --boot`, as each user; Capri's new release only looked for: `capri-update --check`). Downloaded then and installed at
@@ -1056,12 +1060,7 @@ brings each change; nothing to run by hand).
   - **Developer tools**, yours, only those there: npm's global packages only where its prefix is in your home (`/usr`'s
     are pacman's), `uv tool upgrade --all`, `rustup update`, cargo's programs with `cargo install-update` (without
     cargo-update, a one-line note), `pipx upgrade-all`
-  Run in a terminal, `update-apps` shows each AUR package's build-script changes for review first; the Updates app's
-  "Update all" builds them without that review (it lists which ones first, in its log; it asks for your password in a
-  dialog). After its `paru -Syu` it rebuilds what's built on a runtime it changed (the boot's same list: Quickshell,
-  Caelestia, qtengine for a new Qt; the AUR's Python packages for a new Python minor version), and on a Qt changed
-  since they were last built, once the runtime is in: `[agros]`'s own at the version installed with AgrOS's Quickshell fix
-  (through `auto-update-aur --fetch`, as the boot's), the AUR's others at their newest. Log: `/var/log/auto-update.log` (its last 20 runs kept; readable by admins, `wheel`, only: it holds every account's
+  Log: `/var/log/auto-update.log` (its last 20 runs kept; readable by admins, `wheel`, only: it holds every account's
   updates);
   `dotfiles-check` says an install at shutdown that failed or was held back (until one goes through), AUR builds, AUR
   apps the install left out, or a firmware update that failed, and 3 shutdowns in a row with nothing installed, with the last one's reason (the boot's
