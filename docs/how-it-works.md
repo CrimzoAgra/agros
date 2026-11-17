@@ -1231,7 +1231,7 @@ the `pkgver` of a package that has a fixed one: see [How it's packaged](#how-its
 
 `tests/run.sh` runs them all (`tests/run.sh lutris-overlay` just one), each in a throwaway home, so nothing of yours is
 touched. Several run at once (one per CPU; `AGROS_TEST_JOBS=1`, one at a time), and one that fails among them runs again
-alone: only a failure there counts. Each test has 10 minutes. A pass ends on the test's own `ok <test>` line, so one that stops early with exit 0
+alone: only a failure there counts (one that passed only alone is said, as flaky). Each test has 10 minutes. A pass ends on the test's own `ok <test>` line, so one that stops early with exit 0
 fails. Run it after changing a script, and after Caelestia, Lutris or Hyprland updates: they check that the
 Caelestia and Lutris changes and the hyprbars patch still fit, besides the boot update (its AUR builds, firmware,
 Proton and developer tools too), the account restore, the
