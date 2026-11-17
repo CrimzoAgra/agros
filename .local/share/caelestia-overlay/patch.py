@@ -1369,17 +1369,28 @@ def lock_intro():
 
 
 def battery_suspend():
-    # A critical battery suspends instead of hibernating: AgrOS has no swap to hibernate into (zram only), so the
-    # hibernate call did nothing after its "Hibernating in 5 seconds" and the laptop died. The session menu's Hibernate
-    # button too, unless set to something else in shell.json (here: it reaches existing accounts, not only new ones)
+    # A critical battery hibernates where the system can, else suspends: an AgrOS install has no swap to hibernate into
+    # (zram only), and there Caelestia's hibernate call did nothing after its "Hibernating in 5 seconds" (a toast) and
+    # the laptop died; a system with swap to resume from (CachyOS installed before, its own swap) still hibernates, as
+    # suspending there drains the battery for good. systemctl's hibernate fails at once where logind says it can't
+    # (CanHibernate). The session menu's Hibernate button the same, unless set to something else in shell.json (here:
+    # it reaches existing accounts, not only new ones)
+    sleep = '["sh", "-c", "systemctl hibernate || systemctl suspend"]'
     rel = first("modules/BatteryMonitor.qml", "daemons/BatteryMonitor.qml")  # (main moved it)
-    s = swap(read(rel), "onTriggered: SessionManager.hibernate()", "onTriggered: SessionManager.suspend()", "the hibernate call")
+    s = swap(read(rel), "onTriggered: SessionManager.hibernate()", f"onTriggered: Quickshell.execDetached({sleep})",
+             "the hibernate call")
+    if not re.search(r"^import Quickshell$", s, re.M):
+        raise LookupError(f"{rel}'s Quickshell import")
     s = swap(s, 'Toaster.toast(Tr.tr("Hibernating in 5 seconds"), Tr.tr("Hibernating to prevent data loss")',
-             'Toaster.toast(Tr.tr("Suspending in 5 seconds"), Tr.tr("Suspending to prevent data loss")', "the toast")
+             'Toaster.toast(Tr.tr("Going to sleep in 5 seconds"), Tr.tr("Hibernating, or suspending where it can\'t, to prevent data loss")',
+             "the toast")
     menu = "modules/session/Content.qml"
+    # (a command that isn't one of its SessionManager's own: the button runs it as it is)
     m = swap(read(menu), "        command: Config.session.commands.hibernate\n",
-             '        command: String(Config.session.commands.hibernate) === "hibernate" ? ["suspend"] : Config.session.commands.hibernate\n',
+             f'        command: String(Config.session.commands.hibernate) === "hibernate" ? {sleep} : Config.session.commands.hibernate\n',
              "the session menu's hibernate button")
+    if "Quickshell.execDetached(command)" not in m:
+        raise LookupError(f"{menu}: its buttons don't run a command of their own")
     return {rel: s, menu: m}
 
 
@@ -1737,7 +1748,7 @@ FEATURES = (
     ("Steam menu: installed games only", steam_installed_only),
     ("lock screen dimmed like the login screen", lock_tint),
     ("lock screen text cursor", lock_cursor),
-    ("critical battery suspends", battery_suspend),
+    ("critical battery hibernates, or suspends where it can't", battery_suspend),
     ("lock screen: a wrong password said at once", lock_instant_fail),
     ("Scroll Lock icon", scroll_lock),
     ("tray A-Z", tray_az),

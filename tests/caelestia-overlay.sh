@@ -22,6 +22,22 @@ dst=$t/.config/quickshell/caelestia skipped=$t/state/caelestia-overlay-skipped
 out=$(run) || fail "overlay failed: $(tail -3 <<<"$out")"
 grep -q '^WARNING\|Traceback' <<<"$out" && fail "patches no longer fit: $(grep '^WARNING' <<<"$out")"
 [[ -d $dst && ! -s $skipped ]] || fail "not installed"
+# A critical battery (and the session menu's Hibernate) hibernates where the system can, else suspends: the command both
+# run, with a systemctl whose hibernate works or is refused as logind refuses it without swap
+battery=$(find "$dst" -name BatteryMonitor.qml -type f)
+sleep_cmd=$(sed -n 's/^ *onTriggered: Quickshell.execDetached(\["sh", "-c", "\(.*\)"\])$/\1/p' "$battery")
+[[ -n $sleep_cmd ]] || fail "a critical battery doesn't run the hibernate-or-suspend command: $(grep -A3 'id: hibernateTimer' "$battery")"
+grep -qF "\"$sleep_cmd\"] : Config.session.commands.hibernate" "$dst/modules/session/Content.qml" ||
+    fail "the session menu's Hibernate not the same: $(grep 'commands.hibernate' "$dst/modules/session/Content.qml")"
+mkdir -p "$t/sleep-bin"
+for can in 0 1; do
+    printf '#!/bin/sh\necho "$1" >>"%s/slept"\n[ "$1" != hibernate ] || exit %s\n' "$t" "$can" >"$t/sleep-bin/systemctl"
+    chmod +x "$t/sleep-bin/systemctl"; rm -f "$t/slept"
+    PATH=$t/sleep-bin:$PATH sh -c "$sleep_cmd"
+    want=hibernate; ((can == 0)) || want=$'hibernate\nsuspend'
+    [[ $(cat "$t/slept") == "$want" ]] || fail "a critical battery with hibernation $( ((can == 0)) && echo working || echo refused): $(cat "$t/slept")"
+done
+rm -rf "$t/sleep-bin" "$t/slept"
 # The bar's reserved space changing (Hyprland has no event for it): maximised and snapped windows fitted again
 grep -q 'onExclusiveZoneChanged: Quickshell.execDetached(\["hyprctl", "eval", "dots.refit_placed_soon()"\])' "$dst/modules/drawers/Exclusions.qml" ||
     fail "the bar's space changing doesn't refit windows: $(grep -A3 'anchors.left: true' "$dst/modules/drawers/Exclusions.qml")"
