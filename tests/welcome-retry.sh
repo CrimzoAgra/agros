@@ -68,4 +68,18 @@ grep -qx 'RemainAfterExit=yes' <<<"$unit" && grep -qx 'PartOf=graphical-session.
 for _ in 2 3; do env -i HOME="$h" PATH="$sb:/usr/bin" NOTIFY_WHEN_UP_TRIES=2 bash "$h/.local/bin/agros-welcome" >/dev/null 2>&1 </dev/null || true; done
 [[ -e $st/done-vscodium ]] || fail "the VSCodium step still tried again after failing three logins in a row"
 [[ -e $st/done-flatpaks ]] && fail "the Flatpaks step marked done offline"
+# An account set up before the offer waited for its answer (done, never marked offered: the unit's end killed the
+# offer, and none has the offer's own mark): not offered again, weeks later, now the unit starts while offered is
+# missing. One this version offered and that wasn't answered is offered again
+# (the offers above that failed, in the background, given up first: not one of them noted here)
+sleep 2
+touch "$st/done"; rm -f "$st/offered" "$st/offer-sent" "$t/offer"
+printf '#!/bin/sh\nprintf "%%s\\n" "$@" >>"%s"\n' "$t/offer" >"$sb/notify-send"
+env -i HOME="$h" PATH="$sb:/usr/bin" bash "$h/.local/bin/agros-welcome" >/dev/null 2>&1 </dev/null || true
+sleep 1
+[[ -e $st/offered && ! -e $t/offer ]] || fail "an account set up before this version offered again: $(cat "$t/offer" 2>/dev/null)"
+rm "$st/offered"; touch "$st/offer-sent"
+env -i HOME="$h" PATH="$sb:/usr/bin" bash "$h/.local/bin/agros-welcome" >/dev/null 2>&1 </dev/null || true
+for _ in $(seq 50); do [[ -e $t/offer ]] && break; sleep 0.1; done
+[[ -e $t/offer ]] || fail "an offer this version made, unanswered, not made again at the next login"
 echo "ok welcome-retry"

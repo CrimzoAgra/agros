@@ -33,7 +33,9 @@ Laptop settings and lighting are in a separate repo: **legion-control-linux**.
 3. **The one thing you run:** its notification offers *Restore my accounts*. Plug in your pen drive and click it, or
    run `agros-personal` ([Your accounts](#your-accounts)). Capri installs right after that, since her fork is private
    and needs your GitHub login (at the next login when gh only gets it from the keyring brought back: `dotfiles-check`
-   installs her then).
+   installs her then). The offer comes back at each login until it's answered (`~/.local/state/agros/offered`); an
+   account set up before it did (its `done` there, without the `offer-sent` mark the offer leaves) isn't offered it
+   again.
 
 The same notification offers *Install hardware apps and VMware* (`agros-welcome --system`). It installs the apps for
 the hardware that's plugged in: Boxflat (Moza), OpenRazer + Polychromatic (Razer), Solaar (Logitech),

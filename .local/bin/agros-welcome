@@ -359,6 +359,13 @@ others() {
 mkdir -p "$st"
 exec > >(tee -a "$st/welcome.log") 2>&1
 echo "== agros-welcome $(date '+%F %T')"
+# An account set up before the offer waited for its answer (agros-welcome.service ended with this script then, which
+# killed the offer at once, so none was ever marked offered): its offer was made at its first login, not made again
+# now, weeks later, as the unit starts again while offered is missing. Told from an offer left unanswered since by the
+# mark this version leaves as it makes one (offer-sent): an account done before has none
+if [[ -e $st/done && ! -e $st/offered && ! -e $st/offer-sent ]]; then
+    touch "$st/offered" && echo "set up before this version: its offer made then, not again"
+fi
 
 # Each step once, marked done; one that failed is tried again at the next login
 steps=()
@@ -396,6 +403,7 @@ for s in "${steps[@]}"; do [[ -e $st/done-$s ]] || all_done=; done
 # part failed or was cancelled (sudo's password prompt closed) is offered again at the next login. Critical: it stays
 # on screen until it's answered (the first login's user may be away), and its buttons only open a terminal
 if [[ ! -e $st/offered ]]; then
+    touch "$st/offer-sent"
     if [[ -n $all_done ]]; then
         text="Everything is installed."
     else
