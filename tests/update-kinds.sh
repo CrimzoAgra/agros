@@ -92,15 +92,26 @@ cp "$t/good" "$t/srv/GE-Proton11-12-x86_64.sha512sum"
 # (a download an earlier run left, cut off: removed; one under way, recent, isn't. A Lutris game on GE-Proton11-3, named
 # without the folder's -x86_64 as Lutris newer than 0.5.22 (its development version) does: kept, though it's in Steam's
 # folder)
-mkdir "$tools/.agros-proton.old" "$tools/.agros-proton.new" "$tools/GE-Proton11-3-x86_64"
-touch -d '7 hours ago' "$tools/.agros-proton.old"
+mkdir "$tools/.agros-proton.Old0ld" "$tools/.agros-proton.New0nw" "$tools/GE-Proton11-3-x86_64"
+touch -d '7 hours ago' "$tools/.agros-proton.Old0ld"
 touch "$tools/GE-Proton11-3-x86_64/.agros-installed"
 mkdir -p "$t/home/.local/share/lutris/games"
 printf 'wine:\n  version: GE-Proton11-3\n' >"$t/home/.local/share/lutris/games/x.yml"
 out=$(run proton) || fail "the Proton update failed: $out"
-[[ ! -e $tools/.agros-proton.old && -e $tools/.agros-proton.new ]] || fail "a download left behind not swept, or one under way taken: $(ls -a "$tools")"
+[[ ! -e $tools/.agros-proton.Old0ld && -e $tools/.agros-proton.New0nw ]] || fail "a download left behind not swept, or one under way taken: $(ls -a "$tools")"
 [[ -d $tools/GE-Proton11-3-x86_64 ]] || fail "a Proton a Lutris game is on (named without -x86_64) removed"
-rm -rf "$tools/.agros-proton.new" "$tools/GE-Proton11-3-x86_64" "$t/home/.local/share/lutris"
+rm -rf "$tools/.agros-proton.New0nw" "$tools/GE-Proton11-3-x86_64" "$t/home/.local/share/lutris"
+# A relative runner_dir in lutris.conf: a folder named from wherever this runs, not one it looks in (nothing listed,
+# installed or removed there)
+rel=$t/cwd/rel/wine
+mkdir -p "$rel/GE-Proton11-5" "$rel/.agros-proton.Old0ld" "$t/home/.local/share/lutris"
+touch "$rel/GE-Proton11-5/.agros-installed"; touch -d '7 hours ago' "$rel/.agros-proton.Old0ld"
+echo 'runner_dir = rel' >"$t/home/.local/share/lutris/lutris.conf"
+[[ -z $(cd "$t/cwd" && run --list | grep Lutris) ]] || fail "a relative runner_dir's Protons listed"
+(cd "$t/cwd" && run proton >/dev/null) || fail "the Proton update failed with a relative runner_dir"
+[[ -d $rel/GE-Proton11-5 && -d $rel/.agros-proton.Old0ld && ! -e $rel/GE-Proton11-12-x86_64 ]] ||
+    fail "a relative runner_dir's folder, from where it ran, changed: $(ls -a "$rel")"
+rm -rf "$t/cwd" "$t/home/.local/share/lutris"
 [[ $(cat "$tools/GE-Proton11-12-x86_64/version" 2>/dev/null) == GE-Proton11-12 ]] || fail "the newest Proton not installed: $out"
 [[ -d $tools/GE-Proton11-6 && ! -e $tools/GE-Proton11-5 ]] || fail "the used Proton removed, or the unused one kept: $(ls "$tools")"
 [[ -d $tools/GE-Proton11-4 ]] || fail "a Proton put there by hand removed"

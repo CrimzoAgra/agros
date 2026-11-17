@@ -41,7 +41,8 @@ mapfile -t servers < <(pacman-conf --config "$base" --repo agros Server 2>/dev/n
 # (fetched into a file of its own: two runs at once, the Updates app's and its list's, don't mix theirs)
 tmp=
 ((offline)) || tmp=$(mktemp "$cache.XXXXXX" 2>/dev/null) || tmp=
-trap 'rm -f "$tmp" "$tmp.sig"' EXIT
+# (none, --offline: nothing to remove, not a .sig in the folder this runs from)
+trap '[[ -z $tmp ]] || rm -f "$tmp" "$tmp.sig"' EXIT
 for server in "${servers[@]}"; do
     [[ -n $server && -n $tmp ]] || break
     curl -fsS --connect-timeout 10 -m 30 -o "$tmp" "$server/agros-approved" 2>/dev/null &&
@@ -54,7 +55,7 @@ for server in "${servers[@]}"; do
     fi
     echo "update-gate: AgrOS's approved list has no good signature by AgrOS's key ($server/agros-approved.sig): not taken, as if unreachable (the list kept from before, nothing new let through)" >&2
 done
-rm -f "$tmp" "$tmp.sig"
+[[ -z $tmp ]] || rm -f "$tmp" "$tmp.sig"
 waits=()
 for name in "${gated[@]}"; do
     have=$(pacman -Q "${db[@]}" -- "$name" 2>/dev/null | cut -d' ' -f2) || continue

@@ -119,7 +119,7 @@ list_proton() {
     while read -r fam api pat; do
         tag=
         while read -r where tools; do
-            [[ -n $(proton_dirs "$pat") ]] || continue
+            [[ $tools == /?* && -n $(proton_dirs "$pat") ]] || continue  # (as update_proton: a folder named in full)
             [[ -n $tag ]] || read -r tag _ < <(proton_latest "$api") || break
             label=$fam; [[ $where == lutris ]] && label="$fam (Lutris)"
             proton_has "$tag" "$pat" || printf 'proton\t%s\t%s\t%s\n' "$label" "$(proton_newest "$pat")" "$tag"
@@ -176,8 +176,12 @@ update_proton() {
     while read -r fam api pat; do
         tag=
         while read -r where tools; do
-            [[ -n $(proton_dirs "$pat") ]] || continue
-            find "$tools" -maxdepth 1 -name '.agros-proton.*' -mmin +360 -exec rm -rf {} + 2>/dev/null
+            # (only a folder named in full: what's removed below is inside it, never in a folder a relative runner_dir
+            # of lutris.conf would name from wherever this runs)
+            [[ $tools == /?* && -n $(proton_dirs "$pat") ]] || continue
+            # (a download an earlier run left: its own folders alone, by their mktemp name, inside this one)
+            find "$tools" -mindepth 1 -maxdepth 1 -type d -name '.agros-proton.??????' -mmin +360 \
+                -exec rm -rf {} + 2>/dev/null
             label=$fam; [[ $where == lutris ]] && label="$fam (Lutris)"
             if [[ -z $tag ]]; then
                 read -r tag url sums < <(proton_latest "$api") || { echo "$fam: can't reach its releases"; rc=1; break; }

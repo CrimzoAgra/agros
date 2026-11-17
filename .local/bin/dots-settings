@@ -40,6 +40,7 @@ scale, position, enabled; screens.main), read by user/monitors.lua; "from": "bin
 (Hyprland's list of binds), to show and to find clashes with."""
 import fcntl
 import json
+import math
 import os
 import pwd
 import re
@@ -695,7 +696,9 @@ def check(key, setting, value):
     if kind in ("choice", "image") and not setting.get("open") and value not in [o["value"] for o in setting["options"]]:
         return f"{key}: one of {', '.join(o['value'] for o in setting['options'])}"
     if kind == "number":
-        if isinstance(value, bool) or not isinstance(value, (int, float)) or setting.get("integer") and value != int(value):
+        # (NaN and Infinity, which JSON from a terminal allows: int() of them crashed this, and settings.lua can't hold them)
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) \
+                or setting.get("integer") and value != int(value):
             return f"{key}: a {'whole ' if setting.get('integer') else ''}number"
         if not setting.get("min", value) <= value <= setting.get("max", value):
             return f"{key}: from {setting['min']:g} to {setting['max']:g}"
@@ -746,7 +749,7 @@ def main(args):
             sys.exit(f"{args[1]}: the value as JSON (true, \"tiling\"...)")
         if "options_cmd" in setting and not setting.get("open"):
             setting["options"] = options_from(setting["options_cmd"])  # (checked against them)
-        if setting["type"] == "number" and setting.get("integer") and isinstance(value, float) and value == int(value):
+        if setting["type"] == "number" and setting.get("integer") and isinstance(value, float) and value.is_integer():
             value = int(value)  # (35.0 from the app's slider: 35)
         problem = check(args[1], setting, value)
         if problem:
