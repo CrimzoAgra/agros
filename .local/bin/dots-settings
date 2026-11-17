@@ -29,6 +29,8 @@ Kinds of setting ("type"): bool, choice (its "options", or "options_cmd": a comm
 or "value<TAB>label"; "open": a value not listed is kept), keys, number ("min", "max", "step", "integer"), text
 ("pattern": a regular expression the whole value must match, "format": how it's said when it doesn't), json
 (any JSON value: Caelestia's lists), image (a choice shown as pictures: the wallpaper). "readonly": shown, not changed.
+"needs": an app's setting (Startup's): programs on the PATH or paths (~: your home), one there meaning it's installed;
+with none, the app shows it as "(not installed)", not changed there.
 Caelestia's own options: a key caelestia-shell.<option> (its shell.json) or caelestia-tokens.<option> (its
 shell-tokens.json, sizes and timings): type, default and choices come from the installed Caelestia
 (caelestia-options.qml), so the schema only gives the label and description, and one Caelestia no longer has isn't
@@ -46,6 +48,7 @@ import math
 import os
 import pwd
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -653,6 +656,13 @@ def current(setting, saved):
     return value
 
 
+def installed(setting):
+    """Whether the app a setting is for is there (its "needs": a program on the PATH, or a path); true with none named"""
+    needs = setting.get("needs") or []
+    return not needs or any(os.path.exists(HOME + n[1:] if n.startswith("~/") else n) if "/" in n else shutil.which(n)
+                            for n in needs)
+
+
 def values(settings):
     saved = stored()
     return {key: current(s, saved) for key, s in settings.items()}
@@ -780,6 +790,9 @@ def main(args):
         now = values(settings)
         for s in (s for page in pages["pages"] for group in page["groups"] for s in group["settings"]):
             s["value"] = now[s["key"]]  # (every copy of one listed twice)
+            # (only in what the app shows: settings.lua keeps a value set, for when the app is installed)
+            if not installed(s) and not s.get("readonly"):
+                s.update(readonly=True, label=f"{s['label']} (not installed)")
         print(json.dumps(pages))
     elif cmd in ("values", "now"):
         print(json.dumps(values(settings)))
