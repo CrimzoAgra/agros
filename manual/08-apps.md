@@ -12,7 +12,7 @@ Everything here comes installed, listed next to the Windows app it replaces.
 | **qView**, an image viewer | Photos |
 | **mpv**, a video player | Media Player |
 | **VSCodium**, VS Code's open-source build | VS Code |
-| **Thunar**: the bar at the bottom shows how full the drive is (it changes colour when the drive is nearly full) | File Explorer |
+| **Thunar**: the bar at the bottom shows how full the drive is (it changes colour when the drive is nearly full); right-click a picture → **Set as wallpaper** | File Explorer |
 | **File Roller** + 7-Zip (Extract/Compress in the right-click menu) | WinRAR, 7-Zip |
 | **qBittorrent** | qBittorrent |
 | **Proton VPN** | Proton VPN |

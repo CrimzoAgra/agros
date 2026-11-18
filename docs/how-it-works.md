@@ -100,7 +100,7 @@ of yours for the mirror counts, not added again), and its removal takes them out
 | `agros-welcome` | The first-login step above |
 | `agros-keyring` | The repo's signing key |
 | `agros-vmware` | In a VMware VM, the desktop on its virtual graphics card: a shim that lets Hyprland and the login screen use its buffers (only there, only with `vmwgfx`; Hyprland gets it from a drop-in for its uwsm unit, `wayland-wm@hyprland.desktop.service.d`, so no app started through uwsm loads it) |
-| `agros-thunar-usage` | A Thunar plugin: a bar beside the free space in its status bar, showing how full the folder's drive is (each window and tab its own drive; the theme's warning colour past 90%) |
+| `agros-thunar-usage` | Two Thunar plugins: a bar beside the free space in its status bar, showing how full the folder's drive is (each window and tab its own drive; the theme's warning colour past 90%), and "Set as wallpaper" on a picture, through Caelestia (Thunar's own, Xfce and GNOME only, left out by agros-noextract.conf) |
 | `agros-wine` | One Wine: CachyOS's (`wine-cachyos-opt`, in `/opt`) first on the PATH (`profile.d`, fish's `vendor_conf.d`, `environment.d`), standing in for Arch's `wine` that `winetricks` needs (provides it, no conflict: a machine that has Arch's keeps updating, with it unused; `agros-desktop` lists this before the gaming packages, so new installs never get Arch's, ~600 MB, nor its Mono and Gecko, ~430 MB). Wine fetches Mono or Gecko itself when a program needs them; a double-clicked `.exe` opens in Faugus Launcher (Proton) |
 
 The AUR packages AgrOS uses (`aur/packages.txt`: Caelestia, equibop, Spicetify, darkly, ...) are built into
