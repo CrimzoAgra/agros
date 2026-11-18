@@ -406,7 +406,7 @@ step caelestia caelestia_setup
 offer() {
     [[ ! -e $st/offered ]] || return 0
     touch "$st/offer-sent"
-    local text admin
+    local text admin=
     # (the system's part offered to an admin (wheel) only: another account can't sudo, and its terminal only failed)
     [[ " $(id -nG 2>/dev/null) " == *" wheel "* ]] && admin=1
     text="Restore accounts: plug in your pen drive to bring back your logins, keys and browser profile."
