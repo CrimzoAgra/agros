@@ -83,7 +83,7 @@ settings_seen = -1  # its mtime when last read (-1: not yet; the first setting()
 
 def logged(fn):
     """An error (e.g. Hyprland renaming a field after an update) is logged and skipped, not fatal: one event goes
-    unhandled instead of the service crash-looping. dotfiles-check reports logged errors."""
+    unhandled instead of the service crash-looping. agros-check reports logged errors."""
     def run(*args, **kwargs):
         try:
             return fn(*args, **kwargs)

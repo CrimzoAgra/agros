@@ -14,7 +14,7 @@
 #   update-apps --qt-mark / --qt-rebuild   this run's own steps around its pacman -Syu, alone (tests/update-apps.sh):
 #                         the Qt Quickshell and Caelestia were built for written down (when it isn't yet), then what's
 #                         built on it rebuilt if Qt changed since
-#   update-apps --qt-stale   whether Qt changed since they were built (exit 0: it did; dotfiles-check's)
+#   update-apps --qt-stale   whether Qt changed since they were built (exit 0: it did; agros-check's)
 set -uo pipefail
 helpers=$(dirname "$(readlink -f "$0")")  # (the shared helpers, beside this: notify-wait)
 
@@ -114,7 +114,7 @@ rebuild_agros() {
 case ${1:-} in
     # (never failing: no stamp written, the next run writes it)
     --qt-mark) qt_mark || echo "!! The Qt Quickshell was built for couldn't be written down ($qt_stamp)"; exit 0 ;;
-    # dotfiles-check's: Qt changed since Quickshell and Caelestia were built (exit 0), else 1
+    # agros-check's: Qt changed since Quickshell and Caelestia were built (exit 0), else 1
     --qt-stale) [[ -s $qt_stamp && $(cat "$qt_stamp") != "$(qt_now)" ]] && ! qt_built; exit ;;
     --qt-rebuild) qt_rebuild; exit ;;
 esac

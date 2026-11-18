@@ -4,7 +4,7 @@
 # is skipped and the original files stay linked.
 #   usage: patch.py <installed caelestia dir> <overlay dir>   "Patched:", "Off:" or "WARNING: ... skipped" per feature
 #                                                             (exit 1 when one was skipped: caelestia-overlay keeps the
-#                                                             WARNING lines for dotfiles-check)
+#                                                             WARNING lines for agros-check)
 #          patch.py --list   the features as JSON (the Settings app's Features page, settings caelestia.<id>)
 import json
 import os

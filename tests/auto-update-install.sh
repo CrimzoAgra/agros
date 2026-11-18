@@ -2,9 +2,9 @@
 # agros-system's auto-update (packages/agros-system/auto-update), with its paths moved into a
 # throwaway folder and pacman/snapper (and the boot half's curl, flatpak, sudo) stand-ins. The install at shutdown
 # (--install): the safety snapshot taken without DBus (at shutdown snapperd can't be started over it), a failed install
-# puts pacman's package lists back, and how it went is written down for dotfiles-check (ok, held for a new Qt, failed,
+# puts pacman's package lists back, and how it went is written down for agros-check (ok, held for a new Qt, failed,
 # nothing to install); nothing installed from a boot download that didn't finish or under another of pacman's users,
-# counted without wiping a failed or held install, and said by dotfiles-check; the boot's lists taken by content or the
+# counted without wiping a failed or held install, and said by agros-check; the boot's lists taken by content or the
 # mirror's time (not the time a copy gave them); one cut off has pacman's lists put back at the next boot. The generated
 # script is shellchecked, and shutdown's own time limit is longer than the install's; the boot's download's unit holds off
 # neither shutdown nor sleep
@@ -256,18 +256,18 @@ rm "$t/pac/db.lck"
 [[ $(res) == "$before" && -s $t/au/held ]] || fail "a skipped install wiped how the last one went: $(res)"
 grep -q "something using pacman still ran ($holder /bin/sh $t/holder --dbpath $t/pac)" "$t/log" || fail "skipped for pacman's other user, not said"
 [[ $(cut -d' ' -f3- "$t/au/skipped") == "something using pacman still ran"* ]] || fail "the skip's reason not written down: $(cat "$t/au/skipped")"
-# dotfiles-check says it, and the failed install still
+# agros-check says it, and the failed install still
 mkdir -p "$t/h"
 for s in hyprctl Hyprland qs; do printf '#!/bin/sh\nexit 0\n' >"$t/bin/$s"; chmod +x "$t/bin/$s"; done
-out=$(HOME=$t/h AUTO_UPDATE_DIR=$t/au PACMAN_DB_DIR=$t/pac "$here/.local/bin/dotfiles-check" 2>&1) || true  # (problems: exit 1)
+out=$(HOME=$t/h AUTO_UPDATE_DIR=$t/au PACMAN_DB_DIR=$t/pac "$here/.local/bin/agros-check" 2>&1) || true  # (problems: exit 1)
 [[ $out == *"hasn't installed for 3 shutdowns in a row"*"the last: something using pacman still ran"* &&
     $out == *"failed to install at shutdown"* && $out == *"held back"* ]] ||
-    fail "dotfiles-check didn't say the skipped installs, or the failed or held one: $out"
+    fail "agros-check didn't say the skipped installs, or the failed or held one: $out"
 # (the held Qt installed since, by Updates: not said any more, though only the next shutdown's install takes its file
 # away; the old one still installed: said)
-out=$(Q_HAVE=6.10.0-1 HOME=$t/h AUTO_UPDATE_DIR=$t/au PACMAN_DB_DIR=$t/pac "$here/.local/bin/dotfiles-check" 2>&1) || true
+out=$(Q_HAVE=6.10.0-1 HOME=$t/h AUTO_UPDATE_DIR=$t/au PACMAN_DB_DIR=$t/pac "$here/.local/bin/agros-check" 2>&1) || true
 [[ -s $t/au/held && $out != *"held back"* ]] || fail "a held-back Qt said after it was installed: $out"
-out=$(Q_HAVE=6.9.0-1 HOME=$t/h AUTO_UPDATE_DIR=$t/au PACMAN_DB_DIR=$t/pac "$here/.local/bin/dotfiles-check" 2>&1) || true
+out=$(Q_HAVE=6.9.0-1 HOME=$t/h AUTO_UPDATE_DIR=$t/au PACMAN_DB_DIR=$t/pac "$here/.local/bin/agros-check" 2>&1) || true
 [[ $out == *"held back"* ]] || fail "a held-back Qt said gone while the old one is still installed: $out"
 # The boot partition in fstab but not mounted: nothing installed (a kernel would go to the folder under it), said
 lists
@@ -586,8 +586,8 @@ Q_HAVE=0.2-1 PACMAN_AUR_RC=1 "$t/auto-update" --install >/dev/null || fail "the 
     fail "the repo's part not installed without the AUR apps pacman refused: $(res) $(cat "$t/calls")"
 [[ $(sed -n 2p "$t/au/aur-install-failed") == "quickshell-git 0.3-1" && $(head -1 "$t/au/aur-install-failed") == *"conflicting files"* ]] ||
     fail "the AUR apps left out not written down: $(cat "$t/au/aur-install-failed" 2>/dev/null)"
-out=$(HOME=$t/h AUTO_UPDATE_DIR=$t/au PACMAN_DB_DIR=$t/pac Q_HAVE=0.2-1 "$here/.local/bin/dotfiles-check" 2>&1) || true
-[[ $out == *"couldn't install AUR apps at shutdown (quickshell-git"*"conflicting files"* ]] || fail "dotfiles-check didn't say the AUR apps left out: $out"
+out=$(HOME=$t/h AUTO_UPDATE_DIR=$t/au PACMAN_DB_DIR=$t/pac Q_HAVE=0.2-1 "$here/.local/bin/agros-check" 2>&1) || true
+[[ $out == *"couldn't install AUR apps at shutdown (quickshell-git"*"conflicting files"* ]] || fail "agros-check didn't say the AUR apps left out: $out"
 lists; built; : >"$t/calls"
 QU=$newqt Q_HAVE=0.3-1 PACMAN_AUR_RC=1 "$t/auto-update" --install >/dev/null && fail "a new Qt installed without its rebuild"
 [[ $(res) == "failed "* && $(grep -c '^pacman -Su' "$t/calls") == 1 && $(cat "$t/pac/sync/core.db") == old ]] ||
@@ -602,8 +602,8 @@ Q_HAVE=0.2-1 "$t/auto-update" --install >/dev/null
 [[ $(res) == "ok "* ]] && grep -q '^pacman -Su .* agros-aur/quickshell-git' "$t/calls" ||
     fail "the rest not installed beside a failed AUR build: $(res) $(cat "$t/calls")"
 grep -q "AUR apps wait" "$t/log" || fail "the AUR apps waiting not said"
-out=$(HOME=$t/h AUTO_UPDATE_DIR=$t/au PACMAN_DB_DIR=$t/pac "$here/.local/bin/dotfiles-check" 2>&1) || true
-[[ $out == *"couldn't build AUR apps (equibop: the build failed): still waiting: equibop;"* ]] || fail "dotfiles-check didn't say the failed AUR build: $out"
+out=$(HOME=$t/h AUTO_UPDATE_DIR=$t/au PACMAN_DB_DIR=$t/pac "$here/.local/bin/agros-check" 2>&1) || true
+[[ $out == *"couldn't build AUR apps (equibop: the build failed): still waiting: equibop;"* ]] || fail "agros-check didn't say the failed AUR build: $out"
 rm -rf "$aurdir"
 
 # Firmware: found at boot (fwupd), written down and said (in a unit of its own); installed at shutdown only once said,
@@ -633,18 +633,18 @@ grep -E 'timeout [^|]*fwupdtool update' "$t/auto-update" && fail "the firmware's
 [[ ! -e $t/au/firmware && ! -e $t/au/firmware-told ]] || fail "installed firmware still waiting"
 grep -q "a UEFI or BIOS update applies at the next boot" "$t/log" || fail "a staged UEFI update not said"
 # Skipped (fwupd's own checks: it needs AC power), though fwupdtool exits 0: the device still offers it after. Kept for
-# the next shutdown, said by dotfiles-check with fwupd's reason; one that fails outright the same
+# the next shutdown, said by agros-check with fwupd's reason; one that fails outright the same
 FW=$FW "$t/auto-update"; cp "$t/au/firmware" "$t/au/firmware-told"
 lists; : >"$t/log"; FW_LEFT=$FW "$t/auto-update" --install >/dev/null
 [[ -s $t/au/firmware-told && -s $t/au/firmware-failed ]] || fail "a skipped firmware update (exit 0) not kept and noted"
 grep -q "firmware: installed" "$t/log" && fail "a skipped firmware update logged as installed"
-out=$(HOME=$t/h AUTO_UPDATE_DIR=$t/au PACMAN_DB_DIR=$t/pac "$here/.local/bin/dotfiles-check" 2>&1) || true
-[[ $out == *"firmware update failed to install at shutdown"*"Device requires AC power to be connected"* ]] || fail "dotfiles-check didn't say the skipped firmware: $out"
+out=$(HOME=$t/h AUTO_UPDATE_DIR=$t/au PACMAN_DB_DIR=$t/pac "$here/.local/bin/agros-check" 2>&1) || true
+[[ $out == *"firmware update failed to install at shutdown"*"Device requires AC power to be connected"* ]] || fail "agros-check didn't say the skipped firmware: $out"
 lists; rm "$t/au/firmware-failed"; FWTOOL_RC=1 "$t/auto-update" --install >/dev/null
 [[ -s $t/au/firmware-told && $(cut -d' ' -f3- "$t/au/firmware-failed") == flashing ]] || fail "a failed firmware update not kept and noted"
 # The EFI partition too small for it (beside Windows, often Windows' 100 MB one): fwupd refuses it before writing
 # anything, every time. Said once, at the next boot's login, as that; not tried again at every shutdown, nor said at
-# every login (dotfiles-check), until a newer one comes
+# every login (agros-check), until a newer one comes
 lists; : >"$t/calls"; FWTOOL_RC=1 FW_NOROOM=1 "$t/auto-update" --install >/dev/null
 [[ ! -e $t/au/firmware-failed && ! -e $t/au/firmware-told ]] && cmp -s "$t/au/firmware" "$t/au/firmware-noroom" ||
     fail "a firmware update the EFI partition has no room for kept to try again, or said at every login"

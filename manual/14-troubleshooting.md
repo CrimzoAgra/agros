@@ -2,7 +2,7 @@
 
 ## Something stopped working
 
-Run `dotfiles-check` in a terminal. It checks the desktop's settings, AgrOS's changes, and that everything that should
+Run `agros-check` in a terminal. It checks the desktop's settings, AgrOS's changes, and that everything that should
 be running is, and tells you what's wrong. It also runs by itself 30 seconds after you log in, and only sends a
 notification when it finds something.
 
@@ -13,7 +13,7 @@ Press **Ctrl+Super+Alt+R** to restart the shell.
 ## The bar came back without the dock
 
 If AgrOS's changes to the shell stop it from loading (after an update to Caelestia or Quickshell), it starts without
-them rather than not at all: the bar as Caelestia has it, no dock, and a notification says so. `dotfiles-check` says
+them rather than not at all: the bar as Caelestia has it, no dock, and a notification says so. `agros-check` says
 why. Your changes are tried again at your next login and after each update.
 
 ## The login screen doesn't appear

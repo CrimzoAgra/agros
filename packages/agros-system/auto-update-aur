@@ -6,7 +6,7 @@
 # AUR's newest). Built as an account of their own (agros-aur: never root, nor a person's), in a sandbox that sees the
 # system as the download leaves it (its packages unpacked over /usr), so they fit the new runtime before it's installed;
 # installed at shutdown in auto-update's own pacman transaction (from a local repo, agros-aur). Each base on its own:
-# one that fails keeps its version (dotfiles-check names it), the others go on; only a new runtime's own rebuilds hold
+# one that fails keeps its version (agros-check names it), the others go on; only a new runtime's own rebuilds hold
 # it back.
 #   auto-update-aur <dbpath>             as root: plan, build (as agros-aur), collect. Writes /var/lib/auto-update/aur/:
 #                                        planned (it ran to the end), rebuild (those a new runtime needs rebuilt),
@@ -245,7 +245,7 @@ mapfile -t ignored < <(pacman-conf --config "$conf" IgnorePkg 2>/dev/null)
 # dropped it, the AUR's of that name is someone else's build), or one whose AUR maintainers changed since its last build
 # here (adopted by another, or a co-maintainer added or changed: a co-maintainer can push its build files too). Those
 # wait for update-apps in a terminal, where paru shows its build files for review (the Updates app, which can't show
-# them, leaves them out; dotfiles-check says so, from failed and wanted). The
+# them, leaves them out; agros-check says so, from failed and wanted). The
 # maintainers as one word, "<maintainer>:<co-maintainers, sorted, a comma between two>". Kept across runs: those each
 # base had at its last build here (aur-maintainers, "<base> <maintainers>": the first seen taken as they are), and a
 # change waiting (aur-maintainer-changed, "<base> <maintainers> <version installed then>"): once that version is
@@ -337,7 +337,7 @@ while IFS=$'\t' read -r name base ver m co; do
         fi
     fi
 done <<<"$info"
-# (its whole base, as for one held back; still in wanted, so dotfiles-check says it waits)
+# (its whole base, as for one held back; still in wanted, so agros-check says it waits)
 for b in "${!guarded[@]}"; do
     [[ -n ${guarded[$b]} && -n ${bases[$b]:-} ]] || continue
     drop "$b" "${guarded[$b]}"
@@ -438,7 +438,7 @@ need=() ok=()
 for b in "${order[@]}"; do
     mapfile -t deps < <(sed -n 's/^[[:space:]]*\(make\)\{0,1\}depends\(_x86_64\)\{0,1\} = //p' "$aur/info/$b" | sort -u)
     why='' missing=()
-    # (the .SRCINFO's text never written as it is: dotfiles-check shows this on the desktop)
+    # (the .SRCINFO's text never written as it is: agros-check shows this on the desktop)
     for d in "${deps[@]}"; do [[ $d =~ $dep_re ]] || { why="it needs something that isn't a package's name: ${d//[^A-Za-z0-9@._+<>=-]/}"; break; }; done
     [[ -z $why ]] && ((${#deps[@]})) && mapfile -t missing < <(pacman -T --dbpath "$db" -- "${deps[@]}" 2>/dev/null)
     mine=()

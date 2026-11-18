@@ -1,7 +1,7 @@
 # agros-system: for every AgrOS user (agros-each-user)
 # A Hyprland update: the config checked against it straight away (Hyprland only: its Lua API is Hyprland's own, not its
 # libraries', which agros-hyprbars-prebuild.hook adds as the plugin builds against their headers), its errors
-# written down for dotfiles-check (hypr-config-check), so a renamed API is said at once, not found at the next login.
+# written down for agros-check (hypr-config-check), so a renamed API is said at once, not found at the next login.
 # agros-scripts too: a new hypr-config-check checks again (Hyprland --verify-config, well under a second per user; nothing
 # shown, its result only written down)
 [Trigger]

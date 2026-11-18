@@ -6,13 +6,13 @@
 #                         when you start it, as AUR apps: the code is built and checked, so not unseen at boot)
 #   capri-update --check  only fetch and say whether an update is waiting ("capri: update available (<commit>)":
 #                         update-kinds' list, and its --boot run, auto-update's, instead of the update)
-# Exit 1 when it failed, 2 when it failed and said so in a notification itself (dotfiles-check's install at login then
+# Exit 1 when it failed, 2 when it failed and said so in a notification itself (agros-check's install at login then
 # adds none of its own)
 # Built in her clone (~/.local/share/capri/src), Rust's build kept in ~/.local/share/capri/target between runs (one
 # from scratch takes minutes and ~1.5 GB: each update only builds what changed). Her one binary (her page is in it)
 # goes to ~/.local/share/capri/<commit>/capri once it passes her checks (her types, her tests, built); then
 # ~/.local/share/capri/current points at it, the build ~/.local/bin/capri starts. A commit that fails is said once
-# (notification, dotfiles-check) and not built again (her packages not downloading is tried again next time; failing
+# (notification, agros-check) and not built again (her packages not downloading is tried again next time; failing
 # so three runs in a row, it's that commit's own); she stays on the build she has. A running Capri carries on with her
 # build until she's next started.
 set -uo pipefail
@@ -32,7 +32,7 @@ export GIT_TERMINAL_PROMPT=0
 # update holds shutdown off until it's done, and the update check (update-apps --check) would never finish
 export GIT_HTTP_LOW_SPEED_LIMIT=1000 GIT_HTTP_LOW_SPEED_TIME=30
 # Rust's build shared by every run (incremental), outside her clone (git clean empties that); rustup's own install
-# (rustup.rs's script) in ~/.cargo/bin, as update-kinds has it, for the install at login too (dotfiles-check)
+# (rustup.rs's script) in ~/.cargo/bin, as update-kinds has it, for the install at login too (agros-check)
 export CARGO_TARGET_DIR="$dir/target" PATH=$HOME/.cargo/bin:$PATH
 # (notify-when-up: once the notification server is up, in the background; normal urgency, from Capri)
 warn() {

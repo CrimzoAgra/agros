@@ -26,7 +26,7 @@ mkdir -m700 "$t/.xdg-run"
 export XDG_RUNTIME_DIR=$t/.xdg-run DBUS_SESSION_BUS_ADDRESS=unix:path=$t/.xdg-run/no-bus
 unset HYPRLAND_INSTANCE_SIGNATURE WAYLAND_DISPLAY DISPLAY
 # Nor the machine's upstream gate (update-gate): its gated list and approved versions (and the day AgrOS's checks last
-# passed, dotfiles-check's) the test's own, none unless it makes them (on an AgrOS machine a test read
+# passed, agros-check's) the test's own, none unless it makes them (on an AgrOS machine a test read
 # /etc/pacman.d/agros-gate.conf and fetched the real approved list), nor AgrOS's key to check the list's signature with
 # (a test that wants one signs with its own)
 export AGROS_GATE=$t/agros-gate.conf AGROS_GATE_CACHE=$t/agros-approved AGROS_GATE_KEYRING=$t/agros-gate-keyring.gpg \

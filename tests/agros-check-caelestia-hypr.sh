@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# dotfiles-check and Caelestia's own Hyprland config (~/.config/hypr, copied once by `caelestia install`): its repo
+# agros-check and Caelestia's own Hyprland config (~/.config/hypr, copied once by `caelestia install`): its repo
 # (Caelestia's clone, its state file, as caelestia-cli keeps them) with a newer version of it than the one installed is
 # a note (not a problem; notified once, low urgency) pointing to caelestia-hypr-refresh, never caelestia update; up to
 # date, or newer only outside hypr/, nothing said. caelestia-hypr-refresh replaces the files not edited, writes .new
@@ -23,7 +23,7 @@ printf '======== Config parsing result:\n\nconfig ok\n'
 H
 printf '#!/bin/sh\nexit 0\n' >"$t/qs"
 chmod +x "$t/Hyprland" "$t/qs"
-check() { PATH=$t:$PATH "$here/.local/bin/dotfiles-check" 2>&1; }
+check() { PATH=$t:$PATH "$here/.local/bin/agros-check" 2>&1; }
 
 # Caelestia's repo upstream (a bare one): hypr/ in its first version, installed from it
 up=$t/upstream.git work=$t/work dots=$XDG_STATE_HOME/caelestia/dots
@@ -59,8 +59,8 @@ grep -q "Hyprland config (~/.config/hypr) has an update: run caelestia-hypr-refr
     fail "Caelestia's newer Hyprland config upstream not said: $out"
 grep -q "caelestia update" <<<"$out" && fail "caelestia update (a system update past Updates) recommended: $out"
 printf '#!/bin/sh\necho "notify $*" >>%s/notified\n' "$t" >"$t/notify-send"; chmod +x "$t/notify-send"
-PATH=$t:$PATH "$here/.local/bin/dotfiles-check" --notify >/dev/null 2>&1
-PATH=$t:$PATH "$here/.local/bin/dotfiles-check" --notify >/dev/null 2>&1
+PATH=$t:$PATH "$here/.local/bin/agros-check" --notify >/dev/null 2>&1
+PATH=$t:$PATH "$here/.local/bin/agros-check" --notify >/dev/null 2>&1
 { [[ $(grep -c "Hyprland config has an update" "$t/notified") == 1 ]] && grep -q "^notify -u low .*Hyprland config has an update" "$t/notified" &&
     ! grep -q "Hyprland config" <<<"$(grep "^notify -u critical" "$t/notified")"; } ||
     fail "the update not notified once, at low urgency: $(cat "$t/notified")"
@@ -226,4 +226,4 @@ rc=0; out=$(refresh) || rc=$?
     fail "an unknown installed version not said (rc $rc): $out"
 rc=0; out=$(PATH=$t:$PATH "$here/.local/bin/caelestia-hypr-refresh" --check 2>"$t/err") || rc=$?
 [[ $rc == 2 && -z $out && $(cat "$t/err") == *"isn't in its clone"* ]] || fail "--check claimed an update from an unknown version (rc $rc): $out"
-echo "ok dotfiles-check-caelestia-hypr"
+echo "ok agros-check-caelestia-hypr"

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Checks the Hyprland config against the Hyprland installed, without starting it (Hyprland --verify-config): run by the
 # pacman hook packages/agros-system/agros-hypr-config-check.hook after a Hyprland (or agros-scripts) update, so an API
-# it renamed is found then, not at the next login with binds missing; also by dotfiles-check at each check, and by
+# it renamed is found then, not at the next login with binds missing; also by agros-check at each check, and by
 # caelestia-hypr-refresh on Caelestia's new config before it goes in. Its errors go to ~/.local/state/hypr-config-check,
-# which dotfiles-check reports (and this prints); none: that file goes. Exit 0: it loads; 1: errors; 2: couldn't check
+# which agros-check reports (and this prints); none: that file goes. Exit 0: it loads; 1: errors; 2: couldn't check
 # (Hyprland refused to run here: its file left as it was)
 set -uo pipefail
 state="${XDG_STATE_HOME:-$HOME/.local/state}/hypr-config-check"
@@ -18,7 +18,7 @@ if [[ -z ${XDG_RUNTIME_DIR:-} || ! -d ${XDG_RUNTIME_DIR:-} ]]; then
     trap 'rm -rf "$XDG_RUNTIME_DIR"' EXIT
 fi
 # (outside the session, so it loads the files on disk rather than asking the running Hyprland. DOTS_VERIFY_CONFIG:
-# the config only checks then, with none of its side effects: no "failed to load" notification, which dotfiles-check
+# the config only checks then, with none of its side effects: no "failed to load" notification, which agros-check
 # gives itself, no settings file written (hypr-user.lua), and no keymap read or cached (user/keys.lua))
 # (--foreground: Hyprland kept in its caller's process group, so caelestia-hypr-refresh stopped as a group (a closed
 # terminal) stops it too; in a group of its own it ran on, up to the minute, writing into the refresh's staging folder

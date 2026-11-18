@@ -38,6 +38,6 @@ hl.on("hyprland.start", function()
 end)
 
 -- After login settles: a notification if a Hyprland or Caelestia update broke something of these dotfiles
--- (config errors, Caelestia patches that no longer fit, services down or logging errors; ~/.local/bin/dotfiles-check)
+-- (config errors, Caelestia patches that no longer fit, services down or logging errors; ~/.local/bin/agros-check)
 -- (A sleep in its own process, not hl.timer: a config reload at login would drop the timer)
-hl.on("hyprland.start", function() hl.exec_cmd("sh -c 'sleep 30; exec ~/.local/bin/dotfiles-check --notify'") end)
+hl.on("hyprland.start", function() hl.exec_cmd("sh -c 'sleep 30; exec ~/.local/bin/agros-check --notify'") end)

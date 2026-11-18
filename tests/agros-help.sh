@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# The commands you might type (agros-*, dotfiles-check): --help and -h print what the command does and exit 0; an
+# The commands you might type (agros-*, agros-check): --help and -h print what the command does and exit 0; an
 # option it doesn't know is refused (exit 2), with nothing run. agros-welcome --help ran the first login's part,
-# agros-links --help linked and copied, dotfiles-check --help ran the check, agros-each-user --help looked for a
+# agros-links --help linked and copied, agros-check --help ran the check, agros-each-user --help looked for a
 # command named --help in every home
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
@@ -9,7 +9,11 @@ set -euo pipefail
 mkdir -p "$t/home" "$t/lib/bin"
 # (anything a command runs past its options: a mark that it ran)
 for c in hyprctl systemctl notify-send getent pacman flatpak qs caelestia flock; do stub "$c" "touch '$t/ran-$c'"; done
-for c in agros-links agros-each-user agros-welcome dotfiles-check agros-personal; do
+# agros-check's old name (a home's copy of desktop.lua from before still runs it): agros-check itself
+out=$(env -i HOME="$t/home" PATH="$t/bin:/usr/bin:/bin" AGROS_LIB="$t/lib" bash "$here/.local/bin/dotfiles-check" --help 2>&1) ||
+    fail "dotfiles-check --help failed: $out"
+[[ $out == *"agros-check --notify"* ]] || fail "dotfiles-check isn't agros-check: $out"
+for c in agros-links agros-each-user agros-welcome agros-check agros-personal; do
     for h in --help -h; do
         out=$(env -i HOME="$t/home" PATH="$t/bin:/usr/bin:/bin" AGROS_LIB="$t/lib" bash "$here/.local/bin/$c" "$h" 2>&1) ||
             fail "$c $h failed: $out"

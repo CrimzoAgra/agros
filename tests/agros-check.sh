@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# dotfiles-check's "is this shell running": by the configs Quickshell lists, missing ones reported; no repo to
+# agros-check's "is this shell running": by the configs Quickshell lists, missing ones reported; no repo to
 # compare the system files with doesn't call them out of date
 set -uo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
@@ -13,7 +13,7 @@ printf '======== Config parsing result:\n\nconfig ok\n'
 H
 chmod +x "$t/Hyprland"
 printf '#!/bin/sh\nprintf "  Config path: %%s\\n" "$HOME/.config/quickshell/caelestia/shell.qml" "$HOME/.config/quickshell/widgets/shell.qml"\n' >"$t/qs"; chmod +x "$t/qs"
-out=$(PATH=$t:$PATH "$here/.local/bin/dotfiles-check" 2>&1)
+out=$(PATH=$t:$PATH "$here/.local/bin/agros-check" 2>&1)
 grep -q "Not running: qs -c switcher" <<<"$out" || fail "a missing shell wasn't reported: $out"
 grep -q "Not running: qs -c caelestia\|Not running: qs -c widgets" <<<"$out" && fail "a running shell reported missing: $out"
 
@@ -34,7 +34,7 @@ cat >"$t/qs" <<'Q'
     "WARN: @other/modules/Mine.qml[1:1]: ReferenceError: Theirs too is not defined"
 exit 0
 Q
-out=$(HOME=$h PATH=$t:$PATH "$here/.local/bin/dotfiles-check" 2>&1)
+out=$(HOME=$h PATH=$t:$PATH "$here/.local/bin/agros-check" 2>&1)
 grep -q "ReferenceError: Gone" <<<"$out" || fail "an overlay QML error wasn't reported: $out"
 grep -q "of null" <<<"$out" && fail "a list item going away was reported: $out"
 # ...nor a window read before it has its IPC object (Workspace.qml's, upstream's line: Steam's windows coming and
@@ -45,7 +45,7 @@ grep -q "Theirs" <<<"$out" && fail "Caelestia's own file of a similar name blame
 grep -q 'no longer has "system_monitor"' <<<"$out" || fail "a missing Caelestia tag wasn't reported: $out"
 grep -q 'no longer has "todo_app"' <<<"$out" && fail "a present Caelestia tag reported missing: $out"
 # No repo where it looks (cloned elsewhere): the installed system files aren't all called out of date
-out=$(HOME=$h DOTFILES_DIR=$t/none PATH=$t:$PATH "$here/.local/bin/dotfiles-check" 2>&1)
+out=$(HOME=$h DOTFILES_DIR=$t/none PATH=$t:$PATH "$here/.local/bin/agros-check" 2>&1)
 grep -q "System files not the repo" <<<"$out" && fail "no repo to compare with, system files called older: $out"
 
 # Hyprland's config errors: from checking it (Hyprland --verify-config), not from hyprctl configerrors alone, which every
@@ -57,7 +57,7 @@ cat >"$t/hyprctl" <<'H'
 exit 0
 H
 chmod +x "$t/hyprctl"
-out=$(HOME=$h PATH=$t:$PATH "$here/.local/bin/dotfiles-check" 2>&1)
+out=$(HOME=$h PATH=$t:$PATH "$here/.local/bin/agros-check" 2>&1)
 grep -q "user.lua:3: in the session only" <<<"$out" || fail "a config file's error from the session not reported: $out"
 grep -q "hl.window_rule" <<<"$out" && fail "a failed hyprctl eval reported as a config error: $out"
 cat >"$t/Hyprland" <<'H'
@@ -65,7 +65,7 @@ cat >"$t/Hyprland" <<'H'
 printf '======== Config parsing result:\n\nuser/apps.lua:7: bad bind\n'
 exit 1
 H
-out=$(HOME=$h PATH=$t:$PATH "$here/.local/bin/dotfiles-check" 2>&1)
+out=$(HOME=$h PATH=$t:$PATH "$here/.local/bin/agros-check" 2>&1)
 grep -q "Hyprland config errors: user/apps.lua:7: bad bind" <<<"$out" || fail "the config's own error (checked) not reported: $out"
 # The install at shutdown (auto-update --install writes down how it went): a failure reported with its reason, an ok
 # one not; pacman's own lock with no pacman running reported, not while one runs
@@ -76,7 +76,7 @@ printf '#!/bin/sh\nexit 1\n' >"$t/pgrep"; chmod +x "$t/pgrep"
 # (an administrator's account, wheel, unless a check says otherwise: what it's told to do depends on it)
 # shellcheck disable=SC2016  # (expanded by the stand-in)
 printf '#!/bin/sh\n[ "$1" = -nG ] && exec echo "${ID_GROUPS-users wheel}"\nexec /usr/bin/id "$@"\n' >"$t/id"; chmod +x "$t/id"
-chk() { HOME=$h AUTO_UPDATE_DIR=$t/au PACMAN_DB_DIR=$t/pacdb PATH=$t:$PATH "$here/.local/bin/dotfiles-check" 2>&1; }
+chk() { HOME=$h AUTO_UPDATE_DIR=$t/au PACMAN_DB_DIR=$t/pacdb PATH=$t:$PATH "$here/.local/bin/agros-check" 2>&1; }
 out=$(chk)
 grep -q "failed to install at shutdown (2026-11-05 22:10: error: failed to commit transaction" <<<"$out" ||
     fail "a failed install at shutdown not reported: $out"
@@ -154,7 +154,7 @@ done
 # (dates the region's way, pt_PT's: the day in agros-arch-ok read all the same. And the file's time given as @seconds:
 # date's own output there, "sex 09 out 2026", isn't one touch -d reads back, so the file kept today's)
 arch_ok() { echo "$1" >"$t/arch-ok"; touch -d "$2" "$t/arch-ok"
-    HOME=$h AGROS_ARCH_OK=$t/arch-ok PATH=$t:$PATH LC_TIME=pt_PT.UTF-8 "$here/.local/bin/dotfiles-check" 2>&1; }
+    HOME=$h AGROS_ARCH_OK=$t/arch-ok PATH=$t:$PATH LC_TIME=pt_PT.UTF-8 "$here/.local/bin/agros-check" 2>&1; }
 out=$(arch_ok "$(date -ud '12 days ago' +%Y/%m/%d)" now)
 grep -qF "AgrOS's checks haven't passed for 12 days: Hyprland updates wait until they do" <<<"$out" || fail "checks not passed for 12 days not said: $out"
 out=$(arch_ok "$(date -ud '3 days ago' +%Y/%m/%d)" now)
@@ -163,4 +163,4 @@ out=$(arch_ok "$(date -ud '40 days ago' +%Y/%m/%d)" "@$(date -d '39 days ago' +%
 grep -q "checks haven't passed" <<<"$out" && fail "a copy not refreshed since counted to today: $out"
 out=$(arch_ok "not a date" "now")
 grep -q "checks haven't passed" <<<"$out" && fail "a copy that isn't a date said: $out"
-echo "ok dotfiles-check"
+echo "ok agros-check"

@@ -13,9 +13,9 @@
 | `update-apps` | Update everything now |
 | `agros-personal` | Restore your accounts from the pen drive |
 | `agros-personal --save` | Save your accounts to the pen drive |
-| `dotfiles-check` | Check that everything is working (see [Troubleshooting](14-troubleshooting.md)) |
+| `agros-check` | Check that everything is working (see [Troubleshooting](14-troubleshooting.md)) |
 
-AgrOS's own commands (`agros-personal`, `agros-welcome`, `agros-links`, `agros-each-user`, `dotfiles-check`) say what
+AgrOS's own commands (`agros-personal`, `agros-welcome`, `agros-links`, `agros-each-user`, `agros-check`) say what
 they do and what they take with `--help`.
 
 ## Tools that come with it

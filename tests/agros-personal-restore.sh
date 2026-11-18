@@ -93,7 +93,7 @@ lutris_db "$new" ea-app 0 "" ""  # (lutris-library's entry for it, not installed
 nl=$new/.config/librewolf/librewolf/xyz.default-release
 echo stale >"$nl/logins.json-wal"  # the new profile's journal, which would be replayed over the one brought back
 # GitHub's login back, gh not taking it yet (it's in the keyring brought back, which opens from the next login): Capri
-# left to that login (dotfiles-check's mark), said, not tried now
+# left to that login (agros-check's mark), said, not tried now
 mkdir -p "$t/ghbin"; printf '#!/bin/sh\n[ "$1 $2" = "auth status" ] && exit 1\nexit 0\n' >"$t/ghbin/gh"
 printf '#!/bin/sh\ntouch "%s/capri-ran"\n' "$t" >"$repo/.local/bin/capri-update"; chmod +x "$t/ghbin/gh" "$repo/.local/bin/capri-update"
 # (the desktop's settings: Proton VPN's start at login off, as it is at first)

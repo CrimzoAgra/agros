@@ -310,7 +310,7 @@ personal_restore() {
     [[ -n $prof ]] || echo "LibreWolf has no profile yet: start it once and close it, then agros-personal."
     # Capri: her fork is private, so an install without your GitHub login couldn't fetch her. With it back now, she's
     # installed (a failure said, the restore still done). gh keeps its login in the keyring, and the one brought back
-    # opens only from the next login: then dotfiles-check installs her (its mark), as it runs at every login
+    # opens only from the next login: then agros-check installs her (its mark), as it runs at every login
     if [[ ! -e ${XDG_DATA_HOME:-$HOME/.local/share}/capri/current && -x $helpers/capri-update ]] && command -v gh >/dev/null; then
         if gh auth status >/dev/null 2>&1; then
             echo "Installing Capri (your GitHub login is back)..."

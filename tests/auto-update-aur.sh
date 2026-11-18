@@ -205,7 +205,7 @@ stub repo-add 'shift; : >"$1"; ln -sf "${1##*/}" "${1%.tar.gz}"'
 
 # A .SRCINFO's dependency that would be an option to root's pacman: refused, never passed on
 : >"$t/calls"
-# (and never written down as it is: dotfiles-check shows it in a notification, which renders links and images)
+# (and never written down as it is: agros-check shows it in a notification, which renders links and images)
 MAKEDEP='--dbpath=/tmp/x ![i](https://e.vil/x.png)' "$t/auto-update-aur" "$t/db" >"$t/out" 2>&1 && fail "an option for a dependency reported success"
 [[ $(cat "$aur/failed") == $'equibop: it needs something that isn\'t a package\'s name: --dbpath=tmpxihttpse.vilx.png\nquickshell-git: it needs something that isn\'t a package\'s name: --dbpath=tmpxihttpse.vilx.png' ]] &&
     ! grep -q '^pacman -T' "$t/calls" ||
@@ -332,7 +332,7 @@ reason() {
 stub pacman-conf '[ "$1" = CacheDir ] && echo '"$t/cache/"'; true'
 # The AUR's foreign apps built unreviewed, but not one whose AUR maintainer changed since its last build here (adopted by
 # another), nor one a signed repository installed (foreign since that repository dropped it: the AUR's of that name is
-# someone else's): said (failed), still in wanted (dotfiles-check names it), and left for Updates, where it can be
+# someone else's): said (failed), still in wanted (agros-check names it), and left for Updates, where it can be
 # reviewed. Once updated from there, the new maintainer taken. The first maintainer seen: taken as it is
 # (maintained <maintainer> [<co-maintainers, as JSON strings>])
 maintained() { stub curl "echo '{\"results\":[{\"Name\":\"equibop\",\"PackageBase\":\"equibop\",\"Version\":\"1.1-1\",\"Maintainer\":\"$1\"${2:+,\"CoMaintainers\":[$2]}}]}'"; }

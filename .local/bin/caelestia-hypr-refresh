@@ -7,8 +7,8 @@
 # one that passes goes into ~/.config/hypr; any error (or no check possible), and nothing there changes, said with the
 # errors. A file Caelestia turned into a folder, or the reverse, is left for you, said; so is one in a folder that's a
 # link of yours (stow's). (~/.config: $XDG_CONFIG_HOME when set, as Caelestia uses it.)
-#   caelestia-hypr-refresh           refresh (by hand: dotfiles-check says when there's one)
-#   caelestia-hypr-refresh --check   dotfiles-check's: only print the newer version's commit (exit 0), else exit 1 (up
+#   caelestia-hypr-refresh           refresh (by hand: agros-check says when there's one)
+#   caelestia-hypr-refresh --check   agros-check's: only print the newer version's commit (exit 0), else exit 1 (up
 #                                    to date) or 2 (Caelestia's dots not installed, or its versions unknown here: said
 #                                    on stderr)
 # "Edited" is against the version last refreshed to (~/.local/state/caelestia-hypr-refresh), else the one Caelestia

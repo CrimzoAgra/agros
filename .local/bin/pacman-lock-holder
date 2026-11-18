@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # pacman-lock-holder [<pacman's db folder>]: something running that may hold pacman's lock, "<pid> <its command>" (exit
-# 1: none). The one list of what takes it (dotfiles-check, auto-update): pacman (paru, yay and the shutdown install run
+# 1: none). The one list of what takes it (agros-check, auto-update): pacman (paru, yay and the shutdown install run
 # it) and the programs built on its library (pamac's daemon, PackageKit's); pacman-key and paccache don't. Not pacman on
 # other lists (-b/--dbpath elsewhere: checkupdates', the boot's download; -r/--root another system's, whose list is in
 # that root) nor one only reading: a query (-Q..., paru -Qua), a dependency test (-T), a search, info, list or group

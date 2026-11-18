@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Capri after a restore (agros-personal's mark: gh's login came back in the keyring, which opens only from the next
-# login): dotfiles-check at that login (--notify) installs her with capri-update, in the background, a failure said in
+# login): agros-check at that login (--notify) installs her with capri-update, in the background, a failure said in
 # a notification; gh still without a login, said as a problem; once either way (the mark gone); run by hand, nothing
 # done; already installed, nothing done
 set -uo pipefail
@@ -9,15 +9,15 @@ set -uo pipefail
 export HOME=$t/home XDG_STATE_HOME=''
 lib=$t/lib mark=$t/home/.local/state/agros/capri-at-login
 mkdir -p "$lib" "$t/bin" "${mark%/*}"
-# (dotfiles-check alone beside its helpers' stand-ins: capri-update and dots-warn written down, the others not there)
-cp "$here/.local/bin/dotfiles-check" "$lib/"
+# (agros-check alone beside its helpers' stand-ins: capri-update and dots-warn written down, the others not there)
+cp "$here/.local/bin/agros-check" "$lib/"
 printf '#!/bin/sh\necho capri-update >>"%s/ran"\necho "capri: cant clone it"\nexit "${CAPRI_RC:-0}"\n' "$t" >"$lib/capri-update"
 # (Capri's notifications only: the check's own, of the helpers not there, isn't this test's)
 printf '#!/bin/sh\ncase "$1" in Capri*) echo "warn $*" >>"%s/ran" ;; esac\n' "$t" >"$lib/dots-warn"
 printf '#!/bin/sh\n[ "$1 $2" = "auth status" ] && exit "${GH_RC:-0}"\nexit 0\n' >"$t/bin/gh"
 printf '#!/bin/sh\nexit 0\n' >"$t/bin/qs"
 chmod +x "$lib"/* "$t/bin"/*
-check() { rm -f "$t/ran"; PATH=$t/bin:$PATH "$lib/dotfiles-check" "$@" 2>&1; }
+check() { rm -f "$t/ran"; PATH=$t/bin:$PATH "$lib/agros-check" "$@" 2>&1; }
 ran() {  # <want>: what ran, once its background run is done
     for _ in {1..50}; do [[ $(cat "$t/ran" 2>/dev/null) == "$1" ]] && return 0; sleep 0.1; done
     return 1
@@ -44,4 +44,4 @@ grep -q "Capri isn't installed: GitHub has no login here" <<<"$out" || fail "gh 
 # Already installed (by hand): nothing
 mkdir -p "$HOME/.local/share/capri/current"; : >"$mark"; check --notify >/dev/null
 sleep 0.5; [[ ! -e $t/ran && ! -e $mark ]] || fail "Capri, installed, installed again: $(cat "$t/ran" 2>/dev/null)"
-echo "ok dotfiles-check-capri"
+echo "ok agros-check-capri"

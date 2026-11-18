@@ -455,7 +455,7 @@ for bad in '' 'return {' 'error("boom")' 'return 42' 'return { ["windows.cascade
            'return { ["caelestia-keys.kbGoToWs"] = {} }' 'return { [1] = { "SUPER + T" }, [true] = false }'; do
     out=$(run_config "$bad" 1) || fail "settings.lua '$bad' took the config down: $(tail -4 <<<"$out")"
 done
-# Its notification that the settings failed to load: not when it's only a check (hypr-config-check: dotfiles-check says it)
+# Its notification that the settings failed to load: not when it's only a check (hypr-config-check: agros-check says it)
 out=$(run_config 'return 42' 0)
 grep -q "^exec dots-warn" <<<"$out" || fail "settings that failed to load not said"
 # ...nor the Scroll Lock keymap made (scroll-lock keymap: files written, xkbcli run) for a check, which only loads it

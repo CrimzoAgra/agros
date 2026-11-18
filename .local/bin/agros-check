@@ -1,0 +1,232 @@
+#!/usr/bin/env bash
+# AgrOS's health check: the pieces of it that a Hyprland or Caelestia update can break. Hyprland runs it a little
+# after login (~/.config/caelestia/user/desktop.lua): an update takes effect at the next login, so that's when breakage shows.
+#   agros-check            list what's wrong, exit 1 (nothing printed and exit 0 when all is well; a note, such as
+#                             Caelestia's Hyprland config having an update, printed with exit 0)
+#   agros-check --notify   the same, as one notification (none when all is well)
+# (not on the live USB: it isn't set up as an install, so its "problems" would only be noise)
+case ${1:-} in
+    '' | --notify) ;;
+    -h | --help) sed -n '2,${/^#/!q;s/^# \{0,1\}//p;}' "$0"; exit 0 ;;
+    *) echo "agros-check: unknown option $1 (agros-check --help)" >&2; exit 2 ;;
+esac
+[[ -d /run/archiso ]] && exit 0
+problems=()
+helpers=$(dirname "$(readlink -f "$0")")  # (the shared helpers, beside this)
+# Hyprland named (its first one when run from an SSH login or a text console: there hyprctl didn't know it, so config
+# errors went unseen and the title bar plugin was said not to be loaded)
+hyprctl() { command hyprctl -i "${HYPRLAND_INSTANCE_SIGNATURE:-0}" "$@"; }
+
+# Hyprland: config errors, settings an update made outdated. The config checked here, as Hyprland loads it from disk
+# (hypr-config-check: Hyprland --verify-config, its errors in its file), not by hyprctl configerrors alone: every
+# hyprctl eval (Capri, the switcher, game-focus) clears that list, and one that fails leaves its own error there. Its
+# lines naming a config file only (<file>.lua:<line>:, where an eval's start with its code), when the check found
+# nothing (it can't see what fails only in the running session)
+hc="${XDG_STATE_HOME:-$HOME/.local/state}/hypr-config-check"
+"$helpers/hypr-config-check" >/dev/null 2>&1
+if [[ -s $hc ]]; then
+    problems+=("Hyprland config errors: $(head -3 "$hc") (hypr-config-check)")
+else
+    errors=$(hyprctl configerrors 2>/dev/null | grep -E '^[^:;]*\.(lua|conf):[0-9]+')
+    [[ -n $errors ]] && problems+=("Hyprland config errors: $errors")
+fi
+deprecated=$(hyprctl deprecated-config 2>/dev/null)
+[[ -n $deprecated && $deprecated != "all good!" ]] && problems+=("Hyprland outdated settings: $deprecated")
+
+# Title bars on floating windows (user/titlebars.lua): the plugin, loaded by hyprbars-build --login at login
+hyprctl plugin list -j 2>/dev/null | jq -e 'any(.[]; .name == "hyprbars")' >/dev/null ||
+    problems+=("Title bar plugin not loaded (see ~/.cache/hyprbars-build.log, or run hyprbars-build)")
+
+# Caelestia patches that no longer fit (caelestia-overlay writes them down)
+skipped="${XDG_STATE_HOME:-$HOME/.local/state}/caelestia-overlay-skipped"
+[[ -s $skipped ]] && problems+=("Caelestia changes that are off: $(paste -sd';' "$skipped")")
+
+# Capri's update that failed (capri-update writes down why; she stays on the version she has)
+capri_failed="${XDG_STATE_HOME:-$HOME/.local/state}/capri-update-failed"
+[[ -s $capri_failed ]] && problems+=("Capri not updated: $(tail -n +2 "$capri_failed")")
+# Capri waiting for the GitHub login a restore brought back (agros-personal's mark: gh's login is in the keyring, which
+# opens from the login after): installed now, at the login's check, in the background (minutes; a failure said in a
+# notification). Once: gh still without a login, said
+capri_mark="${XDG_STATE_HOME:-$HOME/.local/state}/agros/capri-at-login"
+if [[ ${1:-} == --notify && -e $capri_mark ]]; then
+    rm -f "$capri_mark"
+    if [[ -e ${XDG_DATA_HOME:-$HOME/.local/share}/capri/current ]]; then
+        :
+    elif gh auth status >/dev/null 2>&1; then
+        gh auth setup-git >/dev/null 2>&1
+        # shellcheck disable=SC2016  # (the inner shell's own variables)
+        # (exit 2: capri-update said why in a notification itself; one is enough)
+        setsid -f bash -c 'out=$("$1/capri-update" 2>&1); rc=$?
+            ((rc == 0 || rc == 2)) || exec "$1/dots-warn" "Capri didn'\''t install" "$(tail -1 <<<"$out")"' \
+            _ "$helpers" </dev/null >/dev/null 2>&1
+    else
+        problems+=("Capri isn't installed: GitHub has no login here (gh auth login, then capri-update)")
+    fi
+fi
+
+# My QML in Caelestia (the overlay's files) failing to load: a Caelestia update renamed something it uses. It still
+# patches in, so caelestia-overlay can't see this; Caelestia's log can
+# (the files the overlay changed or added: the real files in its folder, the rest are links to Caelestia's)
+# By path, as the log names them (@modules/bar/Bar.qml[12:3]): Caelestia has other files of the same names
+changed=$(find ~/.config/quickshell/caelestia -type f -name '*.qml' -printf '%P\n' 2>/dev/null | paste -sd'|')
+qml=$([[ -n $changed ]] && timeout 5 qs log -c caelestia 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' |
+    grep -E "@(${changed//./\\.})\[" |
+    grep -iE 'error|unavailable|not a type|not defined|TypeError|ReferenceError' |
+    grep -vE 'of null$|Value is (null|undefined) and could not be converted to an object' | head -3)
+# (left out: "... of null", a list item read as it goes away, and "Value is undefined and could not be converted to an
+# object", a window read before it has its IPC object (Steam's coming and going): Caelestia's own lines do it too, in a
+# file here only for a block the overlay adds to it. Not a rename)
+[[ -n $qml ]] && problems+=("Caelestia changes failing to load (overlay QML): $qml")
+
+# Caelestia internals my config relies on, which it could rename (then that part stops working without an error):
+# the game tag user/apps.lua gives native games and matches its rules on, the tags it undoes, the restart key
+# user/keys.lua takes over, the shortcut that refreshes Caps/Num Lock
+for want in 'rules.lua:"game"' 'rules.lua:"music_player"' 'rules.lua:"communication_app"' 'rules.lua:"todo_app"' \
+            'rules.lua:"system_monitor"' 'keybinds.lua:"CTRL + SUPER + ALT + R"'; do
+    grep -qF "${want#*:}" ~/.config/hypr/hyprland/"${want%%:*}" 2>/dev/null ||
+        problems+=("Caelestia's ${want%%:*} no longer has ${want#*:} (user/apps.lua, user/keys.lua rely on it)")
+done
+grep -rqF 'name: "refreshDevices"' /etc/xdg/quickshell/caelestia 2>/dev/null ||
+    problems+=("Caelestia no longer has its refreshDevices shortcut: the Caps/Num Lock badges won't refresh (user/keys.lua)")
+# What sets the system's problems below right: Updates' "Update all", which an administrator's (wheel) alone (another
+# account's Updates has none, and update-apps refuses it), and the boot update's log, readable by them alone (root:wheel
+# 0640): another account is told to ask one
+if [[ " $(id -nG 2>/dev/null) " == *" wheel "* ]]; then
+    run_updates="run Updates" see_log="see /var/log/auto-update.log, or "
+    run_review="run update-apps in a terminal (it shows their build scripts to review first)"
+else
+    run_updates="ask an administrator to run Updates" see_log=""
+    run_review="ask an administrator to run update-apps in a terminal (it shows their build scripts to review first)"
+fi
+# Quickshell uses Qt's private parts: a Qt version it wasn't rebuilt for can stop the shells from starting (the Qt it
+# was built for: written down by update-apps, which rebuilds it)
+# (update-apps compares them, as it writes them)
+"$helpers/update-apps" --qt-stale &&
+    problems+=("Qt was updated after Quickshell: $run_updates (it rebuilds Quickshell and Caelestia for it)")
+# (both folders named by the tests only)
+au=${AUTO_UPDATE_DIR:-/var/lib/auto-update}
+pacdb=${PACMAN_DB_DIR:-/var/lib/pacman}
+# (what the boot's update wrote down, plain text alone in the notification, which renders Markdown, links and images:
+# its reasons can carry a build's or a package script's words)
+plain() { tr -cd "A-Za-z0-9 @._+=:,;/()'\n-"; }
+# behind <file>: the packages of its "<name> <version>" lines (each line's first and last word) not at that version
+# yet (older, or not installed), comma-separated
+behind() {
+    local name ver have
+    while read -r name ver; do
+        ver=${ver##* }
+        [[ -n $ver ]] || continue
+        have=$(pacman -Q "$name" 2>/dev/null | awk '{print $2}')
+        [[ -n $have && $(vercmp "$have" "$ver") -ge 0 ]] || echo "$name"
+    done <"$1" | plain | paste -sd, | sed 's/,/, /g'
+}
+# a Qt or Python update the boot's install held back, its rebuild of what's built on it failed (auto-update): Updates
+# does it with the rebuild
+# (its lines "<package> <old> -> <new>", as pacman -Qu said them: those not installed yet named, and said only while
+# one is. Updates installs them, but only the next shutdown's install takes the file away)
+held=$([[ -s $au/held ]] && behind "$au/held")
+[[ -n $held ]] &&
+    problems+=("The automatic update was held back (a new $held; the boot couldn't rebuild the AUR apps built on it): ${see_log}$run_updates")
+# the boot's AUR builds that failed (auto-update-aur's "<base>: <why>" each, or why none was built): those apps wait,
+# the rest installs without them. Not beside the held update (the same failure), and only while one it meant to build
+# ("<name> <version>" in wanted) is still older than that, those named: Updates built it since, or the run failed
+# before it planned any (the AUR out of reach: nothing known to be waiting, the next boot tries again), nothing to say
+# (one held for its build files to be reviewed, auto-update-aur's guard: the Updates app leaves it out too, update-apps
+# in a terminal shows them)
+aur_left=$([[ -z $held && -s $au/aur/failed && -s $au/aur/wanted ]] && behind "$au/aur/wanted")
+aur_do=$run_updates
+grep -qF "review it: run update-apps in a terminal" "$au/aur/failed" 2>/dev/null && aur_do=$run_review
+[[ -n $aur_left ]] &&
+    problems+=("The automatic update couldn't build AUR apps ($(plain <"$au/aur/failed" | paste -sd';' | sed 's/;/; /g')): still waiting: $aur_left; $aur_do")
+# AUR apps the shutdown's install left out, pacman refusing them (a conflict, a file conflict, a missing dependency:
+# auto-update's "<when> <pacman's error>", then "<name> <version>" each): said while one isn't at that version yet
+if read -r aiwhen aiat aiwhy 2>/dev/null <"$au/aur-install-failed"; then
+    ai_left=$(behind <(tail -n +2 "$au/aur-install-failed"))
+    [[ -n $ai_left ]] &&
+        problems+=("The automatic update couldn't install AUR apps at shutdown ($ai_left, $aiwhen $aiat${aiwhy:+: $(plain <<<"$aiwhy")}): the rest installed; $run_updates")
+fi
+# firmware the shutdown couldn't install (fwupd's reason, e.g. the battery too low): tried again at the next one
+read -r fwwhen fwat fwwhy 2>/dev/null <"$au/firmware-failed" &&
+    problems+=("A firmware update failed to install at shutdown ($fwwhen $fwat${fwwhy:+: $(plain <<<"$fwwhy")}): it's tried again at the next one, or $run_updates")
+# the install at shutdown failed (auto-update --install writes down how it went: "failed <date> <why>"); tried again
+# at the next shutdown, but it fails the same way until it's looked at
+read -r how when at why 2>/dev/null <"$au/install-result"
+[[ ${how:-} == failed ]] &&
+    problems+=("The automatic update failed to install at shutdown ($when $at${why:+: $(plain <<<"$why")}): ${see_log}$run_updates")
+# nothing installed at shutdown several times in a row (its boot download never finishing: a short session, a download
+# that fails every boot; something else using pacman still running): "<shutdowns> <since> <the last one's why>",
+# written down beside how the last real install went
+read -r skips since skipwhy 2>/dev/null <"$au/skipped"
+[[ ${skips:-} =~ ^[0-9]+$ ]] && ((skips >= 3)) &&
+    problems+=("The automatic update hasn't installed for $skips shutdowns in a row (since $since; the last: $(plain <<<"${skipwhy:-the boot download unfinished}")): ${see_log}$run_updates")
+# a lock the boot's download left (shutdown cut it off): the next boot's download takes it out, but meanwhile nothing
+# was downloaded (not while that download is running: it's its own)
+[[ -e $au/db/db.lck ]] && ! systemctl is-active -q auto-update 2>/dev/null &&
+    problems+=("The automatic update's download left a lock ($au/db/db.lck): it's removed at the next boot")
+# pacman's own lock with nothing running that takes it (one cut off: a crash, a power cut): every install and update
+# fails on it, the one at shutdown too. What takes it: pacman-lock-holder's list, beside this (auto-update's too)
+[[ -e $pacdb/db.lck ]] && ! "$helpers/pacman-lock-holder" "$pacdb" >/dev/null &&
+    problems+=("pacman's lock was left behind ($pacdb/db.lck): nothing installs until it's removed (sudo rm $pacdb/db.lck, with no update running)")
+
+# AgrOS's checks (its CI's tests on Arch) not passed for over 10 days: Hyprland's updates wait meanwhile (the upstream
+# gate), and AgrOS may have stopped looking after itself. The day they last passed is the boot's copy (auto-update:
+# agros-arch-ok, from beside the [agros] repo; no network here), counted to when it was fetched (the file's time), not
+# to today: a copy the boot hasn't refreshed yet (the first login after weeks off) says no more than it knew then
+archok=${AGROS_ARCH_OK:-/var/lib/agros/agros-arch-ok}
+if read -r okday 2>/dev/null <"$archok" && [[ $okday =~ ^[0-9]{4}/[0-9]{2}/[0-9]{2}$ ]] &&
+    okday=$(date -ud "${okday//\//-}" +%s 2>/dev/null) && fetched=$(stat -c %Y "$archok" 2>/dev/null); then
+    days=$(((fetched - okday) / 86400))
+    ((days > 10)) && problems+=("AgrOS's checks haven't passed for $days days: Hyprland updates wait until they do")
+fi
+
+# Caelestia's own Hyprland config (~/.config/hypr, what `caelestia install` put there): nothing refreshes it, so an
+# upstream fix (a setting Hyprland deprecated) never got here. A newer version upstream (Caelestia's clone fetched, 10 s
+# at most): a note, not a problem (it changes about weekly), pointing to caelestia-hypr-refresh, which refreshes those
+# files alone. Never `caelestia update`: its own system update goes past Updates' Qt rebuild, and a new Qt left
+# Quickshell unable to start. As a notification: once per new version, low urgency
+notes=()
+if hypr_new=$(FETCH_TIMEOUT=10 "$helpers/caelestia-hypr-refresh" --check 2>/dev/null); then
+    notes+=("Caelestia's Hyprland config (~/.config/hypr) has an update: run caelestia-hypr-refresh (those files only; one you've edited is kept, its new version written beside it as .new)")
+fi
+
+# The shells and services
+for c in caelestia switcher widgets; do
+    # By the configs Quickshell says are running (one its crash handler restarted shows no -c in ps)
+    "$helpers/qs-running" "/quickshell/$c/shell.qml" || problems+=("Not running: qs -c $c")
+done
+for s in game-focus tray-keeper; do
+    systemctl --user is-active -q "$s" || problems+=("Not running: $s ($(systemctl --user is-active "$s"))")
+done
+failed=$(systemctl --user list-units --failed --plain --no-legend 2>/dev/null | awk '{print $1}' | paste -sd' ')
+[[ -n $failed ]] && problems+=("Failed services: $failed")
+
+# Errors the services logged and carried on from (e.g. a field Hyprland renamed), since they last started: a fix and
+# a restart clears them
+for s in game-focus tray-keeper; do
+    log=$(journalctl --user -u "$s" _SYSTEMD_INVOCATION_ID="$(systemctl --user show -p InvocationID --value "$s")" \
+        -o cat --no-pager 2>/dev/null)
+    n=$(grep -c '^Traceback' <<<"$log")
+    ((n > 0)) && problems+=("$s logged $n error(s) since it started: $(grep -E '^[A-Za-z]*Error' <<<"$log" | tail -1)")
+done
+
+# (The system's files are AgrOS's packages' own: pacman keeps them as the packages have them)
+
+# Notes (not problems: exit 0 all the same); as a notification, low urgency, each new version once
+if ((${#notes[@]})); then
+    printf '%s\n' "${notes[@]}"
+    # (its old name kept: the record of what was already said, on machines from before agros-check was renamed)
+    seen="${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles-check-hypr-notified"
+    if [[ ${1:-} == --notify && $(cat "$seen" 2>/dev/null) != "$hypr_new" ]]; then
+        "$helpers/notify-when-up" -u low -a Dotfiles -i system-software-update "Caelestia's Hyprland config has an update" \
+            "Run caelestia-hypr-refresh: those files only (no system update); one you've edited is kept, its new version beside it as .new" &&
+            { mkdir -p "${seen%/*}"; echo "$hypr_new" >"$seen"; }
+    fi
+fi
+((${#problems[@]})) || exit 0
+printf '%s\n' "${problems[@]}"
+if [[ ${1:-} == --notify ]]; then
+    "$helpers/dots-warn" "Something in your setup needs a look" \
+        "$(printf '• %s\n' "${problems[@]}")
+(probably after a Hyprland or Caelestia update; run agros-check for the list)"
+fi
+exit 1

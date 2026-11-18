@@ -21,7 +21,7 @@ hl.config({ ecosystem = { no_update_news = true } })
 dots = {}
 
 -- Only a check (hypr-config-check: Hyprland --verify-config): loaded, nothing done on the side. No "failed to load"
--- notification (dotfiles-check gives its own) and no settings file written
+-- notification (agros-check gives its own) and no settings file written
 local verify = os.getenv("DOTS_VERIFY_CONFIG") == "1"
 dots.verifying = verify  -- (for the other files: user/keys.lua's keymap not made then)
 

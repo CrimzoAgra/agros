@@ -69,7 +69,7 @@ trap 'rm -rf "$tmp"' EXIT
 rmdir "$tmp" && cp -as "$src" "$tmp"
 rc=0 out=
 [[ -n $plain ]] || { out=$(python3 "$share/patch.py" "$src" "$tmp" 2>&1) || rc=$?; printf '%s\n' "$out"; }
-# Patches that no longer fit: kept for dotfiles-check, and said now if you're logged in (this also runs from the
+# Patches that no longer fit: kept for agros-check, and said now if you're logged in (this also runs from the
 # pacman hook, where nobody reads the output)
 skipped="${XDG_STATE_HOME:-$HOME/.local/state}/caelestia-overlay-skipped"
 mkdir -p "${skipped%/*}"
@@ -103,7 +103,7 @@ elif ((rc != 0)) && [[ ! -s $skipped ]]; then
     rm -rf "$tmp" && cp -as "$src" "$tmp"
 fi
 # (not with the shell stopped, CAELESTIA_REBUILDING: Caelestia is the notification server, so it went to nobody; said
-# by caelestia-restart once its new shell is up, and by dotfiles-check 30 s into a login). In the background: dots-warn
+# by caelestia-restart once its new shell is up, and by agros-check 30 s into a login). In the background: dots-warn
 # waits for the notification server, which a pacman hook shouldn't. The session's bus as this environment says (a pacman
 # hook's agros-each-user sets it), /run/user/<uid>'s only when it doesn't
 bus=${DBUS_SESSION_BUS_ADDRESS:-unix:path=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/bus}

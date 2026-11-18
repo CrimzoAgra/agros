@@ -33,7 +33,7 @@ Laptop settings and lighting are in a separate repo: **legion-control-linux**.
 3. **The one thing you run:** its notification offers *Restore accounts*. Plug in your pen drive and click it, or
    run `agros-personal` ([Your accounts](#your-accounts)). Capri installs right after that (built from her code: a few
    minutes), since her fork is private and needs your GitHub login (at the next login when gh only gets it from the
-   keyring brought back: `dotfiles-check` installs her then). The offer comes back at each login until it's answered
+   keyring brought back: `agros-check` installs her then). The offer comes back at each login until it's answered
    (`~/.local/state/agros/offered`); an account set up before it did (its `done` there, without the `offer-sent` mark
    the offer leaves) isn't offered it again.
 
@@ -336,7 +336,7 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
   recorder by its process name
 - **`.local/share/caelestia-overlay/`**: my changes to Caelestia, patched in by `patch.py`. A change whose code no
   longer fits a new Caelestia version is skipped, not broken; one that still fits but whose QML no longer loads (a
-  renamed Caelestia component) is reported by `dotfiles-check`
+  renamed Caelestia component) is reported by `agros-check`
   - Bar:
     - A dock (`Dock.qml`, `DockMenu.qml`): pinned apps and open windows, Force quit; minimised windows dimmed; a
       click on a window or its preview brings it to the front. Turned off, its place is kept (the workspaces, tray and
@@ -418,7 +418,7 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
   from the shell's stop to its new start, so a rebuild waiting on one finds the shell up and hands over too. A game
   open: the restart waits until it closes (`after-games`, in the background); a session that ends first loses it, and
   the next login's `caelestia-start` makes it. Skipped patches go to `~/.local/state/caelestia-overlay-skipped`
-  (reported by `dotfiles-check`)
+  (reported by `agros-check`)
 - **`.local/bin/caelestia-start`**: starts Caelestia at login (Caelestia's `execs.lua` runs it, so set by
   `agros-hyprland-settings`), running `caelestia-overlay` first (at every login: it rebuilds only what's out of date,
   so one an update left waiting for a game is made then). `caelestia-start --prepare` (`caelestia-prepare.service`,
@@ -444,7 +444,7 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
   was there); the changes it skipped are said once the new shell is up (Caelestia is the notification server: said
   during the build, they went to nobody). Each start waits for the shell's config to load (it answers `qs ipc show`,
   30 s at most): one that never does, on the overlay's changes, is stopped and started again on Caelestia as it comes
-  (`caelestia-overlay --without-changes <why>`: links only, why written down for `dotfiles-check` and said once the
+  (`caelestia-overlay --without-changes <why>`: links only, why written down for `agros-check` and said once the
   shell is up, not marked built, so the next login or update tries the changes again), exit 3; `--without-changes`
   does that at once (`caelestia-start`'s). A shell that won't close in 5 s is killed outright. With a game open, any
   restart (the Settings app's, a rebuild handed over, the shortcut) waits until it closes (`after-games`, in the
@@ -747,13 +747,13 @@ helper a package update just brought works before `agros-links` has linked it), 
   `caelestia-overlay --running` (its folder's path resolved too), `agros-welcome`'s and the overlay's own
 - **`.local/bin/notify-when-up`**: the one way to notify at login or from a hook: tried again for up to a minute, as
   Caelestia is the notification server and one sent while it isn't up (login, a restart, a rebuild) went to nobody.
-  Used by `dots-warn`, `dotfiles-check`, `hyprbars-build`, `capri-update`, `agros-welcome`'s offer, `nvidia-shader-fix`,
+  Used by `dots-warn`, `agros-check`, `hyprbars-build`, `capri-update`, `agros-welcome`'s offer, `nvidia-shader-fix`,
   `caelestia-restart` and `hypr-reload` (each waiting for a game), `update-kinds`' notices, `agros-each-user --notify`,
   `appimage-open` and `claude-notify` (Claude Code waits on its hook:
   2 s of tries, not a minute)
 - **`.local/bin/dots-warn`**: the one way to warn that something in the setup needs a look (a critical notification
   from "Dotfiles", sent by `notify-when-up`). Used by the Lua config, the overlays (Caelestia's, Lutris's),
-  `caelestia-restart`, `dotfiles-check`, `agros-links` (settings kept with AgrOS's new version beside them: marked said
+  `caelestia-restart`, `agros-check`, `agros-links` (settings kept with AgrOS's new version beside them: marked said
   only once it got through), `nvidia-shader-fix` and `service-failed@.service`
 - **`.local/bin/notify-wait`**: a notification that waits for its click (`notify-send -w`) and gives up when Caelestia
   restarts, so a click on a new notification can't reach an old one (used by `game-focus` and `update-apps`)
@@ -771,7 +771,7 @@ helper a package update just brought works before `agros-links` has linked it), 
 - **`.local/bin/wait-online`**: waits (at most ~2 min) for the network at boot or login (`auto-update`,
   `hyprbars-build`, `timezone-auto`); any HTTP answer is online, an error too: only no connection waits
 - **`.local/bin/pacman-lock-holder`**: what running may hold pacman's lock, the one list of what takes it
-  (`auto-update`, also before it takes out a stale lock of the boot's download, and `dotfiles-check`); one only reading
+  (`auto-update`, also before it takes out a stale lock of the boot's download, and `agros-check`); one only reading
   (a query, a search or info, the files database, `paru -G`, what it would do printed, `-p`/`--print`/`--print-format`,
   an upgrade's too, `-Sup`, but not with `-y`/`--refresh` or `-c`/`--clean`, which take the lock) doesn't, nor one on
   another database
@@ -846,7 +846,8 @@ helper a package update just brought works before `agros-links` has linked it), 
   Hyprland's default, which follows the mouse with no lag; nothing clears that layer when the desktop closes, so this
   hides it at logind's PrepareForShutdown, holding a delay lock until Hyprland has taken that up; a shutdown called off
   after that brings it back), `keyring-default`, `bluetooth-on`, `vm-screen-follow` (in a VM), `timezone-auto` (when
-  on), the update check timer, and `dotfiles-check` after 30 s
+  on), the update check timer, and `agros-check` after 30 s (`dotfiles-check`, its old name, runs it too: a home set up
+  before the rename keeps its copy of `desktop.lua`, which calls that)
 - **`.config/autostart/`**: Geoclue's demo agent (Caelestia starts it already) and Polychromatic's own autostart
   off (OpenRazer's service applies the
   lighting). Turning one on or off in the Settings app changes your copy here; `dotfiles-sync` commits it if it's in the
@@ -921,7 +922,7 @@ helper a package update just brought works before `agros-links` has linked it), 
   one binary (her page is in it), `~/.local/share/capri/<commit>/capri` with its `.capri-build` mark, and she's
   switched to it (`current`, atomically) only once it's built and checked; the build before is kept, and any she's
   still running from, older ones (and the Electron Capri's builds) removed. A commit that doesn't install, check or
-  build is said once (notification, `dotfiles-check`) and isn't built again; she stays on her build until the fork
+  build is said once (notification, `agros-check`) and isn't built again; she stays on her build until the fork
   moves on. A download that failed (her packages, her crates) is tried again next run, and at its third run in a row
   it's that commit's own. Without Rust (`cargo`, `rustc`: the `rust` package, or `rustup` with a toolchain chosen)
   it's said, and tried again next time. One run at a time (a `--check` meanwhile says nothing). The fork is private:
@@ -1004,7 +1005,7 @@ brings each change; nothing to run by hand).
     installer check it the same way
   - Checks that stop passing are said on the machine too: the boot's update keeps the day they last passed on Arch
     (`agros-arch-ok`, beside the repo; `/var/lib/agros/agros-arch-ok`, from the first of `[agros]`'s servers that
-    answers, taken only with a good signature by AgrOS's key, as the list is), and `dotfiles-check` says after login,
+    answers, taken only with a good signature by AgrOS's key, as the list is), and `agros-check` says after login,
     once it was over 10 days old when fetched: "AgrOS's checks haven't passed for N days: Hyprland updates wait until
     they do" (a broken check, or CI no longer running). No network at login: a copy the boot hasn't refreshed yet is
     counted to when it was fetched, not to today
@@ -1046,7 +1047,7 @@ brings each change; nothing to run by hand).
   - **AUR apps** (`packages/agros-system/auto-update-aur`, after the download; an app whose AUR maintainer
     or co-maintainers changed since its last build (a co-maintainer can push its build files too), or one its repo
     dropped (signed, now foreign), isn't built: left for `update-apps` in a terminal, where paru shows its build files
-    for review (the Updates app leaves it out), and said by `dotfiles-check`): those with a newer AUR version (not in
+    for review (the Updates app leaves it out), and said by `agros-check`): those with a newer AUR version (not in
     a repo: `paru -Qua`'s), and, when the download brings a new version of a runtime that breaks what's built on it,
     those built on it (from the AUR or `[agros]`, not a `-bin`, not rebuilt by their repo in the same download). The
     runtimes are one list, `update-kinds`' (`runtimes`, which `update-apps` uses too): Qt (`qt6-base`,
@@ -1100,8 +1101,8 @@ brings each change; nothing to run by hand).
     and version as their file names them, at least the version planned, the AUR's or the installed one a runtime rebuild
     is pinned to: a `sudo` or `linux` a build left beside them isn't); a dependency a `.SRCINFO` names must look like
     one (`name`, `name>=1.2`) and reaches root's pacman after `--`. Nothing a build wrote reaches a notification as it
-    is: the reasons `dotfiles-check` shows are fixed sentences, with a name stripped to `[A-Za-z0-9@._+<>=-]` (and
-    `dotfiles-check` keeps only plain characters of anything `auto-update` wrote down, pacman's error included, which
+    is: the reasons `agros-check` shows are fixed sentences, with a name stripped to `[A-Za-z0-9@._+<>=-]` (and
+    `agros-check` keeps only plain characters of anything `auto-update` wrote down, pacman's error included, which
     can carry an install script's words: Caelestia's notifications render Markdown, links and images); a build's own
     output reaches root's log through `cat -v` (no terminal escapes). What's left: an AUR package's own install script
     runs as root when it's installed at shutdown: that's what installing from the AUR is (paru's the same), the build
@@ -1118,7 +1119,7 @@ brings each change; nothing to run by hand).
     at the next boot leaves a desktop that can't start if that build fails. Collected (read as `agros-aur`, through the
     sandbox) into a local repo, `agros-aur`, and installed at shutdown in the same `pacman -Su` as the repo's
     (`agros-aur/<name>` targets, a reinstall for a runtime rebuild of the same version), each one that built. Each base
-    is on its own: one that failed keeps the version it has (as `paru -Syu` leaves it), named by `dotfiles-check` (until
+    is on its own: one that failed keeps the version it has (as `paru -Syu` leaves it), named by `agros-check` (until
     it's at the version the boot meant to build, Updates having built it; not beside the held update for the same
     failure), and the rest goes in. Only a new runtime waits for what's built on it: one of its rebuilds failed (or came
     out older than what's installed, which pacman would leave), and the whole update waits (a part of it would be a
@@ -1127,7 +1128,7 @@ brings each change; nothing to run by hand).
     file conflict, a missing dependency: it refuses the whole transaction, and every shutdown failed the same way, the
     system never updated) is left out of a second try (`--ignore`; pacman installs nothing of a transaction it refuses),
     unless a new runtime in it needs it (then it fails as one, the lists put back); what's left out is written down
-    (`/var/lib/auto-update/aur-install-failed`) and named by `dotfiles-check` until it's installed.
+    (`/var/lib/auto-update/aur-install-failed`) and named by `agros-check` until it's installed.
     A Qt the shells were rebuilt for is written down (`/var/lib/auto-update/qt-built`), so Updates doesn't rebuild
     them again
   - **Firmware** (fwupd): its metadata refreshed (LVFS, signed) and checked at boot (nothing said when offline or
@@ -1142,7 +1143,7 @@ brings each change; nothing to run by hand).
     udisks2, which stopped first before: a UEFI update was "installed" with nothing staged). fwupd's own checks stand
     (on battery below its level, or without AC power, it skips the device); its exit says nothing of a skipped device
     (nor, in 2.1, of a failed flash), so a device still offering the same update after it (`fwupdtool get-updates`)
-    wasn't updated: tried at the next shutdown, said by `dotfiles-check` with fwupd's reason (Updates checks the same
+    wasn't updated: tried at the next shutdown, said by `agros-check` with fwupd's reason (Updates checks the same
     after its `fwupdmgr update`); that note goes once nothing's waiting. One fwupd refuses because the EFI partition is
     too small for it (beside Windows, often Windows' own 100 MB, nearly full; fwupd checks before it writes anything)
     isn't tried at every shutdown nor said at every login: said once on the desktop ("Firmware update can't be
@@ -1180,7 +1181,7 @@ brings each change; nothing to run by hand).
     cargo-update, a one-line note), `pipx upgrade-all`
   Log: `/var/log/auto-update.log` (its last 20 runs kept; readable by admins, `wheel`, only: it holds every account's
   updates);
-  `dotfiles-check` says an install at shutdown that failed or was held back (until one goes through), AUR builds, AUR
+  `agros-check` says an install at shutdown that failed or was held back (until one goes through), AUR builds, AUR
   apps the install left out, or a firmware update that failed, and 3 shutdowns in a row with nothing installed, with the
   last one's reason (the boot's download didn't finish: only a finished one is installed; something else using pacman
   still held its lock; a soft reboot, which keeps the kernel running; with pacman's error when the download failed; on
@@ -1256,7 +1257,7 @@ brings each change; nothing to run by hand).
 - **pacman hooks** (`agros-system`, for every account through `agros-each-user`): the Caelestia overlay re-applied after
   every `caelestia-shell` update; the title bar plugin built for a new Hyprland (or a library its plugins hang on)
   straight away; the Hyprland config checked against a new Hyprland (`hypr-config-check`, its errors said by
-  `dotfiles-check`); the overlay, the title bar plugin and the config check also after an `agros-scripts` update
+  `agros-check`); the overlay, the title bar plugin and the config check also after an `agros-scripts` update
   (their scripts are in it; the check is `Hyprland --verify-config`, well under a second per user). `agros-boot` adds
   one that hides GRUB's loading messages again after each GRUB update, and one that remakes the faster splash after a
   CachyOS splash update (and the boot images, when it changed and is the splash in use)
@@ -1436,13 +1437,13 @@ breaks something holds back that one piece, never the rest (`.github/workflows/c
 
 - **The login screen broke**: Ctrl+Alt+F2, log in, `sudo login-reset` (a text login; `sudo login-reset --back` undoes
   it)
-- **Something stopped working after a Hyprland or Caelestia update**: run `dotfiles-check`. It lists Hyprland config
+- **Something stopped working after a Hyprland or Caelestia update**: run `agros-check`. It lists Hyprland config
   errors (the config checked from disk with `Hyprland --verify-config`, by `hypr-config-check`: the running Hyprland's
   own list is cleared by every `hyprctl eval`) and outdated settings, Caelestia changes that no longer fit (skipped by
   the overlay), and parts that aren't running (Caelestia, the switcher, the widgets, the title bar plugin, the services)
   or logged errors, and my QML in Caelestia that fails to load (a Caelestia update renamed something it uses, which the
   patches can't see). It also runs 30 s after login and sends a notification only if something's wrong
-- **Caelestia's Hyprland config has an update** (a low-urgency note from `dotfiles-check`, once per new version): run
+- **Caelestia's Hyprland config has an update** (a low-urgency note from `agros-check`, once per new version): run
   `caelestia-hypr-refresh`. It refreshes `~/.config/hypr` alone (files you haven't edited replaced, Caelestia's new
   version written beside the ones you have as `.new`) and checks the config. Not `caelestia update`: its own system
   update skips the Qt rebuild (the boot update's and the Updates app's), and a new Qt leaves the shell unable to start

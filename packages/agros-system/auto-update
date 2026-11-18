@@ -5,13 +5,13 @@
 #                                 update-kinds, then the AUR builds (auto-update-aur)
 #   auto-update --install         the shutdown's: firmware the users were told of, then the packages the download got
 #   auto-update --firmware-note   the firmware waiting said to the users (its own unit, started by the boot's run)
-# Everything it says goes to /var/log/auto-update.log; its notes for dotfiles-check and Updates in /var/lib/auto-update
+# Everything it says goes to /var/log/auto-update.log; its notes for agros-check and Updates in /var/lib/auto-update
 log=/var/log/auto-update.log
 # (the last 20 runs kept: every boot's download and every shutdown's pacman output are added to it. Not by the firmware
 # note, which runs beside the boot's run). Written beside it and renamed over it: on a full disk, written over in place,
 # the whole log was lost, when it's what says why nothing installs.
 # Root's and the admins' (wheel) alone: it has every account's update output, their apps and where they are. Nothing
-# run as a user reads it (dotfiles-check reads the notes in /var/lib/auto-update, and points admins here)
+# run as a user reads it (agros-check reads the notes in /var/lib/auto-update, and points admins here)
 private() { chgrp wheel "$1" 2>/dev/null; chmod 640 "$1"; }
 if [[ ${1:-} != --firmware-note ]] && [[ -s $log ]]; then
     kept=$(awk 'function run() { return /^===== / && !/^===== done / } NR == FNR { runs += run(); next } run() { n++ } n > runs - 20' "$log" "$log") &&
@@ -41,7 +41,7 @@ ln -sfn /var/lib/pacman/local "$db/local"
 # is cut off (shutdown's time limit, a power cut), must leave pacman on the lists its packages came from, not newer
 # ones (a partial upgrade). restore puts them back (at the next boot for one cut off); settled drops them
 au=/var/lib/auto-update
-# What takes pacman's lock, and lock_holder finding one holding it (agros-scripts' pacman-lock-holder, dotfiles-check's
+# What takes pacman's lock, and lock_holder finding one holding it (agros-scripts' pacman-lock-holder, agros-check's
 # too): pacman's lists aren't changed under any of them
 pacdb=/var/lib/pacman
 lock_holder() { /usr/lib/agros/bin/pacman-lock-holder "$pacdb"; }
@@ -96,15 +96,15 @@ if [[ ${1:-} == --firmware-note ]]; then
 fi
 
 if [[ ${1:-} == --install ]]; then
-    # How a real install went, for dotfiles-check (this runs at shutdown: its log alone was never seen): ok, held or
+    # How a real install went, for agros-check (this runs at shutdown: its log alone was never seen): ok, held or
     # failed, when, and why. Shutdowns with nothing installed (skip, below) counted beside it, not over it: a held or
     # failed install is still said until one replaces it. Its why plain text alone (plain): pacman's error can carry what
-    # a package's install script printed, and dotfiles-check puts it in a notification, which renders links and images
+    # a package's install script printed, and agros-check puts it in a notification, which renders links and images
     plain() { tr -cd "A-Za-z0-9 @._+=:,;/()'-"; }
     result() { printf '%s %s %s\n' "$1" "$(date '+%F %H:%M')" "$(plain <<<"${2:-}")" >"$au/install-result"; rm -f "$au/skipped"; }
     # Said on the splash, where its theme shows messages (the plain one looked stuck for the minutes a kernel takes)
     say() { command -v plymouth >/dev/null && plymouth --ping 2>/dev/null && plymouth display-message --text="$1" 2>/dev/null; true; }
-    # skip <why>: nothing installed this shutdown, counted ("<shutdowns> <since> <why>", dotfiles-check says it 3 in a row)
+    # skip <why>: nothing installed this shutdown, counted ("<shutdowns> <since> <why>", agros-check says it 3 in a row)
     skip() {
         echo "$1: nothing installed"
         read -r skips since _ 2>/dev/null <"$au/skipped" || true
@@ -162,7 +162,7 @@ if [[ ${1:-} == --install ]]; then
         elif ((${#ids[@]} == 1)) && grep -q 'does not have sufficient space' "$au/firmware-out"; then
             # The EFI partition too small for it (fwupd checks before it writes anything): beside Windows, often
             # Windows' own 100 MB, nearly full. It never fits, so not tried again at every shutdown and said at every
-            # login (dotfiles-check, firmware-failed): said once, at the next boot's login, as that (--firmware-note,
+            # login (agros-check, firmware-failed): said once, at the next boot's login, as that (--firmware-note,
             # firmware-told gone), and tried again only for a newer one (firmware-noroom: this one). Only for one
             # device alone: with others beside it, which one has no room isn't known, and another skipped for its own
             # reason (AC power) would wait with it, said as having no room. Those fail as any, until it's left alone
@@ -201,7 +201,7 @@ if [[ ${1:-} == --install ]]; then
     fi
     recover
     # (gone once a real install runs: one with nothing to install, or nothing held back, leaves no "held back" for
-    # dotfiles-check to keep saying)
+    # agros-check to keep saying)
     rm -f "$au/held"
     # The lists the download used, each with its signature (a list without its own, pacman refuses it as invalid),
     # where newer than pacman's: by the mirror's time (the download's and pacman's own sync keep it; cp -p here too),
@@ -272,7 +272,7 @@ if [[ ${1:-} == --install ]]; then
     pending=$(/usr/lib/agros/bin/updates-pending <<<"$pending")
     # The boot's AUR builds (auto-update-aur), installed in this same transaction: each newer than what's installed, or
     # rebuilt for the new runtime this installs. Each one on its own: one whose build failed keeps its version (as paru
-    # -Syu leaves it), said by dotfiles-check. Only a new runtime (auto-update-aur's list: Qt, whose private parts the
+    # -Syu leaves it), said by agros-check. Only a new runtime (auto-update-aur's list: Qt, whose private parts the
     # shells use, so they wouldn't start at the next boot; Python's minor version, whose modules folder changes) waits
     # for what's built on it: without every one of those rebuilt for it (the build failed or didn't finish, or was for
     # other lists than these) the whole update waits (a part of it would be a partial upgrade) for the next boot's
@@ -348,7 +348,7 @@ if [[ ${1:-} == --install ]]; then
     # AUR apps pacman can't install (a conflict, a file conflict, a dependency missing): it refuses the whole
     # transaction, at every shutdown, and the system was never updated. Tried again without them (pacman installs
     # nothing of a transaction it refuses), but for those a new runtime in it needs (installed with it or not at all),
-    # their version kept. Once that goes through, the AUR apps left out are written down for dotfiles-check ("<when>
+    # their version kept. Once that goes through, the AUR apps left out are written down for agros-check ("<when>
     # <pacman's error>", then "<name> <version>" each), until an install of them goes through
     if ((rc && ${#targets[@]})); then
         keep=() drop=()
@@ -397,7 +397,7 @@ fi
 /usr/lib/agros/bin/wait-online https://archlinux.org
 
 # The day AgrOS's checks last passed on Arch (agros-arch-ok, which its CI publishes beside the [agros] repo; Hyprland's
-# updates wait while they fail), kept for dotfiles-check, which says so after login when it's over 10 days old. Each of
+# updates wait while they fail), kept for agros-check, which says so after login when it's over 10 days old. Each of
 # [agros]'s servers in turn; none answering, the copy kept as it is (its file's time: when it was fetched). Taken only
 # with a good signature by AgrOS's key beside it (agros-arch-ok.sig, checked with gpgv against agros-keyring's key
 # alone, as update-gate takes its list): none, or a bad one (a mirror or a network in between that changed it, to hide
@@ -422,7 +422,7 @@ rm -f "$archok.new" "$archok.new.sig"
 # system and CachyOS gaming packages, the NVIDIA driver too: downloaded now, installed at shutdown (only once this
 # finished: its mark, complete).
 # A lock a download cut off left (shutdown stopped it mid-way) taken out first, only with nothing on these lists that
-# may hold it running (pacman-lock-holder); else every boot's download failed on it (dotfiles-check says when one is left)
+# may hold it running (pacman-lock-holder); else every boot's download failed on it (agros-check says when one is left)
 if [[ -e $db/db.lck ]] && ! /usr/lib/agros/bin/pacman-lock-holder "$db" >/dev/null; then
     echo "removing a stale lock: $db/db.lck"
     rm -f "$db/db.lck"
@@ -434,7 +434,7 @@ rm -rf "$db/complete" "$db/keyrings" "$au/download-failed" "$aur"
 # builds for it (the shutdown decides again, on the lists it installs from)
 gated=$au/pacman.conf
 # (pacman's errors kept apart, then added to the log: the first written down when the download didn't finish
-# (download-failed), for the shutdown's note that dotfiles-check says: an expired key, a dependency that can't be had.
+# (download-failed), for the shutdown's note that agros-check says: an expired key, a dependency that can't be had.
 # In English: "error:" is what's looked for)
 err=$au/download-err
 if LC_ALL='' LC_MESSAGES=C pacman -Sy --noconfirm --dbpath "$db" --logfile /dev/null 2>"$err"; then

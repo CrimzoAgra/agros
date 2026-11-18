@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Run from an SSH login or a text console (no HYPRLAND_INSTANCE_SIGNATURE or WAYLAND_DISPLAY), the scripts that talk to
 # Hyprland name it (its first one): caelestia-restart has Hyprland run it (from there the shell was killed and the new
-# one couldn't start), dots-settings' reload reaches it, dotfiles-check sees its config errors and title bar plugin
+# one couldn't start), dots-settings' reload reaches it, agros-check sees its config errors and title bar plugin
 # (it said the plugin wasn't loaded), and the desktop step's Caelestia CLI writes the borders' colours for its Lua config
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
@@ -22,7 +22,7 @@ esac
 EOS
 printf '#!/bin/sh\necho "qs $*" >>"$log"\n' >"$t/bin/qs"
 printf '#!/bin/sh\necho "caelestia $* for ${HYPRLAND_INSTANCE_SIGNATURE:-none}" >>"$log"\n' >"$t/bin/caelestia"
-# (Hyprland's own check of its config, dotfiles-check's: fine, so it goes by hyprctl's list)
+# (Hyprland's own check of its config, agros-check's: fine, so it goes by hyprctl's list)
 printf '#!/bin/sh\necho config ok\n' >"$t/bin/Hyprland"
 chmod +x "$t/bin/"*
 export PATH=$t/bin:$PATH
@@ -80,7 +80,7 @@ grep -q '^hyprctl -j monitors all' "$log" || fail "dots-settings' questions (Scr
 for _ in $(seq 50); do grep -q '^hyprctl reload' "$log" && break; sleep 0.1; done
 grep -q '^hyprctl reload' "$log" || fail "dots-settings' reload didn't reach Hyprland: $(cat "$log")"
 
-out=$("${outside[@]}" "$here/.local/bin/dotfiles-check" 2>&1) || true
+out=$("${outside[@]}" "$here/.local/bin/agros-check" 2>&1) || true
 [[ $out == *"broken.lua:1: oops"* ]] || fail "Hyprland's config errors not seen: $out"
 [[ $out == *"Title bar plugin not loaded"* ]] && fail "the loaded title bar plugin said not loaded: $out"
 
