@@ -31,11 +31,11 @@ Laptop settings and lighting are in a separate repo: **legion-control-linux**.
    what's per user: LibreWolf's settings, the Spotify, Nuvio and ArtCraft Flatpaks with Spicetify, VSCodium's
    extensions and Claude Code's plugins.
 3. **The one thing you run:** its notification offers *Restore accounts*. Plug in your pen drive and click it, or
-   run `agros-personal` ([Your accounts](#your-accounts)). Capri installs right after that, since her fork is private
-   and needs your GitHub login (at the next login when gh only gets it from the keyring brought back: `dotfiles-check`
-   installs her then). The offer comes back at each login until it's answered (`~/.local/state/agros/offered`); an
-   account set up before it did (its `done` there, without the `offer-sent` mark the offer leaves) isn't offered it
-   again.
+   run `agros-personal` ([Your accounts](#your-accounts)). Capri installs right after that (built from her code: a few
+   minutes), since her fork is private and needs your GitHub login (at the next login when gh only gets it from the
+   keyring brought back: `dotfiles-check` installs her then). The offer comes back at each login until it's answered
+   (`~/.local/state/agros/offered`); an account set up before it did (its `done` there, without the `offer-sent` mark
+   the offer leaves) isn't offered it again.
 
 The same notification offers *Hardware apps* (`agros-welcome --system`). It installs the apps for
 the hardware that's plugged in: Boxflat (Moza), OpenRazer + Polychromatic (Razer), Solaar (Logitech),
@@ -174,7 +174,8 @@ With the Windows ones they replace in brackets:
 - balenaEtcher (Rufus), and Phone Link: scrcpy, your Android phone's screen on the computer (USB debugging on, phone
   plugged in; its screen off while mirrored, kept awake, 20 Mbit/s)
 - Capri, the Edgerunners 2 desktop companion: [my fork](https://github.com/CrimzoAgra/capri-overlay) (private) of
-  [CapriDesktop](https://github.com/nunezValen/CapriDesktop), her chat on your Claude Code (see [Apps](#apps))
+  [CapriDesktop](https://github.com/nunezValen/CapriDesktop), rewritten as a native Wayland app (Tauri and Rust), her
+  chat on your Claude Code (see [Apps](#apps))
 - WhatsApp, Outlook, Teams and OneDrive: use the web versions
 
 ### Your accounts
@@ -766,7 +767,7 @@ helper a package update just brought works before `agros-links` has linked it), 
   (`uwsm/env.d/nvidia-vaapi.sh`, by its installed path: read before `agros-links` runs) and the desktop widgets' stats
   panel's GPU meter
 - **`.local/bin/fail-streak`**: counts a failure that keeps coming back, so it's given up on at the third run in a row
-  rather than tried for good (`capri-update`'s download or merge, `agros-welcome`'s VSCodium step)
+  rather than tried for good (`capri-update`'s downloads, `agros-welcome`'s VSCodium step)
 - **`.local/bin/wait-online`**: waits (at most ~2 min) for the network at boot or login (`auto-update`,
   `hyprbars-build`, `timezone-auto`); any HTTP answer is online, an error too: only no connection waits
 - **`.local/bin/pacman-lock-holder`**: what running may hold pacman's lock, the one list of what takes it
@@ -908,30 +909,37 @@ helper a package update just brought works before `agros-links` has linked it), 
   user; one left, that installation isn't updated). A missing runtime comes from Flathub
   (both use `.local/share/github-release/lib.sh`: the release's x86_64 file and its checksum). At boot, each user's
   own are done as that user and the system-wide ones once, as root
-- **`.local/bin/capri-update`**: installs and updates Capri: my fork (`CrimzoAgra/capri-overlay`: CapriDesktop with
-  her brain on Claude Code, on Hyprland, her intro and new text box) merged with the latest **release** (v* tag) of the
-  original ([nunezValen/CapriDesktop](https://github.com/nunezValen/CapriDesktop)), not every commit to its main. Built
-  in `~/.local/share/capri/<build>/` with her lockfile's packages (no install scripts but Electron's download), then
-  `npm run build`, and switched to (`current`) only once it's built, Electron starts, her types check
-  (`npm run typecheck`) and her tests pass (`npm run test`, my fork's); the build before is kept, and any she's still
-  running from. Two kinds of conflict are settled by rule: a file my fork deleted stays deleted, and her lines
-  (`src/shared/lines/*.json`) stay my fork's. A release my changes otherwise don't merge with, or that doesn't build or
-  check, is said once (notification, `dotfiles-check`) and isn't tried again with that fork commit; she then gets my
-  fork with the release she's on, else with the one it has merged in itself, so my own changes still come and a first
-  install still has her; merge the release in the fork by hand (a download that failed is tried again). One run at a
-  time (a `--check` meanwhile says nothing). The
-  fork is private: with no GitHub login (`gh auth login`) its last copy is used, never a login prompt (`$CAPRI_FORK`
-  fetches it from elsewhere for one run, e.g. a bundle of it). A release tag moved upstream is refused and said, not
-  taken. Her folder from the old Capri (mochiiwuff/capri-desktop's fork) is cloned again and its build not kept. It runs
-  from the Updates app (as AUR apps: the merged code is built and checked, not unseen at boot); `--check` is what the
-  Updates app lists and what the boot runs.
-  **`.local/bin/capri`** starts her build (Super menu entry and icon made by `capri-update`; log `~/.cache/capri.log`),
-  through XWayland on Hyprland (her window lets the clicks around her through); `$CAPRI_RUN`, set in your session,
-  names a start script run instead (a checkout of her code you work on). Started again while she runs, she comes back.
-  At login she starts put away (`--hidden`: only her tray icon) when the Settings app's Startup page says so (on by
-  default); once she's installed, Shift+Space (Settings, Shortcuts; off while a game or a fullscreen window has the
-  focus) puts her away or brings her back, through her local bridge (`POST 127.0.0.1:47823/toggle`). She sets her own
-  window rules, by her windows' titles, and writes her windows' own (hidden) launcher entry for their icon
+- **`.local/bin/capri-update`**: installs and updates Capri: my fork's main (`CrimzoAgra/capri-overlay`: CapriDesktop
+  with her brain on Claude Code, on Hyprland, rewritten as a Tauri 2 app: her React page in WebKitGTK, Rust behind it,
+  native on Wayland through gtk-layer-shell). It no longer takes the original's
+  ([nunezValen/CapriDesktop](https://github.com/nunezValen/CapriDesktop)) Electron releases. Cloned to
+  `~/.local/share/capri/src` and built there: her lockfile's packages (`npm ci`, no install scripts), her types
+  (`npm run typecheck`) and tests (`npm test`) first, her Rust crates downloaded (`cargo fetch --locked`), then
+  `npm run tauri build -- --no-bundle` offline. Rust's build is one folder shared by every run
+  (`~/.local/share/capri/target`, `CARGO_TARGET_DIR`: a build from scratch takes minutes and ~1.5 GB, an update only
+  rebuilds what changed); her Rust tests (`cargo test`, a second, debug build) aren't run. What's kept of a build is her
+  one binary (her page is in it), `~/.local/share/capri/<commit>/capri` with its `.capri-build` mark, and she's
+  switched to it (`current`, atomically) only once it's built and checked; the build before is kept, and any she's
+  still running from, older ones (and the Electron Capri's builds) removed. A commit that doesn't install, check or
+  build is said once (notification, `dotfiles-check`) and isn't built again; she stays on her build until the fork
+  moves on. A download that failed (her packages, her crates) is tried again next run, and at its third run in a row
+  it's that commit's own. Without Rust (`cargo`, `rustc`: the `rust` package, or `rustup` with a toolchain chosen)
+  it's said, and tried again next time. One run at a time (a `--check` meanwhile says nothing). The fork is private:
+  with no GitHub login (`gh auth login`) its last copy is used, never a login prompt (`$CAPRI_FORK` fetches it from
+  elsewhere for one run, e.g. a bundle of it). It runs from the Updates app (as AUR apps: the code is built and
+  checked, not unseen at boot); `--check` is what the Updates app lists and what the boot runs. Exit 2: it failed and
+  said so in a notification itself.
+  **`.local/bin/capri`** starts her build's binary (Super menu entry and icon made by `capri-update`; log
+  `~/.cache/capri.log`, moved aside past 5 MB): native on Wayland, a layer-shell surface that lets the clicks around
+  her through; `$CAPRI_RUN`, set in your session, names a start script run instead (a checkout of her code you work
+  on). Started again while she runs, she comes back. At login she starts put away (`--hidden`: only her tray icon)
+  when the Settings app's Startup page says so (on by default); once she's installed (her build's `current/capri`),
+  Shift+Space (Settings, Shortcuts; off while a game or a fullscreen window has the focus) puts her away or brings her
+  back, through her local bridge (`POST 127.0.0.1:47823/toggle`). She sets her own layer rules, and writes her
+  windows' own (hidden) launcher entry for their icon (app id `dev.cybercompanion.capri`). `agros-desktop` brings
+  what she's built and runs with: `rust`, `nodejs` and `npm`, `webkit2gtk-4.1`, `gtk-layer-shell`,
+  `libayatana-appindicator` (her tray icon), `gst-plugins-good` and `gst-libav` (her clips, H.264), `grim` (her
+  scanner)
 - **`.config/legion-control/`**: Legion Control's lighting choices, and the backup of Lenovo's original keyboard
   lighting profile (its "Default" mode puts that back)
 
@@ -1028,7 +1036,7 @@ brings each change; nothing to run by hand).
   boot's), the AUR's others at their newest. VSCodium's own updater (which only opens the website) is off
 - **The boot update** (`agros-system`: `packages/agros-system/auto-update`, for every account): updates everything at
   every boot. Then: Flatpaks (system-wide and yours), AppImages, Proton builds and developer tools (`update-kinds
-  --boot`, as each user; Capri's new release only looked for: `capri-update --check`). Downloaded then and installed at
+  --boot`, as each user; Capri's new commits only looked for: `capri-update --check`). Downloaded then and installed at
   shutdown, after a Snapper snapshot (installed under the running session, a new NVIDIA driver or kernel broke games and
   USB devices until a reboot): the system, kernel and CachyOS gaming packages, the AUR apps, and firmware. The keyrings
   (Arch's, CachyOS's, AgrOS's) are downloaded alone first and installed first: a key expired on the machine doesn't stop

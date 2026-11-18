@@ -1257,7 +1257,11 @@ printf '%s\n' 'return { ["keys.capri"] = { "SHIFT + Space" } }' >"$t/home/.confi
 capri_load() { (cd "$t" && HOME=$t/home CAPRI_RUN=$1 XDG_RUNTIME_DIR=$t/run HYPRLAND_INSTANCE_SIGNATURE=test lua capri.lua stub.lua 2>&1); }
 out=$(capri_load "") || fail "Capri: $out"
 grep -qx "bind SHIFT + Space" <<<"$out" && fail "Capri's key bound with her not installed"
+# (her Electron build from before, no binary: not her build now)
 mkdir -p "$t/home/.local/share/capri/current"; echo '{}' >"$t/home/.local/share/capri/current/package.json"
+out=$(capri_load "") || fail "Capri: $out"
+grep -qx "bind SHIFT + Space" <<<"$out" && fail "Capri's key bound for her Electron build"
+: >"$t/home/.local/share/capri/current/capri"
 out=$(capri_load "") || fail "Capri: $out"
 grep -qx "bind SHIFT + Space" <<<"$out" || fail "Capri's key missing with her installed"
 grep -qx "fullscreen false" <<<"$out" || fail "Capri's key still bound over a fullscreen window: $out"
@@ -1274,7 +1278,7 @@ grep -qx "bind SHIFT + Space" <<<"$out" && fail "Capri's key bound for a start s
 out=$(capri_load "$t/home/Projects/run-capri.sh") || fail "Capri: $out"
 grep -qx "bind SHIFT + Space" <<<"$out" || fail "Capri's key missing with \$CAPRI_RUN's start script there"
 rm -r "$t/home/Projects"
-mkdir -p "$t/home/.local/share/capri/current"; echo '{}' >"$t/home/.local/share/capri/current/package.json"
+mkdir -p "$t/home/.local/share/capri/current"; : >"$t/home/.local/share/capri/current/capri"
 # One user module erroring (a Hyprland update renamed something it uses): the others still load, and it's still an
 # error for Hyprland to show
 cp "$t/home/.config/caelestia/user/workspaces.lua" "$t/workspaces.lua.bak"

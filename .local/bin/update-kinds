@@ -341,7 +341,7 @@ if [[ ${1:-} == --list ]]; then
     # Flatpaks installed from a downloaded file (no repo): their GitHub releases
     "$helpers/flatpak-bundle-update" --check 2>/dev/null |
         sed -n 's/^\(.*\): update available (\(.*\) -> \(.*\))$/flatpak\t\1\t\2\t\3/p'
-    # Capri, when she's installed (capri-update's build): her fork or the original's release moved on
+    # Capri, when she's installed (capri-update's build): my fork moved on
     [[ -e $capri_current ]] && "$helpers/capri-update" --check 2>/dev/null |
         sed -n 's/^capri: update available (\(.*\))$/capri\tcapri\t\t\1/p'
     "$helpers/appimage-update" --check 2>/dev/null | sed -n 's/^\(.*\): update available (\(.*\))$/appimage\t\1\t\t\2/p'
@@ -389,7 +389,7 @@ for kind; do
         capri)
             [[ -e $capri_current ]] || continue
             echo; echo "== Capri"
-            # (at boot only whether her fork or the original's release moved on: merged, built and tested from Updates)
+            # (at boot only whether my fork moved on: built and tested from Updates)
             if $boot; then "$helpers/capri-update" --check; else "$helpers/capri-update"; fi ;;
         proton) proton_any || continue; echo; echo "== Proton"; update_proton ;;
         dev) echo; echo "== Developer tools"; update_dev ;;

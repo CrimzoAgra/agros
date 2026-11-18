@@ -286,9 +286,11 @@ at_login("nightlight", "gammastep")
 -- tray-keeper also brings back tray icons apps like Proton VPN don't re-add themselves
 hl.on("hyprland.start", function() hl.exec_cmd("systemctl --user start tray-keeper") end)  -- a service: restarted if it crashes
 
--- Capri (~/.local/bin/capri, class "Capri Desktop") sets her own window rules, by her windows' titles, and places herself.
+-- Capri (~/.local/bin/capri: native on Wayland, a layer-shell surface, namespace "capri"; her other windows' app id
+-- "dev.cybercompanion.capri") sets her own layer rules and places herself: no window rules of hers here.
 -- Her key and her start at login only once she's installed (else her key would take Shift+Space from other apps): her
--- build (capri-update's), or the start script $CAPRI_RUN names (a checkout of her code: ~/.local/bin/capri runs it)
+-- build's binary (capri-update's), or the start script $CAPRI_RUN names (a checkout of her code: ~/.local/bin/capri
+-- runs it)
 local function file_exists(path)
     local f = io.open(path)
     if f then f:close() end
@@ -297,7 +299,7 @@ end
 local home = os.getenv("HOME")
 local data = os.getenv("XDG_DATA_HOME") or (home .. "/.local/share")
 local capri_run = os.getenv("CAPRI_RUN")
-if (capri_run and capri_run ~= "" and file_exists(capri_run)) or file_exists(data .. "/capri/current/package.json") then
+if (capri_run and capri_run ~= "" and file_exists(capri_run)) or file_exists(data .. "/capri/current/capri") then
     -- Put away / back (Shift+Space by default): apps can't have a shortcut of their own on Wayland, so it's bound here
     -- and passed to her local bridge. Switched off while a game has the focus (borderless too:
     -- dots.is_game) or a window is fullscreen where you are: bound, Hyprland takes the key from the game or app even
