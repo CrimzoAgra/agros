@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# claude-notify (Claude Code's Stop hook): no notification while Capri's window is focused (her chat is open); else one
+# claude-notify (Claude Code's Stop hook): no notification while Capri's chat has the keyboard (she says so on her local bridge); else one
 # titled with the project folder and the answer's start, whatever that starts with ("- " a list: notify-send took it
 # for options), cut at 200 characters, not bytes
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 mkdir -p "$t/bin"
-printf '#!/bin/sh\necho "{\\"class\\": \\"$FOCUSED\\"}"\n' >"$t/bin/hyprctl"
+# (her local bridge's answer: is her chat focused)
+printf '#!/bin/sh\necho "$FOCUSED"\n' >"$t/bin/curl"
 # (notify-send as GLib reads its options: "--" ends them, any other argument starting with "-" is one)
 cat >"$t/bin/notify-send" <<EOF
 #!/usr/bin/env bash
@@ -19,22 +20,22 @@ EOF
 chmod +x "$t/bin/"*
 notify() { rm -f "$t/sent"; FOCUSED=$1 PATH=$t/bin:$PATH LC_ALL=C "$here/.local/bin/claude-notify" <<<"$2"; }
 
-notify "Capri Desktop" '{"cwd": "/home/me/proj", "last_assistant_message": "hi"}' || fail "failed with Capri focused"
+notify yes '{"cwd": "/home/me/proj", "last_assistant_message": "hi"}' || fail "failed with Capri focused"
 [[ ! -e $t/sent ]] || fail "notified while Capri's chat was open"
-notify foot '{"cwd": "/home/me/proj", "last_assistant_message": "- first\n\n  - second"}' || fail "an answer starting with a list"
+notify no '{"cwd": "/home/me/proj", "last_assistant_message": "- first\n\n  - second"}' || fail "an answer starting with a list"
 [[ $(sed -n 1p "$t/sent") == "Capri: proj" && $(sed -n 2p "$t/sent") == "- first - second" ]] || fail "sent: $(cat "$t/sent")"
 long=$(printf 'a%.0s' {1..199})çã
-notify foot "{\"cwd\": \"/p\", \"last_assistant_message\": \"$long\"}" || fail "a long answer"
+notify no "{\"cwd\": \"/p\", \"last_assistant_message\": \"$long\"}" || fail "a long answer"
 body=$(sed -n 2p "$t/sent")
 iconv -f UTF-8 -t UTF-8 <<<"$body" >/dev/null 2>&1 || fail "the body was cut inside a letter"
 [[ $body == "$(printf 'a%.0s' {1..199})ç" ]] || fail "not cut at 200 characters: $body"
-notify foot '{"cwd": "/p"}' && [[ $(sed -n 2p "$t/sent") == Done ]] || fail "no answer text: not \"Done\""
+notify no '{"cwd": "/p"}' && [[ $(sed -n 2p "$t/sent") == Done ]] || fail "no answer text: not \"Done\""
 # A Claude Code without last_assistant_message: the last answer's text from the conversation's file
 printf '%s\n' '{"type": "assistant", "message": {"content": [{"type": "text", "text": "older"}]}}' \
     '{"type": "user", "message": {"content": "next"}}' \
     '{"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Bash"}, {"type": "text", "text": "the last"}]}}' \
     >"$t/transcript.jsonl"
-notify foot "{\"cwd\": \"/p\", \"transcript_path\": \"$t/transcript.jsonl\"}" && [[ $(sed -n 2p "$t/sent") == "the last" ]] ||
+notify no "{\"cwd\": \"/p\", \"transcript_path\": \"$t/transcript.jsonl\"}" && [[ $(sed -n 2p "$t/sent") == "the last" ]] ||
     fail "no last_assistant_message: the conversation's last answer not used: $(cat "$t/sent")"
 
 # agros-welcome wires it as Claude Code's Stop hook: added beside the settings and hooks there, once

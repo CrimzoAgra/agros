@@ -3,8 +3,9 @@
 # finishes an answer, titled with the project folder, the answer's start as the body (none while Capri's chat is open:
 # you're reading it there)
 in=$(cat)
-# Not while her chat is open: it has the keyboard then, so her window is the focused one
-[[ $(hyprctl -i "${HYPRLAND_INSTANCE_SIGNATURE:-0}" activewindow -j 2>/dev/null | jq -r .class) == "Capri Desktop" ]] && exit 0
+# Not while you're in her chat: her window has the keyboard then. She's a layer surface, not a window Hyprland calls
+# active, so she says it herself on her local bridge (none running: no answer, notified)
+[[ $(curl -s --max-time 1 -X POST http://127.0.0.1:47823/focused 2>/dev/null) == yes ]] && exit 0
 dir=$(jq -r '.cwd // empty' <<<"$in")
 # The answer: last_assistant_message (Claude Code's Stop input); a version without it: the last text of an answer in
 # the conversation's file (transcript_path, one JSON object a line), which may lag behind; neither: "Done"
