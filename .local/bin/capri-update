@@ -143,8 +143,10 @@ if [[ $(cat "$new/.capri-build" 2>/dev/null) != "$want" ]]; then
         [[ -x $CARGO_TARGET_DIR/release/capri ]]; } || fail "Her build failed on $build ($dir/build.log)."
     rm -rf "$new"
     # (not copied or marked, a full disk: not switched to; tried again next time)
-    { mkdir -p "$new" && cp "$CARGO_TARGET_DIR/release/capri" "$new/capri" && echo "$want" >"$new/.capri-build"; } ||
-        fail "Her build couldn't be finished (is the disk full?)." again
+    # (and a package.json, for a home's own copy of user/apps.lua from the Electron Capri's time, never replaced by an
+    # update: it takes her as installed by that file, and her key and her start at login went with it)
+    { mkdir -p "$new" && cp "$CARGO_TARGET_DIR/release/capri" "$new/capri" && echo '{ "name": "capri" }' >"$new/package.json" &&
+        echo "$want" >"$new/.capri-build"; } || fail "Her build couldn't be finished (is the disk full?)." again
 fi
 old=$(readlink "$dir/current" 2>/dev/null)
 # (not switched, a full disk: said, not "installed" with her still on the old one; tried again next time)

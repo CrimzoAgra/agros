@@ -106,7 +106,9 @@ reloads 1 && [[ $(cat "$t/hyprctl") == "-i 0 reload" ]] ||  # (Hyprland named: r
     fail "her first install didn't load the config again after the game: $(cat "$t/hyprctl" 2>/dev/null)"
 [[ $("$app/current/capri") == one && $(cur) == "$(short)" ]] || fail "not the fork's code: $out"
 [[ $(cat "$app/current/.capri-build") == "$(git -C "$t/fork" rev-parse HEAD)" ]] || fail "her build not marked"
-[[ $(LC_ALL=C ls -A "$app/current" | paste -sd' ') == ".capri-build capri" ]] || fail "more than her binary kept: $(ls -A "$app/current")"
+[[ $(LC_ALL=C ls -A "$app/current" | paste -sd' ') == ".capri-build capri package.json" ]] || fail "more than her binary kept: $(ls -A "$app/current")"
+# (a home's own user/apps.lua from the Electron Capri's time takes her as installed by her package.json: one there)
+[[ -s $app/current/package.json ]] || fail "no package.json for an old apps.lua"
 [[ $(cat "$t/builds") == "true $app/target" ]] || fail "not built offline in the shared Rust build: $(cat "$t/builds")"
 grep -qF "Exec=\"$t/ho|me/.local/bin/capri\"" "$t/ho|me/.local/share/applications/capri.desktop" || fail "no launcher entry"
 [[ $(cat "$t/ho|me/.local/share/icons/hicolor/256x256/apps/capri.png") == icon ]] || fail "no icon"
