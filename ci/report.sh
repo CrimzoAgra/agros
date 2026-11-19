@@ -10,8 +10,11 @@
 #   HELD     a file: what was held back, "<name>: <why>" each (build-repo.sh's AGROS_HELD)
 #   REPORT   a file: the tests' report (test-passes.sh's AGROS_TEST_REPORT)
 #   RUN_URL  this run's page
+#   NEWER    true: the published repo was already a newer commit's (ci/newer.sh: this run a re-run of an older one),
+#            nothing put out. Nothing said: the issue stays as the newer commit's run left it
 set -uo pipefail
 shopt -s extglob
+[[ ${NEWER:-} != true ]] || { echo "A newer commit's repo is already published: this run put nothing out, nothing said"; exit 0; }
 held=$(cat "${HELD:-/dev/null}" 2>/dev/null)
 report=$(cat "${REPORT:-/dev/null}" 2>/dev/null)
 ahead=$(grep '^    AHEAD ' <<<"$report")

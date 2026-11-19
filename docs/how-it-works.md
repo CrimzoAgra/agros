@@ -1444,6 +1444,11 @@ breaks something holds back that one piece, never the rest (`.github/workflows/c
   `AGROS_HOLD_OWN`). Failing even then: AgrOS's own code, and nothing goes out.
 - **Upstream's next release** no longer fitting AgrOS's changes (a check against a main branch, above): nothing held,
   everything goes out, and the issue below says which change to adapt before that release.
+- **Never an older commit's over a newer one.** Runs on `main` go one at a time, a newer push queued behind (an older
+  one still waiting dropped), but a re-run of an older run (its failed jobs re-run a day later) would put that
+  commit's repo out over the newer one, every machine's AgrOS packages then "updated" back. The release asks first
+  (`ci/newer.sh`: is the published `agros-system`'s commit one after this run's on `main` as it now is?), and when it
+  is, nothing is signed or put out (no ISO either) and the report job says nothing.
 - **One issue** (`ci/report.sh`, label `held`) says what was held back or why nothing went out (or, as "Heads-up", what
   of upstream's next release doesn't fit), brought up to date by each run and closed by itself once one puts everything
   out again with none of these. GitHub notifies of it. (GitHub's API failing: each call tried three times, then the

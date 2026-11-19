@@ -328,6 +328,8 @@ jobs:
     # sign job signs what this leaves
     needs: [agros, repo, test]
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    outputs:
+      newer: ${{ steps.newer.outputs.newer }}
     runs-on: ubuntu-26.04
     timeout-minutes: 45
     container:
@@ -343,6 +345,7 @@ jobs:
           pacman -Su --noconfirm --needed $(pacman -T git sudo)
       - uses: actions/checkout@v7
         with:
+          fetch-depth: 0  # (main's history: ci/newer.sh)
           persist-credentials: false
       - uses: actions/download-artifact@v8
         with:
@@ -422,6 +425,16 @@ jobs:
       # again before repo-add reads it (those a hold brought back too), and the database read back against them
       - name: The database
         run: ci/repo-db.sh out/x86_64
+      # Not put out when the published repo is already a newer commit's (ci/newer.sh): a re-run of an older run (its
+      # failed jobs re-run, a day later) published that older commit's repo over the newer one, every machine's
+      # AgrOS packages "updated" back. The sign job, Pages' deploy and the ISO then skipped, the report job silent
+      - name: A newer commit already published?
+        id: newer
+        env:
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          git config --global --add safe.directory '*'
+          ci/newer.sh "https://$OWNER.github.io/${GITHUB_REPOSITORY#*/}/x86_64"
       - uses: actions/upload-artifact@v7
         with:
           name: unsigned
@@ -435,6 +448,7 @@ jobs:
     # files, reading no package; once the key is gone, Arch's and CachyOS's install scripts, the install check, Pages'
     # upload
     needs: release
+    if: needs.release.outputs.newer != 'true'
     runs-on: ubuntu-26.04
     timeout-minutes: 30
     container:
@@ -541,6 +555,7 @@ jobs:
           RESULT: ${{ needs.test.outputs.result }}
           BUILD: ${{ needs.agros.result == 'success' && needs.repo.result || needs.agros.result }}
           RELEASE: ${{ needs.release.result != 'success' && needs.release.result || needs.sign.result != 'success' && needs.sign.result || needs.publish.result }}
+          NEWER: ${{ needs.release.outputs.newer }}
           HELD: /tmp/held/held
           REPORT: /tmp/report/report
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}

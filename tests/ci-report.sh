@@ -37,6 +37,17 @@ grep -q 'FAIL lutris' "$t/body" || fail "the issue doesn't say which tests faile
     fail "the issue not closed once all went out: $(go env BUILD=success RELEASE=success RESULT=ok)"
 rm "$t/open"
 [[ -z $(go env BUILD=success RELEASE=success RESULT=ok) ]] || fail "an issue touched with all out and none open"
+# A re-run of an older run, the published repo already a newer commit's (ci/newer.sh): nothing put out, the issue as
+# the newer run left it, neither opened nor closed nor edited
+echo 12 >"$t/open"
+for r in "RELEASE=skipped RESULT=hold-agros HELD=$t/held" "RELEASE=skipped RESULT=ok"; do
+    rm -f "$t/gh.log"
+    # shellcheck disable=SC2086  # (the variables, each a word)
+    PATH=$t/bin:$PATH RUN_URL=https://run AGROS_RETRY_WAIT=0 env BUILD=success NEWER=true $r "$here/ci/report.sh" >/dev/null ||
+        fail "a re-run of an older run failed the report ($r)"
+    [[ ! -e $t/gh.log ]] || fail "an issue touched by a re-run of an older run ($r): $(cat "$t/gh.log")"
+done
+rm "$t/open"
 # Upstream's next release no longer fitting (the report's AHEAD lines): all went out, but the issue opened, said as a
 # heads-up, kept open while it lasts, closed once it's gone
 printf -- '- With this run'"'"'s [agros], on today'"'"'s Arch:\n    all passed\n- Upstream'"'"'s next release...:\n    AHEAD lutris-overlay: x\n' >"$t/report"
