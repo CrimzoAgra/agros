@@ -4,7 +4,7 @@
 # the desktop shell at normal CPU priority, the keyring unlocked with the login password, a VMware VM's screen
 # following its window, the night light's location (geoclue), the automatic time zone without a password (polkit),
 # Hyprland's updates held until AgrOS's CI has checked them (the upstream gate), folder icons in the colour scheme's colour (papirus-folders, sudoers), mDNS from Avahi alone, UFW's logging off,
-# qView's first-run dialog off, File Roller's first window wide enough for its file names
+# File Roller's first window wide enough for its file names
 pkgname=agros-system
 pkgver=0
 pkgrel=1
@@ -21,8 +21,7 @@ optdepends=('snapper: a snapshot before each update' 'ananicy-cpp: the shell rul
 install=agros-system.install
 # (settings of /etc yours to change: an edited one kept at upgrade, AgrOS's new one beside it as .pacnew. Not the gate,
 # the NoExtract list or the sudoers rule: those reach every machine as they are)
-backup=('etc/vmware-tools/tools.conf' 'etc/geoclue/conf.d/90-agros.conf' 'etc/ananicy.d/99-agros/agros.rules'
-        'etc/xdg/qView/qView.conf')
+backup=('etc/vmware-tools/tools.conf' 'etc/geoclue/conf.d/90-agros.conf' 'etc/ananicy.d/99-agros/agros.rules')
 _root=$(realpath "${startdir}/../..")
 
 pkgver() {
@@ -57,10 +56,6 @@ package() {
     install -Dm644 "$_root/system/resolved/agros.conf" "$pkgdir/usr/lib/systemd/resolved.conf.d/50-agros.conf"
     install -Dm644 "$_root/system/udev/90-agros-btrfs-members.rules" "$pkgdir/usr/lib/udev/rules.d/90-agros-btrfs-members.rules"
     install -Dm755 "$_root/system/udev/agros-btrfs-member" "$pkgdir/usr/lib/udev/agros-btrfs-member"
-    # qView without its first-run Welcome dialog (or update checks), for every account, also one made before: Qt reads a
-    # setting missing from yours here. Not in /etc/skel: qView writes its window size and recent files into yours, which
-    # dotfiles-sync would then push to the repo
-    install -Dm644 "$_root/system/qview/qView.conf" "$pkgdir/etc/xdg/qView/qView.conf"
     # File Roller's first window: its own 600x480 leaves its file names about 50 px (glib2's pacman hook compiles it in)
     install -Dm644 "$_root/system/file-roller/50-agros-file-roller.gschema.override" \
         "$pkgdir/usr/share/glib-2.0/schemas/50-agros-file-roller.gschema.override"
