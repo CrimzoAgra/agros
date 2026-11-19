@@ -1,4 +1,4 @@
-# agros-nvidia: here only so that mkinitcpio's own pacman hook (90-mkinitcpio-install.hook, or limine-mkinitcpio-hook's
-# in its place), which watches usr/lib/initcpio/*, makes the boot images again once, after the transaction, when
+# agros-nvidia: here only so that mkinitcpio's own pacman hook (90-mkinitcpio-install.hook), which watches
+# usr/lib/initcpio/*, makes the boot images again once, after the transaction, when
 # agros-nvidia is installed, updated or removed: its early-load list is in /etc/mkinitcpio.conf.d, which that hook
 # doesn't watch. mkinitcpio itself never reads this file
