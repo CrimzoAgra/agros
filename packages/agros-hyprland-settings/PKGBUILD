@@ -27,7 +27,8 @@ _components=(hypr fish foot fastfetch btop micro "thunar|Thunar" starship.toml u
 # when out of date or missing), else it came up on Caelestia's own config (no dock, the bar laid out otherwise) and
 # jumped when agros-welcome rebuilt it and restarted it; and each start logged. Its night light (gammastep) not started:
 # off by default, Settings > Startup turns it on (user/apps.lua)
-_execs_sed='s|^\( *\)hl.exec_cmd("caelestia shell -d")$|\1hl.exec_cmd("~/.local/bin/caelestia-start")|; /^ *hl.exec_cmd("sleep 1 && gammastep")$/d'
+_execs_start='s|^\( *\)hl.exec_cmd("caelestia shell -d")$|\1hl.exec_cmd("~/.local/bin/caelestia-start")|'
+_execs_sed="$_execs_start"'; /^ *hl.exec_cmd("sleep 1 && gammastep")$/d'
 # Settings that are yours to change, through the apps that write them (Caelestia's settings and weather location, the
 # dock's pins, default apps, Settings > Startup, VSCodium, Legion Control) or one machine's own (hosts/): copied into a
 # home once, never updated (one an app wrote back to an older AgrOS version would read as never edited)
@@ -38,7 +39,7 @@ _own=(.config/caelestia/shell.json .config/quickshell/sidedock/pins.json .config
 # AgrOS's history and Caelestia's, as package() copies them (thunar as Thunar, execs.lua changed), and as it is now
 # (the only one known for a file changed some other way at build time)
 _versions() {
-    local skel=$1 c src dest r b p s o fix
+    local skel=$1 c src dest r b p s o e fix
     {
         git -C "$_root" log --format= --raw --root --no-abbrev --no-renames HEAD -- .config .local/share |
             while read -r _ _ _ b _ p; do echo "$_root $b $p"; done
@@ -50,8 +51,11 @@ _versions() {
     } | LC_ALL=C sort -u | while read -r r b p; do
         # (deleted in that commit, or not a settings file any more)
         [[ $b != 0000000000000000000000000000000000000000 && -f $skel/$p && ! -L $skel/$p ]] || continue
-        [[ $p == .config/hypr/hyprland/execs.lua ]] && fix=(sed "$_execs_sed") || fix=(cat)
-        s=$(git -C "$r" cat-file blob "$b" | "${fix[@]}" | sha256sum) && echo "${s%% *}  $p"
+        # (execs.lua as AgrOS has shipped it: its night light still started too, as until 2026-11-17)
+        [[ $p == .config/hypr/hyprland/execs.lua ]] && fix=("$_execs_sed" "$_execs_start") || fix=('')
+        for e in "${fix[@]}"; do
+            s=$(git -C "$r" cat-file blob "$b" | sed "$e" | sha256sum) && echo "${s%% *}  $p"
+        done
     done
     (cd "$skel" && find .config .local/share -type f -exec sha256sum {} +)
 }

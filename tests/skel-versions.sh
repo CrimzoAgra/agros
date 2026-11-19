@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # agros-hyprland-settings' package() (its PKGBUILD's, run as makepkg would) on a made-up repo and Caelestia's dots, each
 # a tiny git repo: /usr/share/agros/skel-versions lists every version each settings file in /etc/skel has had (AgrOS's
-# history and Caelestia's, thunar as Thunar), Caelestia's execs.lua as package() changes it (caelestia-start), not
+# history and Caelestia's, thunar as Thunar), Caelestia's execs.lua as package() changes it (caelestia-start; its
+# night light kept as well as taken out), not
 # the files that are yours (_own), not ones no longer in /etc/skel
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
@@ -50,6 +51,9 @@ for x in 1 2; do
     ! has "-- $x"$'\n''    hl.exec_cmd("caelestia shell -d")'$'\n' .config/hypr/hyprland/execs.lua ||
         fail "execs.lua's version $x listed unchanged (never what /etc/skel has)"
 done
+# (and as AgrOS shipped it before its night light went off: started there, or that home's read as edited)
+has '-- 2'$'\n''    hl.exec_cmd("sleep 1 && gammastep")'$'\n''    hl.exec_cmd("~/.local/bin/caelestia-start")'$'\n' \
+    .config/hypr/hyprland/execs.lua || fail "execs.lua as shipped with its night light not listed: $(grep execs "$v")"
 grep -q 'hl.exec_cmd("~/.local/bin/caelestia-start")' "$t/pkg/etc/skel/.config/hypr/hyprland/execs.lua" || fail "execs.lua not changed"
 ! grep -q gammastep "$t/pkg/etc/skel/.config/hypr/hyprland/execs.lua" || fail "the night light still started by execs.lua"
 ! grep -qE ' \.config/(caelestia/shell\.json|gone\.conf)$' "$v" || fail "yours (shell.json) or a deleted one listed: $(cat "$v")"
