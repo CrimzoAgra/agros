@@ -44,6 +44,8 @@ You don't have to think about updates.
   If AgrOS's checks stop passing for more than about 10 days (something upstream broke them, or AgrOS's automatic
   checks stopped running), a warning after you log in says "AgrOS's checks haven't passed for N days: Hyprland
   updates wait until they do". Nothing's wrong with your computer: everything else still updates.
+- **An app AgrOS replaces** (qView, by gThumb) is removed after the update that brings the new one, unless you
+  installed it yourself or another app needs it. Its settings in your home stay.
 - **Every 6 hours** it checks again. When something's waiting, a notification offers **Update now** (to an
   administrator: other accounts get their updates at boot and shutdown all the same).
 - **Right after an update** (and at each login), the desktop's settings files you never changed get AgrOS's new
