@@ -279,7 +279,7 @@ Changes apply right away.
     each change to Caelestia (listed from `caelestia-overlay`'s and the Lutris overlay's `patch.py --list`, so new ones
     show up by themselves). A Caelestia change turned off is left out of the rebuild (`Off:`, not a warning)
   - **Startup**: the apps `user/apps.lua` can start at login (Lutris and Capri on by default;
-    Proton VPN, Solaar and ArtCraft off; one not installed, named by its `needs` in the schema, shown as "(not
+    Proton VPN, the night light, Solaar and ArtCraft off; one not installed, named by its `needs` in the schema, shown as "(not
     installed)" and not changed there, its value kept for when it is), and every app with a standard
     autostart entry (`/etc/xdg/autostart`, `~/.config/autostart`); turning one of those off writes your copy of it
     with `Hidden=true`, as GNOME's startup settings do
