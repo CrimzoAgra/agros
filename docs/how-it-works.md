@@ -1408,7 +1408,9 @@ breaks something holds back that one piece, never the rest (`.github/workflows/c
   everything goes out, and the issue below says which change to adapt before that release.
 - **One issue** (`ci/report.sh`, label `held`) says what was held back or why nothing went out (or, as "Heads-up", what
   of upstream's next release doesn't fit), brought up to date by each run and closed by itself once one puts everything
-  out again with none of these. GitHub notifies of it.
+  out again with none of these. GitHub notifies of it. (GitHub's API failing: each call tried three times, then the
+  report job fails, so the run and the Friday status show it; never a second issue, and one that turns up anyway is
+  closed beside the first.)
 - **Every Friday at 17:00 Lisbon time** an issue (`ci/status.sh`, `.github/workflows/status.yml`, label `status`,
   last week's closed) says whether anything needs a look: the last CI and ISO runs (an ISO run the upstream gate held,
   which built nothing and which GitHub shows as a success, too), what's held (and since when), CachyOS changes waiting

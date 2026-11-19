@@ -5,11 +5,19 @@ set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 mkdir -p "$t/bin"
-# shellcheck disable=SC2016
-printf '#!/bin/bash\necho "gh $*" >>%s/gh.log\ncase "$1 $2" in "issue list") cat %s/open 2>/dev/null; true ;; "issue create"|"issue edit") for a; do [[ $p == --body-file ]] && cp "$a" %s/body; p=$a; done ;; esac\n' \
-    "$t" "$t" "$t" >"$t/bin/gh"
+# (GitHub's API down: $t/listfail fails the list, $t/writefail the rest)
+sed "s|@T@|$t|g" >"$t/bin/gh" <<'GH'
+#!/bin/bash
+echo "gh $*" >>@T@/gh.log
+case "$1 $2" in
+  "issue list") [[ -e @T@/listfail ]] && exit 1; cat @T@/open 2>/dev/null; true ;;
+  "issue create"|"issue edit"|"issue close")
+    [[ -e @T@/writefail ]] && exit 1
+    for a; do [[ $p == --body-file ]] && cp "$a" @T@/body; p=$a; done ;;
+esac
+GH
 chmod +x "$t/bin/gh"
-go() { rm -f "$t/gh.log"; PATH=$t/bin:$PATH RUN_URL=https://run "$@" "$here/ci/report.sh" >/dev/null; grep -v '^gh issue list\|^gh label' "$t/gh.log" || true; }
+go() { rm -f "$t/gh.log"; PATH=$t/bin:$PATH RUN_URL=https://run AGROS_RETRY_WAIT=0 "$@" "$here/ci/report.sh" >/dev/null; grep -v '^gh issue list\|^gh label' "$t/gh.log" || true; }
 echo "quickshell-git: AgrOS's fix didn't build" >"$t/held"
 [[ $(go env BUILD=success RELEASE=success RESULT=ok HELD="$t/held") == "gh issue create --label held --title Held back: built and tested, but some packages didn't build --body-file "* ]] ||
     fail "a held package didn't open an issue: $(go env BUILD=success RELEASE=success RESULT=ok HELD="$t/held")"
@@ -43,4 +51,26 @@ echo 13 >"$t/open"
 sed -i '/AHEAD/d' "$t/report"
 [[ $(go env BUILD=success RELEASE=success RESULT=ok REPORT="$t/report") == "gh issue close 13 "* ]] ||
     fail "the heads-up not closed once it's gone: $(go env BUILD=success RELEASE=success RESULT=ok REPORT="$t/report")"
+# GitHub's API failing: never read as no issue open (a second one opened beside it, or one left open with the run
+# saying all went out), and the report job fails (the run shows it, the Friday status says it) rather than passing
+said() { local rc=0; rm -f "$t/gh.log"; PATH=$t/bin:$PATH RUN_URL=https://run AGROS_RETRY_WAIT=0 "$@" "$here/ci/report.sh" >/dev/null 2>&1 || rc=$?; return "$rc"; }
+echo 12 >"$t/open"
+touch "$t/listfail"
+! said env BUILD=success RELEASE=success RESULT=ok HELD="$t/held" || fail "the open issue couldn't be looked up, and the report job passed"
+grep -q '^gh issue \(create\|edit\)' "$t/gh.log" && fail "an issue written while the open one couldn't be looked up: $(cat "$t/gh.log")"
+[[ $(grep -c '^gh issue list' "$t/gh.log") == 3 ]] || fail "the lookup not tried three times: $(cat "$t/gh.log")"
+! said env BUILD=success RELEASE=success RESULT=ok || fail "all out said with the open issue not looked up (left open)"
+rm "$t/listfail"
+touch "$t/writefail"
+! said env BUILD=success RELEASE=success RESULT=ok HELD="$t/held" || fail "the issue couldn't be brought up to date, and the report job passed"
+! said env BUILD=success RELEASE=success RESULT=ok || fail "the issue couldn't be closed, and the report job passed"
+rm "$t/writefail"
+# (two open, a create GitHub made but answered as failed: the first brought up to date, the second closed; both
+# closed once all is out)
+printf '%s\n' 12 14 >"$t/open"
+out=$(go env BUILD=success RELEASE=success RESULT=ok HELD="$t/held")
+[[ $out == "gh issue edit 12 "*$'\n'"gh issue close 14 --comment A second copy of #12: said there" ]] ||
+    fail "a second open issue not closed: $out"
+out=$(go env BUILD=success RELEASE=success RESULT=ok)
+[[ $out == "gh issue close 12 "*$'\n'"gh issue close 14 "* ]] || fail "not every open issue closed once all went out: $out"
 echo "ok ci-report"

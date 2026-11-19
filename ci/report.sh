@@ -26,9 +26,25 @@ esac
 # (tested, but not put out)
 [[ ${BUILD:-}/${RESULT:-} != success/@(ok|hold-agros|hold-upstream) || ${RELEASE:-} == success ]] ||
     state="the release didn't go through (${RELEASE:-not run}): nothing published"
-open=$(gh issue list --label held --state open --json number -q '.[0].number')
+# again <command>...: tried up to three times (GitHub's API drops a call now and then). One that still fails fails the
+# report job, so the run shows it and the Friday status says CI's last run failed; the next run tries again. (Never
+# read as no issue open: that opened a second one beside it, or left one open with the run saying all went out)
+again() {
+    local i
+    for i in 1 2 3; do
+        "$@" && return 0
+        ((i == 3)) || sleep "${AGROS_RETRY_WAIT:-20}"
+    done
+    echo "::error::gh ${2:-} ${3:-} failed three times: CI's held issue not brought up to date" >&2
+    return 1
+}
+# (every open one: a second one, from a create GitHub made but answered as failed, closed beside the first)
+open=$(again gh issue list --label held --state open --json number -q '.[].number') || exit 1
+read -r first others <<<"$(paste -sd' ' <<<"$open")"
 if [[ $state == ok && -z $held && -z $ahead ]]; then
-    [[ -z $open ]] || gh issue close "$open" --comment "Everything built and passed again: $RUN_URL"
+    for n in $open; do
+        again gh issue close "$n" --comment "Everything built and passed again: $RUN_URL" || exit 1
+    done
     echo "All out"
     exit 0
 fi
@@ -58,9 +74,12 @@ body=$(mktemp)
 } >"$body"
 gh label create held --color D93F0B --description "CI held something back" --force >/dev/null 2>&1 || true
 title="$title: ${state%%:*}"
-if [[ -n $open ]]; then
-    gh issue edit "$open" --title "$title" --body-file "$body"
+rc=0
+if [[ -n $first ]]; then
+    again gh issue edit "$first" --title "$title" --body-file "$body" || rc=1
+    for n in $others; do again gh issue close "$n" --comment "A second copy of #$first: said there" || rc=1; done
 else
-    gh issue create --label held --title "$title" --body-file "$body"
+    again gh issue create --label held --title "$title" --body-file "$body" || rc=1
 fi
 rm -f "$body"
+exit "$rc"
