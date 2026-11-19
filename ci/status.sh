@@ -226,6 +226,9 @@ done
 rm -f "$body" "$baseline"
 [[ -n $new ]] || { echo "::error::The status issue couldn't be made: none sent this week"; exit 1; }
 echo "$new"
+# (only older ones: two runs at once, a manual one beside Friday's, each closing the other's left none open)
+new=${new##*/}
 for n in $(gh issue list --label status --state open --json number -q '.[].number' 2>/dev/null); do
-    [[ $n == "${new##*/}" ]] || gh issue close "$n" >/dev/null
+    [[ $n =~ ^[0-9]+$ && $new =~ ^[0-9]+$ ]] && ((n < new)) && gh issue close "$n" >/dev/null
 done
+exit 0

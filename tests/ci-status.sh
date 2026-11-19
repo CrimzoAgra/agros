@@ -92,8 +92,9 @@ case "$*" in
     [[ $STATE == *gh-down* ]] && exit 1
     [[ $STATE == *status-missed* ]] && json '[{"createdAt": "2026-11-06T17:02:00Z"}]' || json '[{"createdAt": "2026-11-13T17:02:00Z"}]' ;;
   "issue list --label status --state all"*) cat @T@/lastbody 2>/dev/null; true ;;
-  # (last week's, 7, and the one just made, 8; making it fails while @T@/createfail is there)
-  "issue list --label status"*) echo 7; echo 8 ;;
+  # (last week's, 7, the one just made, 8, and 9, another run's made at the same time; making it fails while
+  # @T@/createfail is there)
+  "issue list --label status"*) echo 7; echo 8; echo 9 ;;
   "issue create"*)
     [[ -e @T@/createfail ]] && exit 1
     for a; do [[ $p == --body-file ]] && cp "$a" @T@/body; p=$a; done
@@ -117,7 +118,7 @@ last_sizes() { PATH=$t/bin:$PATH "$here/ci/status.sh" --last-sizes; }
 go ""
 grep -q '^@someone \*\*Nothing broke this week' "$t/body" || fail "all well not said: $(cat "$t/body")"
 grep -qx 'gh issue close 7' "$t/gh.log" || fail "last week's status not closed"
-grep -q 'gh issue close 8' "$t/gh.log" && fail "this week's status closed as soon as it was made"
+grep -q 'gh issue close [89]' "$t/gh.log" && fail "this week's status (or another run's, newer) closed: $(cat "$t/gh.log")"
 [[ $(grep -n '^gh issue \(create\|close\)' "$t/gh.log" | head -1) == *create* ]] ||
     fail "last week's status closed before this week's was made: $(cat "$t/gh.log")"
 # (GitHub's API failing to make it: tried three times, then the run fails, last week's left open; never a run that
