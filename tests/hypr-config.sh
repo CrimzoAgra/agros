@@ -422,7 +422,7 @@ import re, sys
 text = re.sub(r'"\s*\.\.\s*"', '', open(sys.argv[1]).read())  # (a string split over lines: one)
 pats = [p.replace("\\\\", "\\") for p in re.findall(r'match = \{ class = "([^"]*)" \}, opaque = true', text)]
 opaque = lambda c: any(re.fullmatch(p, c) for p in pats)
-want = ("org.gnome.TextEditor", "com.interversehq.qView", "mpv", "org.gnome.FileRoller", "libreoffice-writer",
+want = ("org.gnome.TextEditor", "org.gnome.gthumb", "mpv", "org.gnome.FileRoller", "libreoffice-writer",
         "libreoffice-calc", "codium", "librewolf")
 sys.exit(0 if all(map(opaque, want)) and not any(map(opaque, ("foot", "thunar", "orgxgnomexTextEditor"))) else 1)
 PY

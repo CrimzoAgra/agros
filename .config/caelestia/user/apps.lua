@@ -32,10 +32,10 @@ hl.window_rule({ match = { class = "^(updates|desktop-settings|agros-install)$" 
 -- LibreWolf opaque too (Caelestia's opacity for every other window left web pages see-through)
 -- (both tagged dots_opaque too: window peek, user/windows.lua, fades them back to whole, as they are)
 hl.window_rule({ match = { class = "^(librewolf)$" }, opaque = true, tag = "+dots_opaque" })
--- ...and the apps AgrOS opens your files in (mimeapps.list and the apps' own): Text Editor, qView, mpv, File Roller,
+-- ...and the apps AgrOS opens your files in (mimeapps.list and the apps' own): Text Editor, gThumb, mpv, File Roller,
 -- LibreOffice (a class per part: libreoffice-writer...) and VSCodium (codium; VSCodium under X11): through text, a
 -- picture or a video, the windows behind showed. Not the terminal: see-through by design (its own colours)
-hl.window_rule({ match = { class = "^(org\\.gnome\\.TextEditor|com\\.interversehq\\.qView|mpv|org\\.gnome\\.FileRoller|"
+hl.window_rule({ match = { class = "^(org\\.gnome\\.TextEditor|org\\.gnome\\.gthumb|mpv|org\\.gnome\\.FileRoller|"
                            .. "libreoffice-.+|soffice|codium|VSCodium)$" }, opaque = true, tag = "+dots_opaque" })
 -- The installer (the live USB's): sized to the screen, in the middle; at its own size its summary page ran past the
 -- bottom of a small screen and hid the Install button. Its main window only, by the product name in the title it opens
