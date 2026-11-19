@@ -112,10 +112,18 @@ if [[ ${1:-} == --install ]]; then
         echo "$((skips + 1)) $since $1" >"$au/skipped"
         exit 0
     }
-    # A soft reboot (systemctl soft-reboot) stops this too, but keeps the kernel running: a kernel or driver installed
-    # under it is the mismatch installing at shutdown is for. Left for a real shutdown
-    ! systemctl list-jobs --no-legend 2>/dev/null | grep -q '^ *[0-9]* *soft-reboot\.target ' ||
-        skip "a soft reboot (the kernel keeps running: installed at a real shutdown)"
+    # Only at a real shutdown: power off, restart, halt or kexec, their target's job queued. A soft reboot (systemctl
+    # soft-reboot) stops this too, but keeps the kernel running: a kernel or driver installed under it is the mismatch
+    # installing at shutdown is for. So does anything else that stops this unit: an admin's `systemctl disable --now`
+    # or restart of it (the whole install then ran under the running desktop, what its ordering is there to avoid), a
+    # switch to rescue or emergency mode (an hour's install under the console opened to fix something). Left for a real
+    # shutdown. (systemctl's list not to be had: installed, as before it was asked)
+    if queued=$(systemctl list-jobs --no-legend 2>/dev/null); then
+        ! grep -q '^ *[0-9]* *soft-reboot\.target ' <<<"$queued" ||
+            skip "a soft reboot (the kernel keeps running: installed at a real shutdown)"
+        grep -qE '^ *[0-9]* *(poweroff|reboot|halt|kexec)\.target ' <<<"$queued" ||
+            skip "not a shutdown (its unit stopped by hand, or rescue or emergency mode): installed at a real shutdown"
+    fi
     # (the boot partition, wherever fstab mounts it, mounted: a kernel or boot image written with it away would go to
     # the folder under it, and the boot use the old ones). An automount's (x-systemd.automount) placeholder counts as
     # mounted too: looked into first (that mounts it), then the real one there, not autofs. Then kept open (busy) for

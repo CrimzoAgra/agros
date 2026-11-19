@@ -156,8 +156,10 @@ disown "$holder"  # (killed at the end without a job notice after "ok")
 on_exit 'pkill -P $holder; kill $holder'
 # shellcheck disable=SC2016  # (expanded by the stand-ins)
 printf '#!/bin/sh\n[ "$1" = -x ] && [ -n "$HOLDER_RUNS" ] && { echo %s; exit 0; }\nexit 1\n' "$holder" >"$t/bin/pgrep"
+# (a shutdown's own job queued, a power off, but where a test says otherwise; $JOBS_FAIL: systemctl can't list them)
 # shellcheck disable=SC2016
-printf '#!/bin/sh\n[ "$1" != list-jobs ] || printf "%%s\n" "$JOBS"\nexit 0\n' >"$t/bin/systemctl"
+printf '#!/bin/sh\n[ "$1" != list-jobs ] || { [ -z "$JOBS_FAIL" ] || exit 1; printf "%%s\n" "$JOBS"; }\nexit 0\n' >"$t/bin/systemctl"
+export JOBS="  41 poweroff.target start waiting"
 chmod +x "$t/bin/"* "$t/auto-update" "$t/auto-update-aur"
 export PATH=$t/bin:$PATH QU="foo 1-1 -> 2-1"
 # pacman's list the one an earlier install put there (copied before cp -p: its time the copy's, now), the download's
@@ -290,6 +292,23 @@ lists
 JOBS="  42 soft-reboot.target start waiting" "$t/auto-update" --install || fail "an install at a soft reboot failed"
 [[ $(cat "$t/pac/sync/core.db") == old && ! -s $t/calls && $(cut -d' ' -f3- "$t/au/skipped") == "a soft reboot"* ]] ||
     fail "installed at a soft reboot, or not counted: $(cat "$t/calls") $(cat "$t/au/skipped")"
+# Not a shutdown at all: the unit stopped by hand (systemctl disable --now, a restart: no shutdown's job queued) or a
+# switch to rescue mode. Nothing installed under the running desktop or the rescue console, counted with its reason
+for jobs in "" "  7 rescue.target start running"; do
+    lists
+    : >"$t/calls"
+    JOBS=$jobs "$t/auto-update" --install || fail "a stop that isn't a shutdown failed ($jobs)"
+    [[ $(cat "$t/pac/sync/core.db") == old && ! -s $t/calls && $(cut -d' ' -f3- "$t/au/skipped") == "not a shutdown"* ]] ||
+        fail "installed when its unit stopped outside a shutdown (${jobs:-no job}), or not counted: $(cat "$t/calls") $(cat "$t/au/skipped")"
+done
+# A restart, halt or kexec is one; and with systemctl's list not to be had, it installs as it did
+for jobs in "  9 reboot.target start waiting" "  9 halt.target start waiting" "  9 kexec.target start waiting" fail; do
+    lists
+    : >"$t/calls"
+    if [[ $jobs == fail ]]; then JOBS_FAIL=1 "$t/auto-update" --install >/dev/null; else JOBS=$jobs "$t/auto-update" --install >/dev/null; fi ||
+        fail "the install at a shutdown failed ($jobs)"
+    grep -q "^pacman -Su" "$t/calls" || fail "nothing installed at a shutdown ($jobs): $(cat "$t/calls")"
+done
 # Nearly empty on battery (a laptop off its charger): nothing installed, counted with its reason; on its charger, or
 # with more charge (a mouse's own battery, nearly empty, isn't the computer's), installed. (battery-low's folder: $t/ps)
 battery() {  # <name> <capacity> <status> [<scope>]

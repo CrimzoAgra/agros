@@ -1204,7 +1204,8 @@ brings each change; nothing to run by hand).
   `agros-check` says an install at shutdown that failed or was held back (until one goes through), AUR builds, AUR
   apps the install left out, or a firmware update that failed, and 3 shutdowns in a row with nothing installed, with the
   last one's reason (the boot's download didn't finish: only a finished one is installed; something else using pacman
-  still held its lock; a soft reboot, which keeps the kernel running; with pacman's error when the download failed; on
+  still held its lock; a soft reboot, which keeps the kernel running; its unit stopped outside a shutdown, by hand or
+  for rescue or emergency mode; with pacman's error when the download failed; on
   battery, nearly empty: below 15%, discharging; pacman's lists couldn't be kept aside, a full disk). Each says to run
   Updates (and where to read the log) to an admin alone; another account, its Updates without "Update all" and the log
   closed to it, is told to ask an administrator to run Updates. An install cut off
