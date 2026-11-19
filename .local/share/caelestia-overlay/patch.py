@@ -321,6 +321,27 @@ def favourites_az():
 """, old.strip())}
 
 
+def launcher_by_kind():
+    # Super menu: an app is found by what it is too (its launcher entry's generic name and keywords), not only by its
+    # name: "term" found nothing, foot's name is Foot (a "Terminal"), nor "files" Thunar. Those found by name first, as
+    # before; then the others, as Caelestia's own >g and >k prefixes find them
+    rel = "modules/launcher/services/Apps.qml"
+    old = """            if (!search.startsWith(`${prefix}t `))
+                return query(search).map(e => e.entry);
+"""
+    return {rel: swap(read(rel), old, """            // caelestia-overlay: then the apps found by what they are (generic name, keywords), after those by name
+            if (!search.startsWith(`${prefix}t `)) {
+                const byName = query(search).map(e => e.entry);
+                keys = ["genericName", "keywords"];
+                weights = [0.5, 0.5];
+                const byKind = query(search).map(e => e.entry).filter(e => !byName.includes(e));
+                keys = ["name"];
+                weights = [1];
+                return byName.concat(byKind);
+            }
+""", "the Super menu's search by name")}
+
+
 def tray_menu_fallback():
     # Right-clicking a tray icon with no standard menu (Wine apps: the Epic Games launcher) opens the app's own menu
     # (~/.local/bin/tray-menu: its ContextMenu call, which Quickshell doesn't make); it did nothing
@@ -1757,6 +1778,7 @@ FEATURES = (
     ("bluetooth pairing", bluetooth),
     ("Spotify tray icon", spotify_tray),
     ("favourites first, all A-Z", favourites_az),
+    ("Super menu finds apps by what they are too: term, files...", launcher_by_kind),
     ("brightness on built-in screens only", internal_brightness),
     ("bar logo does nothing", logo_inert),
     ("popout safe triangle", safe_triangle),

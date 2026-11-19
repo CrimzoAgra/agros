@@ -117,6 +117,27 @@ console.log(r.join(' '));")
 else
     skipped "no node: the panels' edge hover not run"
 fi
+# The Super menu finds an app by what it is too (its generic name, keywords: "term" found nothing, foot's name is
+# Foot), after those found by name, each once; its prefixes and its search by name as Caelestia's after it (query: the
+# list's items whose keys hold the text, as Caelestia's Searcher matches them)
+if command -v node >/dev/null; then
+    fn=$(sed -n '/^    function search(search: string): var {$/,/^    }$/p' "$dst/modules/launcher/services/Apps.qml" |
+        sed 's/(search: string): var {/(search) {/')
+    [[ -n $fn ]] || fail "the Super menu's search not found"
+    seq=$(node -e "const GlobalConfig = { launcher: { specialPrefix: '>' } };
+let keys = ['name'], weights = [1];
+const list = [{ entry: 'foot', name: 'Foot', genericName: 'Terminal', keywords: ['shell'] },
+    { entry: 'termius', name: 'Termius', genericName: 'SSH client', keywords: ['terminal'] },
+    { entry: 'thunar', name: 'Thunar', genericName: 'File Manager', keywords: ['files', 'explorer'] }];
+const query = s => list.filter(i => keys.map(k => i[k]).join(' ').toLowerCase().includes(s.trim().toLowerCase()));
+$fn
+const r = [search('term'), search('files'), search('foot'), [keys.join('+')], search('>g term')];
+console.log(r.map(x => x.join(',')).join(' '));")
+    [[ $seq == "termius,foot thunar foot name foot,termius" ]] ||
+        fail "the Super menu's search by what an app is: $seq (want: termius,foot thunar foot name foot,termius)"
+else
+    skipped "no node: the Super menu's search not run"
+fi
 # The sidebar's shortcut mode: added once on a Caelestia without its own (2.5.0)
 grep -q 'property bool sidebarShortcutActive' /etc/xdg/quickshell/caelestia/modules/drawers/Interactions.qml ||
     [[ $(grep -c 'property bool sidebarShortcutActive' "$i") == 1 ]] || fail "the sidebar's shortcut mode not patched in"

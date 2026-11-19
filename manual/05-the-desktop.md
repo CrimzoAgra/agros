@@ -16,8 +16,9 @@ Right-click an empty part of the bar for the Task Manager and the floating/tilin
 
 ## The app menu
 
-Press **Super**, type, and press Enter. Pinned favourites come first, then every app from A to Z. The button next to
-the search bar checks for updates.
+Press **Super**, type, and press Enter. Typing what an app is finds it too ("term" for the terminal, "files"), after
+the apps whose name matches. Pinned favourites come first, then every app from A to Z. The button next to the search
+bar checks for updates.
 
 ## Notifications
 
