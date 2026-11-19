@@ -173,7 +173,13 @@ out=$(NO=1 REF=com.x.App FLATPAK_BUNDLE_HELD=1 fbu 2>&1) || true  # (a temp fold
     fail "Updates installed a version asking for more access without a yes, or didn't ask what it adds: $out / $(cat "$t/asked" 2>/dev/null)"
 # ...yes, and it's installed, what it adds said in its log
 rm -f "$t/installs"
+# (a download a run cut off left, hours old, taken away first; one of a run going on now, and anything else, kept)
+mkdir -p "$t/home/.cache/agros-flatpak.OLDone/.ref.x" "$t/home/.cache/agros-flatpak.NEWone" "$t/home/.cache/agros-flatpak-mine"
+touch -d '7 hours ago' "$t/home/.cache/agros-flatpak.OLDone" "$t/home/.cache/agros-flatpak-mine"
 out=$(REF=com.x.App FLATPAK_BUNDLE_HELD=1 fbu 2>&1) || true
+[[ ! -e $t/home/.cache/agros-flatpak.OLDone && -d $t/home/.cache/agros-flatpak.NEWone && -d $t/home/.cache/agros-flatpak-mine ]] ||
+    fail "a download a cut-off run left not taken away, or another one taken: $(ls -A "$t/home/.cache")"
+rm -rf "$t/home/.cache/agros-flatpak.NEWone" "$t/home/.cache/agros-flatpak-mine"
 [[ $out == *"com.x.App: its new version asks for more access, said yes to: [Context]filesystems=host, [Session Bus Policy]org.freedesktop.Flatpak=talk"* &&
     $out == *"com.x.App: updated to 1.1"* ]] && grep -q -- '--user .*--bundle ' "$t/installs" ||
     fail "Updates didn't install a version asking for more access after a yes, or didn't say what it adds: $out / $(cat "$t/installs" 2>/dev/null)"

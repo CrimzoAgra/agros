@@ -201,8 +201,12 @@ reinstall() {
 # it (over an older one); prints the app id; exit 3 as fetch_from's. (In your cache, on disk, as update-apps' builds:
 # the file and the repo it's read into, about twice the app's size, in /tmp took memory)
 install_from() {
-    local tmp got ok=0
-    mkdir -p "${XDG_CACHE_HOME:-$HOME/.cache}" && tmp=$(mktemp -d "${XDG_CACHE_HOME:-$HOME/.cache}/agros-flatpak.XXXXXX") || return 1
+    local tmp got ok=0 cache=${XDG_CACHE_HOME:-$HOME/.cache}
+    mkdir -p "$cache" || return 1
+    # (one a run cut off left there (logged out or shut down mid-update, a power cut: nothing took it away), twice the
+    # app's size kept in your cache for good: its own folders alone, by their mktemp name, hours old, taken away)
+    find "$cache" -mindepth 1 -maxdepth 1 -type d -name 'agros-flatpak.??????' -mmin +360 -exec rm -rf {} + 2>/dev/null
+    tmp=$(mktemp -d "$cache/agros-flatpak.XXXXXX") || return 1
     got=$(fetch_from "$1" "$tmp" "$2" "${3:-}" "${4:-}") || ok=$?
     ((ok)) || { reinstall "$2" "${got#*$'\t'}" "${got%%$'\t'*}" >&2 && echo "${got%%$'\t'*}"; } || ok=1
     rm -rf "${tmp:?}"
