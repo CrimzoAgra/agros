@@ -230,7 +230,9 @@ Changes apply right away.
 - **`.config/quickshell/settings/`**: the app (`desktop-settings [page]` opens it, on a page if given). It draws
   every page from the schema: one control per kind of setting (a switch, joined buttons or a list for a choice,
   shortcuts, a slider and -/+ for a number, a text field, a JSON field, pictures), a button back to the default on any
-  that's changed, a note where AgrOS relies on the value, and a search over every page above the list of pages
+  that's changed, a note where AgrOS relies on the value, and a search over every page above the list of pages. Below
+  that list, whether changes are being applied, or why one wasn't (in red, with an error icon, wrapped in the list's
+  width)
 - **`.local/share/dots-settings/schema.json`**: every setting, its kind, default, and how a change applies (reload
   Hyprland...). A new setting is added here, then read where it's used; a new kind of setting is added to
   `dots-settings` and the app once, for every page

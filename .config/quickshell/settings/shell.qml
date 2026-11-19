@@ -1006,8 +1006,10 @@ ShellRoot {
                         }
                     }
 
-                    // Whether changes are being saved and applied
+                    // Whether changes are being saved and applied, or why one wasn't: wrapped in the list's width (a long
+                    // one widened the list, under the page beside it)
                     RowLayout {
+                        Layout.fillWidth: true
                         Layout.margins: 12
                         spacing: 8
                         opacity: root.busy ? 1 : 0.7
@@ -1015,8 +1017,9 @@ ShellRoot {
                         Icon {
                             id: busyIcon
 
-                            text: root.busy ? "sync" : "check_circle"
+                            text: root.busy ? "sync" : root.error ? "error" : "check_circle"
                             font.pixelSize: 18
+                            color: root.error ? root.c("error") : root.c("onSurfaceVariant")
 
                             RotationAnimation on rotation {
                                 running: root.busy
@@ -1028,8 +1031,10 @@ ShellRoot {
                             }
                         }
                         Label {
+                            Layout.fillWidth: true
                             text: root.error || (root.busy ? "Applying…" : root.deferred ? "Applied once your game closes" : "Changes apply right away")
                             font.pixelSize: 12
+                            wrapMode: Text.Wrap
                             color: root.error ? root.c("error") : root.c("onSurfaceVariant")
                         }
                     }
