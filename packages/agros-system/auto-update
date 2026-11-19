@@ -333,7 +333,9 @@ if [[ ${1:-} == --install ]]; then
         done <"$aur/built"
     fi
     [[ ! -s $aur/failed ]] || echo "AUR apps wait, the rest installs without them (the boot's builds: $(paste -sd';' "$aur/failed" | sed 's/;/; /g'))"
-    [[ -n $pending || ${#targets[@]} -gt 0 ]] || { echo "nothing to install"; result ok; settled; exit 0; }
+    # (what AgrOS dropped removed then too: the update that took it out may have come through Updates, the old
+    # update-apps, with no removal of its own)
+    [[ -n $pending || ${#targets[@]} -gt 0 ]] || { echo "nothing to install"; result ok; settled; retire; exit 0; }
     # safety snapshot (pick it in the boot menu if an update breaks something). --no-dbus: this runs at shutdown, when
     # snapperd (started on demand over DBus) can't be started any more, and the snapshot was silently skipped
     # Then into the boot menu's snapshot list here: what does that otherwise (grub-btrfsd) is stopped by now, and isn't

@@ -213,6 +213,11 @@ ORPHANS=qview RNS_RC=1 "$t/auto-update" --install >/dev/null || fail "a removal 
 lists; : >"$t/calls"
 ORPHANS=qview PACMAN_RC=1 "$t/auto-update" --install >/dev/null && fail "a failed install reported success"
 grep -q -- '-Rns' "$t/calls" && fail "removed after a failed install: $(cat "$t/calls")"
+# (and with nothing to install: the update that dropped it came through Updates, whose old update-apps removed nothing)
+lists; : >"$t/calls"
+ORPHANS=qview QU='' QU_RC=1 "$t/auto-update" --install >/dev/null || fail "nothing to install, a package to retire: failed"
+grep -qx 'pacman -Rns --noconfirm -- qview (SNAP_PAC_SKIP=y)' "$t/calls" ||
+    fail "what AgrOS dropped not removed when there was nothing to install: $(cat "$t/calls")"
 rm "$t/retired"
 
 # A failed install: pacman's lists back as they were (not newer than its packages), and written down with pacman's reason
