@@ -62,6 +62,8 @@ printf '#!/bin/sh\necho "warned: $*" >>%q\n' "$t/warned" >"$t/lib/bin/dots-warn"
 for f in caelestia/old.lua caelestia/mine.lua caelestia/shell.json; do echo new >"$s/$f"; done
 echo new >"$t/skel/.local/share/applications/x.desktop"
 echo old >"$h/caelestia/old.lua"; chmod 600 "$h/caelestia/old.lua"; echo old >"$t/home/.local/share/applications/x.desktop"
+# (one an earlier run had wrongly offered: gone with the update)
+echo stale >"$h/caelestia/old.lua.agros-new"
 echo edited >"$h/caelestia/mine.lua"; echo edited >"$h/caelestia/shell.json"
 sha() { sha256sum <"$1" | cut -d' ' -f1; }
 for v in old agros new; do

@@ -67,7 +67,9 @@ if [[ -r $versions ]]; then
         s=$(sum "$f")
         if [[ ${known[$(sum "$to") $n]-} ]]; then
             # (written beside it, then moved over it: never half-written; its mode as yours was)
-            cp "$f" "$to.agros-tmp" && chmod --reference="$to" "$to.agros-tmp" && mv -f "$to.agros-tmp" "$to"
+            # (an .agros-new an earlier run left beside it gone too: yours is AgrOS's now, nothing to compare)
+            cp "$f" "$to.agros-tmp" && chmod --reference="$to" "$to.agros-tmp" && mv -f "$to.agros-tmp" "$to" &&
+                rm -f "$to.agros-new"
         elif [[ ! ${told[$s $n]-} ]]; then
             cp "$f" "$to.agros-new" && new+=("$n") && offer+=("$s $n")
         fi
