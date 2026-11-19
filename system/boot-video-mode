@@ -3,16 +3,16 @@
 desktop (the screen doesn't resync when Hyprland takes over). Runs at every boot (boot-video-mode.service, installed
 by agros-boot): reads the connected screens' modes from their EDID, picks the screen's own resolution (its preferred
 mode's) and then its highest refresh rate there (screenmode.py, shared with the login screen's best-mode), and sets
-video=<screen>:<W>x<H>@<Hz> in the kernel options (Limine or GRUB) when they changed. The kernel picks its mode before
+video=<screen>:<W>x<H>@<Hz> in GRUB's kernel options when they changed. The kernel picks its mode before
 this can run, so a newly connected screen gets its mode from the boot after.
   boot-video-mode           update the kernel options if the screens changed
   boot-video-mode --check   only print the options for the screens connected now (none: said, exit 3)
   boot-video-mode --current the video= options the boot config has now (what a boot with no screen found keeps; no
-                            Limine or GRUB settings: exit 4)
+                            GRUB settings: exit 4)
   boot-video-mode --quiet-boot  the options that keep the boot's and shutdown's text behind the splash (QUIET) added,
                             each only where the line has no option of its name (a loglevel=7 of yours stays); the boot
                             entries not made again (boot-menu does); none missing: exit 3. (Here, the one place that
-                            edits the kernel options line of Limine or GRUB)
+                            edits GRUB's kernel options line)
   boot-video-mode --remove  the video= options it set taken out (agros-boot's removal): the ones in the form it writes,
                             video=<screen>:<W>x<H>@<Hz> (others, like video=efifb:off, are yours: kept); and the QUIET
                             ones the line didn't have before AgrOS (its <file>.agros-orig, boot-menu's copy; none: kept);
@@ -20,7 +20,7 @@ this can run, so a newly connected screen gets its mode from the boot after.
   boot-video-mode --test    its own checks of the option editing (tests/run.sh)
   (AGROS_ROOT: another root, the tests' throwaway one)
 The kernel options line is the set in effect: the file is read as a shell script, so a KEY= line sets the options and each
-KEY+= after it adds to them (Limine's KERNEL_CMDLINE[default] can have several). Options go on its last line; ones of
+KEY+= after it adds to them. Options go on its last line; ones of
 the same name on any of its lines count as there
 """
 import glob
@@ -88,8 +88,8 @@ def with_video(line, video):
     # Whole options only (after a space or the quote): not the end of another one's name, like "foo.video=1"
     kept = [v for v in re.findall(r'(?<![^\s"\'])video=[^ "\']*', line) if connector(v) not in now]
     entries = kept + video
-    # A value with no quotes (KERNEL_CMDLINE[default]+=quiet, GRUB_CMDLINE_LINUX_DEFAULT=quiet: one word, as the shell
-    # reads it): quoted, so the options can go in
+    # A value with no quotes (GRUB_CMDLINE_LINUX_DEFAULT=quiet: one word, as the shell reads it): quoted, so the options
+    # can go in
     quoted = with_quotes(line, "screen modes")
     if quoted is None:
         return line
@@ -97,10 +97,9 @@ def with_video(line, video):
 
 
 def with_quotes(line, what):
-    """The options line with its value quoted (a value with no quotes, KERNEL_CMDLINE[default]+=quiet,
-    GRUB_CMDLINE_LINUX_DEFAULT=quiet: one word, as the shell reads it), so options can go in; None, said, where they
-    can't (a quote not closed)"""
-    bare = re.match(r'^([A-Za-z_][\w\[\]]*\+?=)([^\s"\']*)\s*$', line)
+    """The options line with its value quoted (a value with no quotes, GRUB_CMDLINE_LINUX_DEFAULT=quiet: one word, as
+    the shell reads it), so options can go in; None, said, where they can't (a quote not closed)"""
+    bare = re.match(r'^([A-Za-z_]\w*\+?=)([^\s"\']*)\s*$', line)
     if bare:
         line = f'{bare.group(1)}"{bare.group(2)}"'
     if not re.search(r'["\']\s*$', line):
@@ -164,24 +163,20 @@ def write(conf, lines):
 
 ROOT = os.environ.get("AGROS_ROOT", "")  # (another root in the tests, boot-loader's too)
 HERE = os.path.dirname(os.path.abspath(__file__))
-# agros-boot's boot-loader, which decides the boot loader for boot-menu and its install too: beside this folder once
-# installed, in agros-boot's in the repo
+# agros-boot's boot-loader, which says whether GRUB is set up, for boot-menu and its install too: beside this folder
+# once installed, in agros-boot's in the repo
 LOADER = next((p for p in (f"{HERE}/../boot-loader", f"{HERE}/../packages/agros-boot/boot-loader") if os.path.exists(p)),
               f"{HERE}/../boot-loader")
 
 
 def boot_config():
-    """The boot loader's settings this keeps the options in: (file, its kernel options line's start, the command that
-    makes the boot entries from it), or None. Limine's or GRUB's, the one boot-loader says boots (Limine with no
-    /etc/default/limine: no kernel options file, none)"""
-    loader = subprocess.run([LOADER], check=False, capture_output=True, text=True).stdout.strip()
-    if loader == "limine" and os.path.isfile(f"{ROOT}/etc/default/limine"):
-        return f"{ROOT}/etc/default/limine", r"KERNEL_CMDLINE\[default\]\+?=", ["limine-update"]
-    if loader == "grub":
-        # (its menu in that root's /boot too: a test's AGROS_ROOT never makes the machine's own)
-        return (f"{ROOT}/etc/default/grub", r"GRUB_CMDLINE_LINUX_DEFAULT\+?=",
-                ["grub-mkconfig", "-o", f"{ROOT}/boot/grub/grub.cfg"])
-    return None
+    """GRUB's settings this keeps the options in: (file, its kernel options line's start, the command that makes the
+    boot entries from it), or None where boot-loader says GRUB isn't set up"""
+    if subprocess.run([LOADER], check=False).returncode:
+        return None
+    # (its menu in that root's /boot too: a test's AGROS_ROOT never makes the machine's own)
+    return (f"{ROOT}/etc/default/grub", r"GRUB_CMDLINE_LINUX_DEFAULT\+?=",
+            ["grub-mkconfig", "-o", f"{ROOT}/boot/grub/grub.cfg"])
 
 
 def effective(lines, key):
@@ -209,7 +204,7 @@ def current_video():
 def main():
     if "--current" in sys.argv:
         print(" ".join(current_video()))
-        return 0 if boot_config() else 4  # (4: no Limine or GRUB settings, nothing it sets)
+        return 0 if boot_config() else 4  # (4: no GRUB settings, nothing it sets)
     if "--remove" in sys.argv or "--quiet-boot" in sys.argv:
         found = boot_config()
         if not found:
@@ -252,7 +247,7 @@ def main():
         return 0
     found = boot_config()
     if not found:
-        print("No Limine or GRUB settings found: nothing to do")
+        print("No GRUB settings found: nothing to do")
         return 0
     conf, key, update = found
     with open(conf) as f:
@@ -285,8 +280,8 @@ if __name__ == "__main__":
         assert best_mode("DTD 1:  3840x2160   60.000000 Hz\n  VIC 102:  4096x2160   60.000000 Hz\n") == (3840, 2160, 60.0)
         assert best_mode("DTD 1:  1920x1080   60.000000 Hz\nDTD 5:  1920x1080   71.910434 Hz\n"
                          "DMT 0x05:   640x480    72.808802 Hz\nVIC 5: 1920x1080i 60.000 Hz") == (1920, 1080, 71.910434)
-        line = 'KERNEL_CMDLINE[default]+="quiet rw video=HDMI-A-1:1280x720@60"'
-        assert with_video(line, ["video=HDMI-A-1:1920x1080@72"]) == 'KERNEL_CMDLINE[default]+="quiet rw video=HDMI-A-1:1920x1080@72"'
+        line = 'GRUB_CMDLINE_LINUX_DEFAULT+="quiet rw video=HDMI-A-1:1280x720@60"'
+        assert with_video(line, ["video=HDMI-A-1:1920x1080@72"]) == 'GRUB_CMDLINE_LINUX_DEFAULT+="quiet rw video=HDMI-A-1:1920x1080@72"'
         assert with_video(with_video(line, ["video=X:1x1@1"]), ["video=X:1x1@1"]) == with_video(line, ["video=X:1x1@1"])
         # A screen not seen now (asleep) keeps its entry; one seen gets the new one
         assert with_video('K="quiet video=DP-1:1x1@1 video=HDMI-A-1:2x2@2"', ["video=HDMI-A-1:3x3@3"]) == 'K="quiet video=DP-1:1x1@1 video=HDMI-A-1:3x3@3"'
@@ -300,7 +295,7 @@ if __name__ == "__main__":
         assert with_video("GRUB_CMDLINE_LINUX_DEFAULT='quiet splash'", ["video=X:1x1@1"]) == "GRUB_CMDLINE_LINUX_DEFAULT='quiet splash video=X:1x1@1'"
         # A value with no quotes: quoted, the options put in (it was left, and "done" said with nothing set)
         assert with_video("GRUB_CMDLINE_LINUX_DEFAULT=quiet", ["video=X:1x1@1"]) == 'GRUB_CMDLINE_LINUX_DEFAULT="quiet video=X:1x1@1"'
-        assert with_video("KERNEL_CMDLINE[default]+=quiet", ["video=X:1x1@1"]) == 'KERNEL_CMDLINE[default]+="quiet video=X:1x1@1"'
+        assert with_video("GRUB_CMDLINE_LINUX_DEFAULT+=quiet", ["video=X:1x1@1"]) == 'GRUB_CMDLINE_LINUX_DEFAULT+="quiet video=X:1x1@1"'
         # One it can't (a quote not closed): left as it is (said on stderr)
         assert with_video('K="quiet', ["video=X:1x1@1"]) == 'K="quiet'
         # The quiet boot: the missing ones added (a name there kept as it is: loglevel=7); none missing, unchanged

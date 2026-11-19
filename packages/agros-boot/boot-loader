@@ -1,24 +1,6 @@
 #!/usr/bin/env bash
-# The boot loader this machine boots with, decided here alone for boot-menu, boot-video-mode and agros-boot's install
-# (agros-boot: /usr/lib/agros/boot-loader):
-#   boot-loader               limine or grub (neither: nothing printed, exit 1)
-#   boot-loader --limine      Limine's limine.conf, the first found where Limine keeps it (none: exit 1)
-#   boot-loader --limine-all  every place Limine's limine.conf can be, one per line
-# Limine where its settings file is (/etc/default/limine), or where it's installed without GRUB's tools: GRUB may still
-# be installed, its /etc/default/grub left, on a machine moved to Limine. Else GRUB, where its settings and
-# grub-mkconfig are. (AGROS_ROOT: another root, the tests' throwaway one)
+# Whether GRUB is set up here (exit 0; else 1), decided here alone for boot-menu, boot-video-mode and agros-boot's
+# install (agros-boot: /usr/lib/agros/boot-loader): its settings and grub-mkconfig are there.
+# (AGROS_ROOT: another root, the tests' throwaway one)
 r=${AGROS_ROOT:-}
-limine=("$r/boot/limine.conf" "$r/boot/limine/limine.conf" "$r/boot/EFI/limine/limine.conf" "$r/efi/limine.conf")
-case ${1:-} in
-    --limine-all) printf '%s\n' "${limine[@]}"; exit 0 ;;
-    --limine)
-        for c in "${limine[@]}"; do [[ -f $c ]] && { echo "$c"; exit 0; }; done
-        exit 1 ;;
-esac
-if [[ -f $r/etc/default/limine ]] || { pacman -Q limine >/dev/null 2>&1 && ! command -v grub-mkconfig >/dev/null; }; then
-    echo limine
-elif [[ -f $r/etc/default/grub ]] && command -v grub-mkconfig >/dev/null; then
-    echo grub
-else
-    exit 1
-fi
+[[ -f $r/etc/default/grub ]] && command -v grub-mkconfig >/dev/null

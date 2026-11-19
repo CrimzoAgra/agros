@@ -2,11 +2,11 @@
 # agros-boot's install script (packages/agros-boot/agros-boot.install) in a throwaway root (AGROS_ROOT), with its own
 # splash-theme, boot-loader and boot-video-mode, boot-menu a stand-in, and the system's tools stand-ins (none of the
 # machine's real ones on PATH): boot-menu run at install and noted; an upgrade runs it only when it changed (one that
-# failed, or with no note: run again); removal puts GRUB's and Limine's settings back from .agros-orig
+# failed, or with no note: run again); removal puts GRUB's settings back from .agros-orig
 # (commented out where boot-menu added them), takes boot-video-mode's video= and the quiet boot's options out (only those
 # not there before AgrOS), and the motherboard's wait back.
-# splash-theme --update/--remove, boot-loader's one decision (Limine or GRUB), and boot-menu's own edits of GRUB's and
-# Limine's settings, the quiet boot's kernel options in both (refused with one of the system's boot tools on PATH).
+# splash-theme --update/--remove, boot-loader's one decision (GRUB set up or not), and boot-menu's own edits of GRUB's
+# settings, the quiet boot's kernel options (refused with one of the system's boot tools on PATH).
 # The mkinitcpio drop-ins that add Plymouth's hook, and the snapshot overlay's (a booted snapshot writable in RAM), where
 # they're missing; that overlay's own script
 set -euo pipefail
@@ -19,7 +19,7 @@ mkdir -p "$r/usr/lib/agros/boot-video-mode" "$r/etc/default" "$r/boot" "$t/bin" 
 ln -s "$b/splash-theme" "$b/boot-loader" "$r/usr/lib/agros/"
 # (copied: run through a link, Python looks for screenmode.py beside the file linked to)
 cp "$here/system/boot-video-mode" "$here/.local/share/caelestia-greeter/screenmode.py" "$r/usr/lib/agros/boot-video-mode/"
-# Only these of the system's tools (no real grub-mkconfig, mkinitcpio, limine-* or efibootmgr found by command -v)
+# Only these of the system's tools (no real grub-mkconfig, mkinitcpio or efibootmgr found by command -v)
 for x in bash sh env sed grep cat cp rm mkdir sha256sum python3 head tail readlink mv dirname cut ln touch chmod cmp ls tee; do
     ln -s "$(command -v "$x")" "$t/sys/$x"
 done
@@ -40,11 +40,10 @@ exit \$rc
 STANDIN
     chmod +x "$r/usr/lib/agros/boot-menu"
 }
-for x in grub-mkconfig limine-update efibootmgr systemctl; do
+for x in grub-mkconfig efibootmgr systemctl; do
     printf '#!/bin/sh\necho "%s $*" >>%s/calls\n' "$x" "$t" >"$t/bin/$x"
 done
 printf '#!/bin/sh\necho "mkinitcpio $*" >>%s/calls\nexit ${MKINITCPIO_RC:-0}\n' "$t" >"$t/bin/mkinitcpio"
-printf '#!/bin/sh\nexit 1\n' >"$t/bin/pacman"
 cat >"$t/bin/plymouth-set-default-theme" <<EOF
 #!/bin/sh
 case \$1 in "") cat "$t/theme" ;; -r) echo default >"$t/theme" ;; *) echo "\$1" >"$t/theme" ;; esac
@@ -52,10 +51,10 @@ EOF
 printf '#!/bin/sh\necho ext4\n' >"$t/bin/findmnt"
 chmod +x "$t/bin/"*
 # (and checked: each boot tool these scripts run is its stand-in here, never the machine's)
-for x in grub-mkconfig limine-update efibootmgr systemctl mkinitcpio findmnt pacman; do
+for x in grub-mkconfig efibootmgr systemctl mkinitcpio findmnt; do
     [[ $(command -v "$x") == "$t/bin/$x" ]] || fail "$x isn't the stand-in: $(command -v "$x")"
 done
-for x in snapper limine-mkinitcpio; do ! command -v "$x" >/dev/null || fail "$x found: $(command -v "$x")"; done
+! command -v snapper >/dev/null || fail "snapper found: $(command -v snapper)"
 # shellcheck source=../packages/agros-boot/agros-boot.install
 . "$b/agros-boot.install"
 stamp=$r/var/lib/agros/boot-menu.sum
@@ -63,23 +62,13 @@ stamp=$r/var/lib/agros/boot-menu.sum
 pac() { (set +e; "$@"); }
 sum() { sha256sum <"$r/usr/lib/agros/boot-menu"; }
 
-# boot-loader: neither; GRUB (its settings and grub-mkconfig); Limine's settings win over GRUB's left behind; Limine
-# installed without GRUB's tools
+# boot-loader: neither GRUB's settings nor grub-mkconfig; its settings without grub-mkconfig; both (GRUB set up)
 mv "$t/bin/grub-mkconfig" "$t/gm"
-"$b/boot-loader" && fail "boot-loader found a loader with none there"
+"$b/boot-loader" && fail "boot-loader found GRUB with none there"
 echo 'GRUB_TIMEOUT=5' >"$r/etc/default/grub"
-"$b/boot-loader" && fail "GRUB without grub-mkconfig taken for the boot loader"
-printf '#!/bin/sh\n[ "$1 $2" = "-Q limine" ]\n' >"$t/bin/pacman"
-[[ $("$b/boot-loader") == limine ]] || fail "Limine installed without GRUB's tools not taken for the boot loader"
-printf '#!/bin/sh\nexit 1\n' >"$t/bin/pacman"
+"$b/boot-loader" && fail "GRUB without grub-mkconfig taken as set up"
 mv "$t/gm" "$t/bin/grub-mkconfig"
-[[ $("$b/boot-loader") == grub ]] || fail "GRUB not found"
-touch "$r/etc/default/limine"
-[[ $("$b/boot-loader") == limine ]] || fail "Limine's settings not taken over GRUB's"
-"$b/boot-loader" --limine && fail "a limine.conf found where there's none"
-mkdir -p "$r/boot/EFI/limine" && touch "$r/boot/EFI/limine/limine.conf"
-[[ $("$b/boot-loader" --limine) == "$r/boot/EFI/limine/limine.conf" ]] || fail "limine.conf not found: $("$b/boot-loader" --limine)"
-rm -r "$r/etc/default/limine" "$r/boot/EFI"
+"$b/boot-loader" || fail "GRUB not found"
 
 # Install: boot-menu run and noted (its version); failed: an empty note, run again at the next upgrade, then noted
 menu 1
@@ -116,31 +105,10 @@ want=$(printf '%s\n' 'GRUB_TIMEOUT_STYLE=menu' 'GRUB_TIMEOUT=5' "GRUB_CMDLINE_LI
 [[ ! -e $r/etc/default/grub.agros-orig && ! -e $stamp && ! -e $r/var/lib/agros/efi-timeout ]] || fail "removal left its notes"
 [[ $(calls | grep -c grub-mkconfig) == 1 ]] && grep -qx 'efibootmgr -q -t 5' <<<"$(calls)" || fail "removal's calls: $(calls)"
 
-# Removal, Limine: limine.conf's settings back, the video= out of /etc/default/limine and its entries made again, no GRUB
-rm "$r/etc/default/grub"
-echo 'KERNEL_CMDLINE[default]+="video=DP-1:2560x1440@165 quiet video=efifb:off"' >"$r/etc/default/limine"
-mkdir -p "$r/boot/limine"
-printf '%s\n' 'timeout: 5' '/CachyOS' >"$r/boot/limine/limine.conf.agros-orig"
-printf '%s\n' 'remember_last_entry: no' 'quiet: yes' 'timeout: 1' '/CachyOS' >"$r/boot/limine/limine.conf"
-rm -f "$t/calls"; pac pre_remove >/dev/null
-[[ $(cat "$r/boot/limine/limine.conf") == "$(printf '%s\n' '#remember_last_entry: no' '#quiet: yes' 'timeout: 5' '/CachyOS')" ]] ||
-    fail "Limine's settings not put back: $(cat "$r/boot/limine/limine.conf")"
-[[ $(cat "$r/etc/default/limine") == 'KERNEL_CMDLINE[default]+="quiet video=efifb:off"' ]] ||
-    fail "its video= not taken out (or the user's own too): $(cat "$r/etc/default/limine")"
-grep -q '^limine-update' <<<"$(calls)" && ! grep -q grub-mkconfig <<<"$(calls)" || fail "Limine's removal calls: $(calls)"
-[[ ! -e $r/boot/limine/limine.conf.agros-orig ]] || fail "limine.conf.agros-orig left"
-# The quiet boot's options out of /etc/default/limine where its limine.agros-orig hadn't them (its own loglevel kept), the
-# entries made again, the copy gone
-echo 'KERNEL_CMDLINE[default]+="loglevel=5 nowatchdog"' >"$r/etc/default/limine.agros-orig"
-echo 'KERNEL_CMDLINE[default]+="loglevel=5 nowatchdog quiet splash rd.udev.log_level=3 systemd.show_status=false"' >"$r/etc/default/limine"
-rm -f "$t/calls"; pac pre_remove >/dev/null
-[[ $(cat "$r/etc/default/limine") == 'KERNEL_CMDLINE[default]+="loglevel=5 nowatchdog"' && ! -e $r/etc/default/limine.agros-orig ]] ||
-    fail "the quiet boot's options not taken out of Limine's: $(cat "$r/etc/default/limine")"
-grep -q '^limine-update' <<<"$(calls)" || fail "Limine's entries not made again after the quiet boot's options came out: $(calls)"
 # boot-video-mode --remove: none there, exit 3; no boot loader, exit 3
 rc=0; "$r/usr/lib/agros/boot-video-mode/boot-video-mode" --remove || rc=$?
 ((rc == 3)) || fail "boot-video-mode --remove with nothing to take out: exit $rc"
-rm "$r/etc/default/limine"
+rm "$r/etc/default/grub"
 rc=0; "$r/usr/lib/agros/boot-video-mode/boot-video-mode" --remove || rc=$?
 ((rc == 3)) || fail "boot-video-mode --remove with no boot loader: exit $rc"
 
@@ -194,7 +162,7 @@ rm -r "$r/sys/class"
 # boot-menu itself on GRUB: only the lines in use set (CachyOS's commented-out #GRUB_THEME= kept as it is, not made a
 # second GRUB_THEME=), the missing ones added, quiet added, GRUB's loading lines out, the menu made, the motherboard's
 # wait taken away; its .agros-orig made
-rm -f "$t/calls" "$r/etc/default/limine" "$r/etc/default/grub"*; rm -rf "$r/boot/limine" "$r/var/lib/agros"
+rm -f "$t/calls" "$r/etc/default/grub"*; rm -rf "$r/var/lib/agros"
 # (neither boot loader yet: nothing done, and not noted as done, an empty note, so the next update runs it again)
 rc=0; bash "$b/boot-menu" >/dev/null || rc=$?
 [[ $rc == 1 && -f $r/var/lib/agros/boot-menu.sum && ! -s $r/var/lib/agros/boot-menu.sum ]] ||
@@ -241,29 +209,11 @@ pac post_upgrade >/dev/null
 grep -qx 'GRUB_TIMEOUT=3' "$r/etc/default/grub" && ! grep -q grub-mkconfig <<<"$(calls)" ||
     fail "the first upgrade after the install ran boot-menu again: $(calls)"
 rm "$r/usr/lib/agros/boot-menu"
-# On Limine: its three settings set (the missing ones before the entries), its default_entry left as it was, no GRUB
-rm -f "$t/calls"; mkdir -p "$r/boot/limine"
-printf '%s\n' '# KERNEL_CMDLINE[default]+="x"' 'KERNEL_CMDLINE[default]+="nowatchdog quiet"' 'KERNEL_CMDLINE[default]+="rw"' >"$r/etc/default/limine"
-printf '%s\n' 'timeout: 5' 'default_entry: 2' '/+CachyOS' >"$r/boot/limine/limine.conf"
-bash "$b/boot-menu" >/dev/null || fail "boot-menu on Limine failed"
-want=$(printf '%s\n' 'remember_last_entry: no' 'quiet: yes' 'timeout: 1' 'default_entry: 2' '/+CachyOS')
-[[ $(cat "$r/boot/limine/limine.conf") == "$want" && -f $r/boot/limine/limine.conf.agros-orig ]] ||
-    fail "boot-menu's Limine settings: $(cat "$r/boot/limine/limine.conf")"
-! grep -q grub-mkconfig <<<"$(calls)" || fail "boot-menu on Limine made GRUB's menu: $(calls)"
-# Its kernel options: the quiet boot's missing ones added on the last line in effect (its quiet on the first counted), its
-# entries made again, the file as it was kept once (limine.agros-orig); run again, nothing to add: the entries not made again
-want=$(printf '%s\n' '# KERNEL_CMDLINE[default]+="x"' 'KERNEL_CMDLINE[default]+="nowatchdog quiet"' 'KERNEL_CMDLINE[default]+="rw splash loglevel=3 rd.udev.log_level=3 systemd.show_status=false"')
-[[ $(cat "$r/etc/default/limine") == "$want" ]] || fail "the quiet boot's options in Limine's: $(cat "$r/etc/default/limine")"
-grep -q '^limine-update' <<<"$(calls)" && grep -qx 'KERNEL_CMDLINE\[default\]+="nowatchdog quiet"' "$r/etc/default/limine.agros-orig" ||
-    fail "Limine's entries not made, or its options before AgrOS not kept: $(calls)"
-rm -f "$t/calls"; bash "$b/boot-menu" >/dev/null
-! grep -q '^limine-update' <<<"$(calls)" || fail "Limine's entries made again with nothing changed"
-grep -qx 'KERNEL_CMDLINE\[default\]+="nowatchdog quiet"' "$r/etc/default/limine.agros-orig" || fail "limine.agros-orig overwritten"
 # With AGROS_ROOT, a boot tool of the system's (here a link to one) refused before anything is done
 mkdir "$t/sysbin" && ln -s "$(readlink -f "$t/sys/cat")" "$t/sysbin/efibootmgr"
-cp "$r/boot/limine/limine.conf.agros-orig" "$r/boot/limine/limine.conf"
+cp "$r/etc/default/grub" "$t/grub-before"
 out=$(PATH=$t/sysbin:$PATH bash "$b/boot-menu") && fail "boot-menu ran with the system's efibootmgr"
-[[ $out == *"efibootmgr is the system's"* ]] && cmp -s "$r/boot/limine/limine.conf.agros-orig" "$r/boot/limine/limine.conf" ||
+[[ $out == *"efibootmgr is the system's"* ]] && cmp -s "$t/grub-before" "$r/etc/default/grub" ||
     fail "boot-menu not refused before any change: $out"
 # The mkinitcpio drop-in: Plymouth's hook added where missing (before an encrypt hook, else last), never twice
 hooks() { bash -c 'read -ra HOOKS <<<"$1"; . "$2"; echo "${HOOKS[*]}"' _ "$1" "$b/mkinitcpio-plymouth.conf"; }
@@ -280,7 +230,7 @@ out=$(bash -c 'HOOKS="$1"; . "$2"; declare -p HOOKS' _ "base udev block encrypt 
 
 # A snapshot booted from the boot menu made writable in RAM. The drop-in, on a Btrfs root: AgrOS's hook in a systemd boot
 # image where none it runs is there (grub-btrfs's busybox one doesn't count there: CachyOS's installer drops it anyway),
-# grub-btrfs's in a busybox one where it's installed; never twice, nor beside Limine's, nor on another filesystem
+# grub-btrfs's in a busybox one where it's installed; never twice, nor on another filesystem
 # (findmnt's stand-in: $ROOT_FS, else btrfs)
 # shellcheck disable=SC2016  # (expanded by the stand-ins)
 printf '#!/bin/sh\necho "${ROOT_FS:-btrfs}"\n' >"$t/bin/findmnt"
@@ -294,9 +244,8 @@ sd="base systemd autodetect microcode kms modconf block keyboard sd-vconsole ply
 [[ $(snap "$sd") == "$sd agros-snapshot-overlay" ]] || fail "the snapshot hook not added to a systemd image: $(snap "$sd")"
 [[ $(snap "$sd grub-btrfs-overlayfs") == "$sd grub-btrfs-overlayfs agros-snapshot-overlay" ]] ||
     fail "grub-btrfs's busybox hook taken for one a systemd image runs: $(snap "$sd grub-btrfs-overlayfs")"
-for h in sd-btrfs-overlayfs agros-snapshot-overlay; do
-    [[ $(snap "$sd $h") == "$sd $h" ]] || fail "a snapshot hook added beside $h: $(snap "$sd $h")"
-done
+[[ $(snap "$sd agros-snapshot-overlay") == "$sd agros-snapshot-overlay" ]] ||
+    fail "the snapshot hook added twice: $(snap "$sd agros-snapshot-overlay")"
 export ROOT_FS=ext4
 [[ $(snap "$sd") == "$sd" ]] || fail "the snapshot hook added on a root that isn't Btrfs: $(snap "$sd")"
 unset ROOT_FS

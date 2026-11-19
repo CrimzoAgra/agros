@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Hides the boot menu: boots CachyOS straight away, press Esc during boot to show the menu
-# (Windows and the auto-update snapshots are listed there). Works with GRUB and Limine. Also takes away the
+# (Windows and the auto-update snapshots are listed there). Also takes away the
 # motherboard's own 1 s wait before the boot loader (its boot menu key, e.g. F11, still works): a second less of
 # the motherboard's start-up, when the graphics card's fans run at full speed.
 # Run by agros-boot's install (/usr/lib/agros/boot-menu), by AgrOS's installer once GRUB is set up (agros-iso's
@@ -16,7 +16,7 @@
 set -euo pipefail
 r=${AGROS_ROOT:-}
 if [[ -n $r ]]; then
-    for x in efibootmgr grub-mkconfig limine-update snapper systemctl findmnt; do
+    for x in efibootmgr grub-mkconfig snapper systemctl findmnt; do
         p=$(command -v "$x") && p=$(readlink -f "$p") || continue
         [[ $p == /usr/* || $p == /bin/* || $p == /sbin/* ]] && { echo "AGROS_ROOT set but $x is the system's ($p)"; exit 1; }
     done
@@ -25,7 +25,7 @@ else
 fi
 grub_quiet() { sed -i "/^[[:space:]]*echo[[:space:]].*message/d" "$r/etc/grub.d/10_linux"; }
 # No text on screen while it boots or shuts down, behind the splash: the kernel options that hide it (quiet, splash,
-# loglevel=3...: boot-video-mode's QUIET, the one place that edits Limine's and GRUB's kernel options line), the ones
+# loglevel=3...: boot-video-mode's QUIET, the one place that edits GRUB's kernel options line), the ones
 # missing added (a value of yours for one kept). Exit 0: some added, the boot entries to be made again
 quiet_boot() {
     local rc=0
@@ -41,42 +41,11 @@ note() {
 }
 trap 'note $?' EXIT
 
-# Limine (CachyOS's default on newer installs): boot CachyOS straight away with no menu;
-# pressing Esc (any key) in the first second shows the menu (snapshots and Windows are listed there; there's no
-# setting that boots at once and can still be interrupted, so 1 s is the shortest)
-limine_menu() {
-    local conf kv key
-    conf=$("$r/usr/lib/agros/boot-loader" --limine) || { echo "No limine.conf found (not set up yet?), boot menu left as is."; exit 1; }
-    cp -n "$conf" "$conf.agros-orig"  # (as it was before AgrOS, once: its own name, not a .bak of yours)
-    # (its default_entry left as CachyOS set it, GRUB_DEFAULT=0's counterpart: remember_last_entry: no makes it the one
-    # booted, as GRUB_SAVEDEFAULT=false does; entry 1 may be a folder of entries, not CachyOS)
-    for kv in "timeout: 1" "quiet: yes" "remember_last_entry: no"; do
-        key=${kv%%:*}
-        if grep -qE "^\s*$key:" "$conf"; then
-            sed -i -E "s|^\s*$key:.*|$kv|" "$conf"
-        else
-            sed -i "1i $kv" "$conf"   # global options go before the entries
-        fi
-    done
-    echo "Limine: boots CachyOS directly, Esc shows the menu ($conf)."
-    # Its kernel options (in /etc/default/limine, which limine-update makes the entries from; as it was before AgrOS
-    # kept once, for agros-boot's removal)
-    [[ -f $r/etc/default/limine ]] || return 0
-    cp -n "$r/etc/default/limine" "$r/etc/default/limine.agros-orig"
-    if quiet_boot; then
-        limine-update || echo "!! Limine's entries not made again (run: sudo limine-update)"
-    fi
-}
-
 boot_menu() {
-    # CachyOS uses GRUB or Limine: hide the menu (press Esc during boot to show it), always boot CachyOS,
+    # GRUB: hide the menu (press Esc during boot to show it), always boot CachyOS,
     # list Windows if there is one, and show the auto-update snapshots in the menu.
-    # (which one: boot-loader, as boot-video-mode and agros-boot's install decide it)
-    case $("$r/usr/lib/agros/boot-loader") in
-        limine) limine_menu; return ;;
-        grub) ;;
-        *) echo "No GRUB or Limine here (yet), boot menu left as is."; exit 1 ;;  # (not noted as done: the next update tries again)
-    esac
+    # (GRUB set up: boot-loader, as boot-video-mode and agros-boot's install decide it)
+    "$r/usr/lib/agros/boot-loader" || { echo "No GRUB here (yet), boot menu left as is."; exit 1; }  # (not noted as done: the next update tries again)
     local conf=$r/etc/default/grub
     [[ -f $r/boot/grub/grub.cfg ]] || { echo "GRUB isn't set up yet (no /boot/grub/grub.cfg), boot menu left as is."; exit 1; }
     # (as it was before AgrOS, once: its own name, not a .bak of yours; agros-boot's removal puts its settings back)
