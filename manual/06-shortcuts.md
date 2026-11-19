@@ -74,3 +74,7 @@ offers to watch it or open its folder.
 | Ctrl+Alt+C | Clear notifications |
 | Ctrl+Super+Alt+R | Restart the shell, if it misbehaves |
 | Shift+Space | Put Capri away / bring her back (once she's installed; not while a game or a fullscreen window has the focus) |
+
+Capri's own keys, while she runs: **Ctrl+Alt+Space** to talk to her (press again when you're done),
+**Ctrl+Alt+Shift+Space** to have her always listening, **Ctrl+Alt+K** for her chat and **Ctrl+Alt+X** for her scanner.
+No other shortcut uses them.
