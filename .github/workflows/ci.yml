@@ -210,6 +210,8 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     outputs:
       sums: ${{ steps.sums.outputs.sums }}
+      aur_state: ${{ steps.aur.outputs.state }}
+      aur_held: ${{ steps.aur.outputs.held }}
     runs-on: ubuntu-26.04
     timeout-minutes: 30
     container:
@@ -243,6 +245,19 @@ jobs:
         with:
           fetch-depth: 0  # (the packages' versions count the commits)
           persist-credentials: false
+      # The AUR packages [agros] carries whose AUR maintainers changed (held 14 days, then taken) or that the AUR no
+      # longer has (held): ci/aur-maintainers.sh, here, where no AUR build script runs, its record (CI's own, read
+      # back from this repo's site, its signature checked) and what to hold this job's outputs: the repo job holds
+      # those, the release publishes the record for the sign job to sign
+      - name: The AUR packages' maintainers (which to hold)
+        id: aur
+        shell: bash
+        env:
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          pacman -S --needed --noconfirm jq >/dev/null
+          ci/aur-maintainers.sh "https://$OWNER.github.io/${GITHUB_REPOSITORY#*/}/x86_64" /tmp/aur-state /tmp/aur-held
+          { echo 'state<<EOF'; cat /tmp/aur-state; echo EOF; echo 'held<<EOF'; cat /tmp/aur-held; echo EOF; } >>"$GITHUB_OUTPUT"
       - name: Build AgrOS's own packages
         env:
           AGROS_PUBLISHED: ${{ vars.AGROS_PUBLISHED || 'https://crimzoagra.github.io/agros/x86_64' }}
@@ -291,6 +306,7 @@ jobs:
           AGROS_PUBLISHED: ${{ vars.AGROS_PUBLISHED || 'https://crimzoagra.github.io/agros/x86_64' }}
           AGROS_HELD: /tmp/held/held
           AGROS_SKIP_OWN: 1
+          AGROS_AUR_HELD: ${{ needs.agros.outputs.aur_held }}
         run: |
           git config --global --add safe.directory '*'
           mkdir -p /tmp/held && : >/tmp/held/held
@@ -392,6 +408,13 @@ jobs:
           cat /tmp/approved-before - <<<"$now" | grep -E '^[a-z0-9@._+-]+ [A-Za-z0-9.:_+~]+$' |
             awk '!seen[$0]++' | tac | awk '++n[$1] <= 20' | tac >out/x86_64/agros-approved
           cat out/x86_64/agros-approved
+      # Who can change each AUR package's build files, and the changes waiting (ci/aur-maintainers.sh: the agros job's
+      # output, never a file the repo job's AUR build scripts could have left here), published for the next run to read
+      # back and for the weekly status (signed by the sign job)
+      - name: The AUR packages' maintainers
+        env:
+          STATE: ${{ needs.agros.outputs.aur_state }}
+        run: printf '%s\n' "$STATE" | sed '/^$/d' >out/x86_64/agros-aur-maintainers
       # The database, from the packages as they now are (the repo job's own never goes out): each one's .PKGINFO checked
       # again before repo-add reads it (those a hold brought back too), and the database read back against them
       - name: The database

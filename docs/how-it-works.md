@@ -1403,12 +1403,13 @@ breaks something holds back that one piece, never the rest (`.github/workflows/c
   sure to clear it), signs it in one step, the only one with `AGROS_GPG_KEY` (`ci/sign-repo.sh`), with nothing before
   it but the checkout and that artifact, and gpg alone reading the files: each new package (one kept as published
   keeps its signature; one with any other `.sig` stops it), the database as the release made it (`agros.db`,
-  `agros.files` and their `.tar.gz` names), `agros-approved` and `agros-arch-ok`; each signature checked against
-  `ci/agros.asc`, then gpg's agent stopped and the key removed before anything else runs (Arch's and CachyOS's
-  install scripts, the install check with signatures required, the upload to Pages). `tests/ci-signing.sh` checks the
-  workflow keeps it so. The install check also resolves `agros-desktop` with CachyOS's v3 and znver4 repos above
-  `[cachyos]`, as the installer sets them on such CPUs (`ci/cpu-repos.sh`, no such CPU needed): not resolving there
-  (their lag behind Arch's), or a library at another soname than below them, is a warning, and the release goes out.
+  `agros.files` and their `.tar.gz` names), `agros-approved`, `agros-arch-ok` and `agros-aur-maintainers` (below);
+  each signature checked against `ci/agros.asc`, then gpg's agent stopped and the key removed before anything else
+  runs (Arch's and CachyOS's install scripts, the install check with signatures required, the upload to Pages).
+  `tests/ci-signing.sh` checks the workflow keeps it so. The install check also resolves `agros-desktop` with
+  CachyOS's v3 and znver4 repos above `[cachyos]`, as the installer sets them on such CPUs (`ci/cpu-repos.sh`, no such
+  CPU needed): not resolving there (their lag behind Arch's), or a library at another soname than below them, is a
+  warning, and the release goes out.
   Changing the signing key: add the new one to `ci/agros.asc` (and agros-iso's `agros.asc`) and raise
   `agros-keyring`'s `pkgver`, let machines update, then replace the secret; signing with a key `ci/agros.asc` lacks
   fails the release, before anything goes out.
@@ -1417,6 +1418,18 @@ breaks something holds back that one piece, never the rest (`.github/workflows/c
   signature checked, with the packages of the repo it needs (`ci/published.sh`); the rest goes out. None published yet:
   the build fails. The AUR packages and CachyOS's installer are built without compiler warnings (theirs, not AgrOS's);
   AgrOS's own packages keep them.
+- **An AUR package whose maintainers changed** (an orphan adopted, a co-maintainer added: either can push its build
+  files, which CI builds unreviewed and AgrOS's key signs for every machine): held by CI itself, no one asked
+  (`ci/aur-maintainers.sh`, in the `agros` job, where no AUR code runs). Its last build stays, as published, for 14
+  days from the day CI first saw the change (time for the AUR's people and the package's other users to catch a bad
+  one), its build files never fetched (`build-repo.sh`: git told to fetch them from nowhere, the kept one installed for
+  what needs it, `keep_held`); then the new maintainers are taken and it's built again. A further change starts the
+  wait again, one undone ends it. One the AUR no longer has (deleted, or renamed: its name free for anyone to take)
+  keeps its last build for good, and the Friday status asks for a look. CI keeps its own record, no list by hand:
+  `agros-aur-maintainers`, published beside the database and signed with it, read back by the next run with its
+  signature checked (only a 404, nothing published yet, starts it afresh: everyone taken as they are; a package added
+  to `aur/packages.txt` is taken as it is too, adding it was its review), with the last day the AUR answered (the AUR
+  down: the record as it was, those held still held). Not in the held issue (nothing went wrong).
 - **Tests that fail** (`ci/test-passes.sh`): all the tests are run again, to see which side broke them: with the
   published `[agros]` (they pass: this run's new AUR builds broke them, swapped for the published ones by `build-repo.sh
   --hold-new`; the new Hyprland still approved), then on Arch as of the last day the tests passed on it (its archive's

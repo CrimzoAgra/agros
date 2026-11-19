@@ -126,4 +126,35 @@ REL=2 heavy && fail "kept though its version changed"
 echo 'pkgname=heavy # new' >"$t/heavy/PKGBUILD"
 heavy && fail "kept though its PKGBUILD changed"
 [[ ! -e $out/heavy-2-1-x86_64.pkg.tar.zst ]] || fail "a package to build left in the repo as published"
+# The AUR packages CI holds unbuilt (AGROS_AUR_HELD, ci/aur-maintainers.sh's "<name> <base> <why>"): each base's
+# build files fenced off (git's own rewrite of its AUR address, checked with git itself), each held one kept as
+# published alone (what it needs is built or kept itself: one carried over too would sit beside its new build) and
+# installed with no dependency checks, said why; one not held: 1, built; one held with none published: the build stops.
+# And build-repo.sh does so for paru's list, Quickshell and caelestia-shell, before any of them is fetched
+rm -f "$out"/* "$t/calls"
+mkdir -p "$t/home"
+held_run() {
+    (
+        asb() { echo "$*" >>"$t/calls"; [[ $1 != git ]] || HOME=$t/home "$@"; }
+        pacman() { echo "pacman $*" >>"$t/calls"; }
+        AGROS_AUR_HELD=$'app app-base its AUR maintainers changed (a to b) on 2026-11-03: its last build kept until 2026-11-17\nnosuch nosuch gone from the AUR'
+        aur_fence
+        "$@"
+    )
+}
+o=$(held_run keep_held app) || fail "a held package not kept: $o"
+[[ $o == *"app: its AUR maintainers changed (a to b) on 2026-11-03: its last build kept until 2026-11-17"* ]] || fail "why it's held not said: $o"
+got=$(cd "$out" && ls | paste -sd' ')
+[[ $got == "app-1-1-x86_64.pkg.tar.zst app-1-1-x86_64.pkg.tar.zst.sig" ]] || fail "not the held package kept alone, with its signature: $got"
+grep -qxF "repo-add -q $out/agros.db.tar.gz $out/app-1-1-x86_64.pkg.tar.zst" "$t/calls" &&
+    grep -qx 'pacman -Sdd --needed --noconfirm --asdeps app' "$t/calls" || fail "the kept one not installed for what needs it: $(cat "$t/calls")"
+e=$(HOME=$t/home GIT_TERMINAL_PROMPT=0 git ls-remote https://aur.archlinux.org/app-base.git 2>&1) && fail "a held base's build files fetched"
+[[ $e == *nonexistent/agros-held/app-base.git* ]] || fail "a held base's build files not fenced off: $e"
+held_run keep_held libx >/dev/null && fail "a package not held kept unbuilt"
+[[ ! -e $out/libx-2-1-x86_64.pkg.tar.zst ]] || fail "a package not held carried over"
+held_run keep_held nosuch >/dev/null 2>&1 && fail "a held package with none published to keep didn't stop the build"
+for l in 'aur_fence' 'keep_held quickshell-git || { asb git clone' 'keep_held caelestia-shell || {' \
+    'for p in "${aur[@]}"; do keep_held "$p" || left+=("$p"); done' '[[ -z ${aur_held[caelestia-shell]:-} ]] && asb git clone'; do
+    grep -qF -- "$l" "$here/ci/build-repo.sh" || fail "build-repo.sh doesn't hold the AUR packages CI holds: no $l"
+done
 echo "ok build-repo-hold"

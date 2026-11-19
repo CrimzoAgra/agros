@@ -1,8 +1,9 @@
 # shellcheck shell=bash
 # Sourced by build-repo.sh: the published repo's packages kept in place of this run's. A package that didn't build held
 # back, the published one kept (hold); one whose rebuild would only be thrown away not built (reused); this run's new
-# AUR builds swapped for the published ones (hold_new, --hold-new). Uses its $out, $work, $keyring, $AGROS_PUBLISHED,
-# asb and the held array (each "<name>: <why>"); sets $stamp, build-repo.sh's keep_published's too
+# AUR builds swapped for the published ones (hold_new, --hold-new); the AUR packages CI holds unbuilt (keep_held). Uses
+# its $out, $work, $keyring, $AGROS_PUBLISHED, asb and the held array (each "<name>: <why>"); sets $stamp,
+# build-repo.sh's keep_published's too
 # shellcheck disable=SC2154  # ($out, $work, $keyring, asb: build-repo.sh's)
 # verify_sig <sig> <file>: a good signature by AgrOS's key, checked against $keyring (ci/agros.asc's key) alone, with
 # gpgv: no other key, the builder's keyring neither (the AUR build scripts', it may hold anything)
@@ -43,8 +44,9 @@ out_has() {
     done
     return 1
 }
-# carry_over <name>: the published package into the repo here, unless one is built; then each of its dependencies
-# this repo publishes (the official ones pacman finds in Arch's)
+# carry_over <name> [alone]: the published package into the repo here, unless one is built; then each of its
+# dependencies this repo publishes (the official ones pacman finds in Arch's), but with "alone" (one kept before the
+# builds: those it needs are built or kept themselves, and one carried over then would sit beside its new build)
 carry_over() {
     local desc f dep
     out_has "$1" && return 0
@@ -56,6 +58,7 @@ carry_over() {
         { echo "!! $f: the published copy couldn't be read or verified"; rm -f "$out/$f" "$out/$f.sig"; return 1; }
     chown builder: "$out/$f" "$out/$f.sig"
     echo "-- $f: the published one kept"
+    [[ ${2:-} != alone ]] || return 0
     for dep in $(field "$desc" DEPENDS | sed 's/[<>=].*//'); do
         if pub_desc "$dep" >/dev/null; then carry_over "$dep" || return 1; fi
     done
@@ -130,4 +133,33 @@ hold_new() {
         held+=("$n: $1")
         carry_over "$n" || echo "!! $n: new, none published: left out"
     done
+}
+
+# The AUR packages CI holds without building them (AGROS_AUR_HELD, ci/aur-maintainers.sh's, "<name> <base> <why>"
+# each: their AUR maintainers changed days ago, or the AUR no longer has them). aur_fence reads them (aur_held, by
+# name) and fences their build files off: the builder's git (paru's) told to fetch each base's from nowhere, so a build
+# that would still want one (a dependency it didn't find installed) fails, and is held itself, rather than run the new
+# maintainers' files. Not said in $AGROS_HELD (CI's held issue, which GitHub notifies of): nothing went wrong, and the
+# weekly status says what's held, until when
+declare -A aur_held=()
+aur_fence() {
+    local n b why
+    while read -r n b why; do
+        [[ -n $why ]] || continue
+        aur_held[$n]=$why
+        asb git config --global "url.file:///nonexistent/agros-held/$b.git.insteadOf" "https://aur.archlinux.org/$b.git"
+    done <<<"${AGROS_AUR_HELD:-}"
+}
+# keep_held <name>: one aur_held has kept as published, alone (carry_over), and installed here as a dependency, no
+# dependency checks (what needs it builds against it: paru and makepkg find it installed, not on the AUR); none
+# published to keep: the build fails, as hold's. 1: not held, build it
+keep_held() {
+    local f
+    [[ -n ${aur_held[$1]:-} ]] || return 1
+    echo "-- $1: ${aur_held[$1]}"
+    carry_over "$1" alone || exit 1
+    f=$(field "$(pub_desc "$1")" FILENAME)
+    { asb repo-add -q "$out/agros.db.tar.gz" "$out/$f" && pacman -Sy --noconfirm >/dev/null &&
+        pacman -Sdd --needed --noconfirm --asdeps "$1" >/dev/null; } ||
+        echo "!! $1: kept, but not installed here: what needs it may not build"
 }

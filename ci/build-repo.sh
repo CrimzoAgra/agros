@@ -8,10 +8,11 @@
 #   ci/build-repo.sh <out dir> --hold-new   this run's new AUR builds there swapped for the published ones (below)
 # Environment: AGROS_HELD (a file: the packages that didn't build, their published ones kept, "<name>: <why>" each),
 # AGROS_SKIP_AUR=1 (only AgrOS's own packages: no AUR ones, no Calamares; CI's agros job), AGROS_SKIP_OWN=1 (all but
-# AgrOS's own, which are in <out dir> already: CI's repo job, given the agros job's), AGROS_PUBLISHED (the published repo's URL: a
-# package already there under the same version is kept as published, its signature checked against AgrOS's public key,
-# ci/agros.asc, but for a compiled one built against other libraries (rebuilt and published); the build fails when the
-# published copy can't be read or verified, or when one of AgrOS's own packages changed with its version not raised)
+# AgrOS's own, which are in <out dir> already: CI's repo job, given the agros job's), AGROS_AUR_HELD (the AUR packages
+# to hold, unbuilt: ci/aur-maintainers.sh), AGROS_PUBLISHED (the published repo's URL: a package already there under
+# the same version is kept as published, its signature checked against AgrOS's public key, ci/agros.asc, but for a
+# compiled one built against other libraries (rebuilt and published); the build fails when the published copy can't be
+# read or verified, or when one of AgrOS's own packages changed with its version not raised)
 set -euo pipefail
 shopt -s extglob  # (make_db's pattern, read as the function is)
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -233,6 +234,9 @@ if [[ -z ${AGROS_SKIP_AUR:-} ]]; then
     asb mkdir -p /home/builder/.config/paru
     printf '[options]\nLocalRepo = agros\nSkipReview\nNoCheck\n' |
         asb tee /home/builder/.config/paru/paru.conf >/dev/null
+    # The AUR packages CI holds, unbuilt (AGROS_AUR_HELD, ci/aur-maintainers.sh: their AUR maintainers changed days ago,
+    # or the AUR no longer has them): their build files fenced off, each kept as published (keep_held, published.sh)
+    aur_fence
     # ninja's status lines for steps with no description (blank) left out
     # (and makepkg's note that it builds in the sources it unpacked: paru unpacks, then builds, always)
     aur_build() {
@@ -243,7 +247,7 @@ if [[ -z ${AGROS_SKIP_AUR:-} ]]; then
     # the repo: caelestia-shell's quickshell-git taken from it, by its name (CachyOS's noctalia-qs only claims it), not
     # built from the AUR without the fix. Its build files or the patch no longer fitting: the published one held. Nothing
     # it's built from changed: the published one kept, not built (reused, published.sh: 7 minutes)
-    { asb git clone -q https://aur.archlinux.org/quickshell-git.git "$work/quickshell-git" &&
+    keep_held quickshell-git || { asb git clone -q https://aur.archlinux.org/quickshell-git.git "$work/quickshell-git" &&
         asb "$work/agros/packages/agros-system/aur-agros-patch" "$work/quickshell-git" quickshell-git &&
         { reused "$work/quickshell-git" ||
             (cd "$work/quickshell-git" && asb env PKGDEST="$out" makepkg -s --noconfirm); }; } ||
@@ -253,16 +257,20 @@ if [[ -z ${AGROS_SKIP_AUR:-} ]]; then
     # caelestia-shell apart from the others, after them (4 minutes: kept when unchanged, as Quickshell), its AUR
     # dependencies (those no repo has) built with the others
     mapfile -t aur < <(printf '%s\n' "${aur[@]}" | grep -vx caelestia-shell)
-    if asb git clone -q https://aur.archlinux.org/caelestia-shell.git "$work/caelestia-shell"; then
+    if [[ -z ${aur_held[caelestia-shell]:-} ]] && asb git clone -q https://aur.archlinux.org/caelestia-shell.git "$work/caelestia-shell"; then
         for d in $(cd "$work/caelestia-shell" && asb makepkg --printsrcinfo | sed -n 's/^\t\(depends\|makedepends\) = \([^<>=]*\).*/\2/p'); do
             pacman -Sp "$d" >/dev/null 2>&1 || [[ " ${aur[*]} " == *" $d "* ]] || aur+=("$d")
         done
     fi
+    # (the held ones kept, not built: what needs them builds against those)
+    left=()
+    for p in "${aur[@]}"; do keep_held "$p" || left+=("$p"); done
+    aur=("${left[@]}")
     # (twice: a download that drops, GitHub's now and then, fails only its package; the second pass builds what's left)
     # One that still didn't build: the published one held, with what it needs
     aur_build || aur_build || true
     pacman -Sy --noconfirm >/dev/null
-    { [[ -d $work/caelestia-shell ]] && { reused "$work/caelestia-shell" ||
+    keep_held caelestia-shell || { [[ -d $work/caelestia-shell ]] && { reused "$work/caelestia-shell" ||
         (cd "$work/caelestia-shell" && asb env PKGDEST="$out" makepkg -s --noconfirm); }; } ||
         hold caelestia-shell "it didn't build from the AUR (the build's log above)"
     for p in "${aur[@]}"; do
