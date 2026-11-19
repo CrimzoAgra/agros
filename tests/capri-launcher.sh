@@ -27,6 +27,14 @@ grep -qx "started $HOME/.local/share/capri/current/capri with: " "$log" || fail 
 # A small one kept as it is
 "$here/.local/bin/capri"
 [[ $(wc -l <"$log") == 2 ]] || fail "a small log moved aside"
+# In a VMware VM, her video's GPU buffers turned off (VMware's driver refuses them: her frame empty); not elsewhere,
+# and a value of yours kept
+printf '#!/bin/sh\necho "sink=${WEBKIT_GST_DMABUF_SINK_DISABLED-unset}"\n' >"$b/capri"
+stub systemd-detect-virt 'echo "$VIRT"'
+start() { VIRT=$1 PATH=$t/bin:$PATH "$here/.local/bin/capri"; tail -1 "$log"; }
+[[ $(start vmware) == sink=1 ]] || fail "in VMware, her video's GPU buffers not turned off: $(tail -1 "$log")"
+[[ $(start none) == sink=unset ]] || fail "her video's GPU buffers turned off outside VMware: $(tail -1 "$log")"
+[[ $(WEBKIT_GST_DMABUF_SINK_DISABLED=0 start vmware) == sink=0 ]] || fail "your own WEBKIT_GST_DMABUF_SINK_DISABLED replaced"
 # $CAPRI_RUN: that script instead, with her arguments
 printf '#!/bin/sh\necho "mine: $*"\n' >"$t/run"; chmod +x "$t/run"
 [[ $(CAPRI_RUN=$t/run "$here/.local/bin/capri" --hidden) == "mine: --hidden" ]] || fail "\$CAPRI_RUN not run"
