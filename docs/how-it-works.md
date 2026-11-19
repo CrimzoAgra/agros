@@ -1215,27 +1215,26 @@ brings each change; nothing to run by hand).
   a file isn't reinstalled with less than 35 min of that left (cut off between its removal and install, the app would be
   gone). The Updates app waits only for its downloads. The install has 60 min (shutdown's own limit is made 75 min for
   it); `paccache.timer` keeps pacman's cache from growing for good
-- **`agros-boot`**: hidden boot menu (GRUB or Limine): straight into the system, Esc in the first second shows
+- **`agros-boot`**: hidden boot menu (GRUB only): straight into the system, Esc in the first second shows
   the menu (Windows and snapshots listed). No motherboard wait before the boot loader (`efibootmgr -t 0`; F11 still
   opens its boot menu). An update that changes `boot-menu` applies its settings again, over any of yours (one that
   doesn't change it leaves them): `boot-menu` notes each run in `/var/lib/agros/boot-menu.sum` (its checksum; empty when
   it failed, so the next update runs it again). With the boot loader not set up yet (the installer's package step: no
-  `/boot/grub/grub.cfg` or `limine.conf`) it changes nothing; the installer's own step runs it once GRUB is set up, so
+  `/boot/grub/grub.cfg`) it changes nothing; the installer's own step runs it once GRUB is set up, so
   `grub.agros-orig` is CachyOS's settings, not the grub package's own file. Removing it puts back the settings it
-  changed from the copies kept before AgrOS (`grub.agros-orig`, `limine.conf.agros-orig`: timeout, menu, default entry,
+  changed from the copies kept before AgrOS (`grub.agros-orig`: timeout, menu, default entry,
   theme, `quiet`), takes out the `video=` options it set (in the form it writes, `video=<screen>:<W>x<H>@<Hz>`; your
   others stay), the quiet boot's options below that weren't there before AgrOS, the splash and the motherboard's wait
   (where it noted the one before)
 - **`agros-boot`** also: a snapshot booted from the menu is made writable in RAM (`agros-snapshot-overlay`, a
   systemd boot image's hook, added by `/etc/mkinitcpio.conf.d/91-agros-snapshot-overlay.conf` on a Btrfs root;
   CachyOS's installer rewrites `HOOKS` without grub-btrfs's, which only busybox images run): read-only, the desktop
-  couldn't log in on it. Limine's own (`sd-btrfs-overlayfs`) counts, and nothing's added twice. Only the root is
+  couldn't log in on it. Nothing's added twice. Only the root is
   overlaid: `/home` and the other subvolumes are the real ones. Making a snapshot the system for good is Btrfs
   Assistant's restore (CachyOS's installer puts it in on Btrfs), as the manual says
 - **`agros-boot`** also: no text at boot or shutdown, only the splash. `boot-menu` adds the kernel options missing from
-  the normal entries' line (`GRUB_CMDLINE_LINUX_DEFAULT`, or Limine's `KERNEL_CMDLINE[default]` in
-  `/etc/default/limine`, kept first as `limine.agros-orig`), through `boot-video-mode --quiet-boot`, the one place that
-  edits that line for both. The file is a shell script: a `KEY=` line sets the options, each `KEY+=` after it adds to
+  the normal entries' line (`GRUB_CMDLINE_LINUX_DEFAULT`), through `boot-video-mode --quiet-boot`, the one place that
+  edits that line. The file is a shell script: a `KEY=` line sets the options, each `KEY+=` after it adds to
   them, so the line is the set in effect (the last `=` and the `+=` after it): the missing ones go on its last line, one
   on any of them counts as there, and removal takes AgrOS's out of those lines only (the screens' `video=` out of every
   one). The options: `quiet` (kernel messages but critical ones off), `splash` (Plymouth's splash, not its text mode),
@@ -1249,18 +1248,18 @@ brings each change; nothing to run by hand).
   (`auto-update --install`) writes to the journal, its progress on the splash (`plymouth display-message`), and the
   shutdown splash is Plymouth's own (`plymouth-poweroff`/`-reboot`)
 - **`agros-boot`** also: no "no video" between the login screen and the desktop. `system/boot-video-mode` at every boot
-  gives the kernel console each connected screen's best mode as a `video=` boot option (Limine or GRUB), and only
+  gives the kernel console each connected screen's best mode as a `video=` boot option, and only
   rebuilds the boot entries when the screens changed
 - **`agros-nvidia`**: loads the NVIDIA driver from the start of the boot (in the initramfs, which CachyOS's
   `chwd` leaves it out of): about 2 s sooner, with the boot splash on it. Installed by `agros-welcome --system` when
   there's an NVIDIA card (PCI vendor 10de, a display controller)
 - **The boot images** after `agros-boot` or `agros-nvidia` is installed, updated or removed: made again once, after the
-  transaction, by mkinitcpio's own pacman hook (Limine's `limine-mkinitcpio-hook` has its own in its place), which
+  transaction, by mkinitcpio's own pacman hook, which
   watches `usr/lib/initcpio/*`: `agros-boot` ships a file there (`plymouth-title-font`), `agros-nvidia` one only for
   this (its list is in `/etc/mkinitcpio.conf.d`, which the hook doesn't watch). Not from their install scripts: with a
   kernel updated in the same transaction, its old modules were gone, so they failed (said so for nothing) and the images
-  were made twice. `splash-theme` run by hand or by its own hook still makes them (`limine-mkinitcpio` on Limine, else
-  `mkinitcpio -P`, the command it names when they fail)
+  were made twice. `splash-theme` run by hand or by its own hook still makes them (`mkinitcpio -P`,
+  the command it names when they fail)
 - **`agros-greeter`** and **`agros-system`**: unlock the passwords keyring with your login password (no keyring prompts
   from Proton VPN, Equibop...)
 - **`agros-system`**: Bluetooth on at boot and after sleep (`system/bluetooth-resume`,
