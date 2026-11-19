@@ -990,10 +990,11 @@ brings each change; nothing to run by hand).
   included by `pacman.conf` the same way, at install and at upgrade): pacman's `NoExtract` for what no one on AgrOS
   uses: docs and help pages (fish's and HPLIP's kept), the Nerd font styles nothing names (JetBrains Mono's Mono, Propo
   and NL, Cascadia's Mono and Propo), Material Symbols' Outlined and Sharp, Hyprland's own wallpapers, the pointer's 11
-  Bibata styles but the desktop's and login screen's (`Bibata-Modern-Ice`, ~295 MiB). A new install has them
-  left out from its first package: agros-iso's `agros-trim.sh` puts the same list in the installed `pacman.conf`
-  (marked `# agros-iso`), which agros-system's install swaps for its Include; keep the two lists the same. On a machine
-  installed before, a package's go at its next update
+  Bibata styles but the desktop's and login screen's (`Bibata-Modern-Ice`, ~295 MiB), Thunar's own "Set as wallpaper"
+  plugin (Xfce's and GNOME's only: `agros-thunar-usage`'s sets it through Caelestia). A new install has them left out
+  from its first package: agros-iso's `agros-trim.sh` puts the same list in the installed `pacman.conf` (marked `#
+  agros-iso`), which agros-system's install swaps for its Include; keep the two lists the same. On a machine installed
+  before, a package's go at its next update (Thunar's plugin removed at `agros-system`'s, two in its menu till then)
 - **The upstream gate** (`packages/agros-system/agros-gate.conf` at `/etc/pacman.d/agros-gate.conf`, which
   `agros-system`'s install adds to `pacman.conf`'s Include lines, with the file; `.local/bin/update-gate`): Hyprland and
   its libraries (the packages AgrOS's config, title bar plugin and shell patches are written against) are held back from
