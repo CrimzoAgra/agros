@@ -47,7 +47,7 @@ pre_remove() {
     "$_lib/splash-theme" --remove --no-initramfs >/dev/null 2>&1 || echo "agros-boot: the splash left as it was"
     # (the shutdown image's hook goes with this package: out of the list made at boot, or that image fails to build)
     sed -i '/^HOOKS+=(plymouth-title-font)$/d' "$_r/run/initramfs/mkinitcpio-shutdown.conf" 2>/dev/null
-    local g=$_r/etc/default/grub key line grub= remake=
+    local g=$_r/etc/default/grub key line grub='' remake=''
     "$_lib/boot-loader" && grub=1
     # The screens' modes boot-video-mode put in the kernel options (video=...) taken out by itself, and the quiet boot's
     # options boot-menu had it add (quiet, splash, loglevel=3...) that the line didn't have before AgrOS (its

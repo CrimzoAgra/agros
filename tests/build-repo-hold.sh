@@ -156,8 +156,8 @@ held_run() {
     (
         asb() { echo "$*" >>"$t/calls"; [[ $1 != git ]] || HOME=$t/home "$@"; }
         pacman() { echo "pacman $*" >>"$t/calls"; }
-        AGROS_AUR_HELD=$'app app-base its AUR maintainers changed (a to b) on 2026-11-03: its last build kept until 2026-11-17\nnosuch nosuch gone from the AUR'
-        aur_fence
+        AGROS_AUR_HELD=$'app app-base its AUR maintainers changed (a to b) on 2026-11-03: its last build kept until 2026-11-17\nnosuch nosuch gone from the AUR' \
+            aur_fence
         "$@"
     )
 }
