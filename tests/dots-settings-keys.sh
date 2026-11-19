@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Out of the box no two shortcuts share keys (my keys.* defaults against Caelestia's own, after hypr-vars.lua's
 # changes): Hyprland runs every bind on the keys, so pressing one does both (Capri's Ctrl+Alt+C also cleared every
-# notification). Against the Caelestia installed here, as the Settings app shows a clash
+# notification), nor with Capri's fixed keys. Against the Caelestia installed here, as the Settings app shows a clash
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
@@ -41,5 +41,11 @@ for k, s in settings.items():
             used.setdefault(norm(one), []).append(k)
 clashes = {keys: ks for keys, ks in used.items() if len(ks) > 1}
 assert not clashes, clashes
+# Nor any of them with Capri's fixed keys: she binds those herself while she runs (her hotkeys.rs, RESERVED: talk,
+# always listening, chat, the scanner), and her Ctrl+Alt+V, Ctrl+Alt+Shift+V and Ctrl+Alt+C once did Caelestia's sound
+# settings, its paste of the latest clip and its clear-notifications along with her own
+capri = {norm(k): k for k in ("CTRL + ALT + Space", "CTRL + ALT + SHIFT + Space", "CTRL + ALT + K", "CTRL + ALT + X")}
+taken = {capri[keys]: ks for keys, ks in used.items() if keys in capri}
+assert not taken, f"Capri's fixed keys taken: {taken}"
 P
 echo "ok dots-settings-keys"
