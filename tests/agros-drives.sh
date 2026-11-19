@@ -63,4 +63,18 @@ grep -q '"1"		"2"' "$vdf" || fail "a library's games lost"
 cp "$vdf" "$t/before"
 run >/dev/null
 cmp -s "$vdf" "$t/before" || fail "a second run changed Steam's list"
+
+# Its unit doesn't start on the live USB (/run/archiso): there it mounted the disk AgrOS goes on, and the installer
+# offered no "Erase disk" for it. Its conditions as systemd reads them, the live USB's mark a folder of the test's
+unit=$here/packages/agros-scripts/agros-drives.service
+cond=$(grep '^Condition' "$unit") || fail "agros-drives.service has no condition: it runs on the live USB too"
+if command -v systemd-analyze >/dev/null; then
+    mkdir "$t/archiso"
+    mapfile -t c < <(sed "s|/run/archiso|$t/archiso|" <<<"$cond")
+    systemd-analyze condition "${c[@]}" >/dev/null 2>&1 && fail "agros-drives.service starts on the live USB: $cond"
+    rmdir "$t/archiso"
+    systemd-analyze condition "${c[@]}" >/dev/null 2>&1 || fail "agros-drives.service doesn't start on an installed system: $cond"
+else
+    grep -qx 'ConditionPathExists=!/run/archiso' <<<"$cond" || fail "agros-drives.service runs on the live USB too: $cond"
+fi
 echo "ok agros-drives"

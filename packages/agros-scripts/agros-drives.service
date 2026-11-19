@@ -1,6 +1,10 @@
 [Unit]
 Description=Mount the internal drives nothing mounts yet and add the Steam libraries on them to Steam
 # (no ordering: nothing at login waits for a drive to spin up; Steam is started later, by you)
+# Not on the live USB (the ISO's own session, /run/archiso; its user may do anything, polkit's rule there): it mounted
+# every Linux partition of the disks there, the one AgrOS goes on too, and the installer (Calamares) offers no "Erase
+# disk" for a disk with a partition mounted ("one of its partitions mounted")
+ConditionPathExists=!/run/archiso
 
 [Service]
 Type=oneshot

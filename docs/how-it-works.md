@@ -669,7 +669,8 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
   and builds the fixed shader from the game's own files
 - **`.local/bin/steam-installed-games`**: installed games, for the bar's Steam menu
 - **`.local/bin/agros-drives`**: the games drives ready at login, their Steam libraries in Steam. A user service
-  (`agros-scripts`' `agros-drives.service`, at every login) mounts each internal partition with a Linux filesystem
+  (`agros-scripts`' `agros-drives.service`, at every login; not on the live USB, where it mounted the disk AgrOS goes
+  on and the installer offered no "Erase disk" for it) mounts each internal partition with a Linux filesystem
   (btrfs, ext4, XFS, F2FS) nothing mounts yet through udisks, at `/run/media/<you>/<label>`, as the file manager would:
   never the system's own, a removable drive, NTFS/exFAT (Proton's games don't run from them) or one `/etc/fstab` lists
   (its own mount, or `noauto`); a btrfs over two partitions is mounted once. `agros-system`'s polkit rule
