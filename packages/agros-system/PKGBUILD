@@ -45,6 +45,8 @@ package() {
     install -Dm644 agros-gate.conf "$pkgdir/etc/pacman.d/agros-gate.conf"
     # (the files no one uses, never unpacked: pacman.conf includes it, the same way)
     install -Dm644 agros-noextract.conf "$pkgdir/etc/pacman.d/agros-noextract.conf"
+    # (the packages AgrOS dropped: removed after an update where nothing needs them, auto-update's and update-apps')
+    install -Dm644 agros-retired "$pkgdir/usr/share/agros/retired"
     install -Dm755 "$_root/system/bluetooth-resume" "$pkgdir/usr/lib/systemd/system-sleep/agros-bluetooth-resume"
     install -Dm755 "$_root/system/screens-resume" "$pkgdir/usr/lib/systemd/system-sleep/agros-screens-resume"
     install -Dm644 "$_root/system/ananicy/dotfiles.rules" "$pkgdir/etc/ananicy.d/99-agros/agros.rules"

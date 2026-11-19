@@ -1,0 +1,4 @@
+# Packages AgrOS no longer installs, one a line: each removed after the system's next update (auto-update's install,
+# the Updates app's), only where it came in as a dependency and nothing needs it any more. One you installed yourself
+# is kept
+qview

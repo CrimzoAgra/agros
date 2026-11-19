@@ -59,6 +59,17 @@ restore() {
 }
 # (the AUR builds' repo list too, put there for the install alone)
 settled() { rm -rf "$prev" "$au/installing" "$pacdb/sync/agros-aur.db"; }
+# retire: the packages AgrOS dropped (agros-system's list: an app it replaced), removed once an update took them out
+# of what AgrOS installs: only those in as a dependency that nothing needs now (one you installed yourself, or that
+# something else still needs, kept). Its failing never fails the update: said, and tried again at the next install
+retire() {
+    local gone
+    mapfile -t gone < <(pacman -Qdtq 2>/dev/null | grep -xF -f /usr/share/agros/retired 2>/dev/null)
+    ((${#gone[@]})) || return 0
+    echo "removing what AgrOS no longer installs: ${gone[*]}"
+    SNAP_PAC_SKIP=y LC_ALL='' LC_MESSAGES=C pacman -Rns --noconfirm -- "${gone[@]}" ||
+        echo "!! not removed (${gone[*]}): tried again after the next install"
+}
 # recover: an install cut off (shutdown's limit, a power cut), or its recovery put off: pacman's lists put back (its
 # packages came from the older ones; those it got to install are taken up again by the next install), and the lock it
 # left. Run at boot and before an install, each time until it's done (only with nothing holding pacman's lock)
@@ -383,6 +394,7 @@ if [[ ${1:-} == --install ]]; then
     # (the Qt the shells were rebuilt for, or needed no rebuild for: Updates' update-apps doesn't rebuild them again)
     [[ $target != *qt6-* ]] || /usr/lib/agros/bin/update-kinds --qt-now >"$au/qt-built"
     settled
+    retire
     echo "===== done $(date) ====="
     exit
 fi

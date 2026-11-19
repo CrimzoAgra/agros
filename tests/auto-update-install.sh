@@ -39,6 +39,7 @@ sed -e "s|/var/lib/auto-update|$t/au|g" -e "s|/var/lib/pacman|$t/pac|g" -e "s|/v
     -e "s|/usr/lib/agros/auto-update-aur|$t/auto-update-aur|g; s|/usr/lib/agros/auto-update |$t/auto-update |g" \
     -e "s|/usr/lib/agros/bin/|$here/.local/bin/|g" \
     -e "s|/var/lib/agros/|$t/agros/|g" -e "s|/usr/share/pacman/keyrings/agros.gpg|$t/agros.gpg|g" \
+    -e "s|/usr/share/agros/retired|$t/retired|g" \
     "$au/auto-update" >"$t/auto-update"
 sed -e "s|/var/lib/auto-update|$t/au|g" -e "s|/usr/lib/agros/auto-update-aur|$t/auto-update-aur|g" \
     -e "s|/usr/lib/agros/bin/|$here/.local/bin/|g" "$au/auto-update-aur" >"$t/auto-update-aur"
@@ -87,12 +88,15 @@ unit=$(cat "$au/auto-update-install.service")
     grep -qx 'Wants=udisks2.service' <<<"$unit"; } || fail "the install's unit not ordered before udisks2 stops: $unit"
 # pacman: -Qu says what's waiting ($QU, exit $QU_RC; $QU_ERR on stderr); -Su installs (exit $PACMAN_RC; $PACMAN_HANG: hangs, to be cut off);
 # -Sy the boot's lists ($SY_ERR: fails, saying it), -Suw its download ($SYUW_RC; $SUW_ERR: fails, saying it), -Sw the
-# keyrings' download first and -S their install first (exit $KEYRING_RC); -Si the version a package would update to ($SI_NEW)
+# keyrings' download first and -S their install first (exit $KEYRING_RC); -Si the version a package would update to ($SI_NEW);
+# -Qdtq the dependencies nothing needs ($ORPHANS, a space between two), -Rns removes (exit $RNS_RC)
 cat >"$t/bin/pacman" <<EOF
 #!/bin/sh
 case \$1 in
     -Qu) [ -z "\$QU" ] || printf '%s\n' "\$QU"; [ -z "\$QU_ERR" ] || echo "\$QU_ERR" >&2; exit \${QU_RC:-0} ;;
     -Q) [ -n "\$Q_HAVE" ] || exit 1; echo "\$2 \$Q_HAVE" ;;
+    -Qdtq) [ -n "\$ORPHANS" ] || exit 1; printf '%s\n' \$ORPHANS ;;
+    -Rns) echo "pacman \$* (SNAP_PAC_SKIP=\$SNAP_PAC_SKIP)" >>"$t/calls"; exit \${RNS_RC:-0} ;;
     -Su) echo "pacman \$* (SNAP_PAC_SKIP=\$SNAP_PAC_SKIP)" >>"$t/calls"; echo "installing foo"
         # (the boot partition kept open by the install all along)
         fds=\$(ls -l /proc/\$PPID/fd 2>/dev/null); case "\$fds" in *" $t/boot"*) echo "boot held" >>"$t/calls" ;; esac
@@ -191,6 +195,25 @@ lists
 [[ $(grep -v '^boot held' "$t/calls" | cut -d' ' -f1 | paste -sd' ') == "snapper snapper grub-btrfs pacman" ]] ||
     fail "the snapshot not put in the boot menu (grub-btrfs) right after it: $(cat "$t/calls")"
 rm "$t/grub-btrfs"
+# The packages AgrOS dropped (agros-system's retired list) removed after the install: only those in as a dependency
+# that nothing needs (pacman -Qdtq); one installed by hand, or still needed, kept. A removal failing doesn't fail the
+# update (said in the log); a failed install removes nothing
+printf '%s\n' '# AgrOS dropped these' qview gone-too >"$t/retired"
+lists; : >"$t/calls"
+ORPHANS="libfoo qview" "$t/auto-update" --install >/dev/null || fail "the install with a package to retire failed"
+[[ $(grep -o '^pacman -[A-Za-z]*' "$t/calls" | paste -sd' ' -) == "pacman -Su pacman -Rns" ]] ||
+    fail "what AgrOS dropped not removed after the install: $(cat "$t/calls")"
+grep -qx 'pacman -Rns --noconfirm -- qview (SNAP_PAC_SKIP=y)' "$t/calls" || fail "not just the dropped orphan removed: $(cat "$t/calls")"
+lists; : >"$t/calls"
+ORPHANS=libfoo "$t/auto-update" --install >/dev/null || fail "the install with nothing to retire failed"
+grep -q -- '-Rns' "$t/calls" && fail "a package removed that was installed by hand or is needed: $(cat "$t/calls")"
+lists; : >"$t/calls"
+ORPHANS=qview RNS_RC=1 "$t/auto-update" --install >/dev/null || fail "a removal that failed failed the update"
+[[ $(res) == "ok "* ]] && grep -q '^!! not removed (qview)' "$t/log" || fail "a failed removal not said, or the update not ok: $(res)"
+lists; : >"$t/calls"
+ORPHANS=qview PACMAN_RC=1 "$t/auto-update" --install >/dev/null && fail "a failed install reported success"
+grep -q -- '-Rns' "$t/calls" && fail "removed after a failed install: $(cat "$t/calls")"
+rm "$t/retired"
 
 # A failed install: pacman's lists back as they were (not newer than its packages), and written down with pacman's reason
 lists
