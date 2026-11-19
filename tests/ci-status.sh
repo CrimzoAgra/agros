@@ -84,6 +84,10 @@ case "$*" in
     [[ $STATE == *gh-down* ]] && exit 1
     n=0; [[ $STATE == *calamares-src-moved* ]] && n=6
     json "{\"ahead_by\": $n, \"base_commit\": {\"commit\": {\"committer\": {\"date\": \"2026-11-16T20:00:00Z\"}}}}" ;;
+  # (the last status made: last Friday's, or the one before when last week's never went out)
+  "issue list --label status --state all -L 1 --json createdAt "*)
+    [[ $STATE == *gh-down* ]] && exit 1
+    [[ $STATE == *status-missed* ]] && json '[{"createdAt": "2026-11-06T17:02:00Z"}]' || json '[{"createdAt": "2026-11-13T17:02:00Z"}]' ;;
   "issue list --label status --state all"*) cat @T@/lastbody 2>/dev/null; true ;;
   # (last week's, 7, and the one just made, 8; making it fails while @T@/createfail is there)
   "issue list --label status"*) echo 7; echo 8 ;;
@@ -186,6 +190,12 @@ grep -qxF -- "- CachyOS's installer recipe couldn't be read: whether it changed 
     fail "CachyOS's installer recipe not read not said: $(cat "$t/body")"
 grep -qxF -- "- CachyOS's installer code couldn't be read: whether it changed since AgrOS's pin not checked" "$t/body" ||
     fail "CachyOS's installer code not read not said: $(cat "$t/body")"
+grep -qxF -- "- Last week's status couldn't be looked up: whether it went out not checked" "$t/body" ||
+    fail "last week's status not looked up not said: $(cat "$t/body")"
+# (a Friday with no status: its run failed, or GitHub dropped it; last week's there, nothing said)
+go "status-missed"
+grep -qxF -- "- No status went out last week (the last one: 2026-11-06): status.yml's run failed or never started, https://github.com/x/agros/actions/workflows/status.yml" "$t/body" ||
+    fail "a week with no status not said: $(cat "$t/body")"
 # (CachyOS's installer recipe, or its code, moved on past AgrOS's pins: a look needed; neither said when they haven't)
 go "calamares-moved calamares-src-moved"
 grep -qxF -- "- CachyOS changed its installer's recipe (cachyos-calamares, 9999abcd, 2026-11-17) since AgrOS's pin (${cpin:0:8}): look at it, then move calamares_pkgbuild on (ci/build-repo.sh)" "$t/body" ||

@@ -122,6 +122,15 @@ arch=$(curl -fsS --retry 3 https://archlinux.org/packages/extra/x86_64/hyprland/
 if [[ -n $approved && -n $arch && $approved != "$arch" ]]; then
     problems+=("Hyprland $arch (Arch's) not approved yet: AgrOS's machines stay on $approved")
 fi
+# Last week's status: none made in the last 10 days (a week, and room for GitHub starting a run hours late) means a
+# Friday went by with no issue: its run failed (GitHub mails that only to whoever last changed the schedule), or GitHub
+# dropped the scheduled run, which nothing else says. (None ever: the first one, nothing to say)
+if prev=$(gh issue list --label status --state all -L 1 --json createdAt -q '.[0].createdAt[:10] // ""' 2>/dev/null); then
+    ! quiet "$prev" 10 ||
+        problems+=("No status went out last week (the last one: $prev): status.yml's run failed or never started, ${GITHUB_SERVER_URL:-https://github.com}/$GITHUB_REPOSITORY/actions/workflows/status.yml")
+else
+    problems+=("Last week's status couldn't be looked up: whether it went out not checked")
+fi
 # Caelestia's dots: pinned by commit (agros-hyprland-settings' _dots), a new one taken on purpose; how far upstream has
 # gone since, in the table (nothing else says it; a pin fails nothing, so not a problem)
 dots=$(sed -n 's/^_dots=//p' "$here/packages/agros-hyprland-settings/PKGBUILD")

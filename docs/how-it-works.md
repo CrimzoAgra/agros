@@ -1411,35 +1411,36 @@ breaks something holds back that one piece, never the rest (`.github/workflows/c
   out again with none of these. GitHub notifies of it. (GitHub's API failing: each call tried three times, then the
   report job fails, so the run and the Friday status show it; never a second issue, and one that turns up anyway is
   closed beside the first.)
-- **Every Friday at 17:00 Lisbon time** an issue (`ci/status.sh`, `.github/workflows/status.yml`, label `status`,
-  last week's closed once it's made; making it tried three times, then the run fails) says whether anything needs a
-  look: the last CI and ISO runs on main (not a pull request's; a failed one with the jobs that failed and its page,
-  CI's iso job alone said as the ISO build not started, its `AGROS_ISO_TOKEN` the likely cause; an ISO run the upstream
-  gate held, which built nothing and which GitHub shows as a success, too), what's held (and since when), CachyOS
-  changes waiting for a merge (agros-iso's CachyOS sync, since when) and the sync's own failures (its ISO check's are
-  the pull request's to say), the R2 mirror's last run failing (machines that fall back to it get older packages) and
-  either repo's keepalive's, a daily run (CI's, the sync's) not seen for 3 days (GitHub turns a public repo's schedules off after 60 days
-  without a commit), whether Arch's newest Hyprland is approved yet, and CachyOS's installer recipe or code moved on
-  past AgrOS's pins (`calamares_pkgbuild`, `calamares_src`); a lookup that fails is said too, never read as
-  nothing to say. Its table also says how far Caelestia's dots have gone since the commit `agros-hyprland-settings`
-  pins (a new one is taken on purpose; nothing else says when there is one). The owner is mentioned, so GitHub notifies
-  them. Its size watch (`ci/sizes.sh` in an Arch container, `ci/sizes.py`) works out
-  from the package databases what goes on the live ISO (agros-iso's list as `agros-trim.sh` leaves it) and on a new
-  install (`netinstall.yaml`'s selected groups), nothing built, and says: a package new this week of 20 MiB or more
-  and what pulled it in, either set grown 50 MiB or more, a package `agros-trim.sh` leaves out coming back, a listed
-  name no repo has, a NoExtract pattern (the live ISO's, installed systems', `agros-noextract.conf`) matching no file
-  any more, the installed systems' two NoExtract lists differing, and each fallback `agros-trim.sh` took (a name
-  CachyOS's list no longer has, the LTS kernel kept, NoExtract not added: its lines ending in "(agros-trim.sh)",
-  otherwise only in the ISO build's log, while the ISO stays bigger for good). A set pacman can't work out (a
-  dependency no package provides, a conflict, an empty list) is said with pacman's error, and its last week's sizes
-  kept for the next; a set whose files pacman can't all list has its NoExtract patterns left unchecked, said. Last
-  week's sizes are kept in last week's issue (a comment in its body; left out, said, if it would take the body past
-  GitHub's 65536 characters); the size watch not running at all is said with a link to its log.
+- **Every Friday at 17:00 Lisbon time** an issue (`ci/status.sh`, `.github/workflows/status.yml`, label `status`, last
+  week's closed once it's made; making it tried three times, then the run fails) says whether anything needs a look: the
+  last CI and ISO runs on main (not a pull request's; a failed one with the jobs that failed and its page, CI's iso job
+  alone said as the ISO build not started, its `AGROS_ISO_TOKEN` the likely cause; an ISO run the upstream gate held,
+  which built nothing and which GitHub shows as a success, too), what's held (and since when), CachyOS changes waiting
+  for a merge (agros-iso's CachyOS sync, since when) and the sync's own failures (its ISO check's are the pull request's
+  to say), the R2 mirror's last run failing (machines that fall back to it get older packages) and either repo's
+  keepalive's, last week's status never made (its run failed, or GitHub dropped it), a daily run (CI's, the sync's) not
+  seen for 3 days (GitHub turns a public repo's schedules off after 60 days without a commit), whether Arch's newest
+  Hyprland is approved yet, and CachyOS's installer recipe or code moved on past AgrOS's pins (`calamares_pkgbuild`,
+  `calamares_src`); a lookup that fails is said too, never read as nothing to say. Its table also says how far
+  Caelestia's dots have gone since the commit `agros-hyprland-settings` pins (a new one is taken on purpose; nothing
+  else says when there is one). The owner is mentioned, so GitHub notifies them. Its size watch (`ci/sizes.sh` in an
+  Arch container, `ci/sizes.py`) works out from the package databases what goes on the live ISO (agros-iso's list as
+  `agros-trim.sh` leaves it) and on a new install (`netinstall.yaml`'s selected groups), nothing built, and says: a
+  package new this week of 20 MiB or more and what pulled it in, either set grown 50 MiB or more, a package
+  `agros-trim.sh` leaves out coming back, a listed name no repo has, a NoExtract pattern (the live ISO's, installed
+  systems', `agros-noextract.conf`) matching no file any more, the installed systems' two NoExtract lists differing, and
+  each fallback `agros-trim.sh` took (a name CachyOS's list no longer has, the LTS kernel kept, NoExtract not added: its
+  lines ending in "(agros-trim.sh)", otherwise only in the ISO build's log, while the ISO stays bigger for good). A set
+  pacman can't work out (a dependency no package provides, a conflict, an empty list) is said with pacman's error, and
+  its last week's sizes kept for the next; a set whose files pacman can't all list has its NoExtract patterns left
+  unchecked, said. Last week's sizes are kept in last week's issue (a comment in its body; left out, said, if it would
+  take the body past GitHub's 65536 characters); the size watch not running at all is said with a link to its log.
 - **Once a month** `.github/workflows/keepalive.yml` turns every scheduled workflow here (CI's nightly run, the weekly
   status, itself) on again through GitHub's API (`gh api -X PUT repos/<repo>/actions/workflows/<file>/enable`, with
   `actions: write`), as keepalive-workflow v2 does, so GitHub's 60 days without a commit never turn them off; no dummy
   commits. agros-iso has the same for its CachyOS sync. (Either failing is in the weekly status.) That it works can
-  only be seen once 60 days pass with no commit; until then the status issue's "not seen for 3 days" is what says a schedule stopped.
+  only be seen once 60 days pass with no commit; until then the status issue's "not seen for 3 days" is what says a
+  schedule stopped.
 
 ## Troubleshooting
 
