@@ -253,6 +253,14 @@ if "${paru[@]}" -Sy --noconfirm; then
     ignore=()
     ((${#held[@]} == 0)) || ignore=(--ignore "$(IFS=,; echo "${held[*]}")")
     "${paru[@]}" --config "$gated" -Su --noconfirm "${ignore[@]}" || status=1
+    # The packages AgrOS dropped (agros-system's list: an app it replaced), removed once an update took them out of
+    # what AgrOS installs, as the boot's update does (auto-update): only those in as a dependency that nothing needs
+    # now. Its failing never fails the update: said, and tried again at the next one
+    mapfile -t gone < <(pacman -Qdtq 2>/dev/null | grep -xF -f "${AGROS_RETIRED:-/usr/share/agros/retired}" 2>/dev/null)
+    if ((${#gone[@]})); then
+        echo "Removing what AgrOS no longer installs: ${gone[*]}"
+        "${paru[@]}" -Rns --noconfirm "${gone[@]}" || echo "!! Not removed (${gone[*]}): tried again at the next update"
+    fi
 else
     status=1
 fi

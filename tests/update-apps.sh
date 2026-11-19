@@ -209,6 +209,26 @@ HOME=$t/home XDG_STATE_HOME=$t/state XDG_CACHE_HOME=$t/home/.cache PATH=$t/bin:$
 keys=$(grep -n -- " --config [^ ]* -S --needed --noconfirm archlinux-keyring$" "$t/paru" | cut -d: -f1)
 su=$(grep -n -- " -Su --noconfirm$" "$t/paru" | cut -d: -f1)
 [[ -n $keys && -n $su ]] && ((keys < su)) || fail "the newer keyring not installed first, on its own: $(cat "$t/paru")"
+# The packages AgrOS dropped (agros-system's retired list) removed after the update, through paru (its sudo): only
+# those in as a dependency that nothing needs (pacman -Qdtq); one installed by hand, or still needed, kept. A removal
+# failing doesn't fail the update, said
+printf '%s\n' '# AgrOS dropped these' qview gone-too >"$t/retired"
+update() { AGROS_RETIRED=$t/retired HOME=$t/home XDG_STATE_HOME=$t/state XDG_CACHE_HOME=$t/home/.cache PATH=$t/bin:$PATH \
+    "$here/.local/bin/update-apps" </dev/null 2>&1; }
+stub pacman 'case "$1" in -Qdtq) printf "%s\n" libfoo qview ;; esac; true'
+rm -f "$t/paru"; update >/dev/null || true
+[[ $(grep -oE -- " -(Su|Rns) --noconfirm( qview)?$" "$t/paru" | paste -sd,) == " -Su --noconfirm, -Rns --noconfirm qview" ]] ||
+    fail "not just the dropped orphan removed, after the update: $(cat "$t/paru")"
+stub pacman 'case "$1" in -Qdtq) echo libfoo ;; esac; true'
+rm -f "$t/paru"; update >/dev/null || true
+grep -q -- -Rns "$t/paru" && fail "a package removed that was installed by hand or is needed: $(cat "$t/paru")"
+stub pacman 'case "$1" in -Qdtq) echo qview ;; esac; true'
+stub paru 'echo "paru $*" >>"'"$t"'/paru"; case "$*" in *" -Rns "*) exit 1 ;; esac'
+mv "$t/bin/timeout" "$t/timeout"  # (the real one: the Flatpaks' step fails with the stand-in's)
+rc=0; out=$(update) || rc=$?
+[[ $rc == 0 && $out == *"!! Not removed (qview)"* ]] || fail "a failed removal failed the update, or wasn't said: $rc $out"
+stub paru 'echo "paru $*" >>"'"$t"'/paru"'
+mv "$t/timeout" "$t/bin/timeout"; rm "$t/retired"
 # On a battery nearly empty (a laptop off its charger, below 15%): nothing installed (a power cut mid-install leaves
 # packages half in), said, a failure for the Updates app; on its charger, updated
 mkdir -p "$t/ps/BAT0"; echo Battery >"$t/ps/BAT0/type"; echo 9 >"$t/ps/BAT0/capacity"; echo Discharging >"$t/ps/BAT0/status"
