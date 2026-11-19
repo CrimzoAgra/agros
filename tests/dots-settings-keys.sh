@@ -35,7 +35,7 @@ def norm(keys):  # as the Settings app compares them
 
 used = {}
 for k, s in settings.items():
-    if s["type"] != "keys":
+    if s["type"] != "keys" or s.get("reserved"):  # (Capri's own: below)
         continue
     for keys in s["default"]:
         for one in ([f"{keys} + {d}" for d in "1234567890"] if s.get("modifier") else [keys]):
@@ -48,6 +48,9 @@ assert not clashes, clashes
 capri = {norm(k): k for k in ("CTRL + ALT + Space", "CTRL + ALT + SHIFT + Space", "CTRL + ALT + K", "CTRL + ALT + X")}
 taken = {capri[keys]: ks for keys, ks in used.items() if keys in capri}
 assert not taken, f"Capri's fixed keys taken: {taken}"
+# And they're the ones the Shortcuts page shows as hers (refused for any other shortcut)
+shown = {norm(k) for s in settings.values() if s.get("reserved") == "Capri's" for k in s["default"]}
+assert shown == set(capri), f"the Shortcuts page's keys of Capri's aren't hers: {shown} against {set(capri)}"
 
 # Every shortcut on the manual's shortcuts page is one of these (an update that moved one left the page naming a key
 # that does nothing). Its cells as written: "Print, Super+Shift+S" each, "Super+1...0" the digits, "/" either key

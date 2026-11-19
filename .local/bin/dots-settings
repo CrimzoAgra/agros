@@ -29,6 +29,8 @@ Kinds of setting ("type"): bool, choice (its "options", or "options_cmd": a comm
 or "value<TAB>label"; "open": a value not listed is kept), keys, number ("min", "max", "step", "integer"), text
 ("pattern": a regular expression the whole value must match, "format": how it's said when it doesn't), json
 (any JSON value: Caelestia's lists), image (a choice shown as pictures: the wallpaper). "readonly": shown, not changed.
+"reserved": whose keys a "keys" setting's are (Capri's, which she binds herself while she runs): no other shortcut can
+have them.
 "needs": an app's setting (Startup's): programs on the PATH or paths (~: your home), one there meaning it's installed;
 with none, the app shows it as "(not installed)", not changed there.
 Caelestia's own options: a key caelestia-shell.<option> (its shell.json) or caelestia-tokens.<option> (its
@@ -497,14 +499,17 @@ MEDIA_KEYS = {
     "XF86AudioNext": "Next track", "XF86AudioPrev": "Previous track", "XF86AudioStop": "Stop the music"}
 
 
+def norm(keys):
+    """A shortcut as the Settings app compares them: modifiers in any order, any case"""
+    parts = [{"control": "ctrl"}.get(p, p) for p in re.split(r"\s*\+\s*", keys.strip().lower())]
+    return "+".join(sorted(parts[:-1]) + parts[-1:])
+
+
 def binds_group(settings, saved):
     """The shortcuts no setting changes (Caelestia's fixed ones: arrows, media keys...), from Hyprland's list, so they
     show with the rest and a clash with one does too. Mouse buttons (mouse:272) are named by the Settings app"""
     mods = [(64, "SUPER"), (4, "CTRL"), (8, "ALT"), (1, "SHIFT")]
 
-    def norm(keys):  # (as the Settings app compares them: modifiers in any order, any case)
-        parts = [{"control": "ctrl"}.get(p, p) for p in re.split(r"\s*\+\s*", keys.strip().lower())]
-        return "+".join(sorted(parts[:-1]) + parts[-1:])
     taken = set()
     for s in settings.values():
         if s["type"] == "keys":
@@ -765,6 +770,21 @@ def check(key, setting, value):
     return None
 
 
+def reserved_clash(key, setting, value, settings):
+    """Why a shortcut can't have those keys: they're another program's ("reserved": Capri's, which she binds herself while
+    she runs), or None. Refused, not only shown as a clash as two of the desktop's own are: Hyprland and she would both
+    act on them (her Ctrl+Alt+C once cleared every notification too), and she'd still have them after any change here"""
+    if setting["type"] != "keys" or setting.get("reserved"):
+        return None
+    mine = {norm(k) for keys in value for k in ([f"{keys} + {d}" for d in "1234567890"] if setting.get("modifier")
+                                                 else [keys])}
+    for s in settings.values():
+        for keys in s["default"] if s.get("reserved") and s["type"] == "keys" else []:
+            if norm(keys) in mine:
+                return f"{key}: {keys} is {s['reserved']} ({s['label'][:1].lower() + s['label'][1:]}): choose other keys"
+    return None
+
+
 def caelestia_set(setting, value):
     """Written to Caelestia's file, which it watches (no restart). Back to the default: the option left out, unless AgrOS
     ships its own value (then that one written), so a Caelestia update's new default reaches it"""
@@ -807,7 +827,7 @@ def main(args):
             setting["options"] = options_from(setting["options_cmd"])  # (checked against them)
         if setting["type"] == "number" and setting.get("integer") and isinstance(value, float) and value.is_integer():
             value = int(value)  # (35.0 from the app's slider: 35)
-        problem = check(args[1], setting, value)
+        problem = check(args[1], setting, value) or reserved_clash(args[1], setting, value, settings)
         if problem:
             sys.exit(problem)
         if "path" in setting:

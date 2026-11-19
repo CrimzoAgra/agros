@@ -77,4 +77,4 @@ offers to watch it or open its folder.
 
 Capri's own keys, while she runs: **Ctrl+Alt+Space** to talk to her (press again when you're done),
 **Ctrl+Alt+Shift+Space** to have her always listening, **Ctrl+Alt+K** for her chat and **Ctrl+Alt+X** for her scanner.
-No other shortcut uses them.
+No other shortcut uses them, and the Settings app's Shortcuts page shows them as hers and won't give them to another.

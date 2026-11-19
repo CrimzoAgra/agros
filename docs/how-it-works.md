@@ -287,7 +287,9 @@ Changes apply right away.
   - **Shortcuts**: my shortcuts (`dots.bind` in `user/keys.lua`, `user/windows.lua` and `user/apps.lua`; defaults in the
     schema), Caelestia's (its `kb*` variables, by its sections, minus the ones `hypr-vars.lua` turns off; your changes
     go back through `hypr-vars.lua`), and the fixed ones neither can change (Caelestia's arrows, media keys...:
-    Hyprland's list of binds, `hyprctl binds`), shown so a clash with them shows too. + records a new one: Hyprland
+    Hyprland's list of binds, `hyprctl binds`), shown so a clash with them shows too; Capri's fixed keys (she binds
+    them herself while she runs: `"reserved"` in the schema) are shown as hers and refused for any other shortcut
+    (`dots-settings set` says why; the app shows it). + records a new one: Hyprland
     switches to an empty submap (`dots-capture`) meanwhile so every key reaches the app, and Esc always leaves it. A
     shortcut used twice shows in red. A new shortcut of mine is a `dots.bind` with its default in the schema: no other
     code

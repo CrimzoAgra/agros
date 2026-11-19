@@ -1245,6 +1245,51 @@
           ]
         },
         {
+          "title": "Capri's own (while she runs, not changeable)",
+          "settings": [
+            {
+              "key": "capri-keys.talk",
+              "label": "Talk to her (press again when you're done)",
+              "type": "keys",
+              "default": [
+                "CTRL + ALT + Space"
+              ],
+              "readonly": true,
+              "reserved": "Capri's"
+            },
+            {
+              "key": "capri-keys.listen",
+              "label": "Have her always listening",
+              "type": "keys",
+              "default": [
+                "CTRL + ALT + SHIFT + Space"
+              ],
+              "readonly": true,
+              "reserved": "Capri's"
+            },
+            {
+              "key": "capri-keys.chat",
+              "label": "Her chat",
+              "type": "keys",
+              "default": [
+                "CTRL + ALT + K"
+              ],
+              "readonly": true,
+              "reserved": "Capri's"
+            },
+            {
+              "key": "capri-keys.scanner",
+              "label": "Her scanner",
+              "type": "keys",
+              "default": [
+                "CTRL + ALT + X"
+              ],
+              "readonly": true,
+              "reserved": "Capri's"
+            }
+          ]
+        },
+        {
           "title": "Caelestia",
           "from": "caelestia-keys"
         },

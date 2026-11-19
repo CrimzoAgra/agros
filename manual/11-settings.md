@@ -19,7 +19,8 @@ setting on any page.
   desktop and Lutris, which you can turn off one by one
 - **Startup**: which apps start when you log in
 - **Shortcuts**: every shortcut. Click **+** next to one and press the new keys. One used twice shows in red. The
-  fixed ones at the bottom can't be changed, but show so you don't pick their keys
+  fixed ones at the bottom can't be changed, but show so you don't pick their keys. Capri's own keys show there too,
+  and no other shortcut can have them (she uses them while she runs)
 - **All Caelestia options**: every option the shell has, by area: click an area to open it
 
 A setting you've changed has a ↺ button that puts it back as AgrOS set it; not the ones kept by the system or by
