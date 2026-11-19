@@ -1342,6 +1342,35 @@ grep -q '^loaded false .*user.workspaces.*renamed API' <<<"$out" || fail "a brok
 grep -qx "bind SHIFT + Space" <<<"$out" || fail "a broken user module took the ones after it down: $(head -5 <<<"$out")"
 cp "$t/workspaces.lua.bak" "$t/home/.config/caelestia/user/workspaces.lua"
 
+# Focus on a click (floating mode's default): a closed window's focus goes to the one used before it (focus_on_close 2,
+# "mru"), not to the one under the pointer (Caelestia's 1: none over the desktop, and Super+Q then did nothing); on
+# hover (the Settings app's choice, or tiling), as Caelestia has it
+cat >"$t/focus.lua" <<'L'
+local home = os.getenv("HOME")
+package.path = home .. "/.config/caelestia/?.lua;" .. home .. "/.config/hypr/?.lua;" .. package.path
+dofile(arg[1])
+local input, config = {}, hl.config
+hl.config = function(c)
+    config(c)
+    for k, v in pairs(c.input or {}) do input[k] = v end
+end
+local vars = require("variables")
+for k, v in pairs(require("hypr-vars")) do vars[k] = v end
+require("hypr-user")
+io.write(tostring(input.follow_mouse), " ", tostring(input.focus_on_close), "\n")
+L
+focus_load() {
+    rm -f "$t/home/.config/dots/settings.lua" "$t/home/.local/state/window-mode"
+    [[ -z $1 ]] || printf '%s\n' "$1" >"$t/home/.config/dots/settings.lua"
+    [[ -z $2 ]] || echo "$2" >"$t/home/.local/state/window-mode"
+    (cd "$t" && HOME=$t/home XDG_RUNTIME_DIR=$t/run HYPRLAND_INSTANCE_SIGNATURE=test lua focus.lua stub.lua 2>&1 | tail -1)
+}
+[[ $(focus_load '' '') == "2 2" ]] || fail "focus on a click: a closed window's focus not to the one used before: $(focus_load '' '')"
+[[ $(focus_load 'return { ["windows.focus"] = "hover" }' '') == "1 1" ]] ||
+    fail "focus on hover: not as Caelestia has it: $(focus_load 'return { ["windows.focus"] = "hover" }' '')"
+[[ $(focus_load '' tiling) == "1 1" ]] || fail "tiling: not as Caelestia has it: $(focus_load '' tiling)"
+rm -f "$t/home/.local/state/window-mode"
+
 # VMware's vmw-dmabuf shim (Hyprland's only) taken out of LD_PRELOAD for the apps, wherever it is in the list, the
 # session's other preloads kept as they were (no stray ':'); none there: LD_PRELOAD left alone
 cat >"$t/preload.lua" <<'L'

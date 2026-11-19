@@ -601,7 +601,8 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
     keeps its own size, but one wider or taller than the screen opens shrunk to fit, in the middle, and one opening off
     it is brought within reach. X11 menus and tooltips are never moved into reach: their apps place them
   - The window clicked, or picked in the dock or Alt+Tab, comes to the front; in floating mode the pointer stays
-    where it is, and focus changes on a click, not on hover
+    where it is, and focus changes on a click, not on hover; a window closed then passes the focus to the one used
+    before it (`focus_on_close` "mru", as on Windows), not to the one under the pointer, which left none focused
   - Clicking a notification brings the app that sent it to the front (or opens it)
 - **Title bars** (`user/titlebars.lua`), on floating windows only:
   - Minimise, maximise (a restore icon when maximised) and close, styled like Caelestia, with a hover highlight:
