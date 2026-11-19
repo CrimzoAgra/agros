@@ -28,4 +28,14 @@ pci 0000:01:00.0 0x10de 0x030000  # NVIDIA, VGA
 installs || fail "agros-nvidia not installed with an NVIDIA card"
 rm -r "$t/sys/bus/pci/devices/0000:01:00.0"; pci 0000:01:00.0 0x10de 0x030200  # NVIDIA, 3D (a laptop's second GPU)
 installs || fail "agros-nvidia not installed with an NVIDIA 3D controller"
+# How the system part went, its terminal's last line: VMware's build failing (sudo refused here) isn't "Done.", which
+# read as all of it in with the failure scrolled away above; everything in is
+out=$(SUDO_USER=me SYSFS=$t/sys PATH=$t/bin:$PATH bash -c 'source "$1"; system_part' _ "$here/.local/bin/agros-welcome" 2>&1) &&
+    fail "the system part exited 0 with VMware not installed"
+[[ $(tail -1 <<<"$out") == "Not all of it installed"* ]] || fail "a failed install's last line: $(tail -1 <<<"$out")"
+# (VMware built: sudo, its modules and services stubbed working)
+for c in sudo modprobe systemctl; do printf '#!/bin/sh\nexit 0\n' >"$t/bin/$c"; chmod +x "$t/bin/$c"; done
+out=$(SUDO_USER=me SYSFS=$t/sys PATH=$t/bin:$PATH bash -c 'source "$1"; system_part' _ "$here/.local/bin/agros-welcome" 2>&1) ||
+    fail "the system part failed with everything installed: $out"
+[[ $(tail -1 <<<"$out") == Done. ]] || fail "everything installed, not said done: $(tail -1 <<<"$out")"
 echo "ok welcome-nvidia"

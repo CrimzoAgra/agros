@@ -97,7 +97,10 @@ system_part() {
         getent group "$g" >/dev/null || groupadd -r "$g"
         gpasswd -a "$user" "$g" >/dev/null
     fi
-    echo "Done."
+    # (its terminal's last line: "Done." under an install that failed, its "!!" scrolled away above VMware's build, read as
+    # all of it in)
+    if ((rc)); then echo "Not all of it installed (the lines marked !! above): agros-welcome --system tries again."
+    else echo "Done."; fi
     return $rc
 }
 
