@@ -19,13 +19,22 @@ json() { jq -r "$q" <<<"$1"; }
 run() { echo "{\"status\": \"completed\", \"conclusion\": \"$1\", \"createdAt\": \"$2T03:00:00Z\", \"databaseId\": $3, \"event\": \"${4:-push}\"}"; }
 case "$*" in
   "run list -R x/agros "*)
-    if [[ $STATE == *ci-failed* ]]; then json "[$(run cancelled 2026-11-20 13), $(run failure 2026-11-19 12), $(run success 2026-11-18 11)]"
+    if [[ $STATE == *ci-failed* || $STATE == *ci-isojob* ]]; then json "[$(run cancelled 2026-11-20 13), $(run failure 2026-11-19 12), $(run success 2026-11-18 11)]"
     # (a pull request from a fork's own main branch, listed as main's: its tests on the published repo passed)
     elif [[ $STATE == *ci-pr* ]]; then json "[$(run success 2026-11-20 13 pull_request), $(run failure 2026-11-19 12), $(run success 2026-11-18 11)]"
     elif [[ $STATE == *ci-quiet* ]]; then json "[$(run success 2026-11-14 12)]"
     elif [[ $STATE == *noruns* ]]; then json '[{"status": "in_progress", "conclusion": "", "createdAt": "2026-11-20T03:00:00Z", "databaseId": 14}]'
     else json "[$(run cancelled 2026-11-20 13), $(run success 2026-11-20 12)]"; fi ;;
-  "run list -R x/iso -w iso.yml "*) json "[$(run success 2026-11-20 21)]" ;;
+  "run list -R x/iso -w iso.yml "*)
+    if [[ $STATE == *iso-failed* ]]; then json "[$(run failure 2026-11-20 22), $(run success 2026-11-18 21)]"
+    else json "[$(run success 2026-11-20 21)]"; fi ;;
+  # (a failed run's jobs: CI's tests, or only its iso job (the ISO's start); the ISO's SourceForge key)
+  "api repos/x/agros/actions/runs/12/jobs "*)
+    [[ $STATE == *gh-down* ]] && exit 1
+    t=failure i=skipped; [[ $STATE != *ci-isojob* ]] || t=success i=failure
+    json "{\"jobs\": [{\"name\": \"test\", \"conclusion\": \"$t\"}, {\"name\": \"report\", \"conclusion\": \"success\"}, {\"name\": \"iso\", \"conclusion\": \"$i\"}]}" ;;
+  "api repos/x/iso/actions/runs/22/jobs "*)
+    json '{"jobs": [{"name": "sourceforge", "conclusion": "failure"}, {"name": "iso", "conclusion": "skipped"}]}' ;;
   "run list -R x/iso -w cachyos-sync.yml "*)
     if [[ $STATE == *cachy-broken* || $STATE == *cachy-checkfail* ]]; then json "[$(run failure 2026-11-20 31), $(run success 2026-11-18 30)]"
     elif [[ $STATE == *cachy-quiet* ]]; then json "[$(run success 2026-11-01 31)]"
@@ -125,15 +134,25 @@ cp "$t/body" "$t/lastbody"
 [[ $(last_sizes) == $'iso hyprland 66560\ninst cairo 1536' ]] || fail "last week's baseline not kept: $(last_sizes)"
 go "ci-failed held sync newhypr"
 grep -q '^@someone \*\*Needs a look' "$t/body" || fail "problems not said: $(cat "$t/body")"
-for s in "AgrOS's CI: its last run failure (2026-11-19); last good 2026-11-18" "Held back: x (https://h, open since 2026-11-10)" \
+for s in "AgrOS's CI: its last run failure (2026-11-19; test failed, https://github.com/x/agros/actions/runs/12); last good 2026-11-18" "Held back: x (https://h, open since 2026-11-10)" \
     "CachyOS ISO changes waiting for a merge: CachyOS: 2 new commit(s) (https://p, open since 2026-11-12)" \
     "Hyprland 0.58.0 (Arch's) not approved yet: AgrOS's machines stay on 0.57.2"; do
     grep -qxF -- "- $s" "$t/body" || fail "not said: $s: $(cat "$t/body")"
 done
 # (a pull request's run isn't main's: main's failure still said)
 go "ci-pr"
-grep -qxF -- "- AgrOS's CI: its last run failure (2026-11-19); last good 2026-11-18" "$t/body" ||
+grep -qxF -- "- AgrOS's CI: its last run failure (2026-11-19; test failed, https://github.com/x/agros/actions/runs/12); last good 2026-11-18" "$t/body" ||
     fail "a pull request's run taken for main's: $(cat "$t/body")"
+# (a failed run says which of its jobs failed, with its page: CI's iso job alone, the ISO build not started; the ISO's
+# own, its SourceForge key; its jobs not read, said)
+go "ci-isojob iso-failed"
+for s in "AgrOS's CI: its last run failure (2026-11-19; iso failed, https://github.com/x/agros/actions/runs/12: the packages went out, but agros-iso's ISO build wasn't started (the AGROS_ISO_TOKEN secret expired or lost its access? Its log says)); last good 2026-11-18" \
+    "The ISO: its last build failure (2026-11-20; sourceforge failed, https://github.com/x/iso/actions/runs/22); last good 2026-11-18"; do
+    grep -qxF -- "- $s" "$t/body" || fail "a failed run's jobs not said: $s: $(cat "$t/body")"
+done
+go "ci-failed gh-down"
+grep -qF -- "- AgrOS's CI: its last run failure (2026-11-19; its jobs couldn't be read, https://github.com/x/agros/actions/runs/12)" "$t/body" ||
+    fail "a failed run's jobs not read not said: $(cat "$t/body")"
 # (a lookup that fails is said, not read as nothing held, nothing waiting, nothing to approve)
 go "gh-down pages-down arch-down"
 for s in "CI's held issue couldn't be read: whether anything is held not checked" \

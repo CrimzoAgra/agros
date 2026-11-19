@@ -34,10 +34,30 @@ last() {
 # schedules off after 60 days without a commit, and nothing else says so
 now=$(date -u -d "${AGROS_NOW:-now}" +%s)
 quiet() { [[ $1 =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] && (((now - $(date -u -d "$1" +%s)) / 86400 >= $2)); }
-read -r ci_last ci_day ci_good _ < <(last "$GITHUB_REPOSITORY" ci.yml) || true
+read -r ci_last ci_day ci_good ci_id < <(last "$GITHUB_REPOSITORY" ci.yml) || true
 read -r iso_last iso_day iso_good iso_id < <(last "$iso" iso.yml) || true
 read -r sync_last sync_day sync_good sync_id < <(last "$iso" cachyos-sync.yml) || true
-[[ ${ci_last:-} == success ]] || problems+=("AgrOS's CI: its last run ${ci_last:-none} (${ci_day:-}); last good ${ci_good:-none}")
+# why <repo> <run id>: a failed run's jobs that failed, and its page ("; <jobs> failed, <url>"): which part to look at
+# (CI's iso job alone: everything went out, the ISO build not started; its report job: the held issue not brought up
+# to date. One run's failure said without them sent the owner to dig through it)
+why() {
+    local j
+    [[ -n ${2:-} ]] || return 0
+    if j=$(gh api "repos/$1/actions/runs/$2/jobs" \
+        -q '[.jobs[] | select(.conclusion != "success" and .conclusion != "skipped" and .conclusion != null) | .name] | join(", ")' 2>/dev/null); then
+        printf '; %s failed' "${j:-no job}"
+    else
+        printf "; its jobs couldn't be read"
+    fi
+    printf ', %s' "${GITHUB_SERVER_URL:-https://github.com}/$1/actions/runs/$2"
+}
+if [[ ${ci_last:-} != success ]]; then
+    w=$(why "$GITHUB_REPOSITORY" "${ci_id:-}")
+    # (only the ISO's start failed: AGROS_ISO_TOKEN, a fine-grained token, expires; or Pages slow to serve the database)
+    [[ $w != "; iso failed,"* ]] ||
+        w+=": the packages went out, but agros-iso's ISO build wasn't started (the AGROS_ISO_TOKEN secret expired or lost its access? Its log says)"
+    problems+=("AgrOS's CI: its last run ${ci_last:-none} (${ci_day:-}$w); last good ${ci_good:-none}")
+fi
 ! quiet "${ci_day:-}" 3 || problems+=("AgrOS's CI hasn't run since ${ci_day}: its daily run turned off?")
 # The ISO: a run the upstream gate held built nothing (its Upstream gate step ran, its publish job skipped), and GitHub
 # shows that wait as a success. Usually gone with CI's next approval; one that stays (the ISO's Hyprland or a library, from
@@ -51,7 +71,8 @@ if [[ ${iso_last:-} == success && -n ${iso_id:-} ]]; then
         problems+=("The ISO: its last build ($iso_day) waits for AgrOS's check of its Hyprland or a library: nothing built, the ISO published before stays the download")
     fi
 fi
-[[ ${iso_last:-} == success || ${iso_last:-} == waiting ]] || problems+=("The ISO: its last build ${iso_last:-none} (${iso_day:-}); last good ${iso_good:-none}")
+[[ ${iso_last:-} == success || ${iso_last:-} == waiting ]] ||
+    problems+=("The ISO: its last build ${iso_last:-none} (${iso_day:-}$(why "$iso" "${iso_id:-}")); last good ${iso_good:-none}")
 # The CachyOS sync: its own steps failing (fetching CachyOS's commits, the merge, the pull request) said here; its ISO
 # check failing is the pull request's to say (below)
 if [[ ${sync_last:-} != success ]]; then
