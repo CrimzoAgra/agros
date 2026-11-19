@@ -48,6 +48,13 @@ pac post_upgrade
 grep -qx 'Include = /etc/pacman.d/agros-gate.conf' "$conf" ||
     fail "an upgrade didn't add the upstream gate's Include (Hyprland not held from a manual pacman -Syu): $(cat "$conf")"
 [[ $(cat "$conf") == "$want" ]] || fail "pacman.conf after an upgrade from an older AgrOS: $(cat "$conf")"
+# (and Thunar's own wallpaper plugin, unpacked before the NoExtract list named it, gone: two "Set as wallpaper" else;
+# Thunar's other plugins kept)
+p=$r/usr/lib/thunarx-3 && mkdir -p "$p" "$r/etc/pacman.d" && touch "$p/thunar-wallpaper-plugin.so" "$p/thunar-uca.so"
+cp "$here/packages/agros-system/agros-noextract.conf" "$r/etc/pacman.d/"
+pac post_upgrade
+[[ ! -e $p/thunar-wallpaper-plugin.so && -e $p/thunar-uca.so ]] || fail "Thunar's own wallpaper plugin left: $(ls "$p")"
+rm -r "${r:?}/etc/pacman.d" "${r:?}/usr"
 
 # Yours kept: [agros]'s own SigLevel, the mirror commented out (not added again), an Include of the gate's with a comment
 printf '%s\n' '[options]' 'Include = /etc/pacman.d/agros-gate.conf  # mine' 'Architecture = auto' '' '[agros]' \

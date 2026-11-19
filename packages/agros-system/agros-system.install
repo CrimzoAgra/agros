@@ -79,6 +79,14 @@ pacman_includes() {
     pacman_include agros-gate
     pacman_include agros-noextract
     [[ -f $_r/etc/pacman.conf ]] && sed -i '/^NoExtract = .* # agros-iso$/d' "$_r/etc/pacman.conf"
+    noextract_leftovers
+}
+# Thunar's own "Set as wallpaper" (Xfce's and GNOME's only), unpacked on a machine from before the list named it: gone
+# now rather than at Thunar's next update (two of it in Thunar's menu till then, agros-thunar-usage's working)
+# shortcut: this one file only; a generic sweep of the list's patterns if another such leftover ever matters
+noextract_leftovers() {
+    local f=usr/lib/thunarx-3/thunar-wallpaper-plugin.so
+    ! grep -qxF "NoExtract = $f" "$_r/etc/pacman.d/agros-noextract.conf" 2>/dev/null || rm -f "$_r/$f"
 }
 
 # The services on, and the keyring's password changed with yours (passwd's PAM)
