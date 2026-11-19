@@ -242,6 +242,14 @@ rm -f "$t/fp"
 run --boot flatpak >/dev/null || fail "the boot's Flatpak update failed"
 [[ $(grep -E '^flatpak (remote-modify|update)' "$t/fp") == $'flatpak remote-modify --user --url= app-origin\nflatpak update --user -y --noninteractive' ]] ||
     fail "the boot's Flatpak update not the user's alone, after its -origin remotes' URLs were emptied: $(cat "$t/fp")"
+# Run in a terminal (update-apps): flatpak setting the terminal up for its progress, in a process group of timeout's
+# own, was stopped by the kernel (SIGTTOU) and never ended, timeout's own deadline included
+if scr=$(command -v script); then
+    stub flatpak '[ "$1" != update ] || '"$(command -v stty)"' sane </dev/tty'
+    HOME=$t/home PATH=$t/bin:$t/sys STEAM_ROOT=$t/steam SHELL=/bin/bash timeout -s KILL 30 \
+        "$scr" -qec "$here/.local/bin/update-kinds flatpak" /dev/null >/dev/null ||
+        fail "the Flatpaks' update, run in a terminal, stopped or failed"
+fi
 stub flatpak 'true'
 
 # --- Developer tools: only those there; npm's global packages only with its prefix in your home

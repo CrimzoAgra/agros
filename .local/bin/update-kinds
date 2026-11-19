@@ -72,6 +72,10 @@ capri_current="${XDG_DATA_HOME:-$HOME/.local/share}/capri/current"
 PATH=$HOME/.cargo/bin:$HOME/.local/bin:$PATH
 # (the AUR's build scripts, npm's, rustup's: a user's, never root's)
 ((EUID)) || { echo "update-kinds: not as root" >&2; exit 1; }
+# Every time limit here in the terminal's foreground: run in a terminal (update-apps), timeout's own process group is a
+# background one, and flatpak setting the terminal up for its progress was stopped there by the kernel (SIGTTOU), for
+# good, past its deadline too. (At the deadline only the command itself is stopped, not what it started)
+timeout() { command timeout --foreground "$@"; }
 
 # Proton builds, where Steam and Lutris look for them: "<launcher> <folder>" each. Steam's compatibilitytools.d;
 # Lutris's Wine runners (lutris.conf's runner_dir, else its data folder's runners: as Lutris finds them). Lutris's
