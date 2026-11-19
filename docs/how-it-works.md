@@ -103,47 +103,47 @@ of yours for the mirror counts, not added again), and its removal takes them out
 | `agros-thunar-usage` | Two Thunar plugins: a bar beside the free space in its status bar, showing how full the folder's drive is (each window and tab its own drive; the theme's warning colour past 90%), and "Set as wallpaper" on a picture, through Caelestia (Thunar's own, Xfce and GNOME only, left out by agros-noextract.conf) |
 | `agros-wine` | One Wine: CachyOS's (`wine-cachyos-opt`, in `/opt`) first on the PATH (`profile.d`, fish's `vendor_conf.d`, `environment.d`), standing in for Arch's `wine` that `winetricks` needs (provides it, no conflict: a machine that has Arch's keeps updating, with it unused; `agros-desktop` lists this before the gaming packages, so new installs never get Arch's, ~600 MB, nor its Mono and Gecko, ~430 MB). Wine fetches Mono or Gecko itself when a program needs them; a double-clicked `.exe` opens in Faugus Launcher (Proton) |
 
-The AUR packages AgrOS uses (`aur/packages.txt`: Caelestia, equibop, Spicetify, darkly, ...) are built into
-the same repo. Quickshell is built first, on its own, with AgrOS's fix
-(`packages/agros-system/aur-patches/quickshell-git.patch`, added by `aur-agros-patch`, its pkgrel a `.<rel>` above the
-AUR's, raised when what it adds changes; stripped, as Arch's own packages are). Without it, a window that closed while
-Quickshell was asking Hyprland for the window list came back from the late answer and stayed listed for good (a game
-quit, its icon left in the dock). The boot's rebuild on a new Qt (`auto-update-aur`) adds the same fix, and a patch that
-no longer applies fails the build rather than going out without it. CachyOS's installer is built there too:
-`cachyos-calamares` rebuilt with AgrOS's changes (the live ISO installs it from `[agros]`; among them, an EFI partition
-already on the disk checked against the minimum size, agros-iso's 64 MB, not the 512 MB a new one gets, so it installs
-beside Windows' 100 MB one): its version is CachyOS's with a `.N` after the pkgrel (`calamares_rel` in
-`ci/build-repo.sh`), raised with any change to AgrOS's changes or to the pins below, beside their new checksum
-(`calamares_sum`, over both), or CI fails. A build whose settings name a module it wasn't built with (CMake leaves one
-out unsaid when its library is missing, and the installer stopped at that step) is held, the published one kept.
-CachyOS's recipe for it is taken at a fixed commit of CachyOS-PKGBUILDS (`calamares_pkgbuild`), and the installer's code
-at a fixed commit of its `cachyos` branch (`calamares_src`), not their newest: their changes reach AgrOS's installer
-only once looked at, the pins moved on and `calamares_rel` raised; the weekly status says when either has moved. (On
-2026-11-17 CachyOS moved the recipe from `cachyos-dev`, as `cachyos-calamares-next`, to `cachyos`; that branch's
-installer installs every package-list group, `platform:` or not, so AgrOS's list lost its handheld kernel group first.
-Their own ISO builds `cachyos-staging`: `cachyos` plus their newest work.) Most of AgrOS's own packages are versioned by
-the repo's commits (one built again from the same commit with other contents fails CI: a build that isn't reproducible);
-`agros-vmware` and `agros-thunar-usage`, compiled, by the commits that touch their own folder (`2.r<count>.<commit>`,
-`1.r<count>.<commit>`: the `2.` keeps `agros-vmware` above the `1-1` published before, with no epoch, whose `:` would go
-in the file's name); `agros-boot` by the commits that touch what it's made from (its folder, `system/boot-video-mode`,
-the login screen's `screenmode.py`: `1.r<count>.<commit>`, the `1.` keeping it above the whole repo's `r<count>` it had
-before), as each new version makes every boot image again (it ships a file mkinitcpio's pacman hook watches);
-`agros-hyprbars` by the Hyprland it's built for, then the commits that touch it (`<hyprland version>.r<count>.<commit>`:
-a build for another Hyprland is a new version); `agros-desktop`, `agros-welcome`, `agros-keyring`, `agros-nvidia` and
-`agros-wine` have a fixed `pkgver`, raised by hand in their `PKGBUILD` with any change to them: CI fails when one
-changed under a version already published. A version already published keeps the published file (a rebuild under the
-same name read as corrupted in pacman's cache), except a compiled one built against other libraries, Qt or Python than
-it (`built_against`): that rebuild goes out, so new installs and the ISO get one that runs. Quickshell, Caelestia and
-Calamares aren't even built when nothing that would change that has (`reused` in `ci/published.sh`). To change AgrOS,
-change this repo: CI builds and publishes the packages, and pacman updates every machine. Settings in `/etc/skel` reach
-new accounts. An account that has them already gets an update's new version right after it (`agros-links`, run for
-each user by `agros-system`'s pacman hook, and again at every login) where its file is still one AgrOS shipped, byte for
-byte (one you never edited); one you edited is kept, AgrOS's new version put beside it as `<file>.agros-new` (as
-pacman's `.pacnew`), and a notification says so once. The settings that are yours to
-change, mostly through the apps that write them, are never updated, only copied in when missing: Caelestia's
-`shell.json` (its settings, the weather location), the dock's pins, `mimeapps.list`, `~/.config/autostart` (Settings >
-Startup), VSCodium's, Legion Control's, and `user/hosts/` (one machine's screens). A file `package()` changes at build
-time only has its current version listed (Caelestia's `execs.lua` has every version, with the same change made).
+The AUR packages AgrOS uses (`aur/packages.txt`: Caelestia, equibop, Spicetify, darkly, ...) are built into the same
+repo. Quickshell is built first, on its own, with AgrOS's fix (`packages/agros-system/aur-patches/quickshell-git.patch`,
+added by `aur-agros-patch`, its pkgrel a `.<rel>` above the AUR's, raised when what it adds changes; stripped, as Arch's
+own packages are). Without it, a window that closed while Quickshell was asking Hyprland for the window list came back
+from the late answer and stayed listed for good (a game quit, its icon left in the dock). The boot's rebuild on a new Qt
+(`auto-update-aur`) adds the same fix, and a patch that no longer applies fails the build rather than going out without
+it. CachyOS's installer is built there too: `cachyos-calamares` rebuilt with AgrOS's changes (the live ISO installs it
+from `[agros]`; among them, an EFI partition already on the disk checked against the minimum size, agros-iso's 64 MB,
+not the 512 MB a new one gets, so it installs beside Windows' 100 MB one): its version is CachyOS's with a `.N` after
+the pkgrel (`calamares_rel` in `ci/build-repo.sh`), raised with any change to AgrOS's changes or to the pins below,
+beside their new checksum (`calamares_sum`, over both), or CI fails. A build whose settings name a module it wasn't
+built with (CMake leaves one out unsaid when its library is missing, and the installer stopped at that step) is held,
+the published one kept. CachyOS's recipe for it is taken at a fixed commit of CachyOS-PKGBUILDS (`calamares_pkgbuild`),
+and the installer's code at a fixed commit of its `cachyos` branch (`calamares_src`), not their newest: their changes
+reach AgrOS's installer only once looked at, the pins moved on and `calamares_rel` raised; the weekly status says when
+either has moved. (On 2026-11-17 CachyOS moved the recipe from `cachyos-dev`, as `cachyos-calamares-next`, to `cachyos`;
+that branch's installer installs every package-list group, `platform:` or not, so AgrOS's list lost its handheld kernel
+group first. Their own ISO builds `cachyos-staging`: `cachyos` plus their newest work.) Most of AgrOS's own packages are
+versioned by the repo's commits (one built again from the same commit with other contents fails CI: a build that isn't
+reproducible); `agros-vmware` and `agros-thunar-usage`, compiled, by the commits that touch their own folder
+(`2.r<count>.<commit>`, `1.r<count>.<commit>`: the `2.` keeps `agros-vmware` above the `1-1` published before, with no
+epoch, whose `:` would go in the file's name); `agros-boot` by the commits that touch what it's made from (its folder,
+`system/boot-video-mode`, the login screen's `screenmode.py`: `1.r<count>.<commit>`, the `1.` keeping it above the whole
+repo's `r<count>` it had before), as each new version makes every boot image again (it ships a file mkinitcpio's pacman
+hook watches); `agros-hyprbars` by the Hyprland it's built for, then the commits that touch it (`<hyprland
+version>.r<count>.<commit>`: a build for another Hyprland is a new version); `agros-desktop`, `agros-welcome`,
+`agros-keyring`, `agros-nvidia` and `agros-wine` have a fixed `pkgver`, raised by hand in their `PKGBUILD` with any
+change to them: CI fails when one changed under a version already published. A version already published keeps the
+published file (a rebuild under the same name read as corrupted in pacman's cache), except a compiled one built against
+other libraries, Qt or Python than it (`built_against`): that rebuild goes out, so new installs and the ISO get one that
+runs. Quickshell, Caelestia and Calamares aren't even built when nothing that would change that has (`reused` in
+`ci/published.sh`). To change AgrOS, change this repo: CI builds and publishes the packages, and pacman updates every
+machine. Settings in `/etc/skel` reach new accounts. An account that has them already gets an update's new version right
+after it (`agros-links`, run for each user by `agros-system`'s pacman hook, and again at every login) where its file is
+still one AgrOS shipped, byte for byte (one you never edited); one you edited is kept, AgrOS's new version put beside it
+as `<file>.agros-new` (as pacman's `.pacnew`), and a notification says so once (gone once yours is updated after all).
+The settings that are yours to change, mostly through the apps that write them, are never updated, only copied in when
+missing: Caelestia's `shell.json` (its settings, the weather location), the dock's pins, `mimeapps.list`,
+`~/.config/autostart` (Settings > Startup), VSCodium's, Legion Control's, and `user/hosts/` (one machine's screens). A
+file `package()` changes at build time only has its current version listed (Caelestia's `execs.lua` has every version,
+with the same change made, and with its night light still started, as AgrOS shipped it until 17 November 2026).
 
 The CI needs two repository secrets: `AGROS_GPG_KEY`, AgrOS's key itself without a passphrase, kept only there (no
 other copy, and no revocation certificate; the same secret in both repos); and `AGROS_ISO_TOKEN`, a fine-grained token
