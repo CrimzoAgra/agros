@@ -402,7 +402,8 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
   - Lock screen: like the login screen (blurred, dimmed wallpaper, a text cursor, its elements coming down onto the
     screen from in front of it, out of focus and sharpening, from the centre outward); a wrong password said at once
     (its own PAM config, `assets/pam.d/passwd`, with nodelay on pam_unix and pam_faillock; pam_faillock still counts
-    and locks out); sleep, restart and power off buttons, bottom right like the login screen's
+    and locks out); sleep, restart and power off buttons, bottom right like the login screen's; notifications only
+    counted, not shown (`lock.hideNotifs` in `shell.json`: what they say, a one-time code, stays off a locked screen)
   - Settings (Caelestia's, Nexus) > Language & region: the weather location picker (the desktop widget's, one
     setting for both) and the system clock: time, NTP, date and time by hand, time zone (`timedatectl`, through polkit;
     `nexus-weather-block.qml`, `nexus-time-block.qml`)

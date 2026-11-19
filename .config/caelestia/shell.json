@@ -328,6 +328,7 @@
         ]
     },
     "lock": {
+        "hideNotifs": true,
         "useWallpaper": true
     },
     "notifs": {

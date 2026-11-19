@@ -39,4 +39,5 @@ desktop, Discord and Spotify follow the wallpaper.
 ## Lock screen
 
 **Super+L** locks the screen. It also locks itself before the computer goes to sleep. When the computer wakes, the
-screens come back on by themselves, on the lock screen (no key press needed).
+screens come back on by themselves, on the lock screen (no key press needed). While it's locked, it only says how many
+notifications came in, not what they say: unlock to read them (**Settings > Lock and session** can show them there).

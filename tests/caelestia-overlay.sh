@@ -227,6 +227,14 @@ lint_new() { [[ ! -x /usr/lib/qt6/bin/qmllint ]] || python3 -I "$t/lint.py" "$1"
 new=$(lint_new /etc/xdg/quickshell/caelestia "$dst")
 [[ -z $new ]] || fail "the patched QML uses what Caelestia doesn't have (qmllint): $new"
 
+# The lock screen says how many notifications came, not what they say (a one-time code read off a locked screen):
+# AgrOS's shell.json turns on Caelestia's lock.hideNotifs, and its notification list there still goes by it
+python3 -c 'import json, sys; sys.exit(json.load(open(sys.argv[1]))["lock"].get("hideNotifs") is not True)' \
+    "$here/.config/caelestia/shell.json" || fail "the lock screen shows what notifications say (shell.json: lock.hideNotifs not on)"
+lock_hides_notifs() { grep -q '^ *visible: !Config.lock.hideNotifs$' <<<"$(sed -n '/^ *StyledListView {$/,/^ *delegate: NotifGroup {}$/p' "$1")"; }
+lock_hides_notifs "$dst/modules/lock/NotifDock.qml" ||
+    fail "the lock screen's notification list doesn't go by lock.hideNotifs: $(grep -n 'hideNotifs\|NotifGroup' "$dst/modules/lock/NotifDock.qml")"
+
 # The lock's own PAM config (Caelestia's assets/pam.d/passwd, read from the shell's folder): pam_unix and pam_faillock without
 # their failure delay (a wrong password said at once), pam_faillock's lines kept; the installed Caelestia's left as it is
 p=$dst/assets/pam.d/passwd
@@ -423,6 +431,8 @@ on_main() {
     # ...and the launcher closing closes the utilities panel there too (unless hovered)
     grep -q 'root.screenState.utilities = false' <<<"$(sed -n '/^        function onLauncherChanged() {$/,/^        }$/p' \
         "$t/head-dst/modules/drawers/Interactions.qml")" || ahead "on Caelestia's main, the launcher closing leaves the utilities panel open"
+    # ...and its lock screen still hides what notifications say by lock.hideNotifs
+    lock_hides_notifs "$t/head-dst/modules/lock/NotifDock.qml" || ahead "on Caelestia's main, the lock screen's notifications don't go by lock.hideNotifs"
     new=$(lint_new "$t/head-src" "$t/head-dst")
     [[ -z $new ]] || ahead "on Caelestia's main, the patched QML uses what it doesn't have (qmllint): $(paste -sd' ' <<<"$new")"
 }
