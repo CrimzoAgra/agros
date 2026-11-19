@@ -324,6 +324,12 @@ if [[ ${1:-} == --list ]]; then
     # line instead of an empty list that reads as up to date)
     # Its copy synced, then listed through the upstream gate (update-gate): a Hyprland AgrOS hasn't checked yet isn't
     # waiting, one it has is (checkupdates' own list leaves every gated one out, as pacman.conf holds them back)
+    # One list at a time per user (its lock: fd 7, from the sync to the last read of its copy, then let go): every
+    # checkupdates of yours syncs the same copy, and a second one while the first synced failed on its lock, read as
+    # "offline" (Updates opened while the 6-hourly check ran: "Couldn't check for updates"), its exit then taking away
+    # the first's lock. The second waits for the first (seconds), 5 min at most, then goes on as before
+    lock=${XDG_STATE_HOME:-$HOME/.local/state}/agros/update-list.lock
+    { mkdir -p "${lock%/*}" && exec 7>>"$lock" && flock -w 300 7; } 2>/dev/null
     rc=0
     checkupdates >/dev/null 2>&1 || rc=$?
     if ((rc == 1)); then printf 'offline\t\t\t\n'; exit 0; fi
@@ -332,6 +338,7 @@ if [[ ${1:-} == --list ]]; then
     "$helpers/update-gate" /etc/pacman.conf "$gated" --dbpath "$copy" >/dev/null 2>&1 || cp /etc/pacman.conf "$gated"
     repo=$(LC_ALL=C pacman -Qu --config "$gated" --dbpath "$copy" 2>/dev/null | "$helpers/updates-pending")
     rm -f "$gated"
+    exec 7>&-
     [[ -n $repo ]] && while read -r name old _ new; do printf 'system\t%s\t%s\t%s\n' "$name" "$old" "$new"; done <<<"$repo"
     # (in English: paru translates "[ignored]", and under another language the ignored ones were listed as waiting)
     LC_ALL=C paru -Qua 2>/dev/null | "$helpers/updates-pending" | while read -r name old _ new _; do

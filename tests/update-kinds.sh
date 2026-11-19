@@ -307,4 +307,17 @@ out=$(CHECKUPDATES_DB=$t/cdb run --list | grep '^system' || true)
 [[ -z $(grep -e '^pacman -Q[ u]' -e '^pacman -Si' "$t/qu" | grep -v -- "--dbpath $t/cdb") ]] ||
     fail "not on checkupdates' copy of the lists: $(cat "$t/qu")"
 rm -f "$AGROS_GATE" "$AGROS_GATE_CACHE"
+# Two lists at once (Updates opened while the 6-hourly check runs): checkupdates syncs one copy per user and, as the
+# real one, fails on its lock (1, "Cannot fetch updates") while another syncs it. Neither said "offline": the second
+# waits for the first. And the lock let go once the copy's read: what runs after (paru's AUR, a job it leaves in the
+# background) doesn't hold up the next list
+# shellcheck disable=SC2016  # (expanded by the stand-in)
+stub checkupdates 'mkdir "'"$t"'/cu-busy" 2>/dev/null || exit 1; sleep 1; rm -r "'"$t"'/cu-busy"; exit 2'
+stub paru 'sleep 5 >/dev/null 2>&1 & true'
+run --list >"$t/list1" & l1=$!
+run --list >"$t/list2" & l2=$!
+wait "$l1" "$l2"
+! grep -q '^offline' "$t/list1" "$t/list2" ||
+    fail "two lists at once: one said offline (checkupdates' lock): $(cat "$t/list1" "$t/list2")"
+flock -n "$t/home/.local/state/agros/update-list.lock" true || fail "the list's lock held past the list (paru's job)"
 echo "ok update-kinds"
