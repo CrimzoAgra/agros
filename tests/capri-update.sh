@@ -112,6 +112,9 @@ reloads 1 && [[ $(cat "$t/hyprctl") == "-i 0 reload" ]] ||  # (Hyprland named: r
 [[ $(cat "$t/builds") == "true $app/target" ]] || fail "not built offline in the shared Rust build: $(cat "$t/builds")"
 grep -qF "Exec=\"$t/ho|me/.local/bin/capri\"" "$t/ho|me/.local/share/applications/capri.desktop" || fail "no launcher entry"
 [[ $(cat "$t/ho|me/.local/share/icons/hicolor/256x256/apps/capri.png") == icon ]] || fail "no icon"
+# (by its path: by name, a shell that looked it up before it was there showed the "missing" icon until the next login)
+grep -qxF "Icon=$t/ho|me/.local/share/icons/hicolor/256x256/apps/capri.png" "$t/ho|me/.local/share/applications/capri.desktop" ||
+    fail "the launcher entry's icon not by its path: $(grep Icon= "$t/ho|me/.local/share/applications/capri.desktop")"
 out=$(run) || fail "second run: $out"
 grep -q "up to date ($(short))" <<<"$out" || fail "not up to date: $out"
 first=$(cur)

@@ -173,13 +173,16 @@ mkdir -p "$apps" "${icon%/*}"
 git show "$want:src-tauri/icons/icon.png" >"$icon"
 # (no StartupWMClass: her windows' own entry, capri-desktop-windows.desktop, hidden, is written by her, with their app
 # id, dev.cybercompanion.capri)
+# (the icon by its path, as hers and appimage-open's: by name, a shell that looked "capri" up before the file was there
+# - her first install, from the desktop - kept the "missing" icon in the Super menu until the next login, whatever
+# icon cache was made again: Qt remembers a name it didn't find, never a path)
 cat >"$apps/capri.desktop" <<EOF
 [Desktop Entry]
 Name=Capri
 GenericName=Desktop companion
 Comment=Project Capricorn's construct, on your desktop: chat, voice and your Claude Code
 Exec="$HOME/.local/bin/capri"
-Icon=capri
+Icon=$icon
 Type=Application
 StartupNotify=false
 Categories=Utility;
