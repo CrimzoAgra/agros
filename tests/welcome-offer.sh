@@ -50,4 +50,17 @@ login later
 while IFS= read -r a; do
     ((${#a} <= 16)) || fail "a button's label too long to show: $a"
 done < <(sed 's/^[a-z]*=//' "$t/actions")
+# Caelestia restarted while the offer waits (a Settings change at the first login): it numbers its notifications from 1
+# again, and another one closed under the offer's number reached the offer's wait as its close (nothing printed), which
+# marked it offered with nothing picked. Given up on as the server goes (gdbus: "does not have an owner", once), and sent
+# again: its second showing's answer is the one taken
+printf '#!/bin/sh\nexit 0\n' >"$h/.local/bin/agros-personal"
+printf '#!/bin/sh\n[ -e %s/restarted ] && exec sleep 30\ntouch %s/restarted; sleep 1\necho "The name org.freedesktop.Notifications does not have an owner"\nexec sleep 30\n' \
+    "$t" "$t" >"$sb/gdbus"
+# shellcheck disable=SC2016  # (expanded by the stand-in)
+printf '#!/bin/sh\necho x >>%s/sent\n[ "$(grep -c . %s/sent)" -gt 1 ] && exec cat %s/pick\nsleep 3\n' "$t" "$t" "$t" >"$sb/notify-send"
+chmod +x "$sb/gdbus" "$sb/notify-send"
+login restore
+[[ $(cat "$t/term" 2>/dev/null) == *end && -e $st/offered && $(grep -c . "$t/sent") == 2 ]] ||
+    fail "the offer, waiting as Caelestia restarted, not sent again, or another notification's close taken for its answer (sent $(grep -c . "$t/sent" 2>/dev/null) times)"
 echo "ok welcome-offer"

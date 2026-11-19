@@ -765,7 +765,8 @@ helper a package update just brought works before `agros-links` has linked it), 
   `caelestia-restart`, `agros-check`, `agros-links` (settings kept with AgrOS's new version beside them: marked said
   only once it got through), `nvidia-shader-fix` and `service-failed@.service`
 - **`.local/bin/notify-wait`**: a notification that waits for its click (`notify-send -w`) and gives up when Caelestia
-  restarts, so a click on a new notification can't reach an old one (used by `game-focus` and `update-apps`)
+  restarts, so a click on a new notification can't reach an old one (used by `game-focus`, `update-apps` and
+  `agros-welcome`'s offer, which is sent again once Caelestia is back)
 - **`.local/bin/json-edit`**: a JSON settings file changed by a jq filter, under its lock, replaced whole, tried again
   while Caelestia is rewriting it (Caelestia's `shell.json`: the weather place from the place picker and
   `agros-personal`, the Super menu and dock pins from `caelestia-pin`; Equibop's theme from `agros-welcome`). An
