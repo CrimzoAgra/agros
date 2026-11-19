@@ -822,7 +822,9 @@ ShellRoot {
 
         title: "Desktop Settings"
         implicitWidth: 980
-        implicitHeight: 700
+        // Tall enough for every page in the list where the screen has the room (at 700, Startup, Shortcuts and All
+        // Caelestia options were below its end, with nothing saying more were there); on a smaller screen, as before
+        implicitHeight: Math.max(700, Math.min(860, (screen?.height ?? 0) - 120))
         color: root.c("surface")
         // Closed: out of sight at once, but quit only when the changes are saved and applied (quitting stops them)
         onVisibleChanged: {
@@ -930,13 +932,26 @@ ShellRoot {
                         }
                     }
 
-                    // (more pages than fit: they scroll)
+                    // (more pages than fit: they scroll, and a bar beside them says so)
                     Flickable {
+                        id: tabsFlick
+
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         contentHeight: tabs.implicitHeight
                         clip: true
                         boundsBehavior: Flickable.StopAtBounds
+
+                        Rectangle {
+                            parent: tabsFlick // (beside the list, not scrolled with it)
+                            visible: tabsFlick.contentHeight > tabsFlick.height
+                            x: tabsFlick.width - width
+                            y: tabsFlick.visibleArea.yPosition * tabsFlick.height
+                            implicitWidth: 4
+                            implicitHeight: tabsFlick.visibleArea.heightRatio * tabsFlick.height
+                            radius: 2
+                            color: root.c("outlineVariant")
+                        }
 
                         ColumnLayout {
                             id: tabs
