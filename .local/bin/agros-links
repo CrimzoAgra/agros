@@ -88,6 +88,14 @@ if [[ ! -e $mark && -f $shell ]] && has=$(jq '.bar.statusIcons != null' "$shell"
             'if .bar.statusIcons == null then .bar.statusIcons = $i else . end' && touch "$mark"
     fi
 fi
+# The lock screen's notifications counted, not shown (lock.hideNotifs: a one-time code showed on a locked screen): a
+# shell.json from before AgrOS set it gets it once, only where it has none (yours kept, and turned off later it stays
+# off). No shell.json, or one jq can't read: looked at again at the next login
+mark=$state/lock-hide-notifs
+if [[ ! -e $mark && -f $shell ]] && jq -e 'type == "object"' "$shell" >/dev/null 2>&1; then
+    "$(dirname "$(readlink -f "$0")")/json-edit" "$shell" --indent 4 \
+        'if .lock.hideNotifs == null then .lock.hideNotifs = true else . end' && touch "$mark"
+fi
 # VSCodium starts on a new empty window, not on the last one without a folder (window.restoreWindows): a Claude Code
 # tab left open there came back at every start and asked again whether to trust your home folder (Claude Code never
 # keeps that answer for home). Its settings.json is yours (copied in once, never updated), so one from before gets the

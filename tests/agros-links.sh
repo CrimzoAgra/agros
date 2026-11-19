@@ -115,6 +115,18 @@ echo '{"bar": {"y": 2}}' >"$h/caelestia/shell.json"; run
 [[ $(jq -c . "$h/caelestia/shell.json") == '{"bar":{"y":2}}' ]] || fail "the status icons added again after the user took them out"
 rm -f "$mark" "$h/caelestia/shell.json"; run
 [[ ! -e $h/caelestia/shell.json ]] || fail "a missing shell.json made, for the status icons: $(cat "$h/caelestia/shell.json")"
+# The lock screen's notifications hidden (lock.hideNotifs): a shell.json from before gets it once, its other settings
+# kept; one of the user's own kept; turned off later, it stays off
+mark=$t/home/.local/state/agros/lock-hide-notifs
+rm -f "$mark"; echo '{"lock": {"useWallpaper": true}, "z": 3}' >"$h/caelestia/shell.json"; run
+[[ $(jq -c '[.lock.hideNotifs, .lock.useWallpaper, .z]' "$h/caelestia/shell.json") == '[true,true,3]' ]] ||
+    fail "lock.hideNotifs not added to a shell.json without it, or its settings lost: $(cat "$h/caelestia/shell.json")"
+echo '{"lock": {}}' >"$h/caelestia/shell.json"; run
+[[ $(jq -c . "$h/caelestia/shell.json") == '{"lock":{}}' ]] || fail "lock.hideNotifs added again after the user took it out"
+rm -f "$mark"; echo '{"lock": {"hideNotifs": false}}' >"$h/caelestia/shell.json"; run
+[[ $(jq -c .lock.hideNotifs "$h/caelestia/shell.json") == false ]] || fail "the user's own lock.hideNotifs replaced"
+rm -f "$mark" "$h/caelestia/shell.json"; run
+[[ ! -e $h/caelestia/shell.json ]] || fail "a missing shell.json made, for lock.hideNotifs: $(cat "$h/caelestia/shell.json")"
 # VSCodium's settings.json from before window.restoreWindows: gets it once, its other settings kept; a value of the
 # user's own kept; one with comments (jq can't read it) left byte for byte; none made where there's none
 code=$h/VSCodium/User/settings.json mark=$t/home/.local/state/agros/vscodium-restore-windows
