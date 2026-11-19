@@ -59,16 +59,19 @@ words = {"super": "SUPER", "ctrl": "CTRL", "alt": "ALT", "shift": "SHIFT", "esc"
 
 
 def combos(cell):
-    mods = []
-    for one in re.split(r",\s*|\s+/\s+", re.sub(r"\s*\(.*?\)", "", cell).strip()):
-        parts = one.split("+")
-        if len(parts) > 1:
-            mods = parts[:-1]
-        elif one.lower() != "super":
-            parts = mods + parts
+    mods, sep = [], ","
+    for one in re.split(r"(,\s*|\s+/\s+)", re.sub(r"\s*\(.*?\)", "", cell).strip()):
+        if one.strip() in (",", "/"):
+            sep = one.strip()
+            continue
         if one.lower() == "super":
             yield ["SUPER + SUPER_L"]
             continue
+        parts = one.split("+")
+        if len(parts) > 1:
+            mods = parts[:-1]
+        elif sep == "/":
+            parts = mods + parts
         choices = []
         for p in parts:
             alts = list("1234567890") if p == "1...0" else p.split("/")
