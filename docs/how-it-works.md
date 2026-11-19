@@ -1305,7 +1305,7 @@ Functions other programs call through `hyprctl eval 'dots.<name>(...)'`, kept in
 | `refit_placed_soon()` | `user/windows.lua` | the overlay's `bar_space_refit` (Caelestia's bar's space changed); its own events |
 | `refit_window(win)` | `user/windows.lua` | `refit_maximised` (each window), a minimised window's restore |
 | `window_fades(on)` | `user/windows.lua` | `focus_window` (off while Alt+Tab leaves a fullscreen game, on again a moment later) |
-| `switcher_open(open)` | `user/keys.lua` | the switcher, as it opens and closes (Super+drag off while it's open) |
+| `switcher_open(open)` | `user/keys.lua` | the switcher, as it opens and closes (Super+drag off while it's open; back a moment after Super or Alt is let go, its pick, if it never says it closed: it died) |
 | `toggle_window_mode()` | `user/windows.lua` | bar menu, the Settings app (window mode) |
 | `window_drag_start(address, kind)`, `window_drag_step(address, kind)`, `window_drag_end(address, kind)`, `titlebar_drag_start(address, phase)` | `user/windows.lua` | the hyprbars patch (each drag's start, each step, its end) |
 | `titlebar_height(win)` | `user/titlebars.lua` | `user/windows.lua` |
