@@ -20,7 +20,8 @@ A setting with "get"/"set" shell commands in the schema lives elsewhere (the win
 "set" gets the value in $VALUE. A group with "from" lists the changes of a patch that can be turned off, from the
 patch itself (patch.py --list), so a new one shows without editing the schema; "from": "autostart" lists the apps
 with a standard autostart entry (system ones in /etc/xdg/autostart, yours in ~/.config/autostart), each on unless
-your copy says Hidden=true, as GNOME's startup settings do it (turning one off writes that copy); "from":
+your copy says Hidden=true, as GNOME's startup settings do it (turning one off writes that copy; one added from
+Startup's "Add an app", a "startup_add" choice of every installed app, is removed instead); "from":
 "caelestia-keys" lists Caelestia's shortcuts (the kb* variables of ~/.config/hypr/variables.lua, by its sections),
 except those hypr-vars.lua turns off (its other keys are their defaults), which reads your changes back as
 caelestia-keys.<variable>.
@@ -91,6 +92,13 @@ PATCHES = {
 
 
 AUTOSTART = ["/etc/xdg/autostart", f"{HOME}/.config/autostart"]
+# Where installed apps' launcher entries are, the first one's copy of an entry winning (yours over Flatpak's over the
+# system's), for Startup's "Add an app"
+APPLICATIONS = [f"{HOME}/.local/share/applications", f"{HOME}/.local/share/flatpak/exports/share/applications",
+                "/var/lib/flatpak/exports/share/applications", "/usr/share/applications"]
+# An autostart entry added from Startup's "Add an app": switched off, it's removed (not kept hidden), and it's listed
+# even without an icon
+ADDED = "X-AgrOS-Startup"
 
 
 def desktop_entry(path):
@@ -119,7 +127,8 @@ def autostart_settings():
     out = []
     for name, entry in entries.items():
         only = entry.get("OnlyShowIn", "")
-        if not entry.get("Icon") or entry.get("NoDisplay") == "true" or (only and "Hyprland" not in only):
+        if entry.get(ADDED) != "true" and (not entry.get("Icon") or entry.get("NoDisplay") == "true"
+                                           or (only and "Hyprland" not in only)):
             continue
         out.append({"key": f"autostart.{name[:-8]}", "label": entry.get("Name", name[:-8]),
                     "description": entry.get("Comment", ""), "type": "bool", "default": True, "autostart": name})
@@ -136,9 +145,48 @@ def autostart_on(name):
     return enabled(desktop_entry(path) if path else {})
 
 
+def startup_apps():
+    """Installed apps Startup's "Add an app" offers, by name: the ones in the menus, for this desktop, that have no
+    autostart entry yet (one that has is in the list below it already). Not terminal ones: started at login, there's
+    no terminal for them"""
+    apps = {}
+    for folder in APPLICATIONS:
+        for name in sorted(os.listdir(folder)) if os.path.isdir(folder) else []:
+            if name.endswith(".desktop") and name not in apps:
+                apps[name] = desktop_entry(os.path.join(folder, name))
+    out = []
+    for name, entry in apps.items():
+        only, never = entry.get("OnlyShowIn", ""), entry.get("NotShowIn", "")
+        if entry.get("Type") != "Application" or not entry.get("Exec") \
+                or "true" in (entry.get("NoDisplay"), entry.get("Hidden"), entry.get("Terminal")) \
+                or (only and "Hyprland" not in only) or "Hyprland" in never \
+                or any(os.path.exists(os.path.join(d, name)) for d in AUTOSTART):
+            continue
+        out.append({"value": name, "label": entry.get("Name", name[:-8])})
+    return sorted(out, key=lambda o: o["label"].lower())
+
+
+def startup_add(name):
+    """An app started at login: its launcher entry copied into your autostart folder, marked as added here, shown (not
+    hidden)"""
+    path = next((p for p in (os.path.join(d, name) for d in APPLICATIONS) if os.path.exists(p)), None)
+    if os.sep in name or not path:
+        sys.exit(f"startup.add: {name}: no such app")
+    with open(path, errors="replace") as f:
+        lines = [l for l in f.read().splitlines()
+                 if not l.startswith(("Hidden=", "NoDisplay=", "X-GNOME-Autostart-enabled=", f"{ADDED}="))]
+    lines.insert([l.strip() for l in lines].index("[Desktop Entry]") + 1, f"{ADDED}=true")
+    os.makedirs(AUTOSTART[1], exist_ok=True)
+    with open(os.path.join(AUTOSTART[1], name), "w") as f:
+        f.write("\n".join(lines) + "\n")
+
+
 def autostart_set(name, on):
     """Your copy of the entry (the system's copied first), with Hidden=true right under [Desktop Entry], or without it"""
     mine, system = os.path.join(AUTOSTART[1], name), os.path.join(AUTOSTART[0], name)
+    # One you added here, switched off: gone from the list (added again from "Add an app")
+    if not on and not os.path.exists(system) and os.path.exists(mine) and desktop_entry(mine).get(ADDED) == "true":
+        return os.remove(mine)
     # (one the system ships switched off starts only from your copy: removing yours, or having none, leaves it off)
     ships_on = os.path.exists(system) and enabled(desktop_entry(system))
     if not os.path.exists(mine):
@@ -602,7 +650,11 @@ def schema(live=True, lists=True):
     for group in (g for page in pages["pages"] for g in page["groups"] if g.get("from") in ("autostart", *PATCHES)):
         name = group["from"]
         if name == "autostart":
-            group["settings"] = autostart_settings()
+            # (after the schema's own there: Startup's "Add an app", its options every app not listed yet)
+            for s in group["settings"]:
+                if s.get("startup_add"):
+                    s["options"] = [{"value": "", "label": "Choose an app…"}] + (startup_apps() if live else [])
+            group["settings"] = group["settings"] + autostart_settings()
             continue
         try:
             changes = json.loads(subprocess.run(["python3", "-I", PATCHES[name], "--list"], capture_output=True,
@@ -633,6 +685,8 @@ def stored():
 
 
 def current(setting, saved):
+    if setting.get("startup_add"):
+        return ""  # (nothing chosen: each pick adds that app, and the list starts over)
     if "autostart" in setting:
         return autostart_on(setting["autostart"])
     if "get" in setting:
@@ -705,7 +759,7 @@ def write_lua(settings):
     # files). Caelestia's shortcuts and variables only when changed: written with their defaults, a Caelestia update's
     # new default would never reach them
     lines = [f"    [{lua_string(k)}] = {lua_value(current(s, saved))}," for k, s in settings.items()
-             if not {"get", "autostart", "path", "readonly"} & s.keys() and not k.startswith("screens.")
+             if not {"get", "autostart", "startup_add", "path", "readonly"} & s.keys() and not k.startswith("screens.")
              and (not k.startswith(("caelestia-keys.", "caelestia-vars.")) or k in saved)]
     # The screens' only as changed, those of a screen not connected (nor listed: "lua" doesn't ask Hyprland) too, for
     # when it is
@@ -842,6 +896,10 @@ def main(args):
                 sys.exit(f"{setting['label']}: not changed")
         elif "autostart" in setting:
             return autostart_set(setting["autostart"], value)
+        elif setting.get("startup_add"):
+            if value:
+                startup_add(value)
+            return
         else:
             with settings_lock():
                 saved = stored()

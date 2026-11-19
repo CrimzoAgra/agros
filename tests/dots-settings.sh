@@ -35,7 +35,7 @@ assert subprocess.run(["luac", "-p", f"{t}/settings.lua"]).returncode == 0, "lua
 assert not [k for k in got if k.startswith("caelestia-keys.")], [k for k in got if k.startswith("caelestia-keys.")]
 for k, s in settings.items():
     # (Caelestia's options are in its own files; its variables and the screens' only once changed)
-    if {"get", "autostart", "path", "readonly"} & s.keys() or s["type"] == "keys" or k.startswith(("caelestia-vars.", "screens.")):
+    if {"get", "autostart", "startup_add", "path", "readonly"} & s.keys() or s["type"] == "keys" or k.startswith(("caelestia-vars.", "screens.")):
         continue
     want = s["default"]
     shown = got.get(k, "nil")

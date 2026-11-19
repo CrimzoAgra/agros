@@ -1070,7 +1070,7 @@
       "icon": "rocket_launch",
       "groups": [
         {
-          "title": "Started by the desktop (from the next login)",
+          "title": "AgrOS apps (from the next login)",
           "settings": [
             {
               "key": "startup.lutris",
@@ -1119,7 +1119,17 @@
           ]
         },
         {
-          "title": "Autostart entries",
+          "title": "Your apps (from the next login)",
+          "settings": [
+            {
+              "key": "startup.add",
+              "label": "Add an app",
+              "description": "Any app you have installed, started when you log in: it joins the list below, switched on. Switching one you added off takes it out of the list again.",
+              "type": "choice",
+              "default": "",
+              "startup_add": true
+            }
+          ],
           "from": "autostart"
         }
       ]

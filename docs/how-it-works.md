@@ -286,7 +286,9 @@ Changes apply right away.
     light, Solaar and ArtCraft off; one not installed, named by its `needs` in the schema, shown as "(not installed)"
     and not changed there, its value kept for when it is), and every app with a standard autostart entry
     (`/etc/xdg/autostart`, `~/.config/autostart`); turning one of those off writes your copy of it with `Hidden=true`,
-    as GNOME's startup settings do
+    as GNOME's startup settings do. "Add an app" offers every installed app in the menus (not terminal ones, nor one
+    listed already) and copies its launcher entry into `~/.config/autostart`, marked `X-AgrOS-Startup=true`: one
+    added that way, switched off, is removed instead of hidden, and is offered again
   - **Shortcuts**: my shortcuts (`dots.bind` in `user/keys.lua`, `user/windows.lua` and `user/apps.lua`; defaults in the
     schema), Caelestia's (its `kb*` variables, by its sections, minus the ones `hypr-vars.lua` turns off; your changes
     go back through `hypr-vars.lua`), and the fixed ones neither can change (Caelestia's arrows, media keys...:

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # dots-settings' autostart entries: turning one off and on again starts it again, also when your copy only hid the
-# system's (Hidden=true and no Exec=, which still replaces the system's entry)
+# system's (Hidden=true and no Exec=, which still replaces the system's entry); Startup's "Add an app" adds one and
+# switching it off takes it out
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
@@ -51,5 +52,28 @@ assert ds.autostart_on("off.desktop") and starts("off.desktop"), "your hiding co
 open(f"{system}/spaced.desktop", "w").write("[Desktop Entry]  \nType=Application\nName=Spaced\nExec=spaced\n")
 ds.autostart_set("spaced.desktop", False)
 assert not ds.autostart_on("spaced.desktop"), "an entry with spaces after its header not turned off"
+# Startup's "Add an app": the installed apps in the menus, not terminal ones nor ones listed already; picked, it's
+# listed and starts (even without an icon); switched off, it's gone from the list and offered again
+apps = f"{t}/apps"
+os.makedirs(apps)
+ds.APPLICATIONS = [apps]
+open(f"{apps}/editor.desktop", "w").write("[Desktop Entry]\nType=Application\nName=Editor\nExec=editor %F\nNoDisplay=false\n\n[Desktop Action new]\nName=New\nExec=editor --new\n")
+open(f"{apps}/top.desktop", "w").write("[Desktop Entry]\nType=Application\nName=Top\nExec=top\nTerminal=true\n")
+open(f"{apps}/helper.desktop", "w").write("[Desktop Entry]\nType=Application\nName=Helper\nExec=helper\nNoDisplay=true\n")
+open(f"{apps}/hello.desktop", "w").write("[Desktop Entry]\nType=Application\nName=Hello\nExec=hello\n")
+offered = lambda: [a["value"] for a in ds.startup_apps()]
+assert offered() == ["editor.desktop"], f"offered {offered()}"
+ds.startup_add("editor.desktop")
+assert starts("editor.desktop"), "added, doesn't start"
+assert "autostart.editor" in [s["key"] for s in ds.autostart_settings()], "added, not listed"
+assert "editor.desktop" not in offered(), "added, still offered"
+ds.autostart_set("editor.desktop", False)
+assert not os.path.exists(f"{mine}/editor.desktop"), "one you added, switched off, still listed"
+assert offered() == ["editor.desktop"], "switched off, not offered again"
+try:
+    ds.startup_add("../hello.desktop")
+    raise AssertionError("a path taken as an app")
+except SystemExit:
+    pass
 P
 echo "ok dots-settings-autostart"
