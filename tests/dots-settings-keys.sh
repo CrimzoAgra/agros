@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Out of the box no two shortcuts share keys (my keys.* defaults against Caelestia's own, after hypr-vars.lua's
 # changes): Hyprland runs every bind on the keys, so pressing one does both (Capri's Ctrl+Alt+C also cleared every
-# notification), nor with Capri's fixed keys. Against the Caelestia installed here, as the Settings app shows a clash
+# notification), nor with Capri's fixed keys; and every key the manual's shortcuts page lists is one of them. Against the
+# Caelestia installed here, as the Settings app shows a clash
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
@@ -47,5 +48,45 @@ assert not clashes, clashes
 capri = {norm(k): k for k in ("CTRL + ALT + Space", "CTRL + ALT + SHIFT + Space", "CTRL + ALT + K", "CTRL + ALT + X")}
 taken = {capri[keys]: ks for keys, ks in used.items() if keys in capri}
 assert not taken, f"Capri's fixed keys taken: {taken}"
+
+# Every shortcut on the manual's shortcuts page is one of these (an update that moved one left the page naming a key
+# that does nothing). Its cells as written: "Print, Super+Shift+S" each, "Super+1...0" the digits, "/" either key
+# ("Super+PageUp/PageDown"; "Ctrl+Super+= / -" the second with the first's modifiers), "Super" alone the launcher's
+import itertools
+import re
+words = {"super": "SUPER", "ctrl": "CTRL", "alt": "ALT", "shift": "SHIFT", "esc": "Escape", "del": "Delete",
+         ".": "Period", "=": "Equal", "-": "Minus", "pageup": "Page_Up", "pagedown": "Page_Down"}
+
+
+def combos(cell):
+    mods = []
+    for one in re.split(r",\s*|\s+/\s+", re.sub(r"\s*\(.*?\)", "", cell).strip()):
+        parts = one.split("+")
+        if len(parts) > 1:
+            mods = parts[:-1]
+        elif one.lower() != "super":
+            parts = mods + parts
+        if one.lower() == "super":
+            yield ["SUPER + SUPER_L"]
+            continue
+        choices = []
+        for p in parts:
+            alts = list("1234567890") if p == "1...0" else p.split("/")
+            alts = [x for a in alts for x in (["mouse_down", "mouse_up"] if a.lower() == "scroll"
+                                              else [words.get(a.lower(), a)])]
+            choices.append(alts)
+        yield [" + ".join(pick) for pick in itertools.product(*choices)]
+
+
+listed, missing = 0, []
+for line in open(f"{here}/manual/06-shortcuts.md", encoding="utf-8"):
+    cell = line.split("|")[1].strip() if line.startswith("| ") else ""
+    if cell in ("", "Shortcut") or set(cell) <= set("-"):
+        continue
+    for keys in combos(cell):
+        listed += len(keys)
+        missing += [f"{k} ({cell})" for k in keys if norm(k) not in used]
+assert listed > 50, f"the shortcuts page read as {listed} keys: is it still a table?"
+assert not missing, f"the manual's shortcuts page lists keys nothing is bound to: {missing}"
 P
 echo "ok dots-settings-keys"
