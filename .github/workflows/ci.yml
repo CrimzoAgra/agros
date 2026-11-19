@@ -231,7 +231,9 @@ jobs:
           pacman -Su --noconfirm --needed $(pacman -T base-devel git sudo)
           git config --system init.defaultBranch main
           m=https://mirror.cachyos.org/repo/x86_64/cachyos
-          curl -fsSL -o /tmp/keyring.pkg "$m/$(curl -fsSL "$m/" | grep -o 'cachyos-keyring-[^"]*\.pkg\.tar\.zst' | sort -V | tail -1)"
+          # (--retry: a timeout or a 5xx from CachyOS's mirror tried again, for 2 minutes, not the whole run failed and
+          # the held issue opened for it)
+          curl -fsSL --retry 8 --retry-delay 15 -o /tmp/keyring.pkg "$m/$(curl -fsSL --retry 8 --retry-delay 15 "$m/" | grep -o 'cachyos-keyring-[^"]*\.pkg\.tar\.zst' | sort -V | tail -1)"
           mkdir /tmp/k && bsdtar -xf /tmp/keyring.pkg -C /tmp/k
           pacman-key --add /tmp/k/usr/share/pacman/keyrings/cachyos.gpg
           pacman-key --lsign-key 882DCFE48E2051D48E2562ABF3B607488DB35A47
@@ -495,7 +497,9 @@ jobs:
       - name: CachyOS's repo (the install check resolves AgrOS as installed)
         run: |
           m=https://mirror.cachyos.org/repo/x86_64/cachyos
-          curl -fsSL -o /tmp/keyring.pkg "$m/$(curl -fsSL "$m/" | grep -o 'cachyos-keyring-[^"]*\.pkg\.tar\.zst' | sort -V | tail -1)"
+          # (--retry: a timeout or a 5xx from CachyOS's mirror tried again, for 2 minutes, not the whole run failed and
+          # the held issue opened for it)
+          curl -fsSL --retry 8 --retry-delay 15 -o /tmp/keyring.pkg "$m/$(curl -fsSL --retry 8 --retry-delay 15 "$m/" | grep -o 'cachyos-keyring-[^"]*\.pkg\.tar\.zst' | sort -V | tail -1)"
           mkdir /tmp/k && bsdtar -xf /tmp/keyring.pkg -C /tmp/k
           pacman-key --add /tmp/k/usr/share/pacman/keyrings/cachyos.gpg
           pacman-key --lsign-key 882DCFE48E2051D48E2562ABF3B607488DB35A47
