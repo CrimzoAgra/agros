@@ -1677,7 +1677,10 @@ def edge_triggers():
     # screen's very edge (its last few pixels, edgePx), not the border's whole width (on an empty workspace, a band 80 px
     # deep); not while a mouse button is held or a window is being dragged (WindowDrag.qml: a window dragged to the top
     # to maximise it opened the dashboard). Once open, one stays open while the pointer is over it, as before. On a side
-    # with another screen beyond (sideShared), the old band: there the pointer goes on across, the edge hard to stop on
+    # with another screen beyond (sideShared), the old band: there the pointer goes on across, the edge hard to stop on.
+    # The bar's popouts on hover (the dock's, a workspace's preview...) not while a window is dragged over the bar either
+    # (one dragged to the left edge to snap it opened the dock's popout, still open after it was let go): the bar then
+    # as if the pointer were off it, an open popout closed
     inter = read("modules/drawers/Interactions.qml")
     # (WindowDrag is a service: Caelestia's Interactions imports none, and without this every hover failed)
     if not re.search(r"^import qs\.services$", inter, re.M):
@@ -1737,6 +1740,8 @@ def edge_triggers():
         raise LookupError("the sidebar's hover")
     inter = inter.replace(f"const showSidebarHover = {edge};", f"const showSidebarHover = {new};")
     inter = inter.replace(f"return {edge};", f"return {new};")
+    inter = swap(inter, "        if (x < bar.implicitWidth) {\n",
+                 "        if (x < bar.implicitWidth && !WindowDrag.dragging) {\n", "the bar popouts' hover")
     return {"modules/drawers/Interactions.qml": inter} | components("services/WindowDrag.qml")
 
 

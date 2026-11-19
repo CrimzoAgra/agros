@@ -381,7 +381,8 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
     panel) open only from the screen's last 3
     pixels (not the last alone: Caelestia's dots' `cursor:hotspot_padding` keeps the pointer a pixel short of every
     edge), not the border's whole width, and not while a mouse button is held or a window is dragged; once open, one
-    stays while the pointer is over it (`edge_triggers`)
+    stays while the pointer is over it; nor do the bar's popouts (the dock's...) on hover while a window is dragged
+    over the bar, one dragged to the left edge to snap it (`edge_triggers`)
   - Notifications:
     - The sidebar slides down from the top when you hover the top edge above it, with notifications only (no
       divider, ending above the bottom-right panel); Super+N (the letter) opens it alone, and Super+K (Caelestia's

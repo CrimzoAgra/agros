@@ -2,8 +2,8 @@ pragma Singleton
 
 // caelestia-overlay: a window being dragged, as AgrOS's config tells it (~/.config/caelestia/user/windows.lua, through
 // Hyprland's custom events): "agros_drag 1" / "agros_drag 0" while any window is moved or resized (the panels don't
-// open from the edges meanwhile: Interactions.qml), and "agros_snap <screen> x y w h" / "agros_snap none" for where a
-// moved window would snap if let go now (SnapPreview.qml draws it)
+// open from the edges meanwhile, nor the bar's popouts: Interactions.qml), and "agros_snap <screen> x y w h" /
+// "agros_snap none" for where a moved window would snap if let go now (SnapPreview.qml draws it)
 
 import QtQuick
 import Quickshell

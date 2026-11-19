@@ -84,6 +84,12 @@ r=$(sidebar_edge_released "$i"); [[ -z $r ]] || fail "the sidebar's hover edge n
 for f in "$i" "$dst/modules/drawers/SnapPreview.qml"; do
     ! grep -q 'WindowDrag\.' "$f" || grep -qx 'import qs.services' "$f" || fail "WindowDrag used without importing qs.services: $f"
 done
+# ...nor the bar's popouts on hover while a window is dragged over the bar (one dragged to the left edge to snap it
+# opened the dock's): the bar then as if the pointer were off it, whose path closes an open one
+grep -qx '        if (x < bar.implicitWidth && !WindowDrag.dragging) {' "$i" ||
+    fail "the bar's popouts open on hover while a window is dragged: $(grep -F 'if (x < bar.implicitWidth' "$i")"
+grep -q '^            popouts.hasCurrent = false;' <<<"$(grep -A2 -F '        } else if ((!popouts.currentName.startsWith("traymenu")' "$i")" ||
+    fail "the bar's popouts not closed off the bar"
 # The panels' edge hover (edgeHover): opens only at the edge, with no button held and no window dragged; an open one
 # stays while hovered, a button held over it or not
 if command -v node >/dev/null; then
