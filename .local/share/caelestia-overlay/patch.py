@@ -340,7 +340,9 @@ def launcher_by_kind():
                 const q = ` ${search.trim().toLowerCase().replace(/\\s+/g, " ").replace(/s$/, "")}`;
                 const word = t => ` ${String(t ?? "").toLowerCase().replace(/[\\s,;.\\/_-]+/g, " ")}`.includes(q);
                 const rank = e => word(e.genericName) ? 0 : word(e.keywords) ? 1 : 2;
-                const byKind = [0, 1, 2].flatMap(r => found.filter(e => rank(e) === r)).map(e => e.entry);
+                // (no flatMap: QML's JavaScript has none, and the menu came up empty)
+                const byKind = found.filter(e => rank(e) === 0).concat(found.filter(e => rank(e) === 1),
+                    found.filter(e => rank(e) === 2)).map(e => e.entry);
                 keys = ["name"];
                 weights = [1];
                 return byName.concat(byKind);

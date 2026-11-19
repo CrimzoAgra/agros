@@ -127,7 +127,9 @@ if command -v node >/dev/null; then
     fn=$(sed -n '/^    function search(search: string): var {$/,/^    }$/p' "$dst/modules/launcher/services/Apps.qml" |
         sed 's/(search: string): var {/(search) {/')
     [[ -n $fn ]] || fail "the Super menu's search not found"
-    seq=$(node -e "const GlobalConfig = { launcher: { specialPrefix: '>' } };
+    # (what QML's JavaScript lacks taken out of node's: with flatMap the menu came up empty there)
+    seq=$(node -e "delete Array.prototype.flatMap; delete Array.prototype.flat; delete Object.fromEntries;
+const GlobalConfig = { launcher: { specialPrefix: '>' } };
 let keys = ['name'], weights = [1];
 const list = [{ entry: 'micro', name: 'Micro', genericName: 'Text Editor', keywords: ['text', 'editor', 'syntax', 'terminal'] },
     { entry: 'desktop-settings', name: 'Desktop Settings', genericName: '', keywords: ['settings', 'dotfiles'] },
