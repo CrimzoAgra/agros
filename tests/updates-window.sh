@@ -27,4 +27,11 @@ console.log([\"error: failed retrieving file 'glibc-2.44+r78+gfcfb867c58ab-1-x86
 else
     skipped "no node: the log's colours not checked"
 fi
+# Opened again while open (Super menu: ~/.local/bin/updates): its window brought to the front, by windows.lua's
+# focus_app (qs -n alone quit, showing nothing), before qs is started as before
+stub hyprctl 'echo "hyprctl $*" >>"$T/calls"'
+stub qs 'echo "qs $* QS_APP_ID=$QS_APP_ID" >>"$T/calls"'
+T=$t PATH=$t/bin:$PATH "$here/.local/bin/updates"
+[[ $(cat "$t/calls") == $'hyprctl eval dots.focus_app(nil, "updates")\nqs -c updates -n QS_APP_ID=updates' ]] ||
+    fail "the Updates launcher, run again, doesn't bring its window to the front: $(cat "$t/calls")"
 echo "ok updates-window"

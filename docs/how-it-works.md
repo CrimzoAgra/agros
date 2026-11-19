@@ -968,7 +968,8 @@ helper a package update just brought works before `agros-links` has linked it), 
 The `system/` files are the parts outside your home: `agros-system` and `agros-boot` install them (a pacman update
 brings each change; nothing to run by hand).
 
-- **Updates app** (`.config/quickshell/updates/`, in the Super menu; opened through `.local/bin/updates`):
+- **Updates app** (`.config/quickshell/updates/`, in the Super menu; opened through `.local/bin/updates`, which brings
+  its window to the front when it's open already):
   - Lists what's waiting, by app with its icon and old → new version (one too long for its column shown whole while
     its row is hovered): system and AUR apps, firmware, Flatpaks, AppImages, Capri, Proton builds, developer tools
   - A list that couldn't be made (`update-apps --list` failed, or hung for 10 minutes) says so, not "Everything is up
@@ -1308,7 +1309,7 @@ Functions other programs call through `hyprctl eval 'dots.<name>(...)'`, kept in
 |---|---|---|
 | `focus_window(address, switcher)` | `user/windows.lua` | dock, switcher (which minimises a fullscreen window it leaves), game-focus |
 | `task_manager()` | `user/keys.lua` | bar menu |
-| `focus_app(entry, name, launch)` | `user/windows.lua` | notification clicks (overlay) |
+| `focus_app(entry, name, launch)` | `user/windows.lua` | notification clicks (overlay), `.local/bin/updates` |
 | `minimise_window()`, `maximise_window()`, `refit_maximised()` | `user/windows.lua` | title bar buttons; a screen change |
 | `refit_placed_soon()` | `user/windows.lua` | the overlay's `bar_space_refit` (Caelestia's bar's space changed); its own events |
 | `refit_window(win)` | `user/windows.lua` | `refit_maximised` (each window), a minimised window's restore |

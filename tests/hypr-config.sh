@@ -774,6 +774,21 @@ for _, d in ipairs(sent) do
 end
 check("notification click: the most recent window", focused, "0xe3")
 sent = {}
+-- The Updates launcher run again (~/.local/bin/updates): the open window, by its class, to the front; none open, nothing
+-- (qs then opens it), never the app launched from here
+local upd = app_win("0xe4", 2)
+upd.class, upd.title = "updates", "Updates"
+WINDOWS = { app_win("0xe1", 1), upd }
+dots.focus_app(nil, "updates")
+focused = nil
+for _, d in ipairs(sent) do
+    if d[1] == "focus" then focused = d[2].window and d[2].window.address end
+end
+check("Updates opened again: its window", focused, "0xe4")
+WINDOWS, sent = { app_win("0xe1", 1) }, {}
+dots.focus_app(nil, "updates")
+check("Updates opened, none open yet", #sent, 0)
+sent = {}
 -- Snapping (floating mode, the first screen: 1920x1080, 40 px reserved at the top; gaps 10 out, 5 in, border 1 or 2):
 -- let go at the left edge it takes the left half, below its title bar; dragged away, its old size back; in the top right
 -- corner the top right quarter; at the top edge maximised; mid-screen nothing. Caelestia told of the drag and the zone
