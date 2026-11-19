@@ -1338,7 +1338,10 @@ Caelestia, Lutris or Hyprland updates: they check that the Caelestia and Lutris 
 fit, besides the boot update (its AUR builds, firmware, Proton and developer tools too), the account restore, the
 bookmarks export, dotfiles-sync not undoing pulled changes, the settings file Lua reads, the login screen's theme,
 lutris-covers' cover checks and the boot video mode, and that every program the configs run (login starts, keys,
-Caelestia's too, the Super menu's actions, the user services, the Quickshell apps) is installed (`config-programs`). One
+Caelestia's too, the Super menu's actions, the user services, the Quickshell apps) is installed (`config-programs`,
+which also holds agros-desktop to Caelestia's own list of what its dots need, its `manifest.toml`), and that each file
+of Caelestia's installed shell AgrOS names by its path (its wallpaper) is still there (`caelestia-paths`: a Caelestia
+release that moved one is held back, not put out with a first login that has no wallpaper). One
 is a lint (`no-pipefail-grep-q`): every shell script that sets `pipefail` must not pipe into `grep -q` (it stops reading
 at its first match, the writer dies of SIGPIPE, and the pipeline reads as "not found": a running Proton was removed
 under a game), nor into `head`/`grep -m` where the pipeline's status decides something; read the output whole (`grep -q
