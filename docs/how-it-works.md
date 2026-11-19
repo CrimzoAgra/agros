@@ -1461,9 +1461,11 @@ breaks something holds back that one piece, never the rest (`.github/workflows/c
   its record, `agros-aur-maintainers`, unreadable), and `agros-desktop` not resolving with CachyOS's v3 or znver4 repos
   (or a library there at another soname) for 3 days or more (above; a shorter one only in its table); a lookup that
   fails is said too, never read as nothing to say. What CI handles by itself is said apart, "for your information",
-  nothing asked: each AUR package it holds while its new maintainers wait their 14 days (above), and until when. Its
-  table also says how far Caelestia's dots have gone since the commit `agros-hyprland-settings` pins (a new one is
-  taken on purpose; nothing else says when there's one). The owner is mentioned, so GitHub notifies them. Its size watch
+  nothing asked: each AUR package it holds while its new maintainers wait their 14 days (above), and until when; a new
+  release of Capri's upstream, nunezValen/CapriDesktop, which Capri's fork follows by hand (the one last noted kept
+  in the issue's body, as the sizes below; the first noted quietly). Its table also says how far Caelestia's dots have
+  gone since the commit `agros-hyprland-settings` pins (a new one is taken on purpose; nothing else says when there's
+  one). The owner is mentioned, so GitHub notifies them. Its size watch
   (`ci/sizes.sh` in an Arch container, `ci/sizes.py`) works out from the package databases what goes on the live ISO
   (agros-iso's list as `agros-trim.sh` leaves it) and on a new install (`netinstall.yaml`'s selected groups), nothing
   built, and says: a package new this week of 20 MiB or more and what pulled it in, either set grown 50 MiB or more, a

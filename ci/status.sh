@@ -217,6 +217,19 @@ if c=$(curl -fsS --retry 3 "$site/agros-cpu-repos" 2>/dev/null); then
 else
     cpu_cell="CI's record couldn't be read"
 fi
+# Capri's upstream, nunezValen/CapriDesktop: Capri is AgrOS's fork of it (capri-update builds the fork), which follows
+# it by hand, so a new release of theirs is news, not a task: said for information when its newest release isn't the
+# one last week's issue noted (in its body, a comment, as the sizes' baseline). The first one noted quietly; theirs not
+# readable: last week's kept for next week, the table says so
+capri_noted=$(gh issue list --label status --state all -L 1 --json body -q '.[0].body' 2>/dev/null |
+    sed -n 's|.*<!-- agros-capri:\([A-Za-z0-9._+-]*\) -->.*|\1|p' | head -n1)
+if capri=$(gh api repos/nunezValen/CapriDesktop/releases/latest -q .tag_name 2>/dev/null) && [[ $capri =~ ^[A-Za-z0-9._+-]+$ ]]; then
+    capri_cell="latest release $capri"
+    [[ -z $capri_noted || $capri_noted == "$capri" ]] ||
+        notes+=("nunezValen released CapriDesktop $capri (https://github.com/nunezValen/CapriDesktop/releases/tag/$capri): Capri's fork follows it by hand, nothing to do unless you want its changes")
+else
+    capri=$capri_noted capri_cell="its releases couldn't be read (last noted ${capri_noted:-none})"
+fi
 # The size watch: each thing it found needs a look; it not having run, too, with its log (or the next week's finds
 # nothing to compare with: last week's baseline kept then). (Its table says it ran, not its baseline: a first week
 # whose sets pacman couldn't work out has none, and what pacman said goes in the issue)
@@ -260,6 +273,7 @@ write_body() {
         echo "| Caelestia's dots | $dots_cell |"
         echo "| [agros]'s AUR packages | $aur_cell |"
         echo "| CachyOS's CPU repos (v3, znver4) | $cpu_cell |"
+        echo "| Capri's upstream (nunezValen/CapriDesktop) | $capri_cell |"
         held_cell=nothing sync_cell="up to date"
         [[ -z $held ]] || held_cell="see above"
         [[ -z $sync ]] || sync_cell="waiting for a merge"
@@ -267,6 +281,7 @@ write_body() {
         echo "| CachyOS ISO changes | $sync_cell |"
         [[ -z ${SIZES:-} || ! -s $SIZES/table ]] || cat "$SIZES/table"
         [[ -z $1 || ! -s $baseline ]] || printf '\n<!-- agros-sizes:%s -->\n' "$(gzip -9c "$baseline" | base64 -w0)"
+        [[ -z $capri ]] || printf '\n<!-- agros-capri:%s -->\n' "$capri"
     } >"$body"
 }
 write_body with

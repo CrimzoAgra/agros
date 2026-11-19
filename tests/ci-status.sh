@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # ci/status.sh: the weekly issue says nothing broke when all is well, and lists what needs a look otherwise (a failed
 # run, a held issue, CachyOS changes waiting, a Hyprland not approved, an AUR package [agros] carries that's gone, CI
-# not having read the AUR for days, and each of these that couldn't be looked up); what CI handles by itself (an AUR
-# package held while its new maintainers wait their 14 days) said apart, for information, nothing broken;
+# not having read the AUR for days, CachyOS's CPU repos failing 3 days, and each of these that couldn't be looked up);
+# what CI handles by itself (an AUR package held while its new maintainers wait their 14 days) and news (a new
+# release of Capri's upstream) said apart, for information, nothing broken;
 # last week's closed, the owner mentioned. gh and curl are stand-ins, their answers as $STATE says
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
@@ -67,6 +68,10 @@ case "$*" in
     [[ $STATE != *cachy-checkfail* ]] || check=failure merge=success
     json "{\"jobs\": [{\"name\": \"prepare\", \"conclusion\": \"$prepare\"}, {\"name\": \"check / iso\", \"conclusion\": \"$check\"},
       {\"name\": \"merge\", \"conclusion\": \"$merge\"}]}" ;;
+  # (Capri's upstream's newest release: $CAPRI, v1.0.6 unless given)
+  "api repos/nunezValen/CapriDesktop/releases/latest "*)
+    [[ $STATE == *gh-down* ]] && exit 1
+    json "{\"tag_name\": \"${CAPRI:-v1.0.6}\"}" ;;
   "issue list --label held"*)
     [[ $STATE == *gh-down* ]] && exit 1
     if [[ $STATE == *held2* ]]; then json '[{"title": "Held back: x", "url": "https://h", "createdAt": "2026-11-10T03:00:00Z"},
@@ -294,6 +299,27 @@ grep -q 'does not resolve on v3' "$t/body" && fail "one a day old said with it: 
 go "cpu-down"
 grep -q '^@someone \*\*Nothing broke this week' "$t/body" &&
     grep -qxF "| CachyOS's CPU repos (v3, znver4) | CI's record couldn't be read |" "$t/body" || fail "the CPU repos' record unreadable: $(cat "$t/body")"
+# (Capri's upstream: a release newer than the one last week's issue noted, said for information, nothing broken; the
+# same one, or the first noted, nothing; theirs not readable: the one noted kept for next week, the table says so)
+rm -f "$t/lastbody"
+go ""
+grep -q 'nunezValen released' "$t/body" && fail "the first release noted said as new: $(cat "$t/body")"
+grep -qx '<!-- agros-capri:v1.0.6 -->' "$t/body" && grep -qxF "| Capri's upstream (nunezValen/CapriDesktop) | latest release v1.0.6 |" "$t/body" ||
+    fail "Capri's upstream's release not noted: $(cat "$t/body")"
+cp "$t/body" "$t/lastbody"
+CAPRI=v1.0.7 go ""
+grep -q '^@someone \*\*Nothing broke this week' "$t/body" &&
+    grep -A3 -xF '**For your information** (nothing to do):' "$t/body" | grep -xF -- "- nunezValen released CapriDesktop v1.0.7 (https://github.com/nunezValen/CapriDesktop/releases/tag/v1.0.7): Capri's fork follows it by hand, nothing to do unless you want its changes" >/dev/null ||
+    fail "a new release of Capri's upstream not said, or not for information: $(cat "$t/body")"
+grep -qx '<!-- agros-capri:v1.0.7 -->' "$t/body" || fail "the new release not noted for next week: $(cat "$t/body")"
+cp "$t/body" "$t/lastbody"
+CAPRI=v1.0.7 go ""
+grep -q 'nunezValen released' "$t/body" && fail "a release already noted said again: $(cat "$t/body")"
+CAPRI=v1.0.8 go "gh-down"
+{ ! grep -q 'nunezValen released' "$t/body" && grep -qx '<!-- agros-capri:v1.0.7 -->' "$t/body" &&
+    grep -qxF "| Capri's upstream (nunezValen/CapriDesktop) | its releases couldn't be read (last noted v1.0.7) |" "$t/body"; } ||
+    fail "Capri's upstream unreadable: the one noted not kept, or not said: $(cat "$t/body")"
+rm -f "$t/lastbody"
 # (no run finished: none, not jq's null)
 go noruns
 grep -qxF -- "- AgrOS's CI: its last run none (-); last good none" "$t/body" || fail "no finished run: $(cat "$t/body")"
