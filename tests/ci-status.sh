@@ -18,7 +18,18 @@ for a; do [[ $p == -q ]] && q=$a; p=$a; done
 json() { jq -r "$q" <<<"$1"; }
 run() { echo "{\"status\": \"completed\", \"conclusion\": \"$1\", \"createdAt\": \"$2T03:00:00Z\", \"databaseId\": $3, \"event\": \"${4:-push}\"}"; }
 case "$*" in
-  "run list -R x/agros "*)
+  # (the mirror: skipped after a pull request's CI run, which says nothing; or failed)
+  "run list -R x/agros -w mirror.yml "*)
+    if [[ $STATE == *mirror-failed* ]]; then json "[$(run skipped 2026-11-20 43), $(run failure 2026-11-19 41), $(run success 2026-11-18 40)]"
+    else json "[$(run skipped 2026-11-20 42), $(run success 2026-11-20 41)]"; fi ;;
+  "api repos/x/agros/actions/runs/41/jobs "*) json '{"jobs": [{"name": "mirror", "conclusion": "failure"}]}' ;;
+  # (the keepalives: agros's not run yet, agros-iso's run, or failed)
+  "run list -R x/agros -w keepalive.yml "*) json '[]' ;;
+  "run list -R x/iso -w keepalive.yml "*)
+    if [[ $STATE == *keep-failed* ]]; then json "[$(run failure 2026-11-09 51), $(run success 2026-10-09 50)]"
+    else json "[$(run success 2026-11-09 50)]"; fi ;;
+  "api repos/x/iso/actions/runs/51/jobs "*) json '{"jobs": [{"name": "keepalive", "conclusion": "failure"}]}' ;;
+  "run list -R x/agros -w ci.yml "*)
     if [[ $STATE == *ci-failed* || $STATE == *ci-isojob* ]]; then json "[$(run cancelled 2026-11-20 13), $(run failure 2026-11-19 12), $(run success 2026-11-18 11)]"
     # (a pull request from a fork's own main branch, listed as main's: its tests on the published repo passed)
     elif [[ $STATE == *ci-pr* ]]; then json "[$(run success 2026-11-20 13 pull_request), $(run failure 2026-11-19 12), $(run success 2026-11-18 11)]"
@@ -153,6 +164,15 @@ done
 go "ci-failed gh-down"
 grep -qF -- "- AgrOS's CI: its last run failure (2026-11-19; its jobs couldn't be read, https://github.com/x/agros/actions/runs/12)" "$t/body" ||
     fail "a failed run's jobs not read not said: $(cat "$t/body")"
+# (the R2 mirror and each keepalive: a failed last run said, a skipped one passed over, none run yet nothing to say)
+go ""
+grep -qxF "| The R2 mirror | last run success 2026-11-20, last good 2026-11-20 |" "$t/body" || fail "the mirror's row: $(cat "$t/body")"
+go "mirror-failed keep-failed"
+for s in "The R2 mirror: its last run failure (2026-11-19; mirror failed, https://github.com/x/agros/actions/runs/41); last good 2026-11-18: machines that fall back to it (Pages down) get older packages" \
+    "The keepalive of iso: its last run failure (2026-11-09; keepalive failed, https://github.com/x/iso/actions/runs/51): GitHub turns its scheduled workflows off after 60 days without a commit"; do
+    grep -qxF -- "- $s" "$t/body" || fail "not said: $s: $(cat "$t/body")"
+done
+grep -qxF "| Keepalive | last run agros none -, iso failure 2026-11-09 |" "$t/body" || fail "the keepalives' row: $(cat "$t/body")"
 # (a lookup that fails is said, not read as nothing held, nothing waiting, nothing to approve)
 go "gh-down pages-down arch-down"
 for s in "CI's held issue couldn't be read: whether anything is held not checked" \

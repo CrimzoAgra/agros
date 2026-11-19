@@ -1415,9 +1415,10 @@ breaks something holds back that one piece, never the rest (`.github/workflows/c
   last week's closed once it's made; making it tried three times, then the run fails) says whether anything needs a
   look: the last CI and ISO runs on main (not a pull request's; a failed one with the jobs that failed and its page,
   CI's iso job alone said as the ISO build not started, its `AGROS_ISO_TOKEN` the likely cause; an ISO run the upstream
-  gate held, which built nothing and which GitHub shows as a success, too), what's held (and since when), CachyOS changes waiting
-  for a merge (agros-iso's CachyOS sync, since when) and the sync's own failures (its ISO check's are the pull request's
-  to say), a daily run (CI's, the sync's) not seen for 3 days (GitHub turns a public repo's schedules off after 60 days
+  gate held, which built nothing and which GitHub shows as a success, too), what's held (and since when), CachyOS
+  changes waiting for a merge (agros-iso's CachyOS sync, since when) and the sync's own failures (its ISO check's are
+  the pull request's to say), the R2 mirror's last run failing (machines that fall back to it get older packages) and
+  either repo's keepalive's, a daily run (CI's, the sync's) not seen for 3 days (GitHub turns a public repo's schedules off after 60 days
   without a commit), whether Arch's newest Hyprland is approved yet, and CachyOS's installer recipe or code moved on
   past AgrOS's pins (`calamares_pkgbuild`, `calamares_src`); a lookup that fails is said too, never read as
   nothing to say. Its table also says how far Caelestia's dots have gone since the commit `agros-hyprland-settings`
@@ -1437,8 +1438,8 @@ breaks something holds back that one piece, never the rest (`.github/workflows/c
 - **Once a month** `.github/workflows/keepalive.yml` turns every scheduled workflow here (CI's nightly run, the weekly
   status, itself) on again through GitHub's API (`gh api -X PUT repos/<repo>/actions/workflows/<file>/enable`, with
   `actions: write`), as keepalive-workflow v2 does, so GitHub's 60 days without a commit never turn them off; no dummy
-  commits. agros-iso has the same for its CachyOS sync. That it works can only be seen once 60 days pass with no
-  commit; until then the status issue's "not seen for 3 days" is what says a schedule stopped.
+  commits. agros-iso has the same for its CachyOS sync. (Either failing is in the weekly status.) That it works can
+  only be seen once 60 days pass with no commit; until then the status issue's "not seen for 3 days" is what says a schedule stopped.
 
 ## Troubleshooting
 

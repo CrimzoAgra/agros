@@ -22,10 +22,11 @@ problems=()
 # last <repo> <workflow file>: its last run on main ("<conclusion> <date>"), its last good one's date, and its id. (Not
 # the cancelled ones: a newer run waiting its turn cancels the one waiting before it, every busy day. Not a pull
 # request's: one from a fork's own main branch is listed as main's, and its tests passing on the published repo hid a
-# failed run of main's. None finished: "none -", not jq's "null null")
+# failed run of main's. Not a skipped one either: the mirror's after each pull request's CI run, which does nothing.
+# None finished: "none -", not jq's "null null")
 last() {
     gh run list -R "$1" -w "$2" -b main -L 50 --json conclusion,status,createdAt,databaseId,event \
-        -q '[.[] | select(.status == "completed" and .conclusion != "cancelled" and .event != "pull_request")] |
+        -q '[.[] | select(.status == "completed" and .conclusion != "cancelled" and .conclusion != "skipped" and .event != "pull_request")] |
             ((.[0] // {conclusion: "none", createdAt: "-"}) | "\(.conclusion) \(.createdAt[:10])"),
             (map(select(.conclusion == "success"))[0].createdAt[:10] // "none"), (.[0].databaseId // "")' 2>/dev/null |
         paste -sd' '
@@ -84,6 +85,20 @@ if [[ ${sync_last:-} != success ]]; then
         problems+=("The CachyOS sync: its last run ${sync_last:-none} (${sync_day:-}; ${f:-no run}); last good ${sync_good:-none}: CachyOS's changes not followed")
 fi
 ! quiet "${sync_day:-}" 3 || problems+=("The CachyOS sync hasn't run since ${sync_day}: its daily run turned off?")
+# The R2 mirror (mirror.yml, after each CI run on main) and each repo's keepalive (keepalive.yml, monthly): GitHub mails
+# a failed run to whoever last changed its schedule, and nothing else said it. A mirror that fails leaves machines that
+# fall back to it (Pages down) on older packages; a keepalive that fails lets GitHub turn the schedules off after 60
+# days without a commit. (None run yet: nothing to say)
+read -r mir_last mir_day mir_good mir_id < <(last "$GITHUB_REPOSITORY" mirror.yml) || true
+[[ ${mir_last:-none} == success || ${mir_last:-none} == none ]] ||
+    problems+=("The R2 mirror: its last run $mir_last (${mir_day:-}$(why "$GITHUB_REPOSITORY" "${mir_id:-}")); last good ${mir_good:-none}: machines that fall back to it (Pages down) get older packages")
+keep_cell=
+for r in "$GITHUB_REPOSITORY" "$iso"; do
+    read -r k_last k_day _ k_id < <(last "$r" keepalive.yml) || true
+    keep_cell+="${keep_cell:+, }${r#*/} ${k_last:-none} ${k_day:-}"
+    [[ ${k_last:-none} == success || ${k_last:-none} == none ]] ||
+        problems+=("The keepalive of ${r#*/}: its last run $k_last (${k_day:-}$(why "$r" "${k_id:-}")): GitHub turns its scheduled workflows off after 60 days without a commit")
+done
 # (each lookup that fails is said too, never read as nothing to say: the held issue, the CachyOS pull request, the
 # approved list, Arch's Hyprland. Since when: what's waited longer than a few days needs a person)
 if ! held=$(gh issue list --label held --state open --json title,url,createdAt -q '.[] | "\(.title) (\(.url), open since \(.createdAt[:10]))"' 2>/dev/null); then
@@ -170,6 +185,8 @@ write_body() {
         echo "| AgrOS's CI (packages) | last run ${ci_last:-none} ${ci_day:-}, last good ${ci_good:-none} |"
         echo "| The ISO | last build ${iso_last:-none} ${iso_day:-}, last good ${iso_good:-none} |"
         echo "| The CachyOS sync | last run ${sync_last:-none} ${sync_day:-}, last good ${sync_good:-none} |"
+        echo "| The R2 mirror | last run ${mir_last:-none} ${mir_day:-}, last good ${mir_good:-none} |"
+        echo "| Keepalive | last run $keep_cell |"
         echo "| Hyprland | approved ${approved:-?}, Arch's ${arch:-?} |"
         echo "| Caelestia's dots | $dots_cell |"
         held_cell=nothing sync_cell="up to date"
