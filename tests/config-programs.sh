@@ -3,9 +3,9 @@
 # the user units (Exec*=), the Quickshell apps (command:, execDetached) and Caelestia's settings (the Super menu's
 # actions) run. One of ~/.local/bin is a script in .local/bin; any other comes with a package agros-desktop installs, or
 # the base system (the table below: a new one is added there with its package, one no longer run taken out). Every unit
-# Lua starts is in .config/systemd/user, and the apps the default apps and the dock's pins name are installed. A package
-# dropped from agros-desktop, or a script renamed, while a config still runs it, fails here, not as a login start, a key
-# or a button that does nothing
+# Lua starts is in .config/systemd/user, the apps the default apps and the dock's pins name are installed, and so is each
+# package Caelestia's manifest lists for the parts of its dots AgrOS takes. A package dropped from agros-desktop, or a
+# script renamed, while a config still runs it, fails here, not as a login start, a key or a button that does nothing
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
@@ -231,6 +231,30 @@ for name, pkg in sorted(PROGRAMS.items()):
         failures.append(f"{name}: no config runs it any more (take it out of this test's list)")
     elif not pkg.startswith("optional:") and pkg not in depends | BASE and PULLED.get(pkg) not in depends:
         failures.append(f"{name}: its package {pkg} isn't in agros-desktop's depends")
+
+# Caelestia's own list of what its configs need (its manifest.toml, at the pinned commit): each package of the
+# components AgrOS takes (those its installer takes by default, and those agros-hyprland-settings copies: _components)
+# in agros-desktop's depends. A pin moved on to dots that need a new package (a font, a theme, a tool a key runs that
+# the program list above can't see) fails here, not as a key, a font or a theme missing after the update
+if dots:
+    import tomllib
+    # (taken by default, but not on AgrOS, each with why; and a package of a component taken, replaced)
+    NOT_TAKEN = {"firefox": "LibreWolf in its place, its settings AgrOS's own"}
+    REPLACED = {"spotify": "Flathub's, agros-welcome's"}
+    manifest = tomllib.load(open(f"{dots}/manifest.toml", "rb"))
+    settings = open(f"{here}/packages/agros-hyprland-settings/PKGBUILD").read()
+    copied = {c.split("|")[0] for c in shlex.split(re.search(r"^_components=\((.*?)\)", settings, re.M).group(1))}
+    for c in manifest.get("components", []):
+        entries = {e.get("src") for e in c.get("entries", [])}
+        if c["name"] in NOT_TAKEN or not (c.get("default") or entries & copied):
+            continue
+        for pkg in c.get("packages", []):
+            if pkg.startswith("local:") or pkg in REPLACED or pkg in depends:
+                continue
+            failures.append(f"Caelestia's {c['name']} needs {pkg} (its manifest.toml): not in agros-desktop's depends")
+    for pkg in manifest.get("packages", []):
+        if pkg not in depends:
+            failures.append(f"Caelestia needs {pkg} (its manifest.toml): not in agros-desktop's depends")
 if failures:
     print("FAIL: " + "\n".join(failures)); sys.exit(1)
 P
