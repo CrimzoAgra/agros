@@ -975,9 +975,10 @@ brings each change; nothing to run by hand).
     to date"
   - An account that isn't an admin (not in `wheel`: it can't sudo) sees the list with "An administrator has to install
     these updates", and no "Update all"
-  - "Update all" runs `update-apps`, showing its progress; shown only while something is waiting. Closed with the
-    title bar; an update already running carries on (its log: `$XDG_RUNTIME_DIR/update-apps.log`), and opening it
-    again and pressing "Update all" follows it
+  - "Update all" runs `update-apps`, showing its progress; shown only while something is waiting, and taking no click
+    for a second after it appears (where "Check again" was, under the pointer: a double-click there isn't an install).
+    Closed with the title bar; an update already running carries on (its log: `$XDG_RUNTIME_DIR/update-apps.log`), and
+    opening it again and pressing "Update all" follows it
 - **Files never unpacked** (`packages/agros-system/agros-noextract.conf` at `/etc/pacman.d/agros-noextract.conf`,
   included by `pacman.conf` the same way, at install and at upgrade): pacman's `NoExtract` for what no one on AgrOS
   uses: docs and help pages (fish's and HPLIP's kept), the Nerd font styles nothing names (JetBrains Mono's Mono, Propo

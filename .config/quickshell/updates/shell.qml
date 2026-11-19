@@ -456,7 +456,16 @@ ShellRoot {
                     visible: root.admin && root.pending.length > 0 || root.phase === "updating"
                     icon: "download"
                     enabled: root.phase !== "checking" && root.phase !== "updating" && root.pending.length > 0
-                    onClicked: root.updateAll()
+                    // It appears where "Check again" was (nothing waiting before), under the pointer: a click there
+                    // for a moment after is the second of a double-click on that, or one more on it, not an install
+                    onVisibleChanged: if (visible) justShown.restart()
+                    onClicked: if (!justShown.running) root.updateAll()
+
+                    Timer {
+                        id: justShown
+
+                        interval: 1000
+                    }
                 }
             }
         }
