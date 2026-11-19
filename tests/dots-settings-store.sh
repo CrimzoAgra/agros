@@ -15,6 +15,13 @@ ds.CACHE, ds.CAELESTIA_DIR = f"{t}/caelestia-options.json", f"{t}/caelestia"  # 
 ds.OPTIONS_QML = f"{here}/.local/share/dots-settings/caelestia-options.qml"  # (the repo's, not your home's)
 ds.SCHEMA, ds.CONFIG, ds.SETTINGS = f"{here}/.local/share/dots-settings/schema.json", t, f"{t}/settings.json"
 ds.PATCHES = {"caelestia": f"{here}/.local/share/caelestia-overlay/patch.py", "lutris": f"{here}/.local/share/lutris-overlay/patch.py"}
+# (Caelestia's shortcuts from a home of the test's own: dots-settings reads the account's home, root's in CI, with none)
+import os
+os.makedirs(f"{t}/.config/hypr"); os.makedirs(f"{t}/.config/caelestia")
+open(f"{t}/.config/hypr/variables.lua", "w").write(
+    '-- KEYBINDS\nkbGoToWs = "SUPER"\n-- All the following binds\nkbClearNotifs = "CTRL + ALT + C"\n')
+open(f"{t}/.config/caelestia/hypr-vars.lua", "w").close()
+ds.HOME = t
 settings = ds.all_settings(ds.schema())
 b = [k for k, s in settings.items() if s["type"] == "bool" and "get" not in s and "autostart" not in s][:2]
 for broken in ("{not json", "[1, 2]", "null"):
