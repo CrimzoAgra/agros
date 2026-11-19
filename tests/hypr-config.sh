@@ -1205,6 +1205,50 @@ hl.dispatch = hdispatch
 for _, e in ipairs(config_errors) do error("config error " .. e, 0) end
 L
 out=$(cd "$t" && HOME=$t/home PLUGIN=1 XDG_RUNTIME_DIR=$t/run HYPRLAND_INSTANCE_SIGNATURE=test lua drag.lua stub.lua 2>&1)     || fail "window drags: $out"
+# The title bar's buttons and double click act on their own window, as the patched plugin names it: one gone by the
+# time the command runs (a second click on close as a slow app shut) leaves the rest alone, not the focused window
+# closed in its place; the focused one only with the AUR plugin, which leaves "{address}" as it is
+cat >"$t/bar.lua" <<'L'
+local home = os.getenv("HOME")
+package.path = home .. "/.config/caelestia/?.lua;" .. home .. "/.config/hypr/?.lua;" .. package.path
+dofile(arg[1])
+local commands, config = {}, hl.config
+hl.plugin.hyprbars.add_button = function(b) commands[#commands + 1] = b.action end
+hl.config = function(c)
+    config(c)
+    local bars = type(c.plugin) == "table" and c.plugin.hyprbars
+    if bars and bars.on_double_click then commands[#commands + 1] = bars.on_double_click end
+end
+local vars = require("variables")
+for k, v in pairs(require("hypr-vars")) do vars[k] = v end
+require("hypr-user")
+local acted, dispatch = {}, hl.dispatch
+hl.dispatch = function(d)
+    local a = d and d[2] or {}
+    local w = type(a.window) == "string" and hl.get_window(a.window) or a.window
+    if type(w) == "table" then acted[#acted + 1] = d[1] .. " " .. w.address end
+    return dispatch(d)
+end
+ACTIVE = WINDOWS[1]
+for _, cmd in ipairs(commands) do
+    local code = cmd:match("^hyprctl eval '(.*)'$")
+    assert(code, "not a hyprctl eval: " .. cmd)
+    for _, case in ipairs({ { "0xdead", "" }, { "0x2", "0x2" }, { "{address}", "0x1" } }) do
+        acted = {}
+        assert(load((code:gsub("{address}", case[1]))))()
+        local on = {}
+        for _, a in ipairs(acted) do on[a:match("(%S+)$")] = true end
+        local want = case[2] == "" and next(on) == nil or case[2] ~= "" and on[case[2]] and not on[case[2] == "0x1" and "0x2" or "0x1"]
+        if not want then
+            io.write("FAIL ", cmd, " with ", case[1], ": ", table.concat(acted, ", "), "\n")
+        end
+    end
+end
+io.write("bar commands ", #commands, "\n")
+L
+out=$(cd "$t" && HOME=$t/home PLUGIN=1 XDG_RUNTIME_DIR=$t/run HYPRLAND_INSTANCE_SIGNATURE=test lua bar.lua stub.lua 2>&1) || fail "title bar commands: $out"
+grep -q '^FAIL' <<<"$out" && fail "a title bar command acted on another window: $(grep '^FAIL' <<<"$out")"
+grep -qx 'bar commands 4' <<<"$out" || fail "the title bar's commands weren't all checked: $out"
 # Capri: her key only once she's installed (it would take Shift+Space from other apps), and off over a fullscreen window
 cat >"$t/capri.lua" <<'L'
 local home = os.getenv("HOME")

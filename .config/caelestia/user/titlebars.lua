@@ -63,9 +63,8 @@ hl.config({ plugin = { hyprbars = {
     bar_button_padding         = 0,
     bar_precedence_over_border = true,
     inactive_button_color      = "rgb(" .. scheme.surfaceContainerHighest .. ")",
-    -- {address}: the bar's own window (the patched plugin fills it in), not whichever has focus by the time this runs;
-    -- the focused one with the AUR plugin, which leaves it as it is
-    on_double_click            = "hyprctl eval 'dots.maximise_window(hl.get_window(\"address:{address}\"))'",
+    -- {address}: the bar's own window (dots.bar_window, below)
+    on_double_click            = "hyprctl eval 'local w = dots.bar_window(\"{address}\") if w then dots.maximise_window(w) end'",
 } } })
 -- Right to left: close, maximise, minimise (as on Windows); maximise and minimise are windows.lua's Super+Alt+F, Super+M.
 -- 40 px wide (size), the bar's full height, no gaps. Icons by Material Symbols codepoint: close, crop_square, remove; on
@@ -75,16 +74,25 @@ hl.config({ plugin = { hyprbars = {
 -- Caelestia's power button (error) with a dark icon on it (hover_color, hover_fg_color: my patch). Minimise and close
 -- icons a little bigger than maximise's (icon_size: my patch; their glyphs look smaller at one size)
 local none = "rgba(00000000)"
+-- The window a bar's button or double click is for: {address}, its own (the patched plugin fills it in), not whichever
+-- has focus by the time the command runs; the focused one with the AUR plugin, which leaves "{address}" as it is. None
+-- when it's gone by then: a second click on close as a slow app (LibreWolf, VSCodium) shut closed the window that had
+-- the focus next
+function dots.bar_window(address)
+    if address:find("{", 1, true) then return hl.get_active_window() end
+    return hl.get_window("address:" .. address)
+end
 local function button(icon, action, opts)
     hl.plugin.hyprbars.add_button({ bg_color = none, fg_color = "rgb(" .. scheme.onSurface .. ")", size = 40,
                                     icon = utf8.char(icon), icon_maximised = opts.maximised and utf8.char(opts.maximised),
                                     hover_color = opts.hover, hover_fg_color = opts.hover_fg, icon_size = opts.icon_size,
                                     action = action })
 end
-button(0xe5cd, "hyprctl eval 'hl.dispatch(hl.dsp.window.close({ window = hl.get_window(\"address:{address}\") or hl.get_active_window() }))'",
+local function on_bar(code) return "hyprctl eval 'local w = dots.bar_window(\"{address}\") if w then " .. code .. " end'" end
+button(0xe5cd, on_bar("hl.dispatch(hl.dsp.window.close({ window = w }))"),
        { hover = "rgb(" .. scheme.error .. ")", hover_fg = "rgb(" .. scheme.onError .. ")", icon_size = 16 })
-button(0xe3c6, "hyprctl eval 'dots.maximise_window(hl.get_window(\"address:{address}\"))'", { maximised = 0xe3e0 })
-button(0xe15b, "hyprctl eval 'dots.minimise_window(hl.get_window(\"address:{address}\"))'", { icon_size = 16 })
+button(0xe3c6, on_bar("dots.maximise_window(w)"), { maximised = 0xe3e0 })
+button(0xe15b, on_bar("dots.minimise_window(w)"), { icon_size = 16 })
 hl.window_rule({ match = { float = false }, ["hyprbars:no_bar"] = true })
 hl.window_rule({ match = { fullscreen = true }, ["hyprbars:no_bar"] = true })
 hl.window_rule({ match = { class = "^steam_app_\\d+$" }, ["hyprbars:no_bar"] = true })
