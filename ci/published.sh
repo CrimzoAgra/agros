@@ -118,9 +118,11 @@ reused() {
 }
 
 # hold_new <why>: each package here neither AgrOS's own nor the published file swapped for the published one (one never
-# published: left out), said in held. AgrOS's own too when AGROS_HOLD_OWN names it (CI: agros-hyprbars, built for
-# Arch's Hyprland, while the tests hold that Hyprland back: the published one is built for the approved one, which the
-# machines and the ISO stay on, and the plugin only starts on the Hyprland it was built for)
+# published: left out), said in held. AgrOS's own too when AGROS_HOLD_OWN names it (CI: agros-hyprbars, built for Arch's
+# Hyprland, while the tests hold that Hyprland back: the published one is built for the approved one, which the machines
+# and the ISO stay on, and the plugin only starts on the Hyprland it was built for). One published that can't be fetched
+# (Pages down past the retries, a copy that doesn't check out) stops it: left out, it went out missing from the repo,
+# said as "new, none published"
 hold_new() {
     local pubfiles f n names=()
     pub_db || exit 1
@@ -135,7 +137,7 @@ hold_new() {
     done
     for n in "${names[@]}"; do
         held+=("$n: $1")
-        carry_over "$n" || echo "!! $n: new, none published: left out"
+        if pub_desc "$n" >/dev/null; then carry_over "$n" || exit 1; else echo "!! $n: new, none published: left out"; fi
     done
 }
 

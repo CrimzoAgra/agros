@@ -117,6 +117,12 @@ got=$(cd "$out" && ls ./agros-*.pkg.tar.zst | sed 's|^\./||' | paste -sd' ')
     fail "agros-hyprbars not held with the Hyprland held back: $got"
 [[ $(printf '%s\n' "${held[@]}") == "agros-hyprbars: held while an Arch update breaks the tests" ]] ||
     fail "agros-hyprbars held, not said: ${held[*]}"
+# (a published one that can't be fetched, Pages down or its copy not checking out: stopped, not left out of the repo)
+rm -f "$out"/*
+pkg "$out" libx 3-1 'depend = libdeep'
+cp "$pub/libx-2-1-x86_64.pkg.tar.zst" "$t/libx.real" && printf 'x' >>"$pub/libx-2-1-x86_64.pkg.tar.zst"
+(hold_new "broke the tests" >/dev/null) && fail "a published one that couldn't be fetched left out, the rest went on"
+cp "$t/libx.real" "$pub/libx-2-1-x86_64.pkg.tar.zst"
 # reused: the published package kept, not built, unless its rebuild would go out: its version or PKGBUILD changed, a
 # library it needs gone from the repos, another Python (makepkg and pacman stand-ins: the version $REL gives, the
 # library $GONE not in any repo's file list, the repos' Python at $PY)
