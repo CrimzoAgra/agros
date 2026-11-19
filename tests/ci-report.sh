@@ -19,7 +19,10 @@ case "$1 $2" in
 esac
 GH
 chmod +x "$t/bin/gh"
-go() { rm -f "$t/gh.log"; PATH=$t/bin:$PATH RUN_URL=https://run AGROS_RETRY_WAIT=0 "$@" "$here/ci/report.sh" >/dev/null; grep -v '^gh issue list\|^gh label' "$t/gh.log" || true; }
+# (the held list and the tests' report empty files unless a case gives its own, as the report job downloads them)
+: >"$t/none"
+go() { rm -f "$t/gh.log"; PATH=$t/bin:$PATH RUN_URL=https://run AGROS_RETRY_WAIT=0 HELD=$t/none REPORT=$t/none "$@" "$here/ci/report.sh" >/dev/null; grep -v '^gh issue list\|^gh label' "$t/gh.log" || true; }
+said() { local rc=0; rm -f "$t/gh.log"; PATH=$t/bin:$PATH RUN_URL=https://run AGROS_RETRY_WAIT=0 HELD=$t/none REPORT=$t/none "$@" "$here/ci/report.sh" >/dev/null 2>&1 || rc=$?; return "$rc"; }
 echo "quickshell-git: AgrOS's fix didn't build" >"$t/held"
 [[ $(go env BUILD=success RELEASE=success RESULT=ok HELD="$t/held") == "gh issue create --label held --title Held back: built and tested, but some packages didn't build --body-file "* ]] ||
     fail "a held package didn't open an issue: $(go env BUILD=success RELEASE=success RESULT=ok HELD="$t/held")"
@@ -39,6 +42,18 @@ grep -q 'FAIL lutris' "$t/body" || fail "the issue doesn't say which tests faile
     fail "the issue not closed once all went out: $(go env BUILD=success RELEASE=success RESULT=ok)"
 rm "$t/open"
 [[ -z $(go env BUILD=success RELEASE=success RESULT=ok) ]] || fail "an issue touched with all out and none open"
+# A release that went through, its held list or the tests' report not downloaded: the report job fails, the issue as
+# it was (read as nothing held, it closed the issue as all out)
+echo 12 >"$t/open"
+for miss in "HELD=$t/gone" "REPORT=$t/gone"; do
+    # shellcheck disable=SC2086  # (the variable, a word)
+    ! said env BUILD=success RELEASE=success RESULT=ok $miss || fail "$miss with the release through: the report job passed"
+    ! grep -qs '^gh issue \(close\|edit\|create\)' "$t/gh.log" || fail "$miss: the issue touched: $(cat "$t/gh.log")"
+done
+# (the release not through: none made, read as none)
+[[ $(go env BUILD=success RELEASE=failure RESULT=ok HELD="$t/gone" REPORT="$t/gone") == "gh issue edit 12 "* ]] ||
+    fail "a failed release without the artifacts not said"
+rm "$t/open"
 # A report too long for an issue (every test failing in all three passes, each with its why): cut short, said, its
 # first lines and the state kept, rather than GitHub refusing the issue every time
 rm -f "$t/body"
@@ -75,7 +90,6 @@ sed -i '/AHEAD/d' "$t/report"
     fail "the heads-up not closed once it's gone: $(go env BUILD=success RELEASE=success RESULT=ok REPORT="$t/report")"
 # GitHub's API failing: never read as no issue open (a second one opened beside it, or one left open with the run
 # saying all went out), and the report job fails (the run shows it, the Friday status says it) rather than passing
-said() { local rc=0; rm -f "$t/gh.log"; PATH=$t/bin:$PATH RUN_URL=https://run AGROS_RETRY_WAIT=0 "$@" "$here/ci/report.sh" >/dev/null 2>&1 || rc=$?; return "$rc"; }
 echo 12 >"$t/open"
 touch "$t/listfail"
 ! said env BUILD=success RELEASE=success RESULT=ok HELD="$t/held" || fail "the open issue couldn't be looked up, and the report job passed"

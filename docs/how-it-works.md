@@ -1455,7 +1455,8 @@ breaks something holds back that one piece, never the rest (`.github/workflows/c
   of upstream's next release doesn't fit), brought up to date by each run and closed by itself once one puts everything
   out again with none of these. GitHub notifies of it. (GitHub's API failing: each call tried three times, then the
   report job fails, so the run and the Friday status show it; never a second issue, and one that turns up anyway is
-  closed beside the first. A test report too long for an issue, GitHub's 65536 characters, is cut short, said: the
+  closed beside the first. So does a release that went through whose held list or test report the report job couldn't
+  download: read as nothing held, it closed the issue as all out. A test report too long for an issue, GitHub's 65536 characters, is cut short, said: the
   run's `report` artifact has it all.)
 - **Every Friday at 17:00 Lisbon time** an issue (`ci/status.sh`, `.github/workflows/status.yml`, label `status`, last
   week's closed once it's made; making it tried three times, then the run fails) says whether anything needs a look: the

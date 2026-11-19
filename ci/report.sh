@@ -15,6 +15,11 @@
 set -uo pipefail
 shopt -s extglob
 [[ ${NEWER:-} != true ]] || { echo "A newer commit's repo is already published: this run put nothing out, nothing said"; exit 0; }
+# (both artifacts the report job downloads, a failed download let through, as a job that didn't run makes none: a
+# release that went through made both, and one missing then read as nothing held, the issue closed as all out. The
+# job fails instead, the issue as it was; the next run says it)
+[[ ${RELEASE:-} != success ]] || { [[ -r ${HELD:-} && -r ${REPORT:-} ]] ||
+    { echo "::error::the held list or the tests' report couldn't be read: CI's held issue left as it was"; exit 1; }; }
 held=$(cat "${HELD:-/dev/null}" 2>/dev/null)
 report=$(cat "${REPORT:-/dev/null}" 2>/dev/null)
 ahead=$(grep '^    AHEAD ' <<<"$report")
