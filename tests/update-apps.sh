@@ -98,7 +98,13 @@ stub paru 'echo "paru $* in ${PWD##*/}" >>"'"$t"'/paru"'
 # shellcheck disable=SC2016
 stub auto-update-aur 'echo "$*" >>"'"$t"'/fetch"; [ "$1" = --fetch ] && mkdir -p "$2/${3%%=*}"'
 export AUTO_UPDATE_AUR=$t/bin/auto-update-aur
+# (a build folder a run cut off left, hours old, taken away; one of a run going on now, and anything else there, kept)
+mkdir -p "$t/home/.cache/agros-rebuild.OLDone/quickshell-git" "$t/home/.cache/agros-rebuild.NEWone" "$t/home/.cache/agros-rebuild-mine"
+touch -d '7 hours ago' "$t/home/.cache/agros-rebuild.OLDone" "$t/home/.cache/agros-rebuild-mine"
 qt 6.9.0 --qt-mark && qt 6.10.0 --qt-rebuild >/dev/null || fail "the rebuild of [agros]'s own for a new Qt failed"
+[[ ! -e $t/home/.cache/agros-rebuild.OLDone && -d $t/home/.cache/agros-rebuild.NEWone && -d $t/home/.cache/agros-rebuild-mine ]] ||
+    fail "a build folder a cut-off run left not taken away, or another one taken: $(ls -A "$t/home/.cache")"
+rm -rf "$t/home/.cache/agros-rebuild.NEWone" "$t/home/.cache/agros-rebuild-mine"
 grep -q -- "^--fetch $t/home/.cache/agros-rebuild\.[^ ]* quickshell-git=0.2.1.r5.gabc1234-1.2$" "$t/fetch" ||
     fail "[agros]'s Quickshell not fetched at its version installed, with AgrOS's fix: $(cat "$t/fetch" 2>/dev/null)"
 grep -q -- "-Ui --noconfirm in quickshell-git$" "$t/paru" && ! grep -q "aur/quickshell-git" "$t/paru" ||

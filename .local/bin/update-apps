@@ -92,10 +92,13 @@ qt_rebuild() {
 # boot's rebuild does them, through auto-update-aur --fetch: the AUR's build files of the version installed (what CI built
 # and tested), AgrOS's fix added, the sources checked. paru -S's would be the AUR's newest, without the fix
 rebuild_agros() {
-    local p base have tmp rc=0 done=' '
+    local p base have tmp rc=0 done=' ' cache=${XDG_CACHE_HOME:-$HOME/.cache}
     # (in your cache, on disk: a build in /tmp takes memory)
-    mkdir -p "${XDG_CACHE_HOME:-$HOME/.cache}" && tmp=$(mktemp -d "${XDG_CACHE_HOME:-$HOME/.cache}/agros-rebuild.XXXXXX") ||
-        return 1
+    mkdir -p "$cache" || return 1
+    # (one a run cut off left there (logged out or shut down mid-build, a power cut: nothing took it away), a whole build
+    # kept in your cache for good: its own folders alone, by their mktemp name, hours old, taken away)
+    find "$cache" -mindepth 1 -maxdepth 1 -type d -name 'agros-rebuild.??????' -mmin +360 -exec rm -rf {} + 2>/dev/null
+    tmp=$(mktemp -d "$cache/agros-rebuild.XXXXXX") || return 1
     for p; do
         base=$(curl -fsS --connect-timeout 10 -m 60 -G https://aur.archlinux.org/rpc/v5/info --data-urlencode "arg[]=$p" |
             jq -r '.results[0].PackageBase // empty' 2>/dev/null)
