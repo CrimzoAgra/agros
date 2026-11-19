@@ -18,6 +18,13 @@ shopt -s extglob
 held=$(cat "${HELD:-/dev/null}" 2>/dev/null)
 report=$(cat "${REPORT:-/dev/null}" 2>/dev/null)
 ahead=$(grep '^    AHEAD ' <<<"$report")
+# (GitHub refuses an issue's text over 65536 characters, every try, and the issue then went on saying an earlier run's:
+# the tests' report that long, every test failing in all three passes with its why, cut short, said, its first lines
+# kept. The whole of it is the run's report artifact)
+if ((${#report} > ${AGROS_REPORT_MAX:-50000})); then
+    report=$(awk -v max="${AGROS_REPORT_MAX:-50000}" '{ n += length($0) + 1 } n <= max { print; next } { cut++ }
+        END { print "    ... cut short here, " cut " more lines: the run\047s report artifact has them all" }' <<<"$report")
+fi
 case ${BUILD:-}/${RESULT:-} in
     success/ok) state=ok ;;
     success/hold-agros) state="this run's new AUR builds broke AgrOS's tests: the published ones kept" ;;

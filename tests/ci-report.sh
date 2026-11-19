@@ -13,7 +13,9 @@ case "$1 $2" in
   "issue list") [[ -e @T@/listfail ]] && exit 1; cat @T@/open 2>/dev/null; true ;;
   "issue create"|"issue edit"|"issue close")
     [[ -e @T@/writefail ]] && exit 1
-    for a; do [[ $p == --body-file ]] && cp "$a" @T@/body; p=$a; done ;;
+    b=; for a; do [[ $p == --body-file ]] && { cp "$a" @T@/body; b=$a; }; p=$a; done
+    # (as GitHub: a body over 65536 characters refused)
+    [[ -z $b || $(wc -m <"$b") -le 65536 ]] ;;
 esac
 GH
 chmod +x "$t/bin/gh"
@@ -37,6 +39,15 @@ grep -q 'FAIL lutris' "$t/body" || fail "the issue doesn't say which tests faile
     fail "the issue not closed once all went out: $(go env BUILD=success RELEASE=success RESULT=ok)"
 rm "$t/open"
 [[ -z $(go env BUILD=success RELEASE=success RESULT=ok) ]] || fail "an issue touched with all out and none open"
+# A report too long for an issue (every test failing in all three passes, each with its why): cut short, said, its
+# first lines and the state kept, rather than GitHub refusing the issue every time
+rm -f "$t/body"
+{ echo "- With this run's [agros], on today's Arch:"; for i in $(seq 1500); do printf '    FAIL test%s: %0100d\n' "$i" 0; done; } >"$t/long"
+[[ $(go env BUILD=success RESULT=fail REPORT="$t/long") == "gh issue create --label held --title Held back: AgrOS's own code fails its tests --body-file "* ]] ||
+    fail "a long report not said: $(go env BUILD=success RESULT=fail REPORT="$t/long")"
+(($(wc -m <"$t/body") <= 65536)) || fail "a long report's issue over GitHub's 65536 characters: $(wc -m <"$t/body")"
+grep -q '^    FAIL test1: ' "$t/body" && grep -q "^    \.\.\. cut short here, [0-9]* more lines: the run's report artifact" "$t/body" ||
+    fail "a long report not cut short, said: $(head -c 300 "$t/body")"
 # A re-run of an older run, the published repo already a newer commit's (ci/newer.sh): nothing put out, the issue as
 # the newer run left it, neither opened nor closed nor edited
 echo 12 >"$t/open"
