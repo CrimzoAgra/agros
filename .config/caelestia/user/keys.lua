@@ -16,9 +16,12 @@ dots.bind("windows_prev", hl.dsp.global("switcher:windows-prev"))
 -- (In the one key hook at the end of this file, with the other two: it runs on every key press and release)
 -- Clicking a workspace in Super+Tab: Super is held then (releasing it picks), and Super+click is Caelestia's window
 -- drag, which Hyprland took before the click reached the switcher. Off while the switcher is open (it calls this
--- as it opens and closes), back as it closes
--- shortcut: the switcher dying while open leaves Super+drag off until the next config reload (which binds it again)
+-- as it opens and closes), back as it closes. Letting go of Super or Alt closes it (the key hook below: its pick), so
+-- one still open by its last word a moment after that has died or hung (one Quickshell restarts after a crash comes
+-- back closed without saying so): Super+drag back all the same, not off until the next config reload
+local switcher_shown = false
 function dots.switcher_open(open)
+    switcher_shown = open
     pcall(hl.unbind, "SUPER + mouse:272")
     if not open then hl.bind("SUPER + mouse:272", hl.dsp.window.drag(), { mouse = true }) end
 end
@@ -70,6 +73,10 @@ hl.on("input.keyboard.key", function(key, _, pressed)
     if pressed ~= 0 then return end
     if key == 133 or key == 134 or key == 64 or key == 108 then  -- Super or Alt: the switcher picks
         hl.dispatch(hl.dsp.global("switcher:commit"))
+        if switcher_shown then
+            hl.timer(function() if switcher_shown then dots.switcher_open(false) end end,
+                     { timeout = 2000, type = "oneshot" })
+        end
     elseif key == 78 then  -- Scroll Lock
         hl.exec_cmd("~/.local/bin/scroll-lock sync")
     end

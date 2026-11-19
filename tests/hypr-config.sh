@@ -1263,6 +1263,33 @@ L
 out=$(cd "$t" && HOME=$t/home PLUGIN=1 XDG_RUNTIME_DIR=$t/run HYPRLAND_INSTANCE_SIGNATURE=test lua bar.lua stub.lua 2>&1) || fail "title bar commands: $out"
 grep -q '^FAIL' <<<"$out" && fail "a title bar command acted on another window: $(grep '^FAIL' <<<"$out")"
 grep -qx 'bar commands 4' <<<"$out" || fail "the title bar's commands weren't all checked: $out"
+# Super+drag off while the switcher is open (its Super+click on a workspace), back as it closes; and back a moment
+# after Super or Alt is let go (its pick, which closes it) even when the switcher never says it closed: it died or hung
+# open (one Quickshell restarted after a crash comes back closed), and Super+drag was off until the next config reload
+cat >"$t/switcher.lua" <<'L'
+local home = os.getenv("HOME")
+package.path = home .. "/.config/caelestia/?.lua;" .. home .. "/.config/hypr/?.lua;" .. package.path
+dofile(arg[1])
+local vars = require("variables")
+for k, v in pairs(require("hypr-vars")) do vars[k] = v end
+require("hypr-user")
+local function fire(name, ...) for _, fn in ipairs(handlers[name] or {}) do fn(...) end end
+local function run_timers() local q = HELD_TIMERS; HELD_TIMERS = {}; for _, fn in ipairs(q) do fn() end end
+local function drag() return tostring(#(BIND_ACTIONS["SUPER + mouse:272"] or {})) end
+HOLD_TIMERS = true
+dots.switcher_open(true); io.write("open ", drag(), "\n")
+fire("input.keyboard.key", 133, 0, 1); fire("input.keyboard.key", 133, 0, 0)
+dots.switcher_open(false); run_timers(); io.write("closed ", drag(), "\n")
+dots.switcher_open(true); fire("input.keyboard.key", 64, 0, 0); io.write("let go, not yet ", drag(), "\n")
+run_timers(); io.write("died open ", drag(), "\n")
+fire("input.keyboard.key", 133, 0, 0); run_timers(); io.write("let go, closed ", drag(), "\n")
+L
+out=$(cd "$t" && HOME=$t/home XDG_RUNTIME_DIR=$t/run HYPRLAND_INSTANCE_SIGNATURE=test lua switcher.lua stub.lua 2>&1) ||
+    fail "switcher: $out"
+[[ $(grep -E '^(open|closed|let go|died)' <<<"$out" | paste -sd'|') == \
+    "open 0|closed 1|let go, not yet 0|died open 1|let go, closed 1" ]] ||
+    fail "Super+drag around the switcher: $(grep -E '^(open|closed|let go|died)' <<<"$out" | paste -sd'|')"
+
 # Capri: her key only once she's installed (it would take Shift+Space from other apps), and off over a fullscreen window
 cat >"$t/capri.lua" <<'L'
 local home = os.getenv("HOME")
