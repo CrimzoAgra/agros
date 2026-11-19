@@ -915,9 +915,12 @@ local function on_open(win, retried)
     end
     if others == 0 and window_mode() ~= "floating" then return end
     if dots.is_game and dots.is_game(win) then return hl.dispatch(hl.dsp.window.float({ action = "on", window = win })) end
-    local full = maximised_box(win)  -- still tiled here: the box without a title bar
-    local maximised = win.fullscreen == 1 or (win.size.x >= full.w - 2 and win.size.y >= full.h - 2)
-    if maximised and win.fullscreen == 1 then
+    -- Maximised by the app's own wish only, not by its size: Hyprland has tiled it by now, the lone tiled window on its
+    -- workspace, so its size is the layout's, not the app's; and that's the maximised box itself when Caelestia's gap
+    -- round a window alone is no wider than the one at the screen's edges (the Settings app's Windows group), which
+    -- opened every window maximised
+    local maximised = win.fullscreen == 1
+    if maximised then
         hl.dispatch(hl.dsp.window.fullscreen({ mode = "maximized", action = "unset", window = win }))
     end
     hl.dispatch(hl.dsp.window.float({ action = "on", window = win }))

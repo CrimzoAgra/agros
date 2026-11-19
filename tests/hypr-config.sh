@@ -1053,6 +1053,20 @@ for _, r in ipairs(WINDOW_RULES) do
     if only_modal and r.float == true then modal_floats = true end
 end
 check("a modal dialog: floats", modal_floats, true)
+-- A window opening tiled (floated as it opens: floating mode), as Hyprland has it by then: the lone tiled window on its
+-- workspace, as big as the maximised box when Caelestia's gap round a window alone is the edges' (or less). The
+-- standard size, not maximised (every window opened maximised); one the app asked to be maximised (1), maximised
+local lone = { address = "0x29", class = "org.gnome.TextEditor", title = "t", floating = false, fullscreen = 0, pid = 1,
+               tags = {}, workspace = ws(1), monitor = SCREENS[1], at = { x = a.x, y = a.y }, size = { x = a.w, y = a.h },
+               focus_history_id = 9 }
+WINDOWS = { lone }
+for _, fn in ipairs(handlers["window.open"] or {}) do fn(lone) end
+r = result()
+check("a window opened as big as the maximised box: not maximised", tostring(r.tag), "nil")
+check("a window opened as big as the maximised box: the standard size", r.h, math.floor(1080 * 0.6 + 0.5))
+lone.fullscreen = 1
+for _, fn in ipairs(handlers["window.open"] or {}) do fn(lone) end
+check("a window that asked to open maximised: maximised", result().tag, "+maximised")
 -- An X11 menu or tooltip (Caelestia's xwl_popup tag): no title bar counted, and left where its app put it
 local menu = { address = "0x28", class = "steam", title = "", floating = true, fullscreen = 0, pid = 1, tags = { "xwl_popup*" },
                workspace = ws(1), monitor = SCREENS[1], at = { x = 100, y = 45 }, size = { x = 300, y = 200 }, focus_history_id = 8 }
