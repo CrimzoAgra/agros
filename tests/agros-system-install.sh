@@ -85,4 +85,18 @@ grep -q "XCURSOR_THEME=$cursor " "$here/packages/agros-greeter/run" && grep -qF 
     fail "the login screen's pointer isn't the desktop's, $cursor"
 grep -qx "NoExtract = usr/share/icons/Bibata-\* !usr/share/icons/$cursor/\*" "$here/packages/agros-system/agros-noextract.conf" ||
     fail "the NoExtract list doesn't keep the desktop's pointer, $cursor: $(grep Bibata "$here/packages/agros-system/agros-noextract.conf")"
+
+# The sudoers rule (papirus-folders without a password, as Caelestia calls it): sudo's own parser reads it, and its one
+# command runs from / (papirus-folders takes a "Papirus" theme in the folder it's run from, which for a caller's own
+# folder was root changing the caller's files). Read as sudo reads it where its tools are here (cvtsudoers)
+rule=$here/system/sudoers/agros-papirus-folders
+if command -v cvtsudoers >/dev/null; then
+    spec=$(cvtsudoers -f json "$rule" 2>&1) || fail "sudo can't read the sudoers rule: $spec"
+    [[ $(jq -c '[.User_Specs[].Cmnd_Specs[] | {c: [.Commands[].command], o: .Options}]' <<<"$spec") == \
+        '[{"c":["/usr/bin/papirus-folders ^-C [a-z]+ -u$"],"o":[{"runcwd":"/"},{"authenticate":false}]}]' ]] ||
+        fail "the sudoers rule isn't papirus-folders alone, without a password, run from /: $spec"
+else
+    grep -qx '%wheel ALL=(root) CWD=/ NOPASSWD: /usr/bin/papirus-folders ^-C \[a-z\]+ -u\$' "$rule" ||
+        fail "the sudoers rule isn't papirus-folders alone, without a password, run from /: $(grep -v '^#' "$rule")"
+fi
 echo "ok agros-system-install"

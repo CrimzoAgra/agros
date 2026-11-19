@@ -1,3 +1,6 @@
 # Caelestia recolours the Papirus folder icons to the colour scheme with `sudo -n papirus-folders -C <colour> -u`:
-# admins may run exactly that without a password (a regular expression, sudo 1.9.10+: no other arguments)
-%wheel ALL=(root) NOPASSWD: /usr/bin/papirus-folders ^-C [a-z]+ -u$
+# admins may run exactly that without a password (a regular expression, sudo 1.9.10+: no other arguments). Run from /
+# (CWD=/), not the folder it was called from: papirus-folders takes a "Papirus" folder there with an index.theme in it
+# as the theme to change, so from a folder of the caller's it made root's links and icon caches in that folder, the
+# caller's to swap for a link elsewhere while it ran
+%wheel ALL=(root) CWD=/ NOPASSWD: /usr/bin/papirus-folders ^-C [a-z]+ -u$
