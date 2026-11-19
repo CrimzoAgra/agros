@@ -1295,6 +1295,7 @@ Functions other programs call through `hyprctl eval 'dots.<name>(...)'`, kept in
 | `toggle_window_mode()` | `user/windows.lua` | bar menu, the Settings app (window mode) |
 | `window_drag_start(address, kind)`, `window_drag_step(address, kind)`, `window_drag_end(address, kind)`, `titlebar_drag_start(address, phase)` | `user/windows.lua` | the hyprbars patch (each drag's start, each step, its end) |
 | `titlebar_height(win)` | `user/titlebars.lua` | `user/windows.lua` |
+| `bar_window(address)` | `user/titlebars.lua` | the title bar's buttons and double click (their own window; none once it's gone) |
 | `is_game(win)` | `user/apps.lua` | `user/windows.lua`, `user/titlebars.lua` |
 | `started_for_game(pid)` | `user/apps.lua` | `user/apps.lua` (store launchers a game started open minimised) |
 | `without_warps(fn)` | `user/windows.lua` | `user/workspaces.lua` (Super+N, `clean_workspace`) |
