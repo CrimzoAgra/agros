@@ -3,7 +3,7 @@
 # list shows, none below the list's end (at 700 high, Startup, Shortcuts and All Caelestia options were, with nothing
 # saying more were there); on a 768-high one it fits the screen, and a bar beside the list says it scrolls.
 # A long message of a change refused (Capri's keys) wraps under the list, beside an error icon, the list as wide as
-# before (it ran under the page, its scroll bar hidden, beside a tick)
+# before (it ran under the page, its scroll bar hidden, beside a tick), naming the setting by its label
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
@@ -66,13 +66,16 @@ read -r height icons bar < <(look)
 ((height <= 768)) || fail "the window ($height high) taller than a 768-high screen"
 ((icons < pages)) || fail "every page fits a 768-high screen: the scroll bar not checked"
 [[ $bar == bar ]] || fail "no scroll bar beside the list of pages that doesn't fit ($icons of $pages shown)"
-# A refusal's message (as the app shows a failed change): the list's search field ends where it did, before the page's
-# card (its colour, surfaceContainerHigh's fallback 1e1f26, along its middle row), the message's red (error's fallback,
-# ffb4ab, at the status line's 0.7) in more than one line, and the icon beside it red too
+# A refusal (a copy of the app setting Capri's Ctrl+Alt+K for the screenshot once the pages are in, as a click would,
+# its picture taken once the message shows): the message names the setting by its label, not dots-settings' key; the
+# list's search field ends where it did, before the page's card (its colour, surfaceContainerHigh's fallback 1e1f26,
+# along its middle row), the message's red (error's fallback, ffb4ab, at the status line's 0.7) in more than one line,
+# and the icon beside it red too
 mkdir -p "$t/qs" && cp -r "$here/.config/quickshell/settings" "$here/.config/quickshell/common" "$t/qs/"
-msg="Screenshot of an area: CTRL + ALT + K is Capri's (her chat): choose other keys"
-sed -i "s|^    property string error // |    property string error: \"$msg\" // |" "$t/qs/settings/shell.qml"
-grep -q "property string error: \"$msg\"" "$t/qs/settings/shell.qml" || fail "the app's error property not found"
+sed -i -e 's|^    property int edits: 0$|&\n    property bool tried\n    onPagesChanged: if (pages.length \&\& !tried) { tried = true; set("keys.screenshot", ["CTRL + ALT + K"]); }\n    onErrorChanged: console.log("shown:", error)|' \
+    -e 's|^\( *running: !!Quickshell.env("DOTS_SETTINGS_SHOT") && root.pages.length > 0\)$|\1 \&\& !!root.error|' "$t/qs/settings/shell.qml"
+[[ $(grep -c 'property bool tried\|root.pages.length > 0 && !!root.error$' "$t/qs/settings/shell.qml") == 2 ]] ||
+    fail "the app's copy that sets a shortcut not made"
 # field: "<search field's right edge> <rows with red in the status line> <red in its icon column>"
 field() {
     python3 -I - "$t/shot.png" <<'P'
@@ -95,6 +98,8 @@ shot 1080
 read -r edge0 _ _ < <(field)
 shot 1080 "$t/qs/settings/shell.qml"
 read -r edge rows icon < <(field)
+msg="shown: Screenshot of an area: CTRL + ALT + K is Capri's (her chat): choose other keys"
+grep -qF "$msg" "$t/qs.log" || fail "a refusal's message not by the setting's label: $(grep -a -m1 'shown:' "$t/qs.log")"
 ((edge == edge0)) || fail "a refusal's long message widened the list of pages: its search field to x $edge, not $edge0"
 ((rows > 16)) || fail "a refusal's long message in one line ($rows rows with red), cut off, not wrapped"
 [[ $icon == red ]] || fail "a refusal's message beside a tick, not an error icon"

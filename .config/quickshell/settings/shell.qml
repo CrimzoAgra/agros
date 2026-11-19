@@ -83,6 +83,18 @@ ShellRoot {
         next();
     }
 
+    // Why a change failed, by the setting's label, as the app names it: dots-settings names its key ("keys.screenshot:
+    // CTRL + ALT + K is Capri's (her chat): choose other keys")
+    // (by loops: the pages' lists, kept in a var property, aren't JS arrays to flatMap)
+    function failure(key: string, why: string): string {
+        for (const p of pages)
+            for (const g of p.groups)
+                for (const s of g.settings)
+                    if (s.key === key && why.startsWith(`${key}: `))
+                        return `${s.label}: ${why.slice(key.length + 2)}`;
+        return why;
+    }
+
     // A reading of the settings (schemaProc) or of their values (nowProc), its clicks counted as it's asked for: counted
     // when it started, a click in between was overwritten by what it had read before it. One running isn't started
     // again (its count, from before that click, stays: its reading is thrown away)
@@ -211,7 +223,7 @@ ShellRoot {
         // Not saved: say so, and show the settings as they really are
         onExited: code => {
             if (code !== 0) {
-                root.error = runnerErr.text.trim().split("\n").pop() || "A change couldn't be saved";
+                root.error = root.failure(runner.command[2] ?? "", runnerErr.text.trim().split("\n").pop()) || "A change couldn't be saved";
                 // A fresh reading, after this (one already running started before it, and is thrown away)
                 schemaProc.running = false;
                 schemaProc.edits = root.edits;
