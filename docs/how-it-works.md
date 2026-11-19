@@ -376,7 +376,9 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
   - Super menu (launcher):
     - Pin buttons; favourites at the top, then everything A-Z
     - Search finds an app by what it is too (its launcher entry's generic name and keywords: "term" finds foot, a
-      "Terminal"), after the apps found by name (`launcher_by_kind`)
+      "Terminal"), after the apps found by name (`launcher_by_kind`); among those, a generic name, then keywords, with
+      a word starting with the text ("files": a File Manager) first, so Enter opens foot, not Micro (its keyword
+      "terminal")
     - A "check for updates" button next to the search bar: its icon spins while checking, then a notification says
       the result (also if the menu was closed meanwhile) and opens the Updates app
     - Opens over fullscreen games and videos too (`general.showOverFullscreen` in `shell.json`; notifications and

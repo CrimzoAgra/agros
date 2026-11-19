@@ -118,23 +118,29 @@ else
     skipped "no node: the panels' edge hover not run"
 fi
 # The Super menu finds an app by what it is too (its generic name, keywords: "term" found nothing, foot's name is
-# Foot), after those found by name, each once; its prefixes and its search by name as Caelestia's after it (query: the
-# list's items whose keys hold the text, as Caelestia's Searcher matches them)
+# Foot), after those found by name, each once; among those, a generic name, then keywords, with a word starting with
+# the text first ("term": Foot, a Terminal, before Micro, a Text Editor with the keyword "terminal"; "files": Thunar, a
+# File Manager, before Desktop Settings' "dotfiles"; both came second, fzf's order); its prefixes and its search by name
+# as Caelestia's after it (query: the list's items whose keys hold the text's letters in order, as Caelestia's fzf
+# matches them, in the list's order)
 if command -v node >/dev/null; then
     fn=$(sed -n '/^    function search(search: string): var {$/,/^    }$/p' "$dst/modules/launcher/services/Apps.qml" |
         sed 's/(search: string): var {/(search) {/')
     [[ -n $fn ]] || fail "the Super menu's search not found"
     seq=$(node -e "const GlobalConfig = { launcher: { specialPrefix: '>' } };
 let keys = ['name'], weights = [1];
-const list = [{ entry: 'foot', name: 'Foot', genericName: 'Terminal', keywords: ['shell'] },
+const list = [{ entry: 'micro', name: 'Micro', genericName: 'Text Editor', keywords: ['text', 'editor', 'syntax', 'terminal'] },
+    { entry: 'desktop-settings', name: 'Desktop Settings', genericName: '', keywords: ['settings', 'dotfiles'] },
+    { entry: 'foot', name: 'Foot', genericName: 'Terminal', keywords: ['shell'] },
     { entry: 'termius', name: 'Termius', genericName: 'SSH client', keywords: ['terminal'] },
-    { entry: 'thunar', name: 'Thunar', genericName: 'File Manager', keywords: ['files', 'explorer'] }];
-const query = s => list.filter(i => keys.map(k => i[k]).join(' ').toLowerCase().includes(s.trim().toLowerCase()));
+    { entry: 'thunar', name: 'Thunar', genericName: 'File Manager', keywords: ['file manager', 'explorer', 'folders'] }];
+const fuzzy = (t, s) => { let i = 0; for (const c of t) if (c === s[i]) i++; return i === s.length; };
+const query = s => list.filter(i => fuzzy(keys.map(k => i[k]).join(' ').toLowerCase(), s.trim().toLowerCase()));
 $fn
 const r = [search('term'), search('files'), search('foot'), [keys.join('+')], search('>g term')];
 console.log(r.map(x => x.join(',')).join(' '));")
-    [[ $seq == "termius,foot thunar foot name foot,termius" ]] ||
-        fail "the Super menu's search by what an app is: $seq (want: termius,foot thunar foot name foot,termius)"
+    [[ $seq == "termius,foot,micro thunar,desktop-settings foot name micro,foot,termius" ]] ||
+        fail "the Super menu's search by what an app is: $seq (want: termius,foot,micro thunar,desktop-settings foot name micro,foot,termius)"
 else
     skipped "no node: the Super menu's search not run"
 fi

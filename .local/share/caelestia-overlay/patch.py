@@ -324,7 +324,9 @@ def favourites_az():
 def launcher_by_kind():
     # Super menu: an app is found by what it is too (its launcher entry's generic name and keywords), not only by its
     # name: "term" found nothing, foot's name is Foot (a "Terminal"), nor "files" Thunar. Those found by name first, as
-    # before; then the others, as Caelestia's own >g and >k prefixes find them
+    # before; then the others, as Caelestia's own >g and >k prefixes find them, those whose generic name, then keywords,
+    # have a word starting with the text (a plural's "s" aside) first: "term" Micro (a Text Editor, its keyword
+    # "terminal") came before Foot (a Terminal), "files" Desktop Settings ("dotfiles") before Thunar (a File Manager)
     rel = "modules/launcher/services/Apps.qml"
     old = """            if (!search.startsWith(`${prefix}t `))
                 return query(search).map(e => e.entry);
@@ -334,7 +336,11 @@ def launcher_by_kind():
                 const byName = query(search).map(e => e.entry);
                 keys = ["genericName", "keywords"];
                 weights = [0.5, 0.5];
-                const byKind = query(search).map(e => e.entry).filter(e => !byName.includes(e));
+                const found = query(search).filter(e => !byName.includes(e.entry));
+                const q = ` ${search.trim().toLowerCase().replace(/\\s+/g, " ").replace(/s$/, "")}`;
+                const word = t => ` ${String(t ?? "").toLowerCase().replace(/[\\s,;.\\/_-]+/g, " ")}`.includes(q);
+                const rank = e => word(e.genericName) ? 0 : word(e.keywords) ? 1 : 2;
+                const byKind = [0, 1, 2].flatMap(r => found.filter(e => rank(e) === r)).map(e => e.entry);
                 keys = ["name"];
                 weights = [1];
                 return byName.concat(byKind);
