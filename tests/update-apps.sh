@@ -222,8 +222,8 @@ HOME=$t/home XDG_STATE_HOME=$t/state XDG_CACHE_HOME=$t/home/.cache PATH=$t/bin:$
     </dev/null >/dev/null 2>&1 || true
 grep -q -- " -Su --noconfirm$" "$t/paru" || fail "not updated on a low battery that's charging: $(cat "$t/paru" 2>/dev/null)"
 rm -r "$t/ps"
-# A booted snapshot (its root an overlay in RAM) or the live USB: nothing updated (gone at the next boot; with Limine a
-# new kernel on the ESP without its modules), said, a failure for the Updates app; and no update offered by --check
+# A booted snapshot (its root an overlay in RAM) or the live USB: nothing updated (gone at the next boot), said, a
+# failure for the Updates app; and no update offered by --check
 stub findmnt 'echo overlay'; rm -f "$t/paru" "$t/sent"
 out=$(HOME=$t/home XDG_STATE_HOME=$t/state XDG_CACHE_HOME=$t/home/.cache PATH=$t/bin:$PATH "$here/.local/bin/update-apps" \
     </dev/null 2>&1) && fail "an update from a snapshot reported success"

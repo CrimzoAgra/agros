@@ -35,7 +35,6 @@ esac' >"$t/bin/agros-each-user"
 chmod +x "$t/bin/agros-each-user"
 sed -e "s|/var/lib/auto-update|$t/au|g" -e "s|/var/lib/pacman|$t/pac|g" -e "s|/var/log/auto-update.log|$t/log|g" \
     -e "s|for m in /boot |for m in $t/boot |" -e "s|/etc/grub.d/41_snapshots-btrfs|$t/grub-btrfs|g" \
-    -e "s|command -v limine-snapper-sync|command -v $t/limine-sync|; s|^\( *\)limine-snapper-sync >|\1$t/limine-sync >|" \
     -e "s|\${AGROS_EACH_USER:-/usr/lib/agros/bin/agros-each-user}|$t/bin/agros-each-user|" \
     -e "s|/usr/lib/agros/auto-update-aur|$t/auto-update-aur|g; s|/usr/lib/agros/auto-update |$t/auto-update |g" \
     -e "s|/usr/lib/agros/bin/|$here/.local/bin/|g" \
@@ -175,7 +174,7 @@ lists
 "$t/auto-update" --install || fail "the install failed: $(cat "$t/log")"
 grep -q "^snapper.* create " "$t/calls" || fail "no safety snapshot taken: $(cat "$t/calls")"
 grep -q "^pacman -Su" "$t/calls" || fail "nothing installed: $(cat "$t/calls")"
-# (neither grub-btrfs nor Limine's snapper sync here: the boot menu's list left alone, quietly)
+# (no grub-btrfs here: the boot menu's list left alone, quietly)
 grep -q "boot menu" "$t/log" && fail "a missing boot menu tool said: $(cat "$t/log")"
 grep -q "^pacman -Su .*(SNAP_PAC_SKIP=y)" "$t/calls" || fail "snap-pac's snapshots (failing over DBus at shutdown) not skipped: $(cat "$t/calls")"
 [[ $(cat "$t/pac/sync/core.db") == new ]] || fail "the boot's package lists weren't used"
@@ -183,20 +182,15 @@ grep -q "^pacman -Su .*(SNAP_PAC_SKIP=y)" "$t/calls" || fail "snap-pac's snapsho
 [[ ! -e $t/au/installing && ! -e $t/au/prev ]] || fail "an install that went fine left its marks"
 grep -q "^installing foo" "$t/log" || fail "pacman's output not in the log"
 # The snapshot into the boot menu's list right after it (grub-btrfsd, which would, is stopped at shutdown): by
-# grub-btrfs's own script, else Limine's snapper sync
-grep -q "command -v $t/limine-sync" "$t/auto-update" || fail "test setup: Limine's snapper sync not moved to the stand-in"
+# grub-btrfs's own script
 printf '#!/bin/sh\necho "grub-btrfs $*" >>%s/calls\n' "$t" >"$t/grub-btrfs"
-printf '#!/bin/sh\necho "limine-sync $*" >>%s/calls\n' "$t" >"$t/limine-sync"
-chmod +x "$t/grub-btrfs" "$t/limine-sync"
-for menu in grub-btrfs limine-sync; do
-    lists
-    : >"$t/calls"
-    "$t/auto-update" --install >/dev/null || fail "the install with $menu failed"
-    [[ $(grep -v '^boot held' "$t/calls" | cut -d' ' -f1 | paste -sd' ') == "snapper snapper $menu pacman" ]] ||
-        fail "the snapshot not put in the boot menu ($menu) right after it: $(cat "$t/calls")"
-    rm -f "$t/grub-btrfs"
-done
-rm "$t/limine-sync"
+chmod +x "$t/grub-btrfs"
+lists
+: >"$t/calls"
+"$t/auto-update" --install >/dev/null || fail "the install with grub-btrfs failed"
+[[ $(grep -v '^boot held' "$t/calls" | cut -d' ' -f1 | paste -sd' ') == "snapper snapper grub-btrfs pacman" ]] ||
+    fail "the snapshot not put in the boot menu (grub-btrfs) right after it: $(cat "$t/calls")"
+rm "$t/grub-btrfs"
 
 # A failed install: pacman's lists back as they were (not newer than its packages), and written down with pacman's reason
 lists

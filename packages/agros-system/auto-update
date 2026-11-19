@@ -22,8 +22,8 @@ fi
 : >>"$log" && private "$log"
 exec >>"$log" 2>&1
 echo "===== $(date) ${1:-} ====="
-# A snapshot booted from the boot menu (its root an overlay in RAM: agros-boot's snapshot-overlay, grub-btrfs's or
-# Limine's), or the live USB: what this downloaded or installed, its lists and notes too, would be gone at the next boot,
+# A snapshot booted from the boot menu (its root an overlay in RAM: agros-boot's snapshot-overlay or grub-btrfs's), or
+# the live USB: what this downloaded or installed, its lists and notes too, would be gone at the next boot,
 # the time and the download wasted. Nothing done, said
 if [[ $(findmnt -no FSTYPE / 2>/dev/null) == overlay ]]; then
     echo "the system runs from a snapshot (or the live USB), its changes in RAM: nothing updated, none of it would be kept"
@@ -325,14 +325,12 @@ if [[ ${1:-} == --install ]]; then
     [[ -n $pending || ${#targets[@]} -gt 0 ]] || { echo "nothing to install"; result ok; settled; exit 0; }
     # safety snapshot (pick it in the boot menu if an update breaks something). --no-dbus: this runs at shutdown, when
     # snapperd (started on demand over DBus) can't be started any more, and the snapshot was silently skipped
-    # Then into the boot menu's snapshot list here: what does that otherwise (grub-btrfsd, Limine's snapper sync) is
-    # stopped by now, and isn't started at shutdown, so this one never showed there. Neither installed: nothing to do
+    # Then into the boot menu's snapshot list here: what does that otherwise (grub-btrfsd) is stopped by now, and isn't
+    # started at shutdown, so this one never showed there. Not installed: nothing to do
     if snapper --no-dbus -c root list >/dev/null 2>&1 &&
         snapper --no-dbus -c root create -c number -d "auto-update $(date +%F_%H%M)"; then
         if [[ -x /etc/grub.d/41_snapshots-btrfs ]]; then
             /etc/grub.d/41_snapshots-btrfs >/dev/null || echo "the boot menu's snapshot list not refreshed (grub-btrfs)"
-        elif command -v limine-snapper-sync >/dev/null; then
-            limine-snapper-sync >/dev/null || echo "the boot menu's snapshot list not refreshed (limine-snapper-sync)"
         fi
     fi
     # Every package is here (the download finished); the network is still up all the same (ordered after it): pacman

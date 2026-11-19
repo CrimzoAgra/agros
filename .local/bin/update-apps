@@ -134,10 +134,9 @@ summary() {
     ((n > 4)) && names+=", ..."
 }
 
-# A snapshot booted from the boot menu (its root an overlay in RAM: agros-boot's snapshot-overlay, grub-btrfs's or
-# Limine's), or the live USB: an update there is gone at the next boot, and with /boot the ESP (Limine) its new kernel
-# and initramfs were written for real, their modules not: the next normal boot broken. Not updated, said (as the boot's
-# auto-update does), and no update offered
+# A snapshot booted from the boot menu (its root an overlay in RAM: agros-boot's snapshot-overlay or grub-btrfs's), or
+# the live USB: an update there is gone at the next boot. Not updated, said (as the boot's auto-update does), and no
+# update offered
 snapshot() { [[ $(findmnt -no FSTYPE / 2>/dev/null) == overlay ]]; }
 # An admin's (wheel) alone: another account can't sudo (the boot's update installs them all the same)
 admin() { [[ " $(id -nG 2>/dev/null) " == *" wheel "* ]]; }
