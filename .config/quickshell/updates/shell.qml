@@ -389,7 +389,9 @@ ShellRoot {
                                             }
 
                                             Text {
-                                                Layout.maximumWidth: 260
+                                                // (all of it while hovered, the name cut instead: a long version,
+                                                // 2.44+r78+g…, had no way to be seen)
+                                                Layout.maximumWidth: hover.hovered ? row.width - 120 : 260
                                                 text: (row.modelData.old ? row.modelData.old + "  →  " : "") + row.modelData.new
                                                 font.family: "CaskaydiaCove NF"
                                                 font.pixelSize: 11

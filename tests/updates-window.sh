@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # The Updates app's window (updates/shell.qml): "Update all", appearing where "Check again" was (nothing waiting before
-# the check), under the pointer, takes no click for a moment (a double-click on "Check again" started an install)
+# the check), under the pointer, takes no click for a moment (a double-click on "Check again" started an install); a
+# version cut off shows whole while hovered
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
@@ -10,4 +11,8 @@ all=$(sed -n '/^                Button {$/,/^                }$/p' "$qml" | sed 
     grep -q 'onClicked: if (!justShown.running) root.updateAll()' <<<"$all" &&
     grep -q 'interval: 1000' <<<"$all"; } ||
     fail "\"Update all\" takes a click as soon as it appears, under the pointer that clicked \"Check again\""
+# A version too long for its column (cut at the end: 2.44+r50+g1848099f063e-3 → 2.44+r78+g…) shows whole while its row
+# is hovered
+grep -q 'Layout.maximumWidth: hover.hovered ? row.width - 120 : 260' <<<"$(grep -B6 \
+    'text: (row.modelData.old ? row.modelData.old + "  →  " : "") + row.modelData.new' "$qml")" || fail "a long version cut off for good"
 echo "ok updates-window"

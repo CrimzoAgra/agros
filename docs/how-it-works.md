@@ -969,8 +969,8 @@ The `system/` files are the parts outside your home: `agros-system` and `agros-b
 brings each change; nothing to run by hand).
 
 - **Updates app** (`.config/quickshell/updates/`, in the Super menu; opened through `.local/bin/updates`):
-  - Lists what's waiting, by app with its icon and old → new version: system and AUR apps, firmware, Flatpaks,
-    AppImages, Capri, Proton builds, developer tools
+  - Lists what's waiting, by app with its icon and old → new version (one too long for its column shown whole while
+    its row is hovered): system and AUR apps, firmware, Flatpaks, AppImages, Capri, Proton builds, developer tools
   - A list that couldn't be made (`update-apps --list` failed, or hung for 10 minutes) says so, not "Everything is up
     to date"
   - An account that isn't an admin (not in `wheel`: it can't sudo) sees the list with "An administrator has to install
