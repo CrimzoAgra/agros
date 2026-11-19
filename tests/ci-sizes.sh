@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # ci/sizes.py (the weekly size watch's comparison): the first week only records; then a package new this week and big
 # is said with what pulled it in, a small one not; a set grown much is said; a package agros-trim.sh leaves out coming
-# back, a name no repo has, a NoExtract pattern matching no file, the two installed-system lists differing, and each of
-# agros-trim.sh's fallbacks are each said; nothing said when nothing changed. A set pacman couldn't work out, or list
-# the files of, is said, its patterns not checked, last week's baseline kept. Then ci/sizes.sh with a stand-in pacman
-# and agros-iso: the lists as the build and the installer take them, names no repo has set aside, other pacman failures
-# and an empty list said
+# back, a name no repo has, a NoExtract pattern matching no file, the two installed-system lists differing, a package of
+# [agros] a repo read before it has too, and each of agros-trim.sh's fallbacks are each said; nothing said when nothing
+# changed. A set pacman couldn't work out, or list the files of, is said, its patterns not checked, last week's baseline
+# kept. Then ci/sizes.sh with a stand-in pacman and agros-iso: the lists as the build and the installer take them, names
+# no repo has set aside, other pacman failures and an empty list said, and [agros]'s packages another repo has too
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
@@ -81,6 +81,13 @@ grep -q tiny <<<"$r" && fail "a small new package said: $r"
 grep -q 'A new install grew\|A new install: .* is new' <<<"$r" && fail "the unchanged install said to have changed: $r"
 grep -q 'agros-noextract.conf NoExtract pattern' <<<"$r" && fail "a pattern still matching said stale: $r"
 
+# ([agros]'s package another repo has too: said, with both versions)
+week1
+echo 'quickshell-git cachyos 0.4-1 0.3.2.r11-1.2' >"$d/shadowed"
+run "$t/week1"
+grep -qxF "[cachyos] has quickshell-git too (0.4-1; [agros]'s 0.3.2.r11-1.2): pacman takes it from there, the first repo that has it (new installs now, machines once theirs is newer), not AgrOS's build: rename AgrOS's, or drop it for theirs" "$t/out/report" ||
+    fail "a package another repo shadows not said: $(cat "$t/out/report")"
+
 # (one package grown: only it named; a [...] class in a pattern a class, not text)
 week1
 sed -i 's/^Installed Size  : 65.00 MiB$/Installed Size  : 125.00 MiB/' "$d/inst.si"
@@ -117,6 +124,8 @@ mkdir -p "$t/bin"
 printf '%s\n' 'hyprland 65.00MiB aquamarine cairo' 'aquamarine 1.50MiB' 'cairo 1.50MiB' 'occt 30.00MiB' 'foot 2.00MiB' \
     'vim 4.00MiB' 'broken 1.00MiB libfoo' 'steamdeck-thing 1.00MiB' >"$t/repo"
 : >"$t/nofiles"
+# (pacman -Sl: "<repo> <name> <version>", [agros] last; none in another repo)
+printf '%s\n' 'core glibc 2.42-1' 'extra hyprland 0.57-1' 'agros caelestia-shell 2.5-1' 'agros quickshell-git 0.3-1.2' >"$t/sl"
 cat >"$t/bin/pacman" <<'EOF'
 #!/bin/bash
 echo "pacman $*" >>"$T/pacman.log"
@@ -134,6 +143,7 @@ size() { awk -v n="$1" '$1 == n { sub(/MiB$/, " MiB", $2); print $2; f = 1 } END
 deps() { awk -v n="$1" '$1 == n { for (i = 3; i <= NF; i++) print $i }' "$T/repo"; }
 case $op in
     -Sy | -Fy) ;;
+    -Sl) cat "$T/sl" ;;
     -Sp)
         ((${#args[@]})) || { echo "error: no targets specified (use -h for help)" >&2; exit 1; }
         rc=0
@@ -221,8 +231,16 @@ sizes || fail "ci/sizes.sh failed: $(cat "$t/err")"
 grep -qxF '| The ISO: its packages | 3, 68 MiB installed |' "$t/sout/table" || fail "the ISO's row: $(cat "$t/sout/table")"
 grep -qxF "The ISO: not in CachyOS's list any more (renamed or dropped?): micro (agros-trim.sh)" "$t/sout/report" ||
     fail "agros-trim.sh's fallback (stderr, in colour) not said: $(cat "$t/sout/report")"
-grep -q "the live ISO's NoExtract pattern\|installed systems' NoExtract pattern\|no repo has\|couldn't" "$t/sout/report" &&
+grep -q "the live ISO's NoExtract pattern\|installed systems' NoExtract pattern\|no repo has\|couldn't\|has .* too" "$t/sout/report" &&
     fail "said of a good week: $(cat "$t/sout/report")"
+# (one [agros] has that a repo pacman reads first has too, which a new install takes from there: said, with the first
+# such repo's version. One no set takes from there (vim, in no set; the ISO's agros/calamares, asked for by its repo) not)
+printf '%s\n' 'cachyos foot 2-1 [installed: 1-1]' 'extra foot 2-2' 'agros foot 1-1' 'extra vim 9-1' 'agros vim 8-1' >>"$t/sl"
+sizes || fail "ci/sizes.sh failed: $(cat "$t/err")"
+grep -q "^\[cachyos\] has foot too (2-1; \[agros\]'s 1-1): " "$t/sout/report" ||
+    fail "a package of [agros] another repo has too not said: $(cat "$t/sout/report")"
+[[ $(grep -c 'has .* too' "$t/sout/report") == 1 ]] || fail "said more than once, or of one no set takes: $(cat "$t/sout/report")"
+sed -i '/ foot \| vim /d' "$t/sl"
 cp "$t/sout/baseline" "$t/good"
 # (a name no repo has set aside, the rest measured; a dependency no package is said as that, not as an unknown name,
 # last week's baseline kept; a package -Fl can't list said)

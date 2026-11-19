@@ -13,6 +13,8 @@
 #   iso.trim        agros-trim.sh's fallbacks (its lines ending in "(agros-trim.sh)": what it couldn't leave out)
 #   live.pats, inst.pats, agros.pats   NoExtract patterns, one a line: agros-trim.sh's for the live ISO and for
 #                   installed systems, and agros-system's agros-noextract.conf (installed systems' too)
+#   shadowed        "<name> <repo> <version> <[agros]'s version>": a package of [agros] another repo has too, which
+#                   pacman reads first (the first repo that has the name is the one it takes)
 # Writes <out>/report (a line for each thing that needs a look), <out>/table (rows for the issue's table) and
 # <out>/baseline ("<set> <package> <KiB>" lines: next week's to compare with; a set not worked out keeps last week's).
 import os
@@ -183,6 +185,14 @@ for pats, key, where in (("live.pats", "iso", "agros-trim.sh, the live ISO's"),
 if read("inst.pats") != read("agros.pats"):
     report.append("agros-iso's agros-trim.sh (installed systems' NoExtract) and agros's agros-noextract.conf differ: "
                   "keep them the same")
+
+# (the other repo's taken: by a new install at once, by a machine as soon as theirs is newer; AgrOS's build, its fix or
+# the version its CI tested, never installed again)
+for line in read("shadowed"):
+    name, repo, theirs, ours = line.split()
+    report.append(f"[{repo}] has {name} too ({theirs}; [agros]'s {ours}): pacman takes it from there, the first repo "
+                  "that has it (new installs now, machines once theirs is newer), not AgrOS's build: rename AgrOS's, or "
+                  "drop it for theirs")
 
 os.makedirs(out, exist_ok=True)
 for name, lines in (("report", report), ("table", table), ("baseline", baseline)):

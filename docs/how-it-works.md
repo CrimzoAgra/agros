@@ -1430,11 +1430,15 @@ breaks something holds back that one piece, never the rest (`.github/workflows/c
   `agros-trim.sh` leaves out coming back, a listed name no repo has, a NoExtract pattern (the live ISO's, installed
   systems', `agros-noextract.conf`) matching no file any more, the installed systems' two NoExtract lists differing, and
   each fallback `agros-trim.sh` took (a name CachyOS's list no longer has, the LTS kernel kept, NoExtract not added: its
-  lines ending in "(agros-trim.sh)", otherwise only in the ISO build's log, while the ISO stays bigger for good). A set
-  pacman can't work out (a dependency no package provides, a conflict, an empty list) is said with pacman's error, and
-  its last week's sizes kept for the next; a set whose files pacman can't all list has its NoExtract patterns left
-  unchecked, said. Last week's sizes are kept in last week's issue (a comment in its body; left out, said, if it would
-  take the body past GitHub's 65536 characters); the size watch not running at all is said with a link to its log.
+  lines ending in "(agros-trim.sh)", otherwise only in the ISO build's log, while the ISO stays bigger for good), and a
+  package of [agros] that a repo pacman reads before it ([cachyos], Arch's) has too, under the same name, and the ISO or
+  a new install takes from there: pacman takes a name from the first repo that has it, so new installs (and machines,
+  once theirs is newer) get that one, not AgrOS's build (Quickshell without AgrOS's fix, a Caelestia CI never tested;
+  the ISO's `agros/calamares` asks for AgrOS's by its repo). A set pacman can't work out (a dependency no package
+  provides, a conflict, an empty list) is said with pacman's error, and its last week's sizes kept for the next; a set
+  whose files pacman can't all list has its NoExtract patterns left unchecked, said. Last week's sizes are kept in last
+  week's issue (a comment in its body; left out, said, if it would take the body past GitHub's 65536 characters); the
+  size watch not running at all is said with a link to its log.
 - **Once a month** `.github/workflows/keepalive.yml` turns every scheduled workflow here (CI's nightly run, the weekly
   status, itself) on again through GitHub's API (`gh api -X PUT repos/<repo>/actions/workflows/<file>/enable`, with
   `actions: write`), as keepalive-workflow v2 does, so GitHub's 60 days without a commit never turn them off; no dummy

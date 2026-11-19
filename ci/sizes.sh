@@ -40,6 +40,12 @@ EOF
 pac() { pacman --config "$w/pacman.conf" --dbpath "$w/db" "$@"; }
 pac -Sy >/dev/null
 pac -Fy >/dev/null
+# [agros]'s packages another repo has too, by the same name ("<name> <repo> <its version> <[agros]'s>" each; those
+# the sets below take from that repo kept, after them): pacman takes a package from the first repo in pacman.conf that
+# has its name, and [agros] is the last, so machines and new installs get that repo's (Quickshell without AgrOS's fix,
+# a Caelestia AgrOS's CI never tested), said nowhere else
+pac -Sl 2>/dev/null | awk '$1 == "agros" { ours[$2] = $3; next } { theirs[$2] = theirs[$2] ? theirs[$2] : $1 " " $3 }
+    END { for (n in ours) if (n in theirs) print n, theirs[n], ours[n] }' | sort >"$w/shadowed" || true
 
 git clone -q --depth 1 "${AGROS_ISO_GIT:-https://github.com/CrimzoAgra/agros-iso.git}" "$w/iso"
 p=$w/iso/archiso
@@ -96,4 +102,9 @@ for set in iso inst; do
     # patterns then not checked, said)
     pac -Fl "${pkgs[@]}" >"$d/$set.files" 2>"$w/err" || err >"$d/$set.fileserror"
 done
+# (only those a set takes from that other repo: the ISO asks for agros/calamares by its repo, so CachyOS's own
+# cachyos-calamares, the one AgrOS rebuilds, reaches neither)
+cat "$w"/{iso,inst}.pkgs 2>/dev/null |
+    awk 'NR == FNR { if (split($0, a, "/") == 2 && a[1] != "agros") taken[a[2]]; next } $1 in taken' - "$w/shadowed" \
+    >"$d/shadowed" || true
 python "$here/ci/sizes.py" "$d" "$prev" "$out"
