@@ -91,8 +91,8 @@ of yours for the mirror counts, not added again), and its removal takes them out
 |---|---|
 | `agros-desktop` | The meta package: every package the desktop is made of (Hyprland, Caelestia, the apps, PipeWire with its JACK, gvfs for Thunar's drives, USB sticks and Trash, fonts, themes). Hardware apps are optional |
 | `agros-hyprland-settings` | The settings every new account gets (`/etc/skel`): Caelestia's own configs (its dots, pinned), AgrOS's over them (everything in `.config`), launcher entries, LibreWolf settings, the wallpaper, and every version each of these has had (`/usr/share/agros/skel-versions`, from the repo's and Caelestia's git history); fonts and icons system-wide |
-| `agros-scripts` | The programs in `.local/bin` and the data they use, in `/usr/lib/agros`, linked into each home (by links in `/etc/skel` for new accounts; `agros-links` adds new ones at every login, before the desktop starts, and copies in once each config file, launcher entry, LibreWolf setting and wallpaper an update added to `/etc/skel` (or an account not made from it lacks), and updates the settings you never edited; `agros-drives` mounts the games drives and adds their Steam libraries at every login) |
-| `agros-system` | The update at every boot (downloaded and AUR apps built at boot, installed at shutdown with firmware), pacman hooks that rebuild each user's Caelestia overlay and hyprbars and check the Hyprland config, Bluetooth and the screens back on after sleep, the ananicy rule, the keyring, the night light's and time zone's permissions (geoclue, polkit), an admin mounting an internal drive without the password (polkit, for `agros-drives`), folder icons that follow the colour scheme (a sudoers rule for `papirus-folders` alone), mDNS from Avahi alone (resolved's off: the two clashed over the computer's name), UFW's logging off (once), the upstream gate (Hyprland's updates held until AgrOS's CI has checked them), the files never unpacked (NoExtract), AgrOS's name in `/etc/os-release`, a VMware VM's screen following its window (VMware's tools) |
+| `agros-scripts` | The programs in `.local/bin` and the data they use, in `/usr/lib/agros`, linked into each home (by links in `/etc/skel` for new accounts; `agros-links` adds new ones at every login, before the desktop starts, and for each user right after an update of `agros-scripts` or `agros-hyprland-settings` (a pacman hook), and copies in once each config file, launcher entry, LibreWolf setting and wallpaper an update added to `/etc/skel` (or an account not made from it lacks), and updates the settings you never edited; `agros-drives` mounts the games drives and adds their Steam libraries at every login) |
+| `agros-system` | The update at every boot (downloaded and AUR apps built at boot, installed at shutdown with firmware), pacman hooks that bring AgrOS's new settings to each user and rebuild each user's Caelestia overlay and hyprbars and check the Hyprland config, Bluetooth and the screens back on after sleep, the ananicy rule, the keyring, the night light's and time zone's permissions (geoclue, polkit), an admin mounting an internal drive without the password (polkit, for `agros-drives`), folder icons that follow the colour scheme (a sudoers rule for `papirus-folders` alone), mDNS from Avahi alone (resolved's off: the two clashed over the computer's name), UFW's logging off (once), the upstream gate (Hyprland's updates held until AgrOS's CI has checked them), the files never unpacked (NoExtract), AgrOS's name in `/etc/os-release`, a VMware VM's screen following its window (VMware's tools) |
 | `agros-greeter` | The Caelestia-style login screen for greetd, its PAM service following the system's, `login-reset` |
 | `agros-boot` | The hidden boot menu in AgrOS's GRUB theme (`grub-theme/`, its pictures and fonts made by `make.sh`), the faster splash with shutdown titles, no text at boot or shutdown (behind the splash), screens in their best mode from boot |
 | `agros-hyprbars` | The title bar plugin, hyprbars, with AgrOS's patch, built in CI for the Hyprland there (in place of the AUR's plain one): the live USB's, and an installed system's until its account's own build is made |
@@ -136,9 +136,10 @@ same name read as corrupted in pacman's cache), except a compiled one built agai
 it (`built_against`): that rebuild goes out, so new installs and the ISO get one that runs. Quickshell, Caelestia and
 Calamares aren't even built when nothing that would change that has (`reused` in `ci/published.sh`). To change AgrOS,
 change this repo: CI builds and publishes the packages, and pacman updates every machine. Settings in `/etc/skel` reach
-new accounts. An account that has them already gets an update's new version at its next login (`agros-links`) where its
-file is still one AgrOS shipped, byte for byte (one you never edited); one you edited is kept, AgrOS's new version put
-beside it as `<file>.agros-new` (as pacman's `.pacnew`), and a notification says so once. The settings that are yours to
+new accounts. An account that has them already gets an update's new version right after it (`agros-links`, run for
+each user by `agros-system`'s pacman hook, and again at every login) where its file is still one AgrOS shipped, byte for
+byte (one you never edited); one you edited is kept, AgrOS's new version put beside it as `<file>.agros-new` (as
+pacman's `.pacnew`), and a notification says so once. The settings that are yours to
 change, mostly through the apps that write them, are never updated, only copied in when missing: Caelestia's
 `shell.json` (its settings, the weather location), the dock's pins, `mimeapps.list`, `~/.config/autostart` (Settings >
 Startup), VSCodium's, Legion Control's, and `user/hosts/` (one machine's screens). A file `package()` changes at build
@@ -1261,9 +1262,11 @@ brings each change; nothing to run by hand).
   run after CachyOS's own, `zz-agros-os-release.hook`; `ID_LIKE` keeps cachyos and arch; its removal puts the old
   name back), and, in a VMware VM, `/etc/vmware-tools/tools.conf` with `resolutionKMS` on, so VMware's tools pass a
   resized window on and `vm-screen-follow` (at login) has Hyprland take the new size
-- **pacman hooks** (`agros-system`, for every account through `agros-each-user`): the Caelestia overlay re-applied after
-  every `caelestia-shell` update; the title bar plugin built for a new Hyprland (or a library its plugins hang on)
-  straight away; the Hyprland config checked against a new Hyprland (`hypr-config-check`, its errors said by
+- **pacman hooks** (`agros-system`, for every account through `agros-each-user`): first, `agros-links` after every
+  `agros-hyprland-settings` or `agros-scripts` update (new settings and programs in a running session straight away,
+  not at its next login: `00-agros-links.hook`, before the others, which then check the updated config); the
+  Caelestia overlay re-applied after every `caelestia-shell` update; the title bar plugin built for a new Hyprland (or
+  a library its plugins hang on) straight away; the Hyprland config checked against a new Hyprland (`hypr-config-check`, its errors said by
   `agros-check`); the overlay, the title bar plugin and the config check also after an `agros-scripts` update
   (their scripts are in it; the check is `Hyprland --verify-config`, well under a second per user). `agros-boot` adds
   one that hides GRUB's loading messages again after each GRUB update, and one that remakes the faster splash after a

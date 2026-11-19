@@ -1,0 +1,19 @@
+# agros-system: for every AgrOS user (agros-each-user)
+# An update of AgrOS's settings or programs brings them to each home straight away (agros-links: the new programs
+# linked, the configs new in /etc/skel copied in, the ones never edited updated, an edited one kept with AgrOS's new
+# version beside it as .agros-new), not at the next login: a session running through the update had none of it until
+# then (swappy's new config: screenshots still saved to ~/Desktop, its window left open after Save). 00-: before AgrOS's
+# other hooks for each user, so the config hypr-config-check checks is the updated one and a program new in the update
+# is linked for them to run. A few file copies per user; its notification of settings you edited is sent in the
+# background, and one that doesn't get through (no one logged in: the shutdown's install) is said at the next login
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = agros-hyprland-settings
+Target = agros-scripts
+
+[Action]
+Description = Bringing AgrOS's new settings to each user (agros-links)...
+When = PostTransaction
+Exec = /usr/lib/agros/bin/agros-each-user --limit 60 agros-links

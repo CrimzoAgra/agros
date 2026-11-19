@@ -2,7 +2,9 @@
 # Links each AgrOS program and its data folder into your home (~/.local/bin/<name>, ~/.local/share/<folder>), where the
 # desktop's configs and scripts look for them. New accounts get them from /etc/skel; this adds ones that came with a
 # package update since. Never over a file of your own: only missing ones, and links that point into AgrOS. Also
-# AgrOS's settings an update added or changed (below). Run at every login (agros-links.service).
+# AgrOS's settings an update added or changed (below). Run at every login (agros-links.service) and for each user
+# right after an update of AgrOS's settings or programs (agros-system's 00-agros-links.hook: a session running through
+# it gets them then, not at its next login).
 set -uo pipefail
 case ${1:-} in
     '') ;;
@@ -27,10 +29,10 @@ for l in "$HOME"/.local/bin/* "$HOME"/.local/share/*; do
 done
 # Files a package update brought into /etc/skel/.config (fetch's, LibreWolf's overrides inside a folder you already
 # have), its launcher entries (/etc/skel/.local/share/applications), LibreWolf's settings (.local/share/firefox, which
-# agros-welcome applies) and Caelestia's wallpaper in Pictures/Wallpapers: copied in once, at the first login after (an
-# account not made from /etc/skel gets them so too). Never over one of yours, and one you delete stays deleted (the
-# files already offered are kept, by their path from .config, the others by theirs from home). Not the rest of
-# ~/.local/share: lutris-library adds Lutris's covers its own way
+# agros-welcome applies) and Caelestia's wallpaper in Pictures/Wallpapers: copied in once, right after the update or at
+# the first login after (an account not made from /etc/skel gets them so too). Never over one of yours, and one you
+# delete stays deleted (the files already offered are kept, by their path from .config, the others by theirs from
+# home). Not the rest of ~/.local/share: lutris-library adds Lutris's covers its own way
 root=${AGROS_SKEL:-/etc/skel} state=${XDG_STATE_HOME:-$HOME/.local/state}/agros
 seen=$state/configs-seen
 mkdir -p "$state" && : >>"$seen"
@@ -42,7 +44,7 @@ for part in .config .local/share/applications .local/share/firefox Pictures/Wall
         to=$HOME/$part/${f#"$skel"/} n=${f#"$root"/}
         [[ $part == .config ]] && n=${f#"$skel"/}
         [[ ${had[$n]-} ]] && continue
-        # (marked seen only once it's there: a copy that failed, a full disk, is tried again at the next login)
+        # (marked seen only once it's there: a copy that failed, a full disk, is tried again at the next run)
         { [[ -e $to || -L $to ]] || { mkdir -p "$(dirname "$to")" && cp -P "$f" "$to"; }; } && echo "$n" >>"$seen"
     done < <(find "$skel" \( -type f -o -type l \) -print0 2>/dev/null)
 done

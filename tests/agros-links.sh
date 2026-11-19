@@ -144,4 +144,20 @@ echo '{"a": 1}' >"$code"; run
 [[ -d $t/home/.claude/projects ]] || fail "Claude Code's projects folder not made"
 rm -r "$t/home/.claude"; run
 [[ ! -e $t/home/.claude ]] || fail "Claude Code's folder, deleted, made again"
+# Run for each user right after an update of AgrOS's settings or programs, not only at the next login (swappy's new
+# config waited for one): a pacman hook agros-system installs, on both packages' install and upgrade, after the
+# transaction, through agros-each-user, and before AgrOS's other hooks for each user (pacman runs them by file name:
+# the config hypr-config-check checks is the updated one)
+sys=$here/packages/agros-system
+hooks=$(cd "$sys" && eval "printf '%s\n' $(sed -n 's|.*install -Dm644 -t "$pkgdir/usr/share/libalpm/hooks" ||p' PKGBUILD)" | LC_ALL=C sort)
+links=$(cd "$sys" && grep -lx 'Exec = /usr/lib/agros/bin/agros-each-user\( --limit [0-9]*\)\? agros-links' $hooks) || true
+[[ -n $links ]] || fail "no pacman hook agros-system installs runs agros-links for each user: $hooks"
+for l in 'Operation = Install' 'Operation = Upgrade' 'Target = agros-hyprland-settings' 'Target = agros-scripts' \
+    'When = PostTransaction'; do
+    grep -qxF "$l" "$sys/$links" || fail "$links: no \"$l\""
+done
+for h in $hooks; do
+    [[ $h == "$links" ]] && break
+    ! grep -q 'agros-each-user' "$sys/$h" || fail "$h, run for each user, comes before $links"
+done
 echo "ok agros-links"

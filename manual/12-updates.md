@@ -46,9 +46,10 @@ You don't have to think about updates.
   updates wait until they do". Nothing's wrong with your computer: everything else still updates.
 - **Every 6 hours** it checks again. When something's waiting, a notification offers **Update now** (to an
   administrator: other accounts get their updates at boot and shutdown all the same).
-- **At your next login** after an update, the desktop's settings files you never changed get AgrOS's new version. One
-  you changed is left as you have it: AgrOS's new version goes beside it, named `<file>.agros-new`, and a notification
-  lists them, so you can compare and copy over what you want. Your own choices (Caelestia's settings and weather
+- **Right after an update** (and at each login), the desktop's settings files you never changed get AgrOS's new
+  version, and new ones are added, with no need to log in again. One you changed is left as you have it: AgrOS's new
+  version goes beside it, named `<file>.agros-new`, and a notification lists them, so you can compare and copy over
+  what you want. Your own choices (Caelestia's settings and weather
   location, the dock's pins, default apps, startup apps) are never touched.
 
 ## The Updates app
