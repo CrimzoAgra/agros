@@ -244,7 +244,12 @@ jobs:
           sed -i '/^\[core\]/i [cachyos]\nServer = '"$m"'\n' /etc/pacman.conf
           pacman -Sy --noconfirm cachyos-keyring cachyos-mirrorlist
           sed -i "s|^Server = $m\$|Include = /etc/pacman.d/cachyos-mirrorlist|" /etc/pacman.conf
-          pacman -Sy --noconfirm
+          # (tried again a minute later, five times: a mirror caught mid-sync serves a database and a signature that don't
+          # match, "signature ... is invalid", and pacman doesn't go on to the next mirror for it)
+          for i in 1 2 3 4 5; do
+            pacman -Syy --noconfirm && break
+            [ "$i" != 5 ] || exit 1; sleep 60
+          done
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0  # (the packages' versions count the commits)
@@ -519,7 +524,12 @@ jobs:
           sed -i '/^\[core\]/i [cachyos]\nServer = '"$m"'\n' /etc/pacman.conf
           pacman -Sy --noconfirm cachyos-keyring cachyos-mirrorlist
           sed -i "s|^Server = $m\$|Include = /etc/pacman.d/cachyos-mirrorlist|" /etc/pacman.conf
-          pacman -Sy --noconfirm
+          # (tried again a minute later, five times: a mirror caught mid-sync serves a database and a signature that don't
+          # match, "signature ... is invalid", and pacman doesn't go on to the next mirror for it)
+          for i in 1 2 3 4 5; do
+            pacman -Syy --noconfirm && break
+            [ "$i" != 5 ] || exit 1; sleep 60
+          done
       - name: Install check (agros-desktop resolves in one transaction, none of what AgrOS leaves out; with CachyOS's CPU-optimised repos too)
         env:
           OWNER: ${{ github.repository_owner }}

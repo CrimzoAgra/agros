@@ -2,7 +2,8 @@
 # Every workflow in .github/workflows: a permissions block of its own (the token read-only unless a job says otherwise),
 # never pull_request_target (a fork's code run with the secrets and a token that writes), no ${{ }} in a run: script
 # (a branch name or an issue's title pasted into bash: passed through env: instead, as each one does), each job a
-# time limit (a hang stopped, not run on to GitHub's 6 hours), and each curl there tried again (--retry)
+# time limit (a hang stopped, not run on to GitHub's 6 hours), and each curl there tried again (--retry), as is
+# each sync through CachyOS's mirror list
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
@@ -28,6 +29,12 @@ for path in sys.argv[1:]:
             for line in s.get("run", "").splitlines():
                 if not line.lstrip().startswith("#") and line.count("curl ") > line.count("--retry "):
                     bad.append(f"{name}: job {jn}, step {s.get('name')}: a curl without --retry: {line.strip()}")
+            # (and each sync through CachyOS's mirror list: a mirror mid-sync fails it, see ci.yml)
+            run = s.get("run", "").splitlines()
+            for i, line in enumerate(run):
+                retried = any("pacman -Syy" in l and "&& break" in l for l in run[i:i + 6])
+                if "cachyos-mirrorlist|" in line and not retried:
+                    bad.append(f"{name}: job {jn}, step {s.get('name')}: CachyOS's mirror list synced, not tried again")
 for b in bad:
     print(b)
 sys.exit(1 if bad else 0)
