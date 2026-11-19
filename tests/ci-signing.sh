@@ -5,7 +5,8 @@
 # step alone: a job of its own (a container of its own: nothing the release job's repo-add could have left running or
 # changed is there), not privileged, that runs nothing before the key but the checkout and the release's files, never
 # repo-add or anything that reads a package (repo-add runs a .PKGINFO line of the wrong kind as code), with gpg's agent
-# stopped and the keyring removed when the step ends. AgrOS's own packages built in a job of their own (agros), no AUR
+# stopped and the keyring removed when the step ends; the release it signs checked first, file for file, against the
+# release job's sums (its output, made after the last step that changes the release: ci/sums.sh). AgrOS's own packages built in a job of their own (agros), no AUR
 # build script there, and the release checks the repo's agros-* packages against that job's sums, and every package's
 # .PKGINFO, (ci/own-check.sh) before anything there reads them; its database made by ci/repo-db.sh, after the hold
 set -euo pipefail
@@ -62,6 +63,11 @@ else:
     run = steps[k].get("run", "")
     if "ci/sign-repo.sh" not in run:
         bad.append("the key's step doesn't run ci/sign-repo.sh")
+    # (the release file for file as the release job made it, by that job's output, before the key comes in: ci/sums.sh)
+    sums = "ci/sums.sh out " in run and run.index("ci/sums.sh") < run.index("--import")
+    if not sums or steps[k].get("env", {}).get("RELEASE_SUMS") != "${{ needs.release.outputs.sums }}" or \
+            jobs["release"].get("outputs", {}).get("sums") != "${{ steps.sums.outputs.sums }}":
+        bad.append("the sign job doesn't check the release against the release job's sums before the key (ci/sums.sh)")
     if not ("trap " in run and "gpgconf --kill all" in run and "rm -rf" in run and run.index("trap ") < run.index("--import")):
         bad.append("the key's step doesn't stop gpg's agent and remove the keyring when it ends (a trap before the import)")
     for i, s in enumerate(steps):
@@ -97,6 +103,11 @@ elif any(i < own[0] for i in hold + db + idx("repo-add") + idx("bsdtar")):
     bad.append("the release reads the packages before ci/own-check.sh checked them")
 if len(db) != 1 or any(i > db[0] for i in hold):
     bad.append("the release's database not made by ci/repo-db.sh once, after the hold")
+# (its sums made last, of out as it's uploaded)
+ss = [i for i, s in enumerate(rs) if s.get("id") == "sums"]
+ups = [i for i, s in enumerate(rs) if s.get("with", {}).get("name") == "unsigned"]
+if len(ss) != 1 or "ci/sums.sh out" not in rs[ss[0]].get("run", "") or not ups or         any(i > ss[0] and i < ups[0] and "run" in rs[i] for i in range(len(rs))) or any(i > ss[0] for i in db + hold):
+    bad.append("the release's sums not made of out as it's uploaded, after the last step that changes it")
 up = [s.get("with", {}) for s in rs if "upload-artifact" in s.get("uses", "")]
 if not any(u.get("name") == "unsigned" and u.get("path") == "out" for u in up):
     bad.append("the release doesn't hand the sign job its repo (the unsigned artifact)")

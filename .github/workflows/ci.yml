@@ -330,6 +330,7 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     outputs:
       newer: ${{ steps.newer.outputs.newer }}
+      sums: ${{ steps.sums.outputs.sums }}
     runs-on: ubuntu-26.04
     timeout-minutes: 45
     container:
@@ -435,6 +436,13 @@ jobs:
         run: |
           git config --global --add safe.directory '*'
           ci/newer.sh "https://$OWNER.github.io/${GITHUB_REPOSITORY#*/}/x86_64"
+      # Every file's sum, as a job output: the sign job signs the artifact below only as this job made it (ci/sums.sh;
+      # the test and repo jobs, root with this run's builds and AUR build scripts, could swap an artifact, not this)
+      - name: Its sums
+        id: sums
+        shell: bash
+        run: |
+          { echo 'sums<<EOF'; ci/sums.sh out; echo EOF; } >>"$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v7
         with:
           name: unsigned
@@ -463,13 +471,16 @@ jobs:
           path: out
       # Signed: each new package (one kept as published keeps its signature), the database, the approved list and the
       # day Arch last passed (update-gate and agros-iso check the list's .sig against AgrOS's key). The secret (AgrOS's
-      # primary key or a signing subkey of it, either) in this step alone
+      # primary key or a signing subkey of it, either) in this step alone. The release first checked file for file
+      # against the release job's sums (ci/sums.sh): an artifact swapped is never signed
       - name: Signed
         env:
           AGROS_GPG_KEY: ${{ secrets.AGROS_GPG_KEY }}
+          RELEASE_SUMS: ${{ needs.release.outputs.sums }}
         shell: bash
         run: |
           [ -n "$AGROS_GPG_KEY" ] || { echo "::error::Add the AGROS_GPG_KEY secret (AgrOS's key, or a signing subkey of it, without a passphrase)"; exit 1; }
+          ci/sums.sh out "$RELEASE_SUMS"
           # (the key gone when this step ends, signed or not, its agent stopped: nothing after it can read it)
           trap 'gpgconf --kill all; rm -rf "$(gpgconf --list-dirs homedir)"' EXIT
           echo "$AGROS_GPG_KEY" | gpg --batch --import

@@ -1403,7 +1403,9 @@ breaks something holds back that one piece, never the rest (`.github/workflows/c
   last passed) and hands it on as an artifact; the `sign` job, a job of its own and so a fresh container (anything a
   package had started or changed in the release's container isn't there: steps of one job share it, and no step can be
   sure to clear it), signs it in one step, the only one with `AGROS_GPG_KEY` (`ci/sign-repo.sh`), with nothing before
-  it but the checkout and that artifact, and gpg alone reading the files: each new package (one kept as published
+  it but the checkout and that artifact, which it first checks file for file against the release job's sums (a job
+  output, which no other job can change, where `test` and `repo`, root with what was built and AUR build scripts,
+  could swap an artifact of the run: `ci/sums.sh`), and gpg alone reading the files: each new package (one kept as published
   keeps its signature; one with any other `.sig` stops it), the database as the release made it (`agros.db`,
   `agros.files` and their `.tar.gz` names), `agros-approved`, `agros-arch-ok` and `agros-aur-maintainers` (below);
   each signature checked against `ci/agros.asc`, then gpg's agent stopped and the key removed before anything else
