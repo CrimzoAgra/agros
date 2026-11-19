@@ -1409,7 +1409,9 @@ breaks something holds back that one piece, never the rest (`.github/workflows/c
   `tests/ci-signing.sh` checks the workflow keeps it so. The install check also resolves `agros-desktop` with
   CachyOS's v3 and znver4 repos above `[cachyos]`, as the installer sets them on such CPUs (`ci/cpu-repos.sh`, no such
   CPU needed): not resolving there (their lag behind Arch's), or a library at another soname than below them, is a
-  warning, and the release goes out.
+  warning, and the release goes out. Each is also kept in a record across runs, `agros-cpu-repos` beside the repo
+  (written after the signing, unsigned: only the weekly status reads it), with the day it was first seen: their lag is
+  routine and gone in a day or two, so the status says one only once it has lasted 3 days.
   Changing the signing key: add the new one to `ci/agros.asc` (and agros-iso's `agros.asc`) and raise
   `agros-keyring`'s `pkgver`, let machines update, then replace the secret; signing with a key `ci/agros.asc` lacks
   fails the release, before anything goes out.
@@ -1456,11 +1458,12 @@ breaks something holds back that one piece, never the rest (`.github/workflows/c
   seen for 3 days (GitHub turns a public repo's schedules off after 60 days without a commit), whether Arch's newest
   Hyprland is approved yet, and CachyOS's installer recipe or code moved on past AgrOS's pins (`calamares_pkgbuild`,
   `calamares_src`), an AUR package [agros] carries that the AUR no longer has, CI not having read the AUR for 3 days (or
-  its record, `agros-aur-maintainers`, unreadable); a lookup that fails is said too, never read as nothing to say. What
-  CI handles by itself is said apart, "for your information", nothing asked: each AUR package it holds while its new
-  maintainers wait their 14 days (above), and until when. Its table also
-  says how far Caelestia's dots have gone since the commit `agros-hyprland-settings` pins (a new one is taken on
-  purpose; nothing else says when there is one). The owner is mentioned, so GitHub notifies them. Its size watch
+  its record, `agros-aur-maintainers`, unreadable), and `agros-desktop` not resolving with CachyOS's v3 or znver4 repos
+  (or a library there at another soname) for 3 days or more (above; a shorter one only in its table); a lookup that
+  fails is said too, never read as nothing to say. What CI handles by itself is said apart, "for your information",
+  nothing asked: each AUR package it holds while its new maintainers wait their 14 days (above), and until when. Its
+  table also says how far Caelestia's dots have gone since the commit `agros-hyprland-settings` pins (a new one is
+  taken on purpose; nothing else says when there's one). The owner is mentioned, so GitHub notifies them. Its size watch
   (`ci/sizes.sh` in an Arch container, `ci/sizes.py`) works out from the package databases what goes on the live ISO
   (agros-iso's list as `agros-trim.sh` leaves it) and on a new install (`netinstall.yaml`'s selected groups), nothing
   built, and says: a package new this week of 20 MiB or more and what pulled it in, either set grown 50 MiB or more, a

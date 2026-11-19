@@ -110,6 +110,13 @@ cat >"$t/bin/curl" <<'CURL'
 #!/bin/bash
 case "$*" in
   *agros-approved*) [[ $STATE == *pages-down* ]] && exit 22; echo "hyprland 0.57.2" ;;
+  # (CI's record of CachyOS's CPU repos (ci/cpu-repos.sh): nothing found; with cpu-new agros-desktop not resolving on v3
+  # since yesterday, cpu-old since 4 days before the last check, cpu-down the record unreadable)
+  *agros-cpu-repos*)
+    [[ $STATE == *cpu-down* ]] && exit 22
+    echo "# checked 2026-11-20"
+    [[ $STATE != *cpu-new* ]] || printf '2026-11-19\tv3 unresolved\tagros-desktop does not resolve on v3 (x)\n'
+    [[ $STATE != *cpu-old* ]] || printf '2026-11-16\tznver4 skew libplacebo\tznver4 machines: libplacebo (y)\n' ;;
   *agros-aur-maintainers*)
     [[ $STATE == *aur-down* ]] && exit 22
     [[ $STATE == *aur-stale* ]] && echo "# checked 2026-11-16" || echo "# checked 2026-11-20"
@@ -271,6 +278,22 @@ grep -qxF -- "- CI hasn't read the AUR since 2026-11-16: whether [agros]'s AUR p
 go "aur-down"
 grep -qxF -- "- CI's record of [agros]'s AUR packages' maintainers couldn't be read (https://crimzoagra.github.io/agros/x86_64/agros-aur-maintainers): whether any changed not checked" "$t/body" ||
     fail "the record unreadable not said: $(cat "$t/body")"
+# (CachyOS's CPU repos: something there for a day is their routine lag, only in the table; the same thing 3 days or
+# more, from first seen to the last check, needs a look; the record unreadable: the table says so, nothing asked)
+go ""
+grep -qxF "| CachyOS's CPU repos (v3, znver4) | agros-desktop resolves on each, as below them (checked 2026-11-20) |" "$t/body" ||
+    fail "the CPU repos' row: $(cat "$t/body")"
+go "cpu-new"
+grep -q '^@someone \*\*Nothing broke this week' "$t/body" || fail "a day of CachyOS's lag asked about: $(cat "$t/body")"
+grep -qxF "| CachyOS's CPU repos (v3, znver4) | 1 thing(s) found (checked 2026-11-20; said above once one has lasted 3 days) |" "$t/body" ||
+    fail "the CPU repos' row with one found: $(cat "$t/body")"
+go "cpu-old cpu-new"
+grep -qxF -- "- znver4 machines: libplacebo (y): so since 2026-11-16, still on 2026-11-20 (CI's install check, ci/cpu-repos.sh): CachyOS's repos usually catch up within a day or two; this long, tell CachyOS (an issue on CachyOS-PKGBUILDS)" "$t/body" ||
+    fail "one that lasted 3 days not said: $(cat "$t/body")"
+grep -q 'does not resolve on v3' "$t/body" && fail "one a day old said with it: $(cat "$t/body")"
+go "cpu-down"
+grep -q '^@someone \*\*Nothing broke this week' "$t/body" &&
+    grep -qxF "| CachyOS's CPU repos (v3, znver4) | CI's record couldn't be read |" "$t/body" || fail "the CPU repos' record unreadable: $(cat "$t/body")"
 # (no run finished: none, not jq's null)
 go noruns
 grep -qxF -- "- AgrOS's CI: its last run none (-); last good none" "$t/body" || fail "no finished run: $(cat "$t/body")"

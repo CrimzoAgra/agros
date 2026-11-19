@@ -198,6 +198,25 @@ else
     problems+=("CI's record of [agros]'s AUR packages' maintainers couldn't be read ($site/agros-aur-maintainers): whether any changed not checked")
     aur_cell="CI's record couldn't be read"
 fi
+# CachyOS's CPU-optimised repos (v3, znver4: the installer puts them above [cachyos] on such CPUs): agros-desktop not
+# resolving there, or a library at another soname, as CI's sign job last found it (ci/cpu-repos.sh's record,
+# agros-cpu-repos). Their lag behind Arch's is routine and gone in a day or two, nothing for anyone to do: said only
+# once the same one has lasted 3 days (first seen to last checked). The record not there or unreadable: not checked,
+# in the table (CI's own failing is said above)
+if c=$(curl -fsS --retry 3 "$site/agros-cpu-repos" 2>/dev/null); then
+    checked=$(sed -n 's/^# checked //p' <<<"$c")
+    n=0
+    while IFS=$'\t' read -r since _ said; do
+        [[ $since =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ && $checked =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || continue
+        n=$((n + 1))
+        (($(date -u -d "$checked" +%s) - $(date -u -d "$since" +%s) >= 3 * 86400)) &&
+            problems+=("$said: so since $since, still on $checked (CI's install check, ci/cpu-repos.sh): CachyOS's repos usually catch up within a day or two; this long, tell CachyOS (an issue on CachyOS-PKGBUILDS)")
+    done <<<"$c"
+    cpu_cell="agros-desktop resolves on each, as below them (checked ${checked:-?})"
+    ((n == 0)) || cpu_cell="$n thing(s) found (checked ${checked:-?}; said above once one has lasted 3 days)"
+else
+    cpu_cell="CI's record couldn't be read"
+fi
 # The size watch: each thing it found needs a look; it not having run, too, with its log (or the next week's finds
 # nothing to compare with: last week's baseline kept then). (Its table says it ran, not its baseline: a first week
 # whose sets pacman couldn't work out has none, and what pacman said goes in the issue)
@@ -240,6 +259,7 @@ write_body() {
         echo "| Hyprland | approved ${approved:-?}, Arch's ${arch:-?} |"
         echo "| Caelestia's dots | $dots_cell |"
         echo "| [agros]'s AUR packages | $aur_cell |"
+        echo "| CachyOS's CPU repos (v3, znver4) | $cpu_cell |"
         held_cell=nothing sync_cell="up to date"
         [[ -z $held ]] || held_cell="see above"
         [[ -z $sync ]] || sync_cell="waiting for a merge"

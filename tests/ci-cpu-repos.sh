@@ -3,7 +3,8 @@
 # AgrOS machine of that CPU level up: each level's pacman.conf (the repos in order, their architecture, their server),
 # its databases apart from the system's; not resolving, or the repos not read, fails; a library one of them provides
 # at another soname than the first repo below with that package (cachyos-extra-v3's libplacebo, November 2026) said as
-# a warning, not a failure. pacman is a stand-in (its databases made here, its plan $T/plan, "LEVEL" the level's)
+# a warning, not a failure; each in a record across runs, since the day first seen (AGROS_CPU_STATE). pacman is a
+# stand-in (its databases made here, its plan $T/plan, "LEVEL" the level's)
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
@@ -95,4 +96,19 @@ out=$(go znver4) && fail "the repos not read passed"
 grep -q "^!! CachyOS's znver4 repos couldn't be read" <<<"$out" || fail "the repos not read not said: $out"
 rm "$t/nosync"
 out=$(go v4) && fail "a level that doesn't exist passed"
+# The record kept across runs (AGROS_CPU_STATE, for the weekly status): each one found with the day it was first seen,
+# kept from the record before (AGROS_CPU_BEFORE) when it was there too, today's when new; one gone, gone; the day checked
+skew=$'v3 machines: libplacebo: libplacebo.so=351-64 here, the repo below: libplacebo.so=387-64 (what links the other soname breaks)'
+printf '# checked 2026-11-17\n2026-11-15\tv3 skew libplacebo\tsaid before\n2026-11-10\tv3 unresolved\tsaid before\n' >"$t/before"
+rec() { AGROS_CPU_BEFORE=${BEFORE-$t/before} AGROS_CPU_STATE=$t/state AGROS_NOW=2026-11-18 go "$@" >/dev/null || true; cat "$t/state"; }
+[[ $(rec v3 znver4) == "# checked 2026-11-18"$'\n'"2026-11-15"$'\t'"v3 skew libplacebo"$'\t'"$skew" ]] ||
+    fail "the record not kept from the one before: $(cat -A "$t/state")"
+[[ $(BEFORE=/nonexistent rec v3) == "# checked 2026-11-18"$'\n'"2026-11-18"$'\t'"v3 skew libplacebo"$'\t'"$skew" ]] ||
+    fail "one new not since today: $(cat -A "$t/state")"
+touch "$t/noresolve"
+[[ $(rec v3) == "# checked 2026-11-18"$'\n'"2026-11-10"$'\t'"v3 unresolved"$'\t'"agros-desktop doesn't resolve with CachyOS's v3 repos above [cachyos] (their lag behind Arch's: error: target not found: agros-foo)" ]] ||
+    fail "not resolving not in the record, since the day first seen: $(cat -A "$t/state")"
+rm "$t/noresolve"
+grep -q 'AGROS_CPU_BEFORE=/tmp/cpu-before AGROS_CPU_STATE=out/x86_64/agros-cpu-repos ci/cpu-repos.sh v3 znver4' "$here/.github/workflows/ci.yml" ||
+    fail "CI's install check doesn't publish the record beside the repo, from the one before"
 echo "ok ci-cpu-repos"

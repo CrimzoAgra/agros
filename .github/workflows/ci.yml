@@ -481,6 +481,8 @@ jobs:
           sed -i "s|^Server = $m\$|Include = /etc/pacman.d/cachyos-mirrorlist|" /etc/pacman.conf
           pacman -Sy --noconfirm
       - name: Install check (agros-desktop resolves in one transaction, none of what AgrOS leaves out; with CachyOS's CPU-optimised repos too)
+        env:
+          OWNER: ${{ github.repository_owner }}
         run: |
           # (with signatures required, as users have it)
           pacman-key --add ci/agros.asc
@@ -494,8 +496,13 @@ jobs:
           # (ci/cpu-repos.sh: resolved, no such CPU needed; a library there at another soname than below it, warned).
           # Not resolving there is said, not a stop: it's CachyOS's repos lagging Arch's (lib32-libffi wanting a libffi
           # cachyos-v3 didn't have yet, 2026-11-17), which machines meet whether this publishes or not, and stopping
-          # held every AgrOS fix back until CachyOS caught up
-          ci/cpu-repos.sh v3 znver4 ||
+          # held every AgrOS fix back until CachyOS caught up. What it finds kept in a record across runs
+          # (agros-cpu-repos, beside the repo: written after the signing, unsigned, read only by the weekly status, which
+          # says one once it has lasted 3 days), the one this repo's site has read back for the day each was first seen
+          # (not readable: started afresh)
+          site=https://$OWNER.github.io/${GITHUB_REPOSITORY#*/}/x86_64
+          curl -fsS --retry 3 -o /tmp/cpu-before "$site/agros-cpu-repos?t=$(date +%s)" 2>/dev/null || : >/tmp/cpu-before
+          AGROS_CPU_BEFORE=/tmp/cpu-before AGROS_CPU_STATE=out/x86_64/agros-cpu-repos ci/cpu-repos.sh v3 znver4 ||
             echo "::warning::agros-desktop doesn't resolve with CachyOS's CPU repos above (their lag behind Arch's; this step's log says what): published anyway"
       - uses: actions/upload-pages-artifact@v5
         with:

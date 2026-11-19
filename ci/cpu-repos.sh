@@ -9,6 +9,11 @@
 # A library those repos build at another soname than the repo below them still resolves, and breaks at run time
 # (cachyos-extra-v3's old libplacebo once Arch's ffmpeg needed libplacebo.so=387, November 2026: mpv broke on v3
 # machines): said as a warning (and in the run's summary), not a failure, as it isn't AgrOS's to fix
+# Each of these, a level not resolving, its repos not read, a library at another soname, also in a record kept across
+# runs, AGROS_CPU_STATE (CI: agros-cpu-repos, published beside the repo, for the weekly status): "# checked <day>",
+# then "<since><tab><what><tab><said>" each, <since> the day it was first seen, kept from AGROS_CPU_BEFORE (the record as
+# published, one with the same <what>: "v3 unresolved", "v3 skew libplacebo"...). CachyOS's repos lag Arch's for a
+# day or two, routinely, so the status says one only once it has lasted 3 days; the record lets it tell
 set -uo pipefail
 conf=${PACMAN_CONF:-/etc/pacman.conf} sync=${PACMAN_SYNC:-/var/lib/pacman/sync}
 mirror=${CACHYOS_MIRROR:-https://mirror.cachyos.org/repo}
@@ -16,6 +21,12 @@ mirror=${CACHYOS_MIRROR:-https://mirror.cachyos.org/repo}
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 failed=0
+found=()
+# seen <what> <said>: one for the record
+seen() {
+    local s=${2//$'\t'/ }
+    found+=("$1"$'\t'"${s//$'\n'/ }")
+}
 # sonames <db>: "<package> <library>.so=<version>" for each library each package in <db> provides
 sonames() {
     bsdtar -xOf "$1" '*/desc' 2>/dev/null |
@@ -40,15 +51,22 @@ for level in "$@"; do
         }
         { print }
         $0 == "[options]" { print "Architecture = " arches }' "$conf" >"$c"
-    grep -qx "\[${repos[0]}\]" "$c" || { echo "!! $conf has no [cachyos] to put the $level repos above"; failed=1; continue; }
+    grep -qx "\[${repos[0]}\]" "$c" || {
+        echo "!! $conf has no [cachyos] to put the $level repos above"
+        seen "$level noconf" "$conf has no [cachyos] to put CachyOS's $level repos above"
+        failed=1
+        continue
+    }
     if ! out=$(pacman --config "$c" --dbpath "$db" -Sy 2>&1); then
         echo "!! CachyOS's $level repos couldn't be read: $(tail -n3 <<<"$out")"
+        seen "$level unreadable" "CachyOS's $level repos couldn't be read: $(tail -n1 <<<"$out")"
         failed=1
         continue
     fi
     if ! plan=$(pacman --config "$c" --dbpath "$db" -Sp --print-format '%r %n' agros-desktop 2>&1); then
         echo "!! agros-desktop doesn't resolve on a $level machine (${repos[*]} above [cachyos]):"
         echo "$plan"
+        seen "$level unresolved" "agros-desktop doesn't resolve with CachyOS's $level repos above [cachyos] (their lag behind Arch's: $(grep -E 'cannot resolve|error:' <<<"$plan" | head -n2 | paste -sd';' | sed 's/;/; /g'))"
         failed=1
         continue
     fi
@@ -82,9 +100,22 @@ for level in "$@"; do
     while IFS= read -r s; do
         [[ -n $s ]] || continue
         echo "::warning::$level machines: $s (what links the other soname breaks)"
+        seen "$level skew ${s%%:*}" "$level machines: $s (what links the other soname breaks)"
         if [[ -n ${GITHUB_STEP_SUMMARY:-} ]]; then
             echo "- CachyOS's $level repos, a library at another soname: $s" >>"$GITHUB_STEP_SUMMARY"
         fi
     done <<<"$skew"
 done
+# The record: each one found, since the day the record before first had it (AGROS_NOW: another day than today)
+if [[ -n ${AGROS_CPU_STATE:-} ]]; then
+    today=$(date -u -d "${AGROS_NOW:-now}" +%F)
+    {
+        echo "# checked $today"
+        for f in "${found[@]}"; do
+            since=$(awk -F'\t' -v w="${f%%$'\t'*}" '$2 == w { print $1; exit }' "${AGROS_CPU_BEFORE:-/dev/null}" 2>/dev/null)
+            [[ $since =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || since=$today
+            printf '%s\t%s\n' "$since" "$f"
+        done
+    } >"$AGROS_CPU_STATE"
+fi
 exit "$failed"
