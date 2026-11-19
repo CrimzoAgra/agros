@@ -95,7 +95,7 @@ of yours for the mirror counts, not added again), and its removal takes them out
 | `agros-system` | The update at every boot (downloaded and AUR apps built at boot, installed at shutdown with firmware), pacman hooks that bring AgrOS's new settings to each user and rebuild each user's Caelestia overlay and hyprbars and check the Hyprland config, Bluetooth and the screens back on after sleep, the ananicy rule, the keyring, the night light's and time zone's permissions (geoclue, polkit), an admin mounting an internal drive without the password (polkit, for `agros-drives`), folder icons that follow the colour scheme (a sudoers rule for `papirus-folders` alone), mDNS from Avahi alone (resolved's off: the two clashed over the computer's name), UFW's logging off (once), the upstream gate (Hyprland's updates held until AgrOS's CI has checked them), the files never unpacked (NoExtract), AgrOS's name in `/etc/os-release`, a VMware VM's screen following its window (VMware's tools) |
 | `agros-greeter` | The Caelestia-style login screen for greetd, its PAM service following the system's, `login-reset` |
 | `agros-boot` | The hidden boot menu in AgrOS's GRUB theme (`grub-theme/`, its pictures and fonts made by `make.sh`), the faster splash with shutdown titles, no text at boot or shutdown (behind the splash), screens in their best mode from boot |
-| `agros-hyprbars` | The title bar plugin, hyprbars, with AgrOS's patch, built in CI for the Hyprland there (in place of the AUR's plain one): the live USB's, and an installed system's until its account's own build is made |
+| `agros-hyprbars` | The title bar plugin, hyprbars, with AgrOS's patch, built in CI for the Hyprland there (one CI's tests hold back: its last build, for the approved one, kept), in place of the AUR's plain one: the live USB's, and an installed system's until its account's own build is made |
 | `agros-nvidia`, `agros-camera-switch` | NVIDIA driver loaded early; the Legion's camera switch |
 | `agros-welcome` | The first-login step above |
 | `agros-keyring` | The repo's signing key |
@@ -1435,7 +1435,9 @@ breaks something holds back that one piece, never the rest (`.github/workflows/c
   published `[agros]` (they pass: this run's new AUR builds broke them, swapped for the published ones by `build-repo.sh
   --hold-new`; the new Hyprland still approved), then on Arch as of the last day the tests passed on it (its archive's
   snapshot; the day published as `agros-arch-ok`): they pass, an Arch update broke them (its Hyprland not approved, the
-  new AUR builds held, AgrOS's own packages still out). Failing even then: AgrOS's own code, and nothing goes out.
+  new AUR builds held, AgrOS's own packages still out but `agros-hyprbars`: built for that Hyprland, it would start
+  on none the machines or the ISO have, so the published one, built for the approved Hyprland, is kept,
+  `AGROS_HOLD_OWN`). Failing even then: AgrOS's own code, and nothing goes out.
 - **Upstream's next release** no longer fitting AgrOS's changes (a check against a main branch, above): nothing held,
   everything goes out, and the issue below says which change to adapt before that release.
 - **One issue** (`ci/report.sh`, label `held`) says what was held back or why nothing went out (or, as "Heads-up", what

@@ -366,6 +366,9 @@ jobs:
           AGROS_PUBLISHED: ${{ vars.AGROS_PUBLISHED || 'https://crimzoagra.github.io/agros/x86_64' }}
           AGROS_HELD: /tmp/held/held
           AGROS_HOLD_WHY: ${{ needs.test.outputs.result == 'hold-agros' && 'its new build broke AgrOS''s tests (they pass with the published one)' || 'held while an Arch update breaks AgrOS''s tests' }}
+          # (an Arch update that broke them: its Hyprland not approved, so agros-hyprbars, built for it, held too, the
+          # published one, built for the approved Hyprland the machines and the ISO stay on, kept)
+          AGROS_HOLD_OWN: ${{ needs.test.outputs.result == 'hold-upstream' && 'agros-hyprbars' || '' }}
         run: |
           git config --global --add safe.directory '*'
           ci/build-repo.sh out/x86_64 --hold-new

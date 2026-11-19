@@ -29,6 +29,10 @@ if any(w in cond for w in ("always()", "failure()", "cancelled()")):
 held = [s for s in rel["steps"] if "--hold-new" in s.get("run", "")]
 if len(held) != 1 or held[0].get("if", "").replace('"', "'") != "needs.test.outputs.result != 'ok'":
     bad.append("the release doesn't hold back new builds whenever the tests didn't all pass on them")
+# (agros-hyprbars, built for Arch's Hyprland, held with it when an Arch update broke the tests, and only then)
+own = str(held[0].get("env", {}).get("AGROS_HOLD_OWN", "")) if held else ""
+if "result == 'hold-upstream'" not in own or "agros-hyprbars" not in own:
+    bad.append(f"agros-hyprbars not held with a Hyprland the tests hold back: AGROS_HOLD_OWN {own!r}")
 listed = lambda n: [n] if isinstance(n, str) else n
 if "sign" not in listed(jobs["publish"].get("needs", [])) or "release" not in listed(jobs.get("sign", {}).get("needs", [])):
     bad.append("the pages published without the release, or unsigned (publish needs sign, sign needs release)")

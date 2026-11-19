@@ -3,7 +3,8 @@
 # checked, and with the packages of the repo it needs (by name or what they provide), not those built here nor Arch's;
 # a tampered copy refused, and so is one signed by another key, even one the keyring the build runs gpg with has (only
 # AgrOS's public key counts, $keyring); none published: the build fails. A published repo here (file://), signed with a
-# key of the test's own
+# key of the test's own. hold_new swaps this run's new builds for the published ones, AgrOS's own too when
+# AGROS_HOLD_OWN names them (agros-hyprbars with a Hyprland held back)
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
@@ -42,6 +43,7 @@ pkg "$pub" libdeep 1-1
 pkg "$pub" built-dep 1-1
 pkg "$pub" quickshell-git 0.3-1.1 'provides = quickshell=0.3'
 pkg "$pub" lonely 1-1
+pkg "$pub" agros-hyprbars 0.57.2.r3.abc-1 'depend = hyprland>=0.57.0'
 SIGNER=$other pkg "$pub" stranger 1-1
 # (for reused: heavy, built from $t/heavy/PKGBUILD with libq 5-1: a program that needs libc.so.6, a Python 3.11 module)
 mkdir -p "$t/heavy" && echo 'pkgname=heavy' >"$t/heavy/PKGBUILD"
@@ -96,14 +98,25 @@ rm -f "$out"/*
 cp "$pub/libdeep-1-1-x86_64.pkg.tar.zst"* "$out/"  # (kept as published by the build)
 pkg "$out" libx 3-1 'depend = libdeep'
 pkg "$out" agros-system r9-1
+pkg "$out" agros-hyprbars 0.58.0.r3.abc-1 'depend = hyprland>=0.58.0'
 pkg "$out" brand-new 1-1
 held=()
 hold_new "broke the tests" >/dev/null
 got=$(cd "$out" && ls ./*.pkg.tar.zst | sed 's|^\./||' | paste -sd' ')
-[[ $got == "agros-system-r9-1-x86_64.pkg.tar.zst libdeep-1-1-x86_64.pkg.tar.zst libx-2-1-x86_64.pkg.tar.zst" ]] ||
+[[ $got == "agros-hyprbars-0.58.0.r3.abc-1-x86_64.pkg.tar.zst agros-system-r9-1-x86_64.pkg.tar.zst libdeep-1-1-x86_64.pkg.tar.zst libx-2-1-x86_64.pkg.tar.zst" ]] ||
     fail "this run's new builds not swapped for the published ones: $got"
 [[ $(printf '%s\n' "${held[@]}" | sort | paste -sd,) == "brand-new: broke the tests,libx: broke the tests" ]] ||
     fail "the held ones not said: ${held[*]}"
+# ...and AgrOS's own too when AGROS_HOLD_OWN names them (agros-hyprbars, built for an Arch Hyprland the tests held
+# back: the published one, built for the approved Hyprland, kept), no other of AgrOS's own
+held=()
+AGROS_HOLD_OWN=agros-hyprbars hold_new "held while an Arch update breaks the tests" >/dev/null
+got=$(cd "$out" && ls ./agros-*.pkg.tar.zst | sed 's|^\./||' | paste -sd' ')
+[[ $got == "agros-hyprbars-0.57.2.r3.abc-1-x86_64.pkg.tar.zst agros-system-r9-1-x86_64.pkg.tar.zst" ]] &&
+    [[ -e $out/agros-hyprbars-0.57.2.r3.abc-1-x86_64.pkg.tar.zst.sig ]] ||
+    fail "agros-hyprbars not held with the Hyprland held back: $got"
+[[ $(printf '%s\n' "${held[@]}") == "agros-hyprbars: held while an Arch update breaks the tests" ]] ||
+    fail "agros-hyprbars held, not said: ${held[*]}"
 # reused: the published package kept, not built, unless its rebuild would go out: its version or PKGBUILD changed, a
 # library it needs gone from the repos, another Python (makepkg and pacman stand-ins: the version $REL gives, the
 # library $GONE not in any repo's file list, the repos' Python at $PY)
