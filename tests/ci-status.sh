@@ -63,8 +63,12 @@ case "$*" in
     n=0; [[ $STATE == *calamares-src-moved* ]] && n=6
     json "{\"ahead_by\": $n, \"base_commit\": {\"commit\": {\"committer\": {\"date\": \"2026-11-16T20:00:00Z\"}}}}" ;;
   "issue list --label status --state all"*) cat @T@/lastbody 2>/dev/null; true ;;
-  "issue list --label status"*) echo 7 ;;
-  "issue create"*) for a; do [[ $p == --body-file ]] && cp "$a" @T@/body; p=$a; done ;;
+  # (last week's, 7, and the one just made, 8; making it fails while @T@/createfail is there)
+  "issue list --label status"*) echo 7; echo 8 ;;
+  "issue create"*)
+    [[ -e @T@/createfail ]] && exit 1
+    for a; do [[ $p == --body-file ]] && cp "$a" @T@/body; p=$a; done
+    echo https://github.com/x/agros/issues/8 ;;
 esac
 GH
 # shellcheck disable=SC2016
@@ -78,12 +82,24 @@ printf '%s\n' 'iso hyprland 66560' 'inst cairo 1536' >"$t/sizes/baseline"
 go() {
     rm -f "$t/gh.log" "$t/body"
     STATE=$1 PATH=$t/bin:$PATH GITHUB_REPOSITORY=x/agros AGROS_ISO_REPO=x/iso AGROS_NOW=2026-11-20 OWNER=someone \
-        SIZES=${SIZES-$t/sizes} "$here/ci/status.sh" >/dev/null
+        SIZES=${SIZES-$t/sizes} AGROS_RETRY_WAIT=0 "$here/ci/status.sh" >/dev/null
 }
 last_sizes() { PATH=$t/bin:$PATH "$here/ci/status.sh" --last-sizes; }
 go ""
 grep -q '^@someone \*\*Nothing broke this week' "$t/body" || fail "all well not said: $(cat "$t/body")"
 grep -qx 'gh issue close 7' "$t/gh.log" || fail "last week's status not closed"
+grep -q 'gh issue close 8' "$t/gh.log" && fail "this week's status closed as soon as it was made"
+[[ $(grep -n '^gh issue \(create\|close\)' "$t/gh.log" | head -1) == *create* ]] ||
+    fail "last week's status closed before this week's was made: $(cat "$t/gh.log")"
+# (GitHub's API failing to make it: tried three times, then the run fails, last week's left open; never a run that
+# passes with no status sent)
+touch "$t/createfail"
+rc=0; go "" 2>/dev/null || rc=$?
+((rc)) || fail "no status made, and the run passed"
+[[ $(grep -c '^gh issue create' "$t/gh.log") == 3 ]] || fail "making the status not tried three times: $(cat "$t/gh.log")"
+grep -q '^gh issue close' "$t/gh.log" && fail "last week's status closed with no new one: $(cat "$t/gh.log")"
+rm "$t/createfail"
+go ""
 grep -qxF '| The ISO: its packages | 3, 68 MiB installed |' "$t/body" || fail "the size watch's row not in the table: $(cat "$t/body")"
 # (how far Caelestia's dots have gone since the pinned commit: in the table, not a problem)
 dots=$(sed -n 's/^_dots=//p' "$here/packages/agros-hyprland-settings/PKGBUILD")

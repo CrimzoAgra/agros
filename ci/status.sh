@@ -165,8 +165,18 @@ if (($(wc -c <"$body") > 65536)); then
     write_body ""
 fi
 gh label create status --color 0E8A16 --description "Weekly status" --force >/dev/null 2>&1 || true
-for n in $(gh issue list --label status --state open --json number -q '.[].number' 2>/dev/null); do
-    gh issue close "$n" >/dev/null
+# The new one first, tried three times (GitHub's API drops a call now and then), and only then last week's closed: a
+# create that failed after they were closed left no status open, and the run, ending on rm, passed with none sent. One
+# that still fails fails the run (GitHub mails its failure to whoever last changed the schedule) and last week's stays
+new=
+for i in 1 2 3; do
+    new=$(gh issue create --label status --title "AgrOS status $(TZ=Europe/Lisbon date +%Y-%m-%d)" --body-file "$body") && break
+    new=
+    ((i == 3)) || sleep "${AGROS_RETRY_WAIT:-60}"
 done
-gh issue create --label status --title "AgrOS status $(TZ=Europe/Lisbon date +%Y-%m-%d)" --body-file "$body"
 rm -f "$body" "$baseline"
+[[ -n $new ]] || { echo "::error::The status issue couldn't be made: none sent this week"; exit 1; }
+echo "$new"
+for n in $(gh issue list --label status --state open --json number -q '.[].number' 2>/dev/null); do
+    [[ $n == "${new##*/}" ]] || gh issue close "$n" >/dev/null
+done
