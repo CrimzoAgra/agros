@@ -20,11 +20,12 @@ if [[ ${1:-} == --last-sizes ]]; then
 fi
 problems=()
 # last <repo> <workflow file>: its last run on main ("<conclusion> <date>"), its last good one's date, and its id. (Not
-# the cancelled ones: a newer run waiting its turn cancels the one waiting before it, every busy day. None finished:
-# "none -", not jq's "null null")
+# the cancelled ones: a newer run waiting its turn cancels the one waiting before it, every busy day. Not a pull
+# request's: one from a fork's own main branch is listed as main's, and its tests passing on the published repo hid a
+# failed run of main's. None finished: "none -", not jq's "null null")
 last() {
-    gh run list -R "$1" -w "$2" -b main -L 50 --json conclusion,status,createdAt,databaseId \
-        -q '[.[] | select(.status == "completed" and .conclusion != "cancelled")] |
+    gh run list -R "$1" -w "$2" -b main -L 50 --json conclusion,status,createdAt,databaseId,event \
+        -q '[.[] | select(.status == "completed" and .conclusion != "cancelled" and .event != "pull_request")] |
             ((.[0] // {conclusion: "none", createdAt: "-"}) | "\(.conclusion) \(.createdAt[:10])"),
             (map(select(.conclusion == "success"))[0].createdAt[:10] // "none"), (.[0].databaseId // "")' 2>/dev/null |
         paste -sd' '

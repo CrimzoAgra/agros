@@ -16,10 +16,12 @@ echo "gh $*" >>@T@/gh.log
 q=. p=
 for a; do [[ $p == -q ]] && q=$a; p=$a; done
 json() { jq -r "$q" <<<"$1"; }
-run() { echo "{\"status\": \"completed\", \"conclusion\": \"$1\", \"createdAt\": \"$2T03:00:00Z\", \"databaseId\": $3}"; }
+run() { echo "{\"status\": \"completed\", \"conclusion\": \"$1\", \"createdAt\": \"$2T03:00:00Z\", \"databaseId\": $3, \"event\": \"${4:-push}\"}"; }
 case "$*" in
   "run list -R x/agros "*)
     if [[ $STATE == *ci-failed* ]]; then json "[$(run cancelled 2026-11-20 13), $(run failure 2026-11-19 12), $(run success 2026-11-18 11)]"
+    # (a pull request from a fork's own main branch, listed as main's: its tests on the published repo passed)
+    elif [[ $STATE == *ci-pr* ]]; then json "[$(run success 2026-11-20 13 pull_request), $(run failure 2026-11-19 12), $(run success 2026-11-18 11)]"
     elif [[ $STATE == *ci-quiet* ]]; then json "[$(run success 2026-11-14 12)]"
     elif [[ $STATE == *noruns* ]]; then json '[{"status": "in_progress", "conclusion": "", "createdAt": "2026-11-20T03:00:00Z", "databaseId": 14}]'
     else json "[$(run cancelled 2026-11-20 13), $(run success 2026-11-20 12)]"; fi ;;
@@ -128,6 +130,10 @@ for s in "AgrOS's CI: its last run failure (2026-11-19); last good 2026-11-18" "
     "Hyprland 0.58.0 (Arch's) not approved yet: AgrOS's machines stay on 0.57.2"; do
     grep -qxF -- "- $s" "$t/body" || fail "not said: $s: $(cat "$t/body")"
 done
+# (a pull request's run isn't main's: main's failure still said)
+go "ci-pr"
+grep -qxF -- "- AgrOS's CI: its last run failure (2026-11-19); last good 2026-11-18" "$t/body" ||
+    fail "a pull request's run taken for main's: $(cat "$t/body")"
 # (a lookup that fails is said, not read as nothing held, nothing waiting, nothing to approve)
 go "gh-down pages-down arch-down"
 for s in "CI's held issue couldn't be read: whether anything is held not checked" \

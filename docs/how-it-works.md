@@ -1412,8 +1412,9 @@ breaks something holds back that one piece, never the rest (`.github/workflows/c
   report job fails, so the run and the Friday status show it; never a second issue, and one that turns up anyway is
   closed beside the first.)
 - **Every Friday at 17:00 Lisbon time** an issue (`ci/status.sh`, `.github/workflows/status.yml`, label `status`,
-  last week's closed once it's made; making it tried three times, then the run fails) says whether anything needs a look: the last CI and ISO runs (an ISO run the upstream gate held,
-  which built nothing and which GitHub shows as a success, too), what's held (and since when), CachyOS changes waiting
+  last week's closed once it's made; making it tried three times, then the run fails) says whether anything needs a
+  look: the last CI and ISO runs on main (not a pull request's; an ISO run the upstream gate held, which built nothing
+  and which GitHub shows as a success, too), what's held (and since when), CachyOS changes waiting
   for a merge (agros-iso's CachyOS sync, since when) and the sync's own failures (its ISO check's are the pull request's
   to say), a daily run (CI's, the sync's) not seen for 3 days (GitHub turns a public repo's schedules off after 60 days
   without a commit), whether Arch's newest Hyprland is approved yet, and CachyOS's installer recipe or code moved on
