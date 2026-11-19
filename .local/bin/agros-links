@@ -96,6 +96,14 @@ if [[ ! -e $mark && -f $code ]] && jq -e 'type == "object"' "$code" >/dev/null 2
     "$(dirname "$(readlink -f "$0")")/json-edit" "$code" --indent 4 \
         'if has("window.restoreWindows") then . else .["window.restoreWindows"] = "folders" end' && touch "$mark"
 fi
+# VSCodium's dialogs drawn in its own window (window.dialogStyle), not as GTK ones: GTK's is as wide as its longest
+# line, and Claude Code's login link (one line, no spaces) made "open the external website?" wider than the screen.
+# Added once, as above
+mark=$state/vscodium-dialog-style
+if [[ ! -e $mark && -f $code ]] && jq -e 'type == "object"' "$code" >/dev/null 2>&1; then
+    "$(dirname "$(readlink -f "$0")")/json-edit" "$code" --indent 4 \
+        'if has("window.dialogStyle") then . else .["window.dialogStyle"] = "custom" end' && touch "$mark"
+fi
 # Claude Code's sessions folder, made before its first session: VSCodium's Claude Code Usage extension reads it, and
 # showed a red "Error" (Usage refresh failed) until Claude Code had run once. Once: one you delete stays deleted
 mark=$state/claude-projects

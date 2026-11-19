@@ -4,5 +4,6 @@
     "update.mode": "none",
     "window.controlsStyle": "hidden",
     "window.restoreWindows": "folders",
+    "window.dialogStyle": "custom",
     "security.workspace.trust.untrustedFiles": "open"
 }

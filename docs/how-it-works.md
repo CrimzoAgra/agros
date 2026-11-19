@@ -863,8 +863,11 @@ helper a package update just brought works before `agros-links` has linked it), 
   `folders`): a Claude Code tab left in a window without one came back at every start and asked again whether to trust
   your home folder, an answer Claude Code never keeps for home. It asks once per project folder, when you start it
   there. `agros-links` adds that setting once to a `settings.json` from before (yours: never updated), where it has
-  none and jq can read it (not one with comments). It also makes `~/.claude/projects` once: the Claude Code Usage
-  extension reads Claude Code's sessions there, and showed a red "Usage refresh failed" error until a first session.
+  none and jq can read it (not one with comments). Its dialogs are drawn in its own window (`window.dialogStyle`:
+  `custom`, added once the same way): GTK's are as wide as their longest line, and Claude Code's login link, one line
+  with no spaces, made "open the external website?" wider than the screen. It also makes `~/.claude/projects` once:
+  the Claude Code Usage extension reads Claude Code's sessions there, and showed a red "Usage refresh failed" error
+  until a first session.
   Claude Code's plugins and conversations are in `~/.claude`, shared by both
 - **`.local/bin/claude`**: Claude Code in the terminal (the CLI inside the editor's extension; without it, the next
   `claude` on PATH), for what the extension can't do, like `/plugin`. Its plugins (installed by `agros-welcome`,

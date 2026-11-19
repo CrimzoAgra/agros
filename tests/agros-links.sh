@@ -125,11 +125,21 @@ cmp -s "$code" "$t/commented" && [[ ! -e $mark ]] || fail "a VSCodium settings.j
 echo '{"window.restoreWindows": "all"}' >"$code"; run
 [[ $(jq -r '."window.restoreWindows"' "$code") == all ]] || fail "the user's own window.restoreWindows replaced"
 rm -f "$mark"; echo '{"a": 1}' >"$code"; run
-[[ $(jq -c . "$code") == '{"a":1,"window.restoreWindows":"folders"}' ]] ||
+[[ $(jq -c '."window.restoreWindows"' "$code") == '"folders"' && $(jq -c .a "$code") == 1 ]] ||
     fail "window.restoreWindows not added to VSCodium's settings, or its settings lost: $(cat "$code")"
 # ...once: taken out by the user, it stays out
 echo '{"a": 1}' >"$code"; run
 [[ $(jq -c . "$code") == '{"a":1}' ]] || fail "window.restoreWindows added again after the user took it out"
+# window.dialogStyle the same way (GTK's dialogs as wide as a long link): added once, the user's own value kept
+code_mark=$t/home/.local/state/agros/vscodium-dialog-style
+[[ -e $code_mark ]] || fail "window.dialogStyle not marked done"
+rm -f "$code_mark"; echo '{"a": 1}' >"$code"; run
+[[ $(jq -c . "$code") == '{"a":1,"window.dialogStyle":"custom"}' ]] ||
+    fail "window.dialogStyle not added to VSCodium's settings, or its settings lost: $(cat "$code")"
+rm -f "$code_mark"; echo '{"window.dialogStyle": "native"}' >"$code"; run
+[[ $(jq -r '."window.dialogStyle"' "$code") == native ]] || fail "the user's own window.dialogStyle replaced"
+echo '{"a": 1}' >"$code"; run
+[[ $(jq -c . "$code") == '{"a":1}' ]] || fail "window.dialogStyle added again after the user took it out"
 # Claude Code's sessions folder (the Usage extension's error without it): made once, and one deleted stays deleted
 [[ -d $t/home/.claude/projects ]] || fail "Claude Code's projects folder not made"
 rm -r "$t/home/.claude"; run
