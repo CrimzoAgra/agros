@@ -1341,11 +1341,12 @@ lutris-covers' cover checks and the boot video mode, and that every program the 
 Caelestia's too, the Super menu's actions, the user services, the Quickshell apps) is installed (`config-programs`,
 which also holds agros-desktop to Caelestia's own list of what its dots need, its `manifest.toml`), and that each file
 of Caelestia's installed shell AgrOS names by its path (its wallpaper) is still there (`caelestia-paths`: a Caelestia
-release that moved one is held back, not put out with a first login that has no wallpaper). One
-is a lint (`no-pipefail-grep-q`): every shell script that sets `pipefail` must not pipe into `grep -q` (it stops reading
-at its first match, the writer dies of SIGPIPE, and the pipeline reads as "not found": a running Proton was removed
-under a game), nor into `head`/`grep -m` where the pipeline's status decides something; read the output whole (`grep -q
-x <<<"$(cmd)"`), or mark a line `# pipefail-ok: <why>`.
+release that moved one is held back, not put out with a first login that has no wallpaper), and that no two shortcuts
+share keys, Capri's fixed ones included, and every one the manual lists is bound (`dots-settings-keys`). One is a lint
+(`no-pipefail-grep-q`): every shell script that sets `pipefail` must not pipe into `grep -q` (it stops reading at its
+first match, the writer dies of SIGPIPE, and the pipeline reads as "not found": a running Proton was removed under a
+game), nor into `head`/`grep -m` where the pipeline's status decides something; read the output whole (`grep -q x
+<<<"$(cmd)"`), or mark a line `# pipefail-ok: <why>`.
 
 CI runs them on every push (not one changing only the manual, a README or the docs' images), pull request and night,
 with what the checks against Caelestia, Hyprland, Qt and the kernel need (its dots at the pinned commit), so none is
