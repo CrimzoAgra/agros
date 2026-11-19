@@ -264,6 +264,10 @@ qt_rebuild "$changes" || status=1
 "$helpers/update-kinds" firmware flatpak appimage capri proton dev || status=1
 rm -f "${XDG_CACHE_HOME:-$HOME/.cache}/update-apps-notified"
 echo
-# In a terminal: wait, so the output can be read (the Updates app shows it itself)
-[[ -t 0 ]] && read -rsn1 -p "Done. Press any key to close."
+# In a terminal: wait, so the output can be read (the Updates app shows it itself), saying how it went as the Updates
+# app does: "Done." under a step that failed (its error scrolled away above) read as everything updated
+if [[ -t 0 ]]; then
+    if ((status)); then read -rsn1 -p "Finished, with problems (see above). Press any key to close."
+    else read -rsn1 -p "Done. Press any key to close."; fi
+fi
 exit $status

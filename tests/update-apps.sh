@@ -248,4 +248,27 @@ for v in 3.14.0-1 3.13.8-1; do
         grep -q -- --rebuild "$t/paru" && fail "rebuilt for a Python bugfix release: $(cat "$t/paru")"
     fi
 done
+
+# Run in a terminal: how it went said where it waits for a key, as the Updates app says it. A step that failed (its
+# error scrolled away above) isn't "Done.", which read as everything updated; all of it working is
+if scr=$(command -v script); then
+    rm -f "$t/bin/timeout"  # (the real one: its time limits as they are)
+    # (in a terminal of its own, script's, a key pressed every second: the one it waits for at the end)
+    term() {
+        while sleep 1; do printf x; done |
+            /usr/bin/timeout -s KILL 60 env HOME="$t/home" XDG_STATE_HOME="$t/state" XDG_CACHE_HOME="$t/home/.cache" \
+                PATH="$t/bin:$PATH" SHELL=/bin/bash "$scr" -qec "$here/.local/bin/update-apps" /dev/null 2>&1
+        return "${PIPESTATUS[1]}"  # (update-apps', through script: not the keys', cut off as it ends)
+    }
+    stub paru 'exit 1'
+    out=$(term) && fail "a failed update in a terminal exited 0"
+    [[ $out == *"Finished, with problems"* && $out != *"Done."* ]] ||
+        fail "a failed update said as done in a terminal: $(tail -3 <<<"$out")"
+    stub paru 'true'
+    out=$(term) || fail "an update with nothing failing failed in a terminal: $(tail -5 <<<"$out")"
+    [[ $out == *"Done. Press any key"* && $out != *"with problems"* ]] ||
+        fail "an update with nothing failing not said as done in a terminal: $(tail -3 <<<"$out")"
+else
+    skipped "no script(1): the run in a terminal not tried"
+fi
 echo "ok update-apps"

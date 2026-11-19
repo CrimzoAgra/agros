@@ -1032,7 +1032,8 @@ brings each change; nothing to run by hand).
   the keyring lacks failed the whole update). Power off, sleep and the lid held off while it installs
   (`systemd-inhibit --what=sleep:shutdown:handle-lid-switch`: logind suspends on the lid whatever sleep lock is held,
   `LidSwitchIgnoreInhibited=yes`; where polkit refuses the lid's lock, power off and sleep alone). Run in a
-  terminal, it shows each AUR package's build-script changes for review first; the Updates app's "Update all" builds
+  terminal, it shows each AUR package's build-script changes for review first, and ends on "Done." or, a step having
+  failed, "Finished, with problems" (as the Updates app says it); the Updates app's "Update all" builds
   them without that review (it lists which ones first, in its log), leaving out those the boot's builds hold for review
   (`aur-maintainer-changed`'s bases, a signed repository's package now foreign: paru's `--ignore`, said with "run
   update-apps in a terminal"; built unreviewed there, the next boot took the new maintainers as reviewed), and sudo asks
