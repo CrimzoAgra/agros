@@ -939,11 +939,13 @@ helper a package update just brought works before `agros-links` has linked it), 
   on). Started again while she runs, she comes back. At login she starts put away (`--hidden`: only her tray icon)
   when the Settings app's Startup page says so (on by default); once she's installed (her build's `current/capri`),
   Shift+Space (Settings, Shortcuts; off while a game or a fullscreen window has the focus) puts her away or brings her
-  back, through her local bridge (`POST 127.0.0.1:47823/toggle`). She sets her own layer rules, and writes her
-  windows' own (hidden) launcher entry for their icon (app id `dev.cybercompanion.capri`). `agros-desktop` brings
-  what she's built and runs with: `rust`, `nodejs` and `npm`, `webkit2gtk-4.1`, `gtk-layer-shell`,
-  `libayatana-appindicator` (her tray icon), `gst-plugins-good` and `gst-libav` (her clips, H.264), `grim` (her
-  scanner)
+  back, through her local bridge (`POST 127.0.0.1:47823/toggle`). Her own keys (Ctrl+Alt+Space talk,
+  Ctrl+Alt+Shift+Space always listening, Ctrl+Alt+K chat, Ctrl+Alt+X the scanner) are binds she makes herself while she
+  runs (`hyprctl eval`, made again after a config reload); none of AgrOS's or Caelestia's shortcuts take them
+  (`tests/dots-settings-keys.sh`). She sets her own layer rules, and writes her windows' own (hidden) launcher entry for
+  their icon (app id `dev.cybercompanion.capri`). `agros-desktop` brings what she's built and runs with: `rust`,
+  `nodejs` and `npm`, `webkit2gtk-4.1`, `gtk-layer-shell`, `libayatana-appindicator` (her tray icon), `gst-plugins-good`
+  and `gst-libav` (her clips, H.264), `grim` (her scanner)
 - **`.config/legion-control/`**: Legion Control's lighting choices, and the backup of Lenovo's original keyboard
   lighting profile (its "Default" mode puts that back)
 
