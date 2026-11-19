@@ -34,4 +34,10 @@ stub qs 'echo "qs $* QS_APP_ID=$QS_APP_ID" >>"$T/calls"'
 T=$t PATH=$t/bin:$PATH "$here/.local/bin/updates"
 [[ $(cat "$t/calls") == $'hyprctl eval dots.focus_app(nil, "updates")\nqs -c updates -n QS_APP_ID=updates' ]] ||
     fail "the Updates launcher, run again, doesn't bring its window to the front: $(cat "$t/calls")"
+# (and Desktop Settings' launcher the same)
+: >"$t/calls"
+T=$t PATH=$t/bin:$PATH "$here/.local/bin/desktop-settings"
+want=$'hyprctl eval dots.focus_app(nil, "desktop-settings")\nqs -c settings -n QS_APP_ID=desktop-settings'
+[[ $(cat "$t/calls") == "$want" ]] ||
+    fail "Desktop Settings' launcher, run again, doesn't bring its window to the front: $(cat "$t/calls")"
 echo "ok updates-window"
