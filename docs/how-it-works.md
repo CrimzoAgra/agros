@@ -794,7 +794,10 @@ helper a package update just brought works before `agros-links` has linked it), 
   aur, firmware, flatpak, appimage, capri, proton, dev) and run (`update-kinds <kind>...`), and the Qt installed
   (`--qt-now`): `update-apps` and the boot's `auto-update` (as each user, `--boot`) both run it, its updates never as
   root (its queries, `--qt-now` and the runtimes' below, also from root's `auto-update`), one run at a time per user
-  (a lock in `~/.local/state/agros`: the boot's and Updates' worked on the same Proton folders at once). Also
+  (a lock in `~/.local/state/agros`: the boot's and Updates' worked on the same Proton folders at once), and one list
+  at a time per user from its sync to its read of checkupdates' copy (another lock there: a second `checkupdates`
+  while the first synced that copy failed on its lock, and Updates opened during the 6-hourly check said "Couldn't
+  check for updates"). Also
   the one list of runtimes whose new version breaks what's built on them (Qt, Python's minor version) and its queries
   (`--runtime-target`, `--runtimes-now`, `--built-on`): what the boot's AUR builds and `update-apps` both rebuild
 - **`.local/bin/agros-each-user`**: runs a command as each AgrOS user (pacman hooks, the boot's update): only
