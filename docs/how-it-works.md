@@ -191,10 +191,10 @@ a lost drive gives nothing without it. `agros-personal` decrypts it straight int
 anywhere else) and backs up what it replaces; the keyring opens with your old login password. It refuses while an app
 whose files it brings back is open, but closes Lutris and Proton VPN when they're only in the tray (they start there at
 login, Proton VPN once you turn that on), asking first in a terminal. Proton VPN's start at login (`startup.protonvpn`,
-off at first) isn't in the file: a restore that brought its account back says where to turn it on. It's never in the repo (`--save` refuses a
-folder inside a git repo): saved logins get past your password and 2FA, and git keeps every version. With no drive, it
-opens each app for you to sign in instead (LibreWolf's Firefox account brings bookmarks and passwords through Sync) and
-asks the weather widget's place. Save again now and then: logins expire.
+off at first) isn't in the file: a restore that brought its account back says where to turn it on. It's never in the
+repo (`--save` refuses a folder inside a git repo): saved logins get past your password and 2FA, and git keeps every
+version. With no drive, it opens each app for you to sign in instead (LibreWolf's Firefox account brings bookmarks and
+passwords through Sync) and asks the weather widget's place. Save again now and then: logins expire.
 
 ## Credits and licenses
 
@@ -1033,11 +1033,12 @@ brings each change; nothing to run by hand).
   terminal, it shows each AUR package's build-script changes for review first; the Updates app's "Update all" builds
   them without that review (it lists which ones first, in its log), leaving out those the boot's builds hold for review
   (`aur-maintainer-changed`'s bases, a signed repository's package now foreign: paru's `--ignore`, said with "run
-  update-apps in a terminal"; built unreviewed there, the next boot took the new maintainers as reviewed), and sudo asks for the password in a dialog
-  (`.local/bin/askpass`, zenity, as `SUDO_ASKPASS`). After its `paru -Syu` it rebuilds what's built on a runtime it
-  changed (the boot's list, below), and on a Qt changed since they were last built, once the runtime is in:
-  `[agros]`'s own at the version installed with AgrOS's Quickshell fix (through `auto-update-aur --fetch`, as the
-  boot's), the AUR's others at their newest. VSCodium's own updater (which only opens the website) is off
+  update-apps in a terminal"; built unreviewed there, the next boot took the new maintainers as reviewed), and sudo asks
+  for the password in a dialog (`.local/bin/askpass`, zenity, as `SUDO_ASKPASS`). After its `paru -Syu` it rebuilds
+  what's built on a runtime it changed (the boot's list, below), and on a Qt changed since they were last built, once
+  the runtime is in: `[agros]`'s own at the version installed with AgrOS's Quickshell fix (through `auto-update-aur
+  --fetch`, as the boot's), the AUR's others at their newest. VSCodium's own updater (which only opens the website) is
+  off
 - **The boot update** (`agros-system`: `packages/agros-system/auto-update`, for every account): updates everything at
   every boot. Then: Flatpaks (system-wide and yours), AppImages, Proton builds and developer tools (`update-kinds
   --boot`, as each user; Capri's new commits only looked for: `capri-update --check`). Downloaded then and installed at
