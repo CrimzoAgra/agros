@@ -1429,7 +1429,8 @@ breaks something holds back that one piece, never the rest (`.github/workflows/c
   `agros-aur-maintainers`, published beside the database and signed with it, read back by the next run with its
   signature checked (only a 404, nothing published yet, starts it afresh: everyone taken as they are; a package added
   to `aur/packages.txt` is taken as it is too, adding it was its review), with the last day the AUR answered (the AUR
-  down: the record as it was, those held still held). Not in the held issue (nothing went wrong).
+  down: the record as it was, those held still held). Not in the held issue (nothing went wrong); the Friday status
+  lists each one, until when.
 - **Tests that fail** (`ci/test-passes.sh`): all the tests are run again, to see which side broke them: with the
   published `[agros]` (they pass: this run's new AUR builds broke them, swapped for the published ones by `build-repo.sh
   --hold-new`; the new Hyprland still approved), then on Arch as of the last day the tests passed on it (its archive's
@@ -1452,10 +1453,10 @@ breaks something holds back that one piece, never the rest (`.github/workflows/c
   keepalive's, last week's status never made (its run failed, or GitHub dropped it), a daily run (CI's, the sync's) not
   seen for 3 days (GitHub turns a public repo's schedules off after 60 days without a commit), whether Arch's newest
   Hyprland is approved yet, and CachyOS's installer recipe or code moved on past AgrOS's pins (`calamares_pkgbuild`,
-  `calamares_src`), each AUR package [agros] carries (`aur/packages.txt`, Quickshell) whose AUR maintainers have changed
-  since `aur/maintainers.txt` recorded them (an orphan adopted, a co-maintainer added: CI builds their build files
-  unreviewed and AgrOS's key signs the result for every machine, so that's someone to look at, then their line there
-  updated) or that the AUR no longer has; a lookup that fails is said too, never read as nothing to say. Its table also
+  `calamares_src`), an AUR package [agros] carries that the AUR no longer has, CI not having read the AUR for 3 days (or
+  its record, `agros-aur-maintainers`, unreadable); a lookup that fails is said too, never read as nothing to say. What
+  CI handles by itself is said apart, "for your information", nothing asked: each AUR package it holds while its new
+  maintainers wait their 14 days (above), and until when. Its table also
   says how far Caelestia's dots have gone since the commit `agros-hyprland-settings` pins (a new one is taken on
   purpose; nothing else says when there is one). The owner is mentioned, so GitHub notifies them. Its size watch
   (`ci/sizes.sh` in an Arch container, `ci/sizes.py`) works out from the package databases what goes on the live ISO

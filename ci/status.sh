@@ -19,6 +19,8 @@ if [[ ${1:-} == --last-sizes ]]; then
     exit 0
 fi
 problems=()
+# (and what needs nothing: CI handling it by itself, news)
+notes=()
 # last <repo> <workflow file>: its last run on main ("<conclusion> <date>"), its last good one's date, and its id. (Not
 # the cancelled ones: a newer run waiting its turn cancels the one waiting before it, every busy day. Not a pull
 # request's: one from a fork's own main branch is listed as main's, and its tests passing on the published repo hid a
@@ -165,39 +167,36 @@ if c=$(gh api "repos/CachyOS/cachyos-calamares/compare/$csrc...cachyos" \
 else
     problems+=("CachyOS's installer code couldn't be read: whether it changed since AgrOS's pin not checked")
 fi
-# The AUR packages [agros] carries (aur/packages.txt, and Quickshell): who can change their build files now, against who
-# could when AgrOS last looked (aur/maintainers.txt). CI builds them unreviewed and AgrOS's key signs them for every
-# machine, so a new maintainer (an orphan adopted, a co-maintainer added) is someone to look at before their next
-# change goes out; the machines' own AUR builds hold such a package for review (auto-update-aur), [agros]'s nothing
-# else would say. One the AUR no longer has: CI keeps its last build, never updated again
-# (a name as ci/own-check.sh reads it: an "aur/" before it taken off)
-mapfile -t aurs < <({
-    sed -e 's/#.*//' -e 's/[[:space:]]//g' -e 's|^.*/||' "$here/aur/packages.txt" | grep .
-    echo quickshell-git
-} | LC_ALL=C sort -u)
-aur_cell="${#aurs[@]} packages, their maintainers as recorded"
-# (-g: the address's [] taken as they are, not as curl's ranges)
-if a=$(curl -gfsS --retry 3 "https://aur.archlinux.org/rpc/v5/info?$(printf 'arg[]=%s&' "${aurs[@]}")" 2>/dev/null) &&
-    [[ $(jq -r .type <<<"$a" 2>/dev/null) == multiinfo ]] &&
-    now=$(jq -r '.results[] | "\(.Name) \(.PackageBase) \(.Maintainer // "-"):\(.CoMaintainers // [] | sort | join(","))"' <<<"$a"); then
+# The AUR packages [agros] carries (aur/packages.txt, and Quickshell): CI keeps its own record of who can change their
+# build files, and holds one whose maintainers changed by itself (ci/aur-maintainers.sh, each run: its last build kept
+# for 14 days from the day the change was first seen, then the new maintainers taken and it's built again), so that's
+# only said, nothing to do. A person is needed only for one the AUR no longer has (deleted, or renamed: CI keeps its
+# last build for good), or when CI hasn't read the AUR for 3 days, or its record (agros-aur-maintainers, published
+# beside the repo) can't be read
+# who <maintainers>: as said ("alice", "alice, co-maintained by bob,carol"; an orphan's "-": "no one")
+who() {
+    local m=${1%%:*}
+    [[ $m != - ]] || m="no one"
+    if [[ $1 == *:?* ]]; then echo "$m, co-maintained by ${1#*:}"; else echo "$m"; fi
+}
+if r=$(curl -fsS --retry 3 "$site/agros-aur-maintainers" 2>/dev/null); then
+    checked=$(sed -n 's/^# checked //p' <<<"$r")
     n=0
-    for p in "${aurs[@]}"; do
-        read -r _ base who < <(awk -v p="$p" '$1 == p' <<<"$now") || true
-        if [[ -z ${base:-} ]]; then
-            problems+=("$p is gone from the AUR (deleted, or renamed): CI keeps its last build in [agros], never updated again")
-            n=$((n + 1))
-            continue
+    while read -r p was new since; do
+        [[ $p != '#' && -n ${since:-} ]] || continue
+        n=$((n + 1))
+        if [[ $new == gone ]]; then
+            problems+=("$p is gone from the AUR since $since (deleted, or renamed): CI keeps its last build in [agros], never built again; take it out of aur/packages.txt, or list it under its new name")
+        else
+            notes+=("$p's AUR maintainers changed ($(who "$was") to $(who "$new")) on $since: CI keeps its last build until $(date -u -d "$since + ${AGROS_AUR_WAIT:-14} days" +%F), then builds theirs (its AUR page's git log shows what they change)")
         fi
-        was=$(awk -v b="$base" '$1 == b { print $2 }' "$here/aur/maintainers.txt")
-        if [[ $was != "$who" ]]; then
-            problems+=("$base's AUR maintainers changed (${was:-none recorded} to $who): CI builds and signs it unreviewed for every machine; look at its build files' changes since (its AUR page's git log), then update aur/maintainers.txt")
-            n=$((n + 1))
-        fi
-    done
-    ((n == 0)) || aur_cell="${#aurs[@]} packages, $n to look at (above)"
+    done <<<"$r"
+    aur_cell="$(grep -vc '^#' <<<"$r") packages, $n held by CI, the AUR last read ${checked:-never}"
+    [[ $checked =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] && ! quiet "$checked" 3 ||
+        problems+=("CI hasn't read the AUR since ${checked:-it began keeping its record}: whether [agros]'s AUR packages changed maintainers not checked (those it held stay held)")
 else
-    problems+=("The AUR couldn't be read: whether [agros]'s AUR packages changed maintainers not checked")
-    aur_cell="${#aurs[@]} packages, the AUR couldn't be read"
+    problems+=("CI's record of [agros]'s AUR packages' maintainers couldn't be read ($site/agros-aur-maintainers): whether any changed not checked")
+    aur_cell="CI's record couldn't be read"
 fi
 # The size watch: each thing it found needs a look; it not having run, too, with its log (or the next week's finds
 # nothing to compare with: last week's baseline kept then). (Its table says it ran, not its baseline: a first week
@@ -222,6 +221,13 @@ write_body() {
             printf -- '- %s\n' "${problems[@]}"
         else
             echo "@${OWNER:?} **Nothing broke this week.** Everything built, passed its tests and went out."
+        fi
+        # (what CI handles by itself, and news: said, nothing asked)
+        if ((${#notes[@]})); then
+            echo
+            echo "**For your information** (nothing to do):"
+            echo
+            printf -- '- %s\n' "${notes[@]}"
         fi
         echo
         echo "| | |"
