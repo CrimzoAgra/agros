@@ -166,8 +166,9 @@ With the Windows ones they replace in brackets:
 - File Roller + 7-Zip (WinRAR, 7-Zip; Extract/Compress in Thunar's right-click menu)
 - VSCodium, VS Code's open-source build (with your extensions), LibreOffice (Microsoft Office), qBittorrent, AntiMicroX
   (JoyToKey)
-- Text Editor (Notepad), qView (Photos), mpv (Media Player; with mpv-mpris, so the Now Playing widget, the dashboard
-  and the media keys see it)
+- Text Editor (Notepad), gThumb (Photos: views a picture, rotates, crops or resizes it and saves; "Thumbnails" in the
+  launcher, its own name), mpv (Media Player; with mpv-mpris, so the Now Playing widget, the dashboard and the media
+  keys see it)
 - VMware Workstation (`agros-welcome --system`: the AUR package, its installer from a copy on archive.org, as Broadcom
   gives it only to signed-in users; checked against the package's checksum)
 - HP Deskjet 1050 J410: HP's Linux driver (HPLIP), printing and scanning; add the printer in Print Settings once it's
@@ -212,7 +213,7 @@ The default wallpaper is Caelestia's own (`assets/wallpaper.webp` in its shell).
 |---|---|
 | `packages/` | The PKGBUILDs of AgrOS's packages (and their system files: units, hooks, the boot update) |
 | `aur/packages.txt`, `ci/` | The AUR packages built into `[agros]`, and the script that builds the repo |
-| `system/` | Files the system packages install (Bluetooth after sleep, the screens on after sleep, the boot video mode, the ananicy rule, the night light's location (geoclue), the time zone's and internal drives' permissions (polkit), resolved's settings, the `papirus-folders` sudoers rule, qView's defaults: no first-run Welcome dialog, at `/etc/xdg/qView/qView.conf`; File Roller's first window wide enough for its file names, a gschema override) |
+| `system/` | Files the system packages install (Bluetooth after sleep, the screens on after sleep, the boot video mode, the ananicy rule, the night light's location (geoclue), the time zone's and internal drives' permissions (polkit), resolved's settings, the `papirus-folders` sudoers rule, File Roller's first window wide enough for its file names, a gschema override) |
 | `.config/caelestia/` | Hyprland settings (`hypr-user.lua`, `hypr-vars.lua`, `user/`) and Caelestia settings (`shell.json`; `cli.json`: its command's, the screen recorder's) |
 | `.config/quickshell/` | The switcher, desktop widgets, Updates and Desktop Settings apps, their shared colours (`common/`), and the dock's pins |
 | `.local/share/caelestia-overlay/` | My changes to Caelestia's own code, patched in by `caelestia-overlay` |
@@ -559,7 +560,7 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
     previous one on a tie (`dots.clean_workspace`); none where there's nothing to move or nowhere to move it. The
     switcher stays open
 - **See-through windows**: Caelestia's window opacity (`windowOpacity`), except where you read or watch a file:
-  LibreWolf, Text Editor, qView, mpv, File Roller, LibreOffice and VSCodium are opaque (`user/apps.lua`); the
+  LibreWolf, Text Editor, gThumb, mpv, File Roller, LibreOffice and VSCodium are opaque (`user/apps.lua`); the
   terminal stays see-through (its own colours)
 - **Windows like on Windows** (`user/windows.lua`):
   - Floating by default, with a floating/tiling switch in the bar's right-click menu (remembered in

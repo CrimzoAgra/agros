@@ -9,7 +9,7 @@ Everything here comes installed, listed next to the Windows app it replaces.
 | **Spotify**, themed in your colours | Spotify |
 | **LibreOffice** | Microsoft Office |
 | **Text Editor** | Notepad |
-| **qView**, an image viewer | Photos |
+| **gThumb** (**Thumbnails** in the app list): view your pictures; rotate, crop or resize one and save it | Photos |
 | **mpv**, a video player | Media Player |
 | **VSCodium**, VS Code's open-source build | VS Code |
 | **Thunar**: the bar at the bottom shows how full the drive is (it changes colour when the drive is nearly full); right-click a picture → **Set as wallpaper** | File Explorer |
