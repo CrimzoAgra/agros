@@ -63,8 +63,10 @@ else:
     run = steps[k].get("run", "")
     if "ci/sign-repo.sh" not in run:
         bad.append("the key's step doesn't run ci/sign-repo.sh")
-    # (the release file for file as the release job made it, by that job's output, before the key comes in: ci/sums.sh)
-    sums = "ci/sums.sh out " in run and run.index("ci/sums.sh") < run.index("--import")
+    # (the release unpacked (ci/artifact.sh), then file for file as the release job made it, by that job's output,
+    # before the key comes in: ci/sums.sh)
+    sums = "ci/sums.sh out " in run and "ci/artifact.sh unpack" in run and \
+        run.index("ci/artifact.sh unpack") < run.index("ci/sums.sh") < run.index("--import")
     if not sums or steps[k].get("env", {}).get("RELEASE_SUMS") != "${{ needs.release.outputs.sums }}" or \
             jobs["release"].get("outputs", {}).get("sums") != "${{ steps.sums.outputs.sums }}":
         bad.append("the sign job doesn't check the release against the release job's sums before the key (ci/sums.sh)")
@@ -108,8 +110,12 @@ ss = [i for i, s in enumerate(rs) if s.get("id") == "sums"]
 ups = [i for i, s in enumerate(rs) if s.get("with", {}).get("name") == "unsigned"]
 if len(ss) != 1 or "ci/sums.sh out" not in rs[ss[0]].get("run", "") or not ups or         any(i > ss[0] and i < ups[0] and "run" in rs[i] for i in range(len(rs))) or any(i > ss[0] for i in db + hold):
     bad.append("the release's sums not made of out as it's uploaded, after the last step that changes it")
+# (and the one file it's uploaded as made after the last step that changes it too: ci/artifact.sh)
+pk = idx("ci/artifact.sh pack out /tmp/unsigned.tar")
+if len(pk) != 1 or not ups or not (pk[0] < ups[0]) or any(i > pk[0] for i in db + hold):
+    bad.append("the release's tar not made of out as it's uploaded, after the last step that changes it")
 up = [s.get("with", {}) for s in rs if "upload-artifact" in s.get("uses", "")]
-if not any(u.get("name") == "unsigned" and u.get("path") == "out" for u in up):
+if not any(u.get("name") == "unsigned" and u.get("path") == "/tmp/unsigned.tar" for u in up):
     bad.append("the release doesn't hand the sign job its repo (the unsigned artifact)")
 for b in bad:
     print(b)

@@ -1395,28 +1395,29 @@ breaks something holds back that one piece, never the rest (`.github/workflows/c
   the file named after them. The database is then made by `ci/repo-db.sh` (after the hold, which brings back published
   packages: each checked again), and read back as pacman reads it: one entry a package, its folder, name, version and
   file what that package's `.PKGINFO` says, else nothing goes out
-- **Signed apart from the build.** The `repo` job runs AUR build scripts (as its builder user, with passwordless
-  sudo), `test` runs what was built and the tests, and `release` runs `repo-add` on the packages, so none has a
-  secret: the repo goes between them unsigned (`ci/build-repo.sh` refuses to start with a secret key at hand), with
-  only AgrOS's public key (`ci/agros.asc`), which the published files it keeps are checked against and `agros-keyring`
-  is made from. The `release` job puts the release together (the hold, the database, the approved list, the day Arch
-  last passed) and hands it on as an artifact; the `sign` job, a job of its own and so a fresh container (anything a
-  package had started or changed in the release's container isn't there: steps of one job share it, and no step can be
-  sure to clear it), signs it in one step, the only one with `AGROS_GPG_KEY` (`ci/sign-repo.sh`), with nothing before
-  it but the checkout and that artifact, which it first checks file for file against the release job's sums (a job
-  output, which no other job can change, where `test` and `repo`, root with what was built and AUR build scripts,
-  could swap an artifact of the run: `ci/sums.sh`), and gpg alone reading the files: each new package (one kept as published
-  keeps its signature; one with any other `.sig` stops it), the database as the release made it (`agros.db`,
-  `agros.files` and their `.tar.gz` names), `agros-approved`, `agros-arch-ok` and `agros-aur-maintainers` (below);
-  each signature checked against `ci/agros.asc`, then gpg's agent stopped and the key removed before anything else
-  runs (Arch's and CachyOS's install scripts, the install check with signatures required, the upload to Pages).
-  `tests/ci-signing.sh` checks the workflow keeps it so. The install check also resolves `agros-desktop` with
-  CachyOS's v3 and znver4 repos above `[cachyos]`, as the installer sets them on such CPUs (`ci/cpu-repos.sh`, no such
-  CPU needed): not resolving there (their lag behind Arch's), or a library at another soname than below them, is a
-  warning, and the release goes out. Each is also kept in a record across runs, `agros-cpu-repos` beside the repo
-  (written after the signing, unsigned: only the weekly status reads it), with the day it was first seen: their lag is
-  routine and gone in a day or two, so the status says one only once it has lasted 3 days.
-  Changing the signing key: add the new one to `ci/agros.asc` (and agros-iso's `agros.asc`) and raise
+- **Signed apart from the build.** The `repo` job runs AUR build scripts (as its builder user, with passwordless sudo),
+  `test` runs what was built and the tests, and `release` runs `repo-add` on the packages, so none has a secret: the
+  repo goes between them unsigned (`ci/build-repo.sh` refuses to start with a secret key at hand), with only AgrOS's
+  public key (`ci/agros.asc`), which the published files it keeps are checked against and `agros-keyring` is made from.
+  The `release` job puts the release together (the hold, the database, the approved list, the day Arch last passed) and
+  hands it on as an artifact (one tar, as the repo job hands its build on: upload-artifact refuses a `:` in a file's
+  name, which a package with an epoch has; unpacked as plain files and folders alone, `ci/artifact.sh`); the `sign` job,
+  a job of its own and so a fresh container (anything a package had started or changed in the release's container isn't
+  there: steps of one job share it, and no step can be sure to clear it), signs it in one step, the only one with
+  `AGROS_GPG_KEY` (`ci/sign-repo.sh`), with nothing before it but the checkout and that artifact, which it first checks
+  file for file against the release job's sums (a job output, which no other job can change, where `test` and `repo`,
+  root with what was built and AUR build scripts, could swap an artifact of the run: `ci/sums.sh`), and gpg alone
+  reading the files: each new package (one kept as published keeps its signature; one with any other `.sig` stops it),
+  the database as the release made it (`agros.db`, `agros.files` and their `.tar.gz` names), `agros-approved`,
+  `agros-arch-ok` and `agros-aur-maintainers` (below); each signature checked against `ci/agros.asc`, then gpg's agent
+  stopped and the key removed before anything else runs (Arch's and CachyOS's install scripts, the install check with
+  signatures required, the upload to Pages). `tests/ci-signing.sh` checks the workflow keeps it so. The install check
+  also resolves `agros-desktop` with CachyOS's v3 and znver4 repos above `[cachyos]`, as the installer sets them on such
+  CPUs (`ci/cpu-repos.sh`, no such CPU needed): not resolving there (their lag behind Arch's), or a library at another
+  soname than below them, is a warning, and the release goes out. Each is also kept in a record across runs,
+  `agros-cpu-repos` beside the repo (written after the signing, unsigned: only the weekly status reads it), with the day
+  it was first seen: their lag is routine and gone in a day or two, so the status says one only once it has lasted 3
+  days. Changing the signing key: add the new one to `ci/agros.asc` (and agros-iso's `agros.asc`) and raise
   `agros-keyring`'s `pkgver`, let machines update, then replace the secret; signing with a key `ci/agros.asc` lacks
   fails the release, before anything goes out.
 - **A package that doesn't build** (an AUR change, AgrOS's Quickshell patch or Calamares changes no longer fitting,

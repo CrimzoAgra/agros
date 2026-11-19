@@ -154,7 +154,7 @@ jobs:
         if: needs.repo.result == 'success'
         with:
           name: built
-          path: /tmp/built
+          path: /tmp/built-tar
       - name: Tests, as a normal user
         id: tests
         shell: bash
@@ -166,6 +166,8 @@ jobs:
           chown -R ci: .
           runuser -u ci -- git config --global --add safe.directory '*'
           mkdir -p /tmp/report
+          # (the repo job's repo, one tar: ci/artifact.sh)
+          [ ! -e /tmp/built-tar/built.tar ] || ci/artifact.sh unpack /tmp/built-tar/built.tar /tmp/built
           if [ -d /tmp/built/x86_64 ]; then
             # (what this run built; the day Arch last passed the tests, published beside the repo. ?t=: the current
             # one, not a copy Pages' CDN keeps up to 10 minutes after a deploy)
@@ -313,10 +315,13 @@ jobs:
           git config --global --add safe.directory '*'
           mkdir -p /tmp/held && : >/tmp/held/held
           ci/build-repo.sh out/x86_64
+      # (one tar: upload-artifact refuses a ":" in a file's name, which a package with an epoch has. ci/artifact.sh)
+      - name: The repo as one file
+        run: ci/artifact.sh pack out /tmp/built.tar
       - uses: actions/upload-artifact@v7
         with:
           name: built
-          path: out
+          path: /tmp/built.tar
       - uses: actions/upload-artifact@v7
         with:
           name: held-build
@@ -353,11 +358,14 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           name: built
-          path: out
+          path: /tmp/built-tar
       - uses: actions/download-artifact@v8
         with:
           name: held-build
           path: /tmp/held
+      # (plain files and folders alone: ci/artifact.sh)
+      - name: The repo job's repo
+        run: ci/artifact.sh unpack /tmp/built-tar/built.tar out
       # AgrOS's own packages as the agros job built them, none changed or added by the repo job's AUR build scripts; the
       # rest only ones this run builds, none replacing another package or shipping pacman's keyrings; every one's
       # .PKGINFO as makepkg writes it. First: nothing before it reads a package
@@ -438,6 +446,8 @@ jobs:
         run: |
           git config --global --add safe.directory '*'
           ci/newer.sh "https://$OWNER.github.io/${GITHUB_REPOSITORY#*/}/x86_64"
+      - name: The release as one file
+        run: ci/artifact.sh pack out /tmp/unsigned.tar
       # Every file's sum, as a job output: the sign job signs the artifact below only as this job made it (ci/sums.sh;
       # the test and repo jobs, root with this run's builds and AUR build scripts, could swap an artifact, not this)
       - name: Its sums
@@ -448,7 +458,7 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: unsigned
-          path: out
+          path: /tmp/unsigned.tar
 
   sign:
     # The release signed (ci/sign-repo.sh) and put out: the only place AgrOS's key is. A job of its own, so a container
@@ -470,7 +480,7 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           name: unsigned
-          path: out
+          path: /tmp/unsigned
       # Signed: each new package (one kept as published keeps its signature), the database, the approved list and the
       # day Arch last passed (update-gate and agros-iso check the list's .sig against AgrOS's key). The secret (AgrOS's
       # primary key or a signing subkey of it, either) in this step alone. The release first checked file for file
@@ -482,6 +492,7 @@ jobs:
         shell: bash
         run: |
           [ -n "$AGROS_GPG_KEY" ] || { echo "::error::Add the AGROS_GPG_KEY secret (AgrOS's key, or a signing subkey of it, without a passphrase)"; exit 1; }
+          ci/artifact.sh unpack /tmp/unsigned/unsigned.tar out
           ci/sums.sh out "$RELEASE_SUMS"
           # (the key gone when this step ends, signed or not, its agent stopped: nothing after it can read it)
           trap 'gpgconf --kill all; rm -rf "$(gpgconf --list-dirs homedir)"' EXIT

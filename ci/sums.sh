@@ -13,11 +13,9 @@
 set -euo pipefail
 dir=${1:?usage: sums.sh <dir> [<sums>]}
 cd "$dir"
-# (made: hidden files left out, as upload-artifact leaves them out of the artifact; checked: every one, so one added
-# hidden is one too many)
-sums() { find . -type f "$@" -print0 | LC_ALL=C sort -z | xargs -0r sha256sum; }
+sums() { find . -type f -print0 | LC_ALL=C sort -z | xargs -0r sha256sum; }
 if (($# < 2)); then
-    sums ! -path '*/.*'
+    sums
     exit 0
 fi
 want=$2
