@@ -104,7 +104,8 @@ done
 if ! held=$(gh issue list --label held --state open --json title,url,createdAt -q '.[] | "\(.title) (\(.url), open since \(.createdAt[:10]))"' 2>/dev/null); then
     held="CI's held issue couldn't be read: whether anything is held not checked"
 fi
-[[ -z $held ]] || problems+=("$held")
+# (one line each: two open ones were one item, the second's line under the first's without its own "- ")
+while IFS= read -r l; do [[ -z $l ]] || problems+=("$l"); done <<<"$held"
 if ! sync=$(gh pr list -R "$iso" --head cachyos --state open --json title,url,createdAt -q '.[] | "\(.title) (\(.url), open since \(.createdAt[:10]))"' 2>/dev/null); then
     sync="its pull request couldn't be read: not checked"
 fi

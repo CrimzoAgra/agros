@@ -67,7 +67,10 @@ case "$*" in
       {\"name\": \"merge\", \"conclusion\": \"$merge\"}]}" ;;
   "issue list --label held"*)
     [[ $STATE == *gh-down* ]] && exit 1
-    [[ $STATE == *held* ]] && json '[{"title": "Held back: x", "url": "https://h", "createdAt": "2026-11-10T03:00:00Z"}]' || json '[]' ;;
+    if [[ $STATE == *held2* ]]; then json '[{"title": "Held back: x", "url": "https://h", "createdAt": "2026-11-10T03:00:00Z"},
+      {"title": "Heads-up: y", "url": "https://h2", "createdAt": "2026-11-11T03:00:00Z"}]'
+    elif [[ $STATE == *held* ]]; then json '[{"title": "Held back: x", "url": "https://h", "createdAt": "2026-11-10T03:00:00Z"}]'
+    else json '[]'; fi ;;
   "pr list"*)
     [[ $STATE == *gh-down* ]] && exit 1
     [[ $STATE == *sync* ]] && json '[{"title": "CachyOS: 2 new commit(s)", "url": "https://p", "createdAt": "2026-11-12T03:00:00Z"}]' || json '[]' ;;
@@ -153,6 +156,11 @@ for s in "AgrOS's CI: its last run failure (2026-11-19; test failed, https://git
     "CachyOS ISO changes waiting for a merge: CachyOS: 2 new commit(s) (https://p, open since 2026-11-12)" \
     "Hyprland 0.58.0 (Arch's) not approved yet: AgrOS's machines stay on 0.57.2"; do
     grep -qxF -- "- $s" "$t/body" || fail "not said: $s: $(cat "$t/body")"
+done
+# (two held issues open: each its own item)
+go "held2"
+for s in "Held back: x (https://h, open since 2026-11-10)" "Heads-up: y (https://h2, open since 2026-11-11)"; do
+    grep -qxF -- "- $s" "$t/body" || fail "an open held issue not its own item: $s: $(cat "$t/body")"
 done
 # (a pull request's run isn't main's: main's failure still said)
 go "ci-pr"
