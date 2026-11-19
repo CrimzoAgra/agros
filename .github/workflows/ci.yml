@@ -609,4 +609,10 @@ jobs:
             [ "$i" = 40 ] && { echo "::error::$db still doesn't list this commit's packages after 20 minutes"; exit 1; }
             sleep 30
           done
-          gh workflow run iso.yml -R CrimzoAgra/agros-iso --ref main
+          # (tried three times: GitHub's API drops a call now and then, and the new packages then waited for the next
+          # publish to reach an ISO, the Friday status saying the ISO build wasn't started)
+          for i in 1 2 3; do
+            gh workflow run iso.yml -R CrimzoAgra/agros-iso --ref main && exit 0
+            [ "$i" = 3 ] || sleep 30
+          done
+          exit 1
