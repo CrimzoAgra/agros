@@ -979,6 +979,8 @@ brings each change; nothing to run by hand).
     for a second after it appears (where "Check again" was, under the pointer: a double-click there isn't an install).
     Closed with the title bar; an update already running carries on (its log: `$XDG_RUNTIME_DIR/update-apps.log`), and
     opening it again and pressing "Update all" follows it
+  - Its log's errors in red, but not pacman's "failed retrieving file ... from <mirror>" (that mirror lacked it, the
+    next one is tried); "failed to retrieve some files" and a failed run stay red
 - **Files never unpacked** (`packages/agros-system/agros-noextract.conf` at `/etc/pacman.d/agros-noextract.conf`,
   included by `pacman.conf` the same way, at install and at upgrade): pacman's `NoExtract` for what no one on AgrOS
   uses: docs and help pages (fish's and HPLIP's kept), the Nerd font styles nothing names (JetBrains Mono's Mono, Propo

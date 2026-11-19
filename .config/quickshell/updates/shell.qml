@@ -62,6 +62,13 @@ ShellRoot {
         updateProc.running = true;
     }
 
+    // A line of the update's log shown red: an error, but not pacman's "failed retrieving file ... from <mirror>" (that
+    // mirror didn't have it: the next one is tried, and the update goes on; "failed to retrieve some files", when none
+    // had it, stays red, as does "Finished, with problems")
+    function isError(line: string): bool {
+        return /(^|\s)error:/i.test(line) && !/error: failed retrieving file .* from /i.test(line);
+    }
+
     // The app that goes with a package, for its name and icon (visual-studio-code-bin -> Visual Studio Code...)
     function entryFor(item: var): var {
         // AppImages are listed by GitHub repo: SomeOwner/AppDesktop -> app
@@ -426,7 +433,7 @@ ShellRoot {
                         wrapMode: Text.WrapAnywhere
                         font.family: "CaskaydiaCove NF"
                         font.pixelSize: 11
-                        color: modelData.startsWith("== ") ? root.c("primary") : /(^|\s)error:/i.test(modelData) ? root.c("error") : root.c("onSurfaceVariant")
+                        color: modelData.startsWith("== ") ? root.c("primary") : root.isError(modelData) ? root.c("error") : root.c("onSurfaceVariant")
                     }
                 }
             }
