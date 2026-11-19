@@ -165,6 +165,40 @@ if c=$(gh api "repos/CachyOS/cachyos-calamares/compare/$csrc...cachyos" \
 else
     problems+=("CachyOS's installer code couldn't be read: whether it changed since AgrOS's pin not checked")
 fi
+# The AUR packages [agros] carries (aur/packages.txt, and Quickshell): who can change their build files now, against who
+# could when AgrOS last looked (aur/maintainers.txt). CI builds them unreviewed and AgrOS's key signs them for every
+# machine, so a new maintainer (an orphan adopted, a co-maintainer added) is someone to look at before their next
+# change goes out; the machines' own AUR builds hold such a package for review (auto-update-aur), [agros]'s nothing
+# else would say. One the AUR no longer has: CI keeps its last build, never updated again
+# (a name as ci/own-check.sh reads it: an "aur/" before it taken off)
+mapfile -t aurs < <({
+    sed -e 's/#.*//' -e 's/[[:space:]]//g' -e 's|^.*/||' "$here/aur/packages.txt" | grep .
+    echo quickshell-git
+} | LC_ALL=C sort -u)
+aur_cell="${#aurs[@]} packages, their maintainers as recorded"
+# (-g: the address's [] taken as they are, not as curl's ranges)
+if a=$(curl -gfsS --retry 3 "https://aur.archlinux.org/rpc/v5/info?$(printf 'arg[]=%s&' "${aurs[@]}")" 2>/dev/null) &&
+    [[ $(jq -r .type <<<"$a" 2>/dev/null) == multiinfo ]] &&
+    now=$(jq -r '.results[] | "\(.Name) \(.PackageBase) \(.Maintainer // "-"):\(.CoMaintainers // [] | sort | join(","))"' <<<"$a"); then
+    n=0
+    for p in "${aurs[@]}"; do
+        read -r _ base who < <(awk -v p="$p" '$1 == p' <<<"$now") || true
+        if [[ -z ${base:-} ]]; then
+            problems+=("$p is gone from the AUR (deleted, or renamed): CI keeps its last build in [agros], never updated again")
+            n=$((n + 1))
+            continue
+        fi
+        was=$(awk -v b="$base" '$1 == b { print $2 }' "$here/aur/maintainers.txt")
+        if [[ $was != "$who" ]]; then
+            problems+=("$base's AUR maintainers changed (${was:-none recorded} to $who): CI builds and signs it unreviewed for every machine; look at its build files' changes since (its AUR page's git log), then update aur/maintainers.txt")
+            n=$((n + 1))
+        fi
+    done
+    ((n == 0)) || aur_cell="${#aurs[@]} packages, $n to look at (above)"
+else
+    problems+=("The AUR couldn't be read: whether [agros]'s AUR packages changed maintainers not checked")
+    aur_cell="${#aurs[@]} packages, the AUR couldn't be read"
+fi
 # The size watch: each thing it found needs a look; it not having run, too, with its log (or the next week's finds
 # nothing to compare with: last week's baseline kept then). (Its table says it ran, not its baseline: a first week
 # whose sets pacman couldn't work out has none, and what pacman said goes in the issue)
@@ -199,6 +233,7 @@ write_body() {
         echo "| Keepalive | last run $keep_cell |"
         echo "| Hyprland | approved ${approved:-?}, Arch's ${arch:-?} |"
         echo "| Caelestia's dots | $dots_cell |"
+        echo "| [agros]'s AUR packages | $aur_cell |"
         held_cell=nothing sync_cell="up to date"
         [[ -z $held ]] || held_cell="see above"
         [[ -z $sync ]] || sync_cell="waiting for a merge"

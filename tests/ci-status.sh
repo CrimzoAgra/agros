@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # ci/status.sh: the weekly issue says nothing broke when all is well, and lists what needs a look otherwise (a failed
-# run, a held issue, CachyOS changes waiting, a Hyprland not approved, and each of these that couldn't be looked up);
+# run, a held issue, CachyOS changes waiting, a Hyprland not approved, an AUR package [agros] carries whose maintainers
+# changed or that's gone, and each of these that couldn't be looked up);
 # last week's closed, the owner mentioned. gh and curl are stand-ins, their answers as $STATE says
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
@@ -101,8 +102,27 @@ case "$*" in
     echo https://github.com/x/agros/issues/8 ;;
 esac
 GH
-# shellcheck disable=SC2016
-printf '#!/bin/bash\ncase "$*" in *agros-approved*) [[ $STATE == *pages-down* ]] && exit 22; echo "hyprland 0.57.2" ;; *json*) [[ $STATE == *arch-down* ]] && exit 22; [[ $STATE == *newhypr* ]] && echo "{\\"pkgver\\": \\"0.58.0\\"}" || echo "{\\"pkgver\\": \\"0.57.2\\"}" ;; esac\n' >"$t/bin/curl"
+# (the AUR's answer: each package asked for (arg[]=), its maintainers as aur/maintainers.txt records them; with
+# aur-new caelestia-shell adopted by someone else, with aur-gone libcava deleted, aur-down unreachable, aur-error its
+# error answer)
+sed "s|@HERE@|$here|g" >"$t/bin/curl" <<'CURL'
+#!/bin/bash
+case "$*" in
+  *agros-approved*) [[ $STATE == *pages-down* ]] && exit 22; echo "hyprland 0.57.2" ;;
+  *aur.archlinux.org/rpc/v5/info*)
+    [[ $STATE == *aur-down* ]] && exit 22
+    [[ $STATE == *aur-error* ]] && { echo '{"type": "error", "error": "Too many package results.", "results": []}'; exit 0; }
+    for a; do [[ $a == *rpc/v5/info* ]] && url=$a; done
+    grep -o 'arg\[\]=[^&]*' <<<"$url" | cut -d= -f2 | while read -r n; do
+        [[ $STATE == *aur-gone* && $n == libcava ]] && continue
+        who=$(awk -v n="$n" '$1 == n { print $2 }' @HERE@/aur/maintainers.txt)
+        [[ $STATE == *aur-new* && $n == caelestia-shell ]] && who=someone-else:helper
+        jq -n --arg n "$n" --arg w "$who" '{Name: $n, PackageBase: $n, Maintainer: ($w | split(":")[0] | if . == "-" then null else . end),
+            CoMaintainers: ($w | split(":")[1] | if . == "" then [] else split(",") end)}'
+    done | jq -s '{type: "multiinfo", results: .}' ;;
+  *json*) [[ $STATE == *arch-down* ]] && exit 22; [[ $STATE == *newhypr* ]] && echo '{"pkgver": "0.58.0"}' || echo '{"pkgver": "0.57.2"}' ;;
+esac
+CURL
 chmod +x "$t/bin/"*
 # (the size watch's out dir: what it found, its table rows, its baseline)
 mkdir -p "$t/sizes"
@@ -131,6 +151,15 @@ grep -q '^gh issue close' "$t/gh.log" && fail "last week's status closed with no
 rm "$t/createfail"
 go ""
 grep -qxF '| The ISO: its packages | 3, 68 MiB installed |' "$t/body" || fail "the size watch's row not in the table: $(cat "$t/body")"
+# (the AUR packages [agros] carries, each asked for with Quickshell, their maintainers as recorded: nothing to say)
+aurs=$(sed -e 's/#.*//' -e 's/[[:space:]]//g' -e 's|^.*/||' "$here/aur/packages.txt" | grep .)
+n=$(wc -l <<<"$aurs")
+grep -qxF "| [agros]'s AUR packages | $((n + 1)) packages, their maintainers as recorded |" "$t/body" ||
+    fail "the AUR packages' row: $(cat "$t/body")"
+# (every package aur/packages.txt lists recorded, with Quickshell: a package added there without its line fails here)
+for p in $aurs quickshell-git; do
+    grep -q "^$p " "$here/aur/maintainers.txt" || fail "$p (aur/packages.txt) has no line in aur/maintainers.txt"
+done
 # (how far Caelestia's dots have gone since the pinned commit: in the table, not a problem)
 dots=$(sed -n 's/^_dots=//p' "$here/packages/agros-hyprland-settings/PKGBUILD")
 grep -qxF "| Caelestia's dots | pinned ${dots:0:7} (2026-11-03), 12 newer commit(s) upstream |" "$t/body" ||
@@ -233,6 +262,20 @@ go "ci-quiet cachy-quiet"
 for s in "AgrOS's CI hasn't run since 2026-11-14: its daily run turned off?" \
     "The CachyOS sync hasn't run since 2026-11-01: its daily run turned off?"; do
     grep -qxF -- "- $s" "$t/body" || fail "not said: $s: $(cat "$t/body")"
+done
+# (an AUR package adopted by someone else, one deleted: each said, the row too; the AUR unreachable or answering an
+# error: said, never read as nothing changed)
+go "aur-new aur-gone"
+for s in "caelestia-shell's AUR maintainers changed (Soramane: to someone-else:helper): CI builds and signs it unreviewed for every machine; look at its build files' changes since (its AUR page's git log), then update aur/maintainers.txt" \
+    "libcava is gone from the AUR (deleted, or renamed): CI keeps its last build in [agros], never updated again"; do
+    grep -qxF -- "- $s" "$t/body" || fail "not said: $s: $(cat "$t/body")"
+done
+[[ $(grep -c "AUR maintainers changed\|gone from the AUR" "$t/body") == 2 ]] || fail "said of others too: $(cat "$t/body")"
+grep -qF "| [agros]'s AUR packages | $((n + 1)) packages, 2 to look at (above) |" "$t/body" || fail "the AUR row: $(cat "$t/body")"
+for st in aur-down aur-error; do
+    go "$st"
+    grep -qxF -- "- The AUR couldn't be read: whether [agros]'s AUR packages changed maintainers not checked" "$t/body" ||
+        fail "$st not said: $(cat "$t/body")"
 done
 # (no run finished: none, not jq's null)
 go noruns

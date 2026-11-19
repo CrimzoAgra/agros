@@ -3,6 +3,8 @@
 # (no quickshell-git: ci/build-repo.sh builds it first, with AgrOS's fix (packages/agros-system/aur-patches), and
 # caelestia-shell takes it from [agros])
 # (no hyprland-plugin-hyprbars: AgrOS's own agros-hyprbars, with its patch, takes its place)
+# (each one, Quickshell's too, with a line in aur/maintainers.txt: who could change its build files when AgrOS last
+# looked, which the weekly status compares with the AUR's)
 caelestia-cli
 caelestia-shell
 # (Caelestia's AUR dependencies, which paru and ci/build-repo.sh build anyway: listed so ci/own-check.sh takes them
