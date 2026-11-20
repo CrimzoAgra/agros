@@ -423,8 +423,12 @@ def entry_details(game_id, slug, service, appid, runner):
             prefix, exe = game.runner.prefix_path, game.runner.game_exe
             if prefix:
                 keys["X-AgrOS-WinePrefix"] = os.path.realpath(prefix)
+            # An Epic game runs through its launcher (the config's .exe): its own .exe from its manifest, or its window
+            # was told apart as the launcher's
+            if service == "egs" and prefix:
+                exe = ((epic_manifests(prefix) or {}).get(appid) or {}).get("LaunchExecutable") or exe
             if exe:
-                keys["X-AgrOS-WineExe"] = os.path.basename(exe)
+                keys["X-AgrOS-WineExe"] = os.path.basename(exe.replace("\\", "/"))
         except Exception as e:  # noqa: BLE001 (a game whose config is broken: its entry anyway, Lutris's icon name)
             logger.error("%s: %s", slug, e)
     return icon, keys

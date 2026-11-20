@@ -207,7 +207,7 @@ c.execute("UPDATE games SET installed = 1, runner = 'wine', directory = ?, confi
           (sys.argv[2], config))
 c.commit()
 P
-printf '{"AppName": "game", "MainGameAppName": "", "DisplayName": "Epic Game", "bIsIncompleteInstall": false}' >"$man/A.item"
+printf '{"AppName": "game", "MainGameAppName": "", "DisplayName": "Epic Game", "bIsIncompleteInstall": false, "LaunchExecutable": "Binaries/Win64/Game.exe"}' >"$man/A.item"
 printf '{"AppName": "dlc", "MainGameAppName": "game", "DisplayName": "Some DLC", "bIsIncompleteInstall": false}' >"$man/B.item"
 printf '{"AppName": "synced", "MainGameAppName": "synced", "DisplayName": "Synced", "bIsIncompleteInstall": true}' >"$man/C.item"
 run
@@ -221,6 +221,9 @@ assert runner == "wine" and game["args"].endswith("-com.epicgames.launcher://app
 assert game["exe"].endswith("EpicGamesLauncher.exe"), game
 P
 ls "$apps"/net.lutris.epic-game-*.desktop >/dev/null 2>&1 || { echo "FAIL: Epic's installed game has no menu entry: $(menu)"; exit 1; }
+# (its window told apart from the launcher's by its own .exe, not the launcher's it's started through)
+grep -qx 'X-AgrOS-WineExe=Game.exe' "$apps"/net.lutris.epic-game-*.desktop ||
+    { echo "FAIL: Epic's game's entry names the wrong .exe: $(grep WineExe "$apps"/net.lutris.epic-game-*.desktop)"; exit 1; }
 rm "$man/A.item"
 run
 [[ -z $(epic) ]] || { echo "FAIL: a game uninstalled in Epic's launcher is still installed in Lutris: $(epic)"; exit 1; }
