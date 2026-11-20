@@ -191,6 +191,39 @@ run
 python3 -Ic 'import sqlite3, sys; c = sqlite3.connect(sys.argv[1]); c.execute("UPDATE games SET installed = 0 WHERE slug = '"'gog-galaxy'"'"); c.commit()' "$t/.local/share/lutris/pga.db"
 run
 [[ $(menu) == net.lutris.flat-game ]] || { echo "FAIL: the menu entry of a launcher no longer installed stayed: $(menu)"; exit 1; }
+# Epic's launcher installed a game (its manifest's MainGameAppName empty, as Epic writes it now): installed in Lutris,
+# opening through the launcher, in the menu. An add-on's manifest and an unfinished download don't count; uninstalled in
+# the launcher, uninstalled again
+egs=$t/Games/epic-games-store
+man=$egs/drive_c/ProgramData/Epic/EpicGamesLauncher/Data/Manifests
+mkdir -p "$man"
+python3 -I - "$t/.local/share/lutris/pga.db" "$egs" <<'P'
+import gi, sqlite3, sys
+gi.require_version("Gtk", "3.0"); gi.require_version("Gdk", "3.0")
+from lutris.config import write_game_config
+config = write_game_config("epic-games-store", {"game": {"exe": "drive_c/Epic/EpicGamesLauncher.exe", "prefix": sys.argv[2]}})
+c = sqlite3.connect(sys.argv[1])
+c.execute("UPDATE games SET installed = 1, runner = 'wine', directory = ?, configpath = ? WHERE slug = 'epic-games-store'",
+          (sys.argv[2], config))
+c.commit()
+P
+printf '{"AppName": "game", "MainGameAppName": "", "DisplayName": "Epic Game", "bIsIncompleteInstall": false}' >"$man/A.item"
+printf '{"AppName": "dlc", "MainGameAppName": "game", "DisplayName": "Some DLC", "bIsIncompleteInstall": false}' >"$man/B.item"
+printf '{"AppName": "synced", "MainGameAppName": "synced", "DisplayName": "Synced", "bIsIncompleteInstall": true}' >"$man/C.item"
+run
+epic() { python3 -Ic 'import sqlite3, sys; print(",".join(sorted(r[0] for r in sqlite3.connect(sys.argv[1]).execute("SELECT service_id FROM games WHERE service = '"'egs'"' AND installed = 1"))))' "$t/.local/share/lutris/pga.db"; }
+[[ $(epic) == game ]] || { echo "FAIL: Epic's installed games in Lutris are '$(epic)' (want game)"; exit 1; }
+python3 -I - "$t/.local/share/lutris/pga.db" <<'P' || { echo "FAIL: Epic's installed game doesn't open through the launcher"; exit 1; }
+import os, sqlite3, sys, yaml
+((config, runner),) = sqlite3.connect(sys.argv[1]).execute("SELECT configpath, runner FROM games WHERE service_id = 'game'").fetchall()
+game = yaml.safe_load(open(os.path.expanduser(f"~/.local/share/lutris/games/{config}.yml")))["game"]
+assert runner == "wine" and game["args"].endswith("-com.epicgames.launcher://apps/game?action=launch"), (runner, game)
+assert game["exe"].endswith("EpicGamesLauncher.exe"), game
+P
+ls "$apps"/net.lutris.epic-game-*.desktop >/dev/null 2>&1 || { echo "FAIL: Epic's installed game has no menu entry: $(menu)"; exit 1; }
+rm "$man/A.item"
+run
+[[ -z $(epic) ]] || { echo "FAIL: a game uninstalled in Epic's launcher is still installed in Lutris: $(epic)"; exit 1; }
 # One run at a time (agros-welcome's and lutris-library.path's overlapped): another holding its lock, this one waits
 flock "$XDG_RUNTIME_DIR/lutris-library.lock" sleep 3 &
 sleep 0.5

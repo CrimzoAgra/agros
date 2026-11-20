@@ -6,5 +6,8 @@ PartOf=graphical-session.target
 [Path]
 # (%D: the user manager's XDG_DATA_HOME, ~/.local/share without it: where Lutris keeps its library too)
 PathChanged=%D/lutris/pga.db
+# and a game Epic's launcher installed or uninstalled, in Lutris's own place for it (Lutris's database doesn't change
+# then: the game showed only after a Reload of Epic in Lutris, if at all)
+PathChanged=%h/Games/epic-games-store/drive_c/ProgramData/Epic/EpicGamesLauncher/Data/Manifests
 # Not stopped by bursts of writes either (the service waits them out)
 TriggerLimitIntervalSec=0

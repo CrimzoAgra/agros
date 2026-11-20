@@ -9,6 +9,7 @@
 #   the sidebar, installed or not: opening one there installs it through Lutris (lutris-overlay keeps them out of the
 #   Games view)
 # - Installed games and launchers get an app menu entry (the Super menu), once each
+# - Games Epic's own launcher installed (or uninstalled) show as installed (or not) in Lutris
 # Run by lutris-library.path whenever Lutris's database changes (a store sync), and by agros-welcome. An open Lutris
 # shows the changes at once (lutris-overlay's library_refresh action, asked over D-Bus); a plain one once restarted
 import fcntl
@@ -33,7 +34,7 @@ import gi  # noqa: E402
 gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 from lutris import settings  # noqa: E402
-from lutris.config import write_game_config  # noqa: E402
+from lutris.config import LutrisConfig, write_game_config  # noqa: E402
 from lutris.database import sql  # noqa: E402
 from lutris.database.games import delete_game, get_games  # noqa: E402
 from lutris.database.services import ServiceGameCollection  # noqa: E402
@@ -42,6 +43,7 @@ from lutris.services.steam import SteamCover, SteamGame, SteamService  # noqa: E
 from lutris.util.steam.appmanifest import AppManifest, get_appmanifests  # noqa: E402
 from lutris.util.log import logger  # noqa: E402
 from lutris.util.steam import config as steam_config  # noqa: E402
+from lutris.util.strings import slugify  # noqa: E402
 
 # Lutris's own warnings ("Steam game N has no config", ~50 a run) only: they also went into an open Lutris's log
 logger.setLevel(logging.ERROR)
@@ -209,6 +211,75 @@ with db:
                    "AND service_id = ? AND installed = 0 AND id NOT IN "
                    "(SELECT game_id FROM games_categories WHERE category_id = ?)",
                    [(hidden_category, a, hidden_category) for (a,) in addons])
+
+
+def epic_manifests(prefix):
+    """The games Epic's launcher has installed in its prefix, by app name: their install manifests, add-ons and
+    unfinished downloads left out. None when its folder isn't there (a drive not mounted: nothing to tell from that)"""
+    folder = os.path.join(prefix, "drive_c/ProgramData/Epic/EpicGamesLauncher/Data/Manifests")
+    if not os.path.isdir(folder):
+        return None
+    games = {}
+    for path in glob.glob(os.path.join(folder, "*.item")):
+        try:
+            with open(path, encoding="utf-8") as f:
+                m = json.load(f)
+        except (OSError, ValueError):
+            continue
+        app = m.get("AppName")
+        # (Epic writes MainGameAppName empty for a game itself now: Lutris's own scan skipped every one for it)
+        if app and m.get("MainGameAppName") in ("", None, app) and not m.get("bIsIncompleteInstall"):
+            games[app] = m
+    return games
+
+
+# Games installed in Epic's launcher: Lutris takes them in only on its Epic source's Reload, and then skips them all
+# (Epic's manifests no longer name a main game). Each made installed here as Lutris's own import makes it (its config
+# the launcher's, opening it through the launcher), the entry already listing it reused; one Epic uninstalled is
+# uninstalled again. Run when its manifests change too (lutris-library.path)
+def epic_installs():
+    store = db.execute("SELECT directory, configpath, runner FROM games WHERE slug = 'epic-games-store' AND installed = 1"
+                       ).fetchone()
+    if not store or not store[0] or not store[1]:
+        return "epic: launcher not installed"
+    directory, configpath, runner = store
+    found = epic_manifests(directory.split("drive_c")[0])
+    if found is None:
+        return "epic: no manifests"
+    names = {a: n for a, n in db.execute("SELECT appid, name FROM service_games WHERE service = 'egs'")}
+    added = removed = 0
+    with db:
+        for app, m in found.items():
+            row = db.execute("SELECT id, installed, name FROM games WHERE service = 'egs' AND service_id = ?",
+                             (app,)).fetchone()
+            if row and row[1]:
+                continue
+            name = names.get(app) or (row[2] if row else None) or m.get("DisplayName") or app
+            installer_slug = f"{slugify(name)}-egs"
+            config = LutrisConfig(game_config_id=configpath).game_level
+            config["game"]["args"] = f"-opengl -SkipBuildPatchPrereq -com.epicgames.launcher://apps/{app}?action=launch"
+            game_config = write_game_config(installer_slug, config)
+            values = (runner or "wine", directory, installer_slug, game_config)
+            if row:
+                db.execute("UPDATE games SET runner = ?, directory = ?, installed = 1, installer_slug = ?, configpath = ? "
+                           "WHERE id = ?", (*values, row[0]))
+            else:
+                db.execute("INSERT INTO games (runner, directory, installed, installer_slug, configpath, name, slug, "
+                           "service, service_id) VALUES (?, ?, 1, ?, ?, ?, ?, 'egs', ?)", (*values, name, slugify(name), app))
+            added += 1
+        # (only ones played through this launcher's prefix: one installed some other way is left alone)
+        for game_id, app in db.execute("SELECT id, service_id FROM games WHERE service = 'egs' AND installed = 1 "
+                                       "AND directory = ?", (directory,)).fetchall():
+            if app not in found:
+                db.execute("UPDATE games SET installed = 0 WHERE id = ?", (game_id,))
+                removed += 1
+    return f"epic: {added} installed, {removed} uninstalled"
+
+
+try:
+    print(epic_installs())
+except Exception as e:  # (one store's trouble never stops the rest of this)
+    logger.error("epic installs: %s", e)
 known = {(s, i) for s, i in db.execute("SELECT service, service_id FROM games")}
 # (Lutris's own slug for it, else the one its store sync made: lutris.net covers are found by it)
 new = [(name, lutris_slug or slug or f"{service}-{appid}", "steam" if service == "steam" else None, service, appid)
