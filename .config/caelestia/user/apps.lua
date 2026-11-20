@@ -157,6 +157,49 @@ hl.on("window.fullscreen", function(win)
     local ws = hl.get_active_workspace()
     if win and win.fullscreen ~= 0 and ws and win.workspace and win.workspace.id == ws.id then focus_game(win) end
 end)
+-- A game's splash screen (its first window, small: Batman: Arkham Knight's logo) shown alone: the game's other windows
+-- opening meanwhile (its main window, still white while it loads) kept out of sight, on a hidden workspace, until the
+-- splash closes, then shown where it was. At most 30 s (a small first window that isn't a splash never hides the game
+-- for long). By the game's process: its windows, and the splash's own workspace to come back to
+local splash = {}  -- pid -> { address = splash's, workspace = its id, held = { addresses } }
+local function small(win)
+    local m = win.monitor or hl.get_active_monitor()
+    return m and win.size and win.fullscreen == 0 and win.size.x * win.size.y < 0.5 * m.width * m.height
+end
+function dots.splash_release(pid)
+    local s = splash[tonumber(pid)]
+    if not s then return end
+    splash[tonumber(pid)] = nil
+    for _, address in ipairs(s.held) do
+        local w = hl.get_window("address:" .. address)
+        if w then
+            hl.dispatch(hl.dsp.window.move({ window = w, workspace = s.workspace, follow = false }))
+            hl.dispatch(hl.dsp.focus({ window = w }))
+        end
+    end
+end
+hl.on("window.open", function(win)
+    if not (win and win.pid and win.pid > 0 and dots.is_game(win)) then return end
+    local s = splash[win.pid]
+    if s and hl.get_window("address:" .. s.address) then
+        s.held[#s.held + 1] = win.address
+        hl.dispatch(hl.dsp.window.move({ window = win, workspace = "special:splash", follow = false }))
+        return
+    end
+    for _, w in ipairs(hl.get_windows() or {}) do
+        if w.pid == win.pid and w.address ~= win.address then return end  -- (not its first window)
+    end
+    if small(win) and win.workspace and (win.workspace.id or 0) > 0 then
+        splash[win.pid] = { address = win.address, workspace = win.workspace.id, held = {} }
+        -- (a sleep in its own process, not hl.timer: a config reload would drop the timer)
+        hl.exec_cmd("sh -c 'sleep 30; exec hyprctl eval \"dots.splash_release(" .. win.pid .. ")\"'")
+    end
+end)
+hl.on("window.close", function(win)
+    for pid, s in pairs(splash) do
+        if win and s.address == win.address then dots.splash_release(pid) end
+    end
+end)
 -- Lower input lag in games (Settings app: games.low_latency): a game's frames go to the screen as soon as they're drawn
 -- (Caelestia's "immediate" for the game tag, which needs tearing allowed; with the game's V-Sync off), the pointer drawn
 -- into the picture meanwhile (game_edges, above)
