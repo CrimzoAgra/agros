@@ -90,7 +90,33 @@ local function button(icon, action, opts)
                                     action = action })
 end
 local function on_bar(code) return "hyprctl eval 'local w = dots.bar_window(\"{address}\") if w then " .. code .. " end'" end
-button(0xe5cd, on_bar("hl.dispatch(hl.dsp.window.close({ window = w }))"),
+-- Whether a process is a Windows program run by Wine (Proton's too): its executable is Wine's loader
+local function wine_program(pid)
+    local p = io.popen("readlink /proc/" .. math.floor(pid) .. "/exe 2>/dev/null")
+    local exe = p and p:read("l") or ""
+    if p then p:close() end
+    return exe:find("/wine[^/]*$") ~= nil
+end
+-- Close, from the bar: the window asked to close, as always. A Wine program's still there a moment later, with no new
+-- window of its own since (a "save changes?": Wine's dialogs are windows of their own), is ended: store launchers under
+-- Proton (Epic's) ignore the request (and Alt+F4) and close only from their own X. Other apps aren't: one may ask
+-- "save?" inside its own window, which can't be told from ignoring it
+function dots.close_window(w)
+    local address, pid = w.address, w.pid
+    local before = {}
+    for _, o in ipairs(hl.get_windows() or {}) do before[o.address] = true end
+    hl.dispatch(hl.dsp.window.close({ window = w }))
+    if not pid or pid <= 0 or not wine_program(pid) then return end
+    hl.timer(function()
+        local still = hl.get_window("address:" .. address)
+        if not still or still.mapped == false then return end
+        for _, o in ipairs(hl.get_windows() or {}) do
+            if o.pid == pid and not before[o.address] then return end
+        end
+        hl.exec_cmd("kill " .. math.floor(pid))
+    end, { timeout = 1500, type = "oneshot" })
+end
+button(0xe5cd, on_bar("dots.close_window(w)"),
        { hover = "rgb(" .. scheme.error .. ")", hover_fg = "rgb(" .. scheme.onError .. ")", icon_size = 16 })
 button(0xe3c6, on_bar("dots.maximise_window(w)"), { maximised = 0xe3e0 })
 button(0xe15b, on_bar("dots.minimise_window(w)"), { icon_size = 16 })
