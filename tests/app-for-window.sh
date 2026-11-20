@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # app-for-window: a window's app file by its class's last part, by its program (through a link: LibreOffice), a Wine
-# .exe, hidden apps last, or none
+# .exe, a Lutris game's prefix (steam_app_default: the .exe that runs among games sharing one, else the launcher), hidden
+# apps last, or none
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
@@ -14,6 +15,12 @@ app tool $'Exec=env FOO=1 python3 /opt/tool/mytool.py --x %f'
 app libreoffice-calc 'Exec=libreoffice --calc %U'
 app libreoffice-startcenter 'Exec=libreoffice %U'
 app game 'Exec=env WINEPREFIX=/p wine "/games/My Game/Game.exe"'
+# lutris-library's entries: Epic's launcher (id 4) and a game in its prefix (id 9), EA's in its own
+mkdir -p "$t/epic" "$t/ea" && ln -s . "$t/epic/pfx"
+lut() { app "net.lutris.$1" $'Exec=env LUTRIS_SKIP_INIT=1 lutris lutris:rungameid/0\nX-AgrOS-WinePrefix='"$2"$'\nX-AgrOS-WineExe='"$3"; }
+lut epic-games-store-4 "$t/epic" EpicGamesLauncher.exe
+lut some-epic-game-9 "$t/epic" Game64.exe
+lut ea-app-1 "$t/ea" EALauncher.exe
 run() { PATH=$t/bin:$PATH XDG_DATA_HOME=$t/share XDG_DATA_DIRS=$t/none "$here/.local/bin/app-for-window" "$@"; }
 
 [[ $(run org.cachyos.cachyos-pi 0) == cachyos-pi ]] || fail "reverse-DNS class against a short StartupWMClass"
@@ -30,5 +37,13 @@ sleep 0.2
 [[ $(run game.exe-unknown $p2) == game ]] || fail "a Wine window by its .exe"
 [[ $(run soffice $p3) == libreoffice-startcenter ]] || fail "LibreOffice's soffice window: Start Center ($(run soffice $p3))"
 [[ -z $(run nothing-like-it $$) ]] || fail "printed an app for a window that has none"
-pkill -P $p2; kill $p1 $p2 $p3
+# (Proton's processes: WINEPREFIX the prefix's pfx, a link back to it here)
+(export WINEPREFIX=$t/epic/pfx; exec -a 'C:\\Epic\\EpicWebHelper.exe' bash -c 'sleep 30; :') >/dev/null 2>&1 & p4=$!
+(export WINEPREFIX=$t/epic; exec -a 'Z:\\games\\Game64.exe' bash -c 'sleep 30; :' x 'Z:\games\Game64.exe') >/dev/null 2>&1 & p5=$!
+(export WINEPREFIX=$t/ea; exec -a 'C:\\EA\\EADesktop.exe' bash -c 'sleep 30; :') >/dev/null 2>&1 & p6=$!
+sleep 0.2
+[[ $(run steam_app_default $p4) == net.lutris.epic-games-store-4 ]] || fail "a Lutris launcher's window by its prefix ($(run steam_app_default $p4))"
+[[ $(run steam_app_default $p5) == net.lutris.some-epic-game-9 ]] || fail "a game in its launcher's prefix by its .exe ($(run steam_app_default $p5))"
+[[ $(run steam_app_default $p6) == net.lutris.ea-app-1 ]] || fail "another launcher's window by its own prefix ($(run steam_app_default $p6))"
+pkill -P $p2; kill $p1 $p2 $p3 $p4 $p5 $p6
 echo "ok app-for-window"

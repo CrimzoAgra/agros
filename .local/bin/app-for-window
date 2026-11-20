@@ -2,9 +2,11 @@
 # app-for-window <class> <pid>: the app file (its id, no ".desktop") a window belongs to, when its class names none
 # Quickshell finds (org.cachyos.cachyos-pi with StartupWMClass=cachyos-pi; Java, Wine, script apps). So the dock, the
 # switcher and the bar show the app's own icon, the one the Super menu shows. Prints nothing when no app fits. By, in
-# order: the class's last part against each app's id and StartupWMClass; a Flatpak's app id; the window's program
-# (its executable, or the script or .exe a runtime runs) against each app's Exec. Apps the menu shows win over hidden ones
+# order: the class's last part against each app's id and StartupWMClass; a Flatpak's app id; a Lutris game's Wine prefix
+# (lutris-library's entries name it: under Proton all their windows have one class); the window's program (its
+# executable, or the script or .exe a runtime runs) against each app's Exec. Apps the menu shows win over hidden ones
 import os
+import re
 import shlex
 import shutil
 import sys
@@ -15,7 +17,7 @@ RUNTIMES = {"env", "sh", "bash", "python", "python3", "java", "wine", "wine64", 
 
 
 def base(path):
-    name = os.path.basename(path).lower()
+    name = path.replace("\\", "/").rsplit("/", 1)[-1].lower()  # (Wine's processes: C:\...\Game.exe)
     for ext in (".exe", ".py", ".jar", ".appimage", ".sh", ".bin"):
         if name.endswith(ext):
             return name[: -len(ext)]
@@ -76,7 +78,8 @@ def apps():
                 exe = program(argv)
                 found = exe and shutil.which(exe)
                 exe = {base(exe), base(os.path.realpath(found)) if found else ""} - {""} if exe else set()
-                yield app, keys.get("StartupWMClass", ""), exe, keys.get("NoDisplay") != "true", len(argv)
+                yield (app, keys.get("StartupWMClass", ""), exe, keys.get("NoDisplay") != "true", len(argv),
+                       keys.get("X-AgrOS-WinePrefix", ""), base(keys.get("X-AgrOS-WineExe", "")))
 
 
 def window_programs(pid):
@@ -107,21 +110,41 @@ def flatpak(pid):
     return ""
 
 
+def wine_prefix(pid):
+    """The Wine prefix the window's process runs in ("" for none)"""
+    try:
+        with open(f"/proc/{pid}/environ", "rb") as fh:
+            env = dict(e.split(b"=", 1) for e in fh.read().split(b"\0") if b"=" in e)
+    except OSError:
+        return ""
+    p = env.get(b"WINEPREFIX", b"").decode(errors="replace")
+    return os.path.realpath(p) if p else ""
+
+
 def main(cls, pid):
     every = list(apps())
     ids = {a[0] for a in every}
-    # Best first: by class, then the Flatpak's id, then by program; within each, apps the menu shows first
+    # Best first: by class, then the Flatpak's id, then a Lutris game's prefix, then by program; within each, apps the
+    # menu shows first
     for shown in (True, False):
-        for app, wmclass, _, visible, _ in every:
+        for app, wmclass, _, visible, _, _, _ in every:
             if visible == shown and cls and (tail(app) == tail(cls) or wmclass and tail(wmclass) == tail(cls)):
                 return app
     if pid:
         fp = flatpak(pid)
         if fp in ids:
             return fp
-        # (several apps run one program, LibreOffice's: the one run plainly, Start Center, not Calc's --calc)
         names = set(window_programs(pid))
-        fits = [(not visible, length, app) for app, _, exe, visible, length in every if exe & names]
+        # A Lutris game under Wine (lutris-library's entries name its prefix and .exe): every one's window has the class
+        # steam_app_default under Proton. Games sharing their store launcher's prefix: the one whose .exe runs, else
+        # the launcher (the first installed: games come after it)
+        prefix = wine_prefix(pid)
+        fits = [(wexe not in names, int(m.group(1)) if (m := re.search(r"-(\d+)$", app)) else 0, app)
+                for app, _, _, _, _, wprefix, wexe in every if prefix and wprefix == prefix]
+        if fits:
+            return min(fits)[2]
+        # (several apps run one program, LibreOffice's: the one run plainly, Start Center, not Calc's --calc)
+        fits = [(not visible, length, app) for app, _, exe, visible, length, _, _ in every if exe & names]
         if fits:
             return min(fits)[2]
     return ""

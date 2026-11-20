@@ -64,7 +64,7 @@ ClippingRectangle {
             return [];
         const groups = new Map();
         for (const t of wins) {
-            const k = keyFor(t.lastIpcObject.class);
+            const k = keyFor(windowId(t.lastIpcObject));
             if (!groups.has(k))
                 groups.set(k, []);
             groups.get(k).push(t);
@@ -87,7 +87,7 @@ ClippingRectangle {
             pinned.push({ uid: "pin:" + entry.id, key: entry.id, entry, wins: ws, win: pick(ws), pinned: true });
         }
         const out = [...groups].filter(([k]) => !used.has(k)).map(([k, ws]) => {
-            const entry = entryFor(ws[0].lastIpcObject.class);
+            const entry = entryFor(windowId(ws[0].lastIpcObject));
             return { uid: "app:" + k, key: entry?.id ?? k, entry, wins: ws, win: pick(ws), pinned: false };
         });
         if (out.length && pinned.length)
@@ -99,6 +99,11 @@ ClippingRectangle {
     // Icons.windowApps); Quickshell's own if that patch didn't fit
     function entryFor(id: string): DesktopEntry {
         return Icons.windowApps ? Icons.windowApps.appEntry(id) : id ? DesktopEntries.byId(id) ?? DesktopEntries.heuristicLookup(id) : null;
+    }
+
+    // What a window is looked up by: its class, or with its process for a class many apps share (WindowApps.qml)
+    function windowId(ipc: var): string {
+        return Icons.windowApps?.windowId(ipc) ?? ipc?.class ?? "";
     }
 
     function keyFor(id: string): string {
@@ -409,7 +414,7 @@ ClippingRectangle {
                     //   bounds: box around the artwork; coverage: how much of the image it fills (0-1);
                     //   reach: distance from the artwork's centre to its farthest pixel (square icons' corners)
                     // (Icons.windowApps: the bar's and switcher's icon too)
-                    readonly property string iconSource: Quickshell.iconPath(modelData.entry?.icon ?? Icons.windowApps?.iconName(modelData.win?.lastIpcObject.class ?? "") ?? "", "application-x-executable")
+                    readonly property string iconSource: Quickshell.iconPath(modelData.entry?.icon ?? Icons.windowApps?.iconName(root.windowId(modelData.win?.lastIpcObject)) ?? "", "application-x-executable")
                     property rect bounds: Qt.rect(0.06, 0.06, 0.88, 0.88)
                     property real coverage: 0.77
                     property real reach: 0.62

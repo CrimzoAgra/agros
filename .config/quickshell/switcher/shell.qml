@@ -281,8 +281,12 @@ ShellRoot {
         source: `file://${Quickshell.shellPath("../common/WindowApps.qml")}`
     }
     // (apps: the app list's length, passed only so a binding calling this is looked up again once that list has loaded)
-    function iconFor(cls: string, apps: int): string {
-        return Quickshell.iconPath(windowApps.item?.iconName(cls) ?? "", "application-x-executable");
+    function iconFor(id: string, apps: int): string {
+        return Quickshell.iconPath(windowApps.item?.iconName(id) ?? "", "application-x-executable");
+    }
+    // What a window is looked up by: its class, or with its process for a class many apps share (WindowApps.qml)
+    function windowId(ipc: var): string {
+        return windowApps.item?.windowId(ipc) ?? ipc?.class ?? "";
     }
 
     GlobalShortcut {
@@ -538,7 +542,7 @@ ShellRoot {
 
                             Repeater {
                                 // One icon per app, at most six
-                                model: [...new Set(card.wins.map(t => t.lastIpcObject.class))].slice(0, 6)
+                                model: [...new Set(card.wins.map(t => root.windowId(t.lastIpcObject)))].slice(0, 6)
 
                                 IconImage {
                                     required property string modelData
@@ -600,7 +604,7 @@ ShellRoot {
                                 IconImage {
                                     anchors.centerIn: parent
                                     implicitSize: 48
-                                    source: root.iconFor(wcard.ipc.class, DesktopEntries.applications.values.length)
+                                    source: root.iconFor(root.windowId(wcard.ipc), DesktopEntries.applications.values.length)
                                 }
 
                                 ScreencopyView {
@@ -640,7 +644,7 @@ ShellRoot {
                             IconImage {
                                 anchors.verticalCenter: parent.verticalCenter
                                 implicitSize: 22
-                                source: root.iconFor(wcard.ipc.class, DesktopEntries.applications.values.length)
+                                source: root.iconFor(root.windowId(wcard.ipc), DesktopEntries.applications.values.length)
                             }
 
                             Text {

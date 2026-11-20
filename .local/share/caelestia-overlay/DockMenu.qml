@@ -61,7 +61,7 @@ ColumnLayout {
             Layout.alignment: Qt.AlignVCenter
             implicitSize: details.implicitHeight
             // (Icons.windowApps: the dock's, bar's and switcher's icon too)
-            source: Quickshell.iconPath(root.target?.entry?.icon ?? Icons.windowApps?.iconName(root.target?.win?.lastIpcObject.class ?? "") ?? "", "application-x-executable")
+            source: Quickshell.iconPath(root.target?.entry?.icon ?? Icons.windowApps?.iconName(Icons.windowApps.windowId(root.target?.win?.lastIpcObject)) ?? "", "application-x-executable")
         }
 
         ColumnLayout {
