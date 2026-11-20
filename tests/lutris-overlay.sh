@@ -348,6 +348,55 @@ waitfor "$t/covers-ran" || fail "a key added since the last look didn't get lutr
 # ...and on Lutris's main (the next release: a change there that breaks one shows here first, as Caelestia's main does in
 # caelestia-overlay); an optional one left out only warns, any other one failing is said, the store pages' fix too. Said
 # (ahead, lib.sh), not a failure: the installed Lutris's checks above are the ones that count
+# services_on_desktop: a program's own services (Epic's updater, one sharing a process) flagged interactive before a Wine
+# start, so what they start has the desktop's Vulkan; Wine's own, a driver and one flagged already left; nothing to do,
+# the file not written
+mkdir -p "$t/pfx"
+cat >"$t/pfx/system.reg" <<'REG'
+WINE REGISTRY Version 2
+
+[System\\ControlSet001\\Services\\EpicGamesUpdater] 1793451240
+#time=1dd6936e68f8cf6
+"ImagePath"=str(2):"\"C:\\Program Files\\Epic Games\\Launcher\\Portal\\Binaries\\Win64\\EpicGamesUpdater.exe\""
+"Start"=dword:00000003
+"Type"=dword:00000010
+
+[System\\ControlSet001\\Services\\Shared] 1793451240
+"ImagePath"="C:\\Program Files\\Shared\\host.exe"
+"Type"=dword:00000020
+
+[System\\ControlSet001\\Services\\Eventlog] 1792432430
+"ImagePath"=str(2):"C:\\windows\\system32\\svchost.exe -k LocalServiceNetworkRestricted"
+"Type"=dword:00000010
+
+[System\\ControlSet001\\Services\\SomeDriver] 1792432430
+"ImagePath"=str(2):"C:\\Program Files\\Some\\drv.sys"
+"Type"=dword:00000001
+
+[System\\ControlSet001\\Services\\Already] 1792432430
+"ImagePath"=str(2):"C:\\Program Files\\Already\\svc.exe"
+"Type"=dword:00000110
+REG
+HOME=$t XDG_CACHE_HOME=$t/cache python3 -I - "$t/cache/lutris-overlay" "$t/pfx" <<'P' || fail "services_on_desktop flagged the wrong services"
+import os, re, sys
+sys.path.insert(0, sys.argv[1])
+from lutris.util.wine.services import services_on_desktop
+reg = os.path.join(sys.argv[2], "system.reg")
+services_on_desktop(sys.argv[2])
+text = open(reg).read()
+types = dict(re.findall(r'Services\\\\(\w+)\] [^\n]*\n(?:(?!\[)[^\n]*\n)*?"Type"=dword:(\w+)', text))
+assert types == {"EpicGamesUpdater": "00000110", "Shared": "00000120", "Eventlog": "00000010", "SomeDriver": "00000001",
+                 "Already": "00000110"}, types
+assert '"Start"=dword:00000003' in text and "#time=1dd6936e68f8cf6" in text
+mtime = os.stat(reg).st_mtime_ns
+os.utime(reg, ns=(0, 0))
+services_on_desktop(sys.argv[2])
+assert os.stat(reg).st_mtime_ns == 0, "written with nothing to change"
+services_on_desktop(sys.argv[2] + "/missing")  # (no prefix yet: nothing, no error)
+P
+grep -q 'services_on_desktop(prefix_path)' "$t/cache/lutris-overlay/lutris/runners/wine.py" ||
+    fail "Lutris's Wine start doesn't flag the prefix's services (services_on_desktop not in its prelaunch)"
+
 note=
 if timeout 120 git clone -q --depth 1 https://github.com/lutris/lutris "$t/lutris-main" 2>/dev/null; then
     mkdir -p "$t/main-root" && cp -as "$t/lutris-main/lutris" "$t/main-root/lutris"

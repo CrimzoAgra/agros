@@ -722,6 +722,19 @@ def egs_refresh():
 """)
 
 
+# Wine: a launcher's updater that's a Windows service (Epic's, EA's...) gets the user's desktop, where Vulkan works. On
+# Wine's hidden service desktop DXVK had no Vulkan: what the service started crashed in dxgi.dll, and Epic's update
+# never finished, asked for again at every start (services.py). Before every Wine or Proton start, any prefix
+def services_on_desktop():
+    shutil.copy(os.path.join(here, "services.py"), os.path.join(pkg, "util/wine/services.py"))
+    edit("runners/wine.py", """            prefix_manager.create_user_symlinks()
+""", """            prefix_manager.create_user_symlinks()
+            from lutris.util.wine.services import services_on_desktop  # lutris-overlay: services_on_desktop
+
+            services_on_desktop(prefix_path)
+""")
+
+
 # Changes that can be turned off, by setting name, with their label in the Settings app. The others are always on: the
 # Steam fix keeps installed games from being deleted, starting hidden only happens when asked (at login), and the
 # start-up once is a plain fix
@@ -740,12 +753,13 @@ OPTIONAL = {
     "bnet_source": "Battle.net among Lutris's sources (Lutris leaves it off)",
     "rockstar_source": "Rockstar Games among Lutris's sources (Lutris has none)",
 }
-# For the dotfiles' own scripts, not offered in the Settings app: one that no longer fits is left out like an optional
-# change (the script then makes do), not the whole build
+# For the dotfiles' own scripts, and fixes worth keeping Lutris's other changes for, not offered in the Settings app:
+# one that no longer fits is left out like an optional change (the script then makes do), not the whole build
 PLUMBING = {
     "library_refresh": "An open Lutris shows lutris-library's changes at once (else once it restarts)",
     "source_page_ids": "A store's own page shows all its games (else some go missing at random)",
     "egs_refresh": "Epic: the login renewed, not expired a day and a half after signing in",
+    "services_on_desktop": "Wine: launchers' updater services get Vulkan (Epic's update no longer crashes and loops)",
 }
 if sys.argv[1:] == ["--list"]:
     print(json.dumps([{"id": k, "label": v} for k, v in OPTIONAL.items()]))
@@ -761,7 +775,7 @@ except (OSError, ValueError):
     values = {}
 changes = [c for c in (sections, steam_placeholder, hide_uninstalled, launchers_apart, same_size_covers, start_hidden, startup_once,
                         vulkaninfo_once, rounded_covers, store_icons, window_after_game, reap_children, flathub_steam, library_refresh, sync_all, revive_installed,
-                        bnet_not_installed, bnet_source, rockstar_source, bnet_login, source_page_ids, source_icons, tall_covers, egs_refresh) if values.get(f"lutris.{c.__name__}") is not False]
+                        bnet_not_installed, bnet_source, rockstar_source, bnet_login, source_page_ids, source_icons, tall_covers, egs_refresh, services_on_desktop) if values.get(f"lutris.{c.__name__}") is not False]
 while True:
     try:
         for change in changes:
