@@ -759,7 +759,7 @@ PLUMBING = {
     "library_refresh": "An open Lutris shows lutris-library's changes at once (else once it restarts)",
     "source_page_ids": "A store's own page shows all its games (else some go missing at random)",
     "egs_refresh": "Epic: the login renewed, not expired a day and a half after signing in",
-    "services_on_desktop": "Wine: launchers' updater services get Vulkan (Epic's update no longer crashes and loops)",
+    "services_on_desktop": "Wine: launchers' updater services get Vulkan (Epic's update no longer crashes and loops), and Epic's overlay is off (games no longer black)",
 }
 if sys.argv[1:] == ["--list"]:
     print(json.dumps([{"id": k, "label": v} for k, v in OPTIONAL.items()]))

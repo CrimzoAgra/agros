@@ -349,8 +349,8 @@ waitfor "$t/covers-ran" || fail "a key added since the last look didn't get lutr
 # caelestia-overlay); an optional one left out only warns, any other one failing is said, the store pages' fix too. Said
 # (ahead, lib.sh), not a failure: the installed Lutris's checks above are the ones that count
 # services_on_desktop: a program's own services (Epic's updater, one sharing a process) flagged interactive before a Wine
-# start, so what they start has the desktop's Vulkan; Wine's own, a driver and one flagged already left; nothing to do,
-# the file not written
+# start, so what they start has the desktop's Vulkan; Wine's own, a driver and one flagged already left; Epic's overlay
+# turned off; nothing to do, the file not written
 mkdir -p "$t/pfx"
 cat >"$t/pfx/system.reg" <<'REG'
 WINE REGISTRY Version 2
@@ -376,6 +376,14 @@ WINE REGISTRY Version 2
 [System\\ControlSet001\\Services\\Already] 1792432430
 "ImagePath"=str(2):"C:\\Program Files\\Already\\svc.exe"
 "Type"=dword:00000110
+
+[Software\\Wow6432Node\\Epic Games\\EOS] 1795208276
+#time=1dd7931d12fe44a
+"MSIProductCode"="{065C945C-8A1E-47EE-8367-B4615DE97A32}"
+"OverlayPath"="C:\\Program Files (x86)\\Epic Games\\Epic Online Services\\managedArtifacts\\98bc"
+
+[Software\\Other] 1
+"OverlayPath"="kept"
 REG
 HOME=$t XDG_CACHE_HOME=$t/cache python3 -I - "$t/cache/lutris-overlay" "$t/pfx" <<'P' || fail "services_on_desktop flagged the wrong services"
 import os, re, sys
@@ -388,6 +396,8 @@ types = dict(re.findall(r'Services\\\\(\w+)\] [^\n]*\n(?:(?!\[)[^\n]*\n)*?"Type"
 assert types == {"EpicGamesUpdater": "00000110", "Shared": "00000120", "Eventlog": "00000010", "SomeDriver": "00000001",
                  "Already": "00000110"}, types
 assert '"Start"=dword:00000003' in text and "#time=1dd6936e68f8cf6" in text
+# Epic's overlay off (its path gone, the key's other values kept); another key's value of that name left
+assert "managedArtifacts" not in text and '"MSIProductCode"' in text and '"OverlayPath"="kept"' in text, text[-400:]
 mtime = os.stat(reg).st_mtime_ns
 os.utime(reg, ns=(0, 0))
 services_on_desktop(sys.argv[2])
