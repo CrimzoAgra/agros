@@ -111,6 +111,17 @@ hl.on("window.open", function(win)
         hl.dispatch(hl.dsp.window.tag({ tag = "+game", window = win }))
     end
 end)
+-- A store launcher's windows tagged store_launcher: under Proton they get the games' class and with it Caelestia's game
+-- tag, which took their title bar (titlebars.lua gives it back by this tag: a launcher is a window like any other). The
+-- windows already open at a config load too
+local function tag_launcher(win)
+    local tags = type(win.tags) == "table" and table.concat(win.tags, " ") or (win.tags or "")
+    if win.pid and win.pid > 0 and not (" " .. tags .. " "):find(" store_launcher ", 1, true) and store_launcher(win.pid) then
+        hl.dispatch(hl.dsp.window.tag({ tag = "+store_launcher", window = "address:" .. win.address }))
+    end
+end
+hl.on("window.open", function(win) if win then tag_launcher(win) end end)
+for _, w in ipairs(hl.get_windows() or {}) do tag_launcher(w) end
 -- Edge resizing (windows.lua) off while a game is open: Hyprland grows every floating window on a shown workspace by
 -- 16 px for it, and a game, borderless over the whole screen but not fullscreen, then took a click on the next screen
 -- beside it, or in a screen corner (its rounded corner: an RTS's camera scroll), as the start of a resize. On again

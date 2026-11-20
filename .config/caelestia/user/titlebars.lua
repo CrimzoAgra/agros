@@ -35,14 +35,15 @@ local alpha = string.format("%02x", math.floor(math.max(0, math.min(1, tonumber(
 local own_title_bar = { "steam", "proton.vpn.app.gtk" }
 local height = 32
 -- dots.titlebar_height: windows.lua's maximise leaves room for the bar above a window that has one. None exactly where
--- the rules at the end give none, by the same tags and classes: fullscreen windows, Caelestia's game tag (games, and
--- store launchers under Proton or Lutris: steam_app_default), Proton's steam_app_<id>, X11 menus and pop-ups
--- (Caelestia's xwl_popup tag), apps with their own
+-- the rules at the end give none, by the same tags and classes: fullscreen windows, Caelestia's game tag (games; a
+-- store launcher, which under Proton or Lutris gets it too with the class steam_app_default, has its bar, tagged
+-- store_launcher by apps.lua), Proton's steam_app_<id>, X11 menus and pop-ups (Caelestia's xwl_popup tag), apps with
+-- their own
 function dots.titlebar_height(win)
     if not win.floating or win.fullscreen ~= 0 or (win.class or ""):match("^steam_app_%d+$") then return 0 end
-    for _, t in ipairs(win.tags or {}) do
-        if t == "game" or t == "game*" or t == "xwl_popup" or t == "xwl_popup*" then return 0 end
-    end
+    local tags = {}
+    for _, t in ipairs(win.tags or {}) do tags[t:gsub("%*$", "")] = true end
+    if tags.xwl_popup or tags.game and not tags.store_launcher then return 0 end
     for _, c in ipairs(own_title_bar) do
         if win.class == c then return 0 end
     end
@@ -97,6 +98,9 @@ hl.window_rule({ match = { float = false }, ["hyprbars:no_bar"] = true })
 hl.window_rule({ match = { fullscreen = true }, ["hyprbars:no_bar"] = true })
 hl.window_rule({ match = { class = "^steam_app_\\d+$" }, ["hyprbars:no_bar"] = true })
 hl.window_rule({ match = { tag = "game" }, ["hyprbars:no_bar"] = true })  -- Lutris, gamescope, native Steam games too
+-- A store launcher's window has its bar (floating, not fullscreen: the rules above still apply): the game tag above came
+-- with its class (apps.lua tags it store_launcher)
+hl.window_rule({ match = { tag = "store_launcher", float = true, fullscreen = false }, ["hyprbars:no_bar"] = false })
 -- XWayland popups (Caelestia's xwl_popup tag: menus and pop-ups of X11 apps, Wine's included) float, but aren't windows
 hl.window_rule({ match = { tag = "xwl_popup" }, ["hyprbars:no_bar"] = true })
 local classes = {}
