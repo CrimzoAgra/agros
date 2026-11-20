@@ -17,8 +17,8 @@ setting on any page.
   sleeps, the weather place, clock and units
 - **Features**: low input lag in games, how games and their launchers behave, and each of AgrOS's changes to the
   desktop and Lutris, which you can turn off one by one
-- **Startup**: which apps start when you log in: AgrOS's own, and any app you add with **Add an app** (switch one you
-  added off to take it out again)
+- **Startup**: which apps start when you log in: none until you add them with **Add an app** (switch one you added off
+  to take it out again). Lutris, Capri, Proton VPN, Solaar and ArtCraft start quietly, in their tray
 - **Shortcuts**: every shortcut. Click **+** next to one and press the new keys. One used twice shows in red. The
   fixed ones at the bottom can't be changed, but show so you don't pick their keys. Capri's own keys show there too,
   and no other shortcut can have them (she uses them while she runs)
@@ -39,7 +39,7 @@ automatic), set at every login without asking for your password.
 
 ## Night light
 
-Off by default. Turn on **Startup > Night light** and, from your next login, the screens turn warmer after sunset,
+Off by default. Turn on **Screens > Night light** and, from your next login, the screens turn warmer after sunset,
 from where your PC finds you on the network. To set your location or the colours yourself, see
 `~/.config/gammastep/config.ini`.
 

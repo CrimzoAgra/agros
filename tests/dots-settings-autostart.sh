@@ -53,7 +53,8 @@ open(f"{system}/spaced.desktop", "w").write("[Desktop Entry]  \nType=Application
 ds.autostart_set("spaced.desktop", False)
 assert not ds.autostart_on("spaced.desktop"), "an entry with spaces after its header not turned off"
 # Startup's "Add an app": the installed apps in the menus, not terminal ones nor ones listed already; picked, it's
-# listed and starts (even without an icon); switched off, it's gone from the list and offered again
+# listed and starts (even without an icon); switched off, it's gone from the list and offered again. Ones AgrOS knows
+# start quietly
 apps = f"{t}/apps"
 os.makedirs(apps)
 ds.APPLICATIONS = [apps]
@@ -70,6 +71,11 @@ assert "editor.desktop" not in offered(), "added, still offered"
 ds.autostart_set("editor.desktop", False)
 assert not os.path.exists(f"{mine}/editor.desktop"), "one you added, switched off, still listed"
 assert offered() == ["editor.desktop"], "switched off, not offered again"
+# One AgrOS knows starts quietly (Lutris: in its tray, no window): its entry's own Exec swapped, not its actions'
+open(f"{apps}/net.lutris.Lutris.desktop", "w").write("[Desktop Entry]\nType=Application\nName=Lutris\nExec=lutris %U\n\n[Desktop Action x]\nName=X\nExec=lutris --x\n")
+ds.startup_add("net.lutris.Lutris.desktop")
+text = open(f"{mine}/net.lutris.Lutris.desktop").read()
+assert "\nExec=env LUTRIS_START_HIDDEN=1 lutris\n" in text and "Exec=lutris --x" in text, text
 try:
     ds.startup_add("../hello.desktop")
     raise AssertionError("a path taken as an app")

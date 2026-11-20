@@ -321,11 +321,11 @@ personal_restore() {
             echo "Capri is installed at your next login (your GitHub login works from then: it's in the keyring)."
         fi
     fi
-    # Proton VPN's account is back, but not its start at login: a desktop setting, off at first (a VPN at every login is
-    # yours to choose)
+    # Proton VPN's account is back, but not its start at login (a VPN at every login is yours to choose): said, unless
+    # it's among the apps you start at login already (Desktop Settings → Startup: your autostart entries)
     if grep -qE '^\.config/Proton/VPN(/|$)' <<<"$list" &&
-        [[ $("$helpers/dots-settings" get startup.protonvpn 2>/dev/null) != true ]]; then
-        echo "Proton VPN starts at login only if you turn it on: Desktop Settings → Startup."
+        [[ ! -e ${XDG_CONFIG_HOME:-$HOME/.config}/autostart/proton.vpn.app.gtk.desktop ]]; then
+        echo "Proton VPN starts at login only if you add it: Desktop Settings → Startup."
     fi
     echo "Accounts back. Log out and in (the keyring): it opens with the password you logged in with on your old PC."
     # (however it was run: the welcome's offer answered, not made again at the next login)

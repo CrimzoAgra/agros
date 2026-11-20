@@ -75,6 +75,7 @@
             ]
         },
         "workspaces": {
+            "ignoredTags": ["xwl_popup"],
             "maxWindowIcons": 5,
             "showWindows": true
         }

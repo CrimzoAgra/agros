@@ -32,8 +32,6 @@ or "value<TAB>label"; "open": a value not listed is kept), keys, number ("min", 
 (any JSON value: Caelestia's lists), image (a choice shown as pictures: the wallpaper). "readonly": shown, not changed.
 "reserved": whose keys a "keys" setting's are (Capri's, which she binds herself while she runs): no other shortcut can
 have them.
-"needs": an app's setting (Startup's): programs on the PATH or paths (~: your home), one there meaning it's installed;
-with none, the app shows it as "(not installed)", not changed there.
 Caelestia's own options: a key caelestia-shell.<option> (its shell.json) or caelestia-tokens.<option> (its
 shell-tokens.json, sizes and timings): type, default and choices come from the installed Caelestia
 (caelestia-options.qml), so the schema only gives the label and description, and one Caelestia no longer has isn't
@@ -51,7 +49,6 @@ import math
 import os
 import pwd
 import re
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -99,6 +96,16 @@ APPLICATIONS = [f"{HOME}/.local/share/applications", f"{HOME}/.local/share/flatp
 # An autostart entry added from Startup's "Add an app": switched off, it's removed (not kept hidden), and it's listed
 # even without an icon
 ADDED = "X-AgrOS-Startup"
+# Apps "Add an app" starts quietly at login, by launcher entry: in their tray, no window (AgrOS used to preset these)
+LOGIN_EXEC = {
+    "net.lutris.Lutris.desktop": "env LUTRIS_START_HIDDEN=1 lutris",  # (the patched one, ~/.local/bin/lutris)
+    "capri.desktop": "capri --hidden",  # put away, only her tray icon: it or her key brings her out
+    # (after keyring-default has made "login" the default keyring: on a fresh install it could ask for the old one's
+    # password while that's being moved)
+    "proton.vpn.app.gtk.desktop": 'sh -c "keyring-default; exec protonvpn-app"',
+    "solaar.desktop": "solaar --window=hide",  # (puts the mouse's settings back when it reconnects)
+    "ai.storyteller.artcraft-launcher.desktop": "artcraft-silent",  # (also when it restarts after updating itself)
+}
 
 
 def desktop_entry(path):
@@ -168,13 +175,19 @@ def startup_apps():
 
 def startup_add(name):
     """An app started at login: its launcher entry copied into your autostart folder, marked as added here, shown (not
-    hidden)"""
+    hidden); started quietly when it's one LOGIN_EXEC knows"""
     path = next((p for p in (os.path.join(d, name) for d in APPLICATIONS) if os.path.exists(p)), None)
     if os.sep in name or not path:
         sys.exit(f"startup.add: {name}: no such app")
     with open(path, errors="replace") as f:
         lines = [l for l in f.read().splitlines()
                  if not l.startswith(("Hidden=", "NoDisplay=", "X-GNOME-Autostart-enabled=", f"{ADDED}="))]
+    if name in LOGIN_EXEC:  # (the entry's own Exec, not its actions')
+        section = ""
+        for i, l in enumerate(lines):
+            section = l.strip() if l.strip().startswith("[") else section
+            if section == "[Desktop Entry]" and l.startswith("Exec="):
+                lines[i] = f"Exec={LOGIN_EXEC[name]}"
     lines.insert([l.strip() for l in lines].index("[Desktop Entry]") + 1, f"{ADDED}=true")
     os.makedirs(AUTOSTART[1], exist_ok=True)
     with open(os.path.join(AUTOSTART[1], name), "w") as f:
@@ -715,13 +728,6 @@ def current(setting, saved):
     return value
 
 
-def installed(setting):
-    """Whether the app a setting is for is there (its "needs": a program on the PATH, or a path); true with none named"""
-    needs = setting.get("needs") or []
-    return not needs or any(os.path.exists(HOME + n[1:] if n.startswith("~/") else n) if "/" in n else shutil.which(n)
-                            for n in needs)
-
-
 def values(settings):
     saved = stored()
     return {key: current(s, saved) for key, s in settings.items()}
@@ -864,9 +870,6 @@ def main(args):
         now = values(settings)
         for s in (s for page in pages["pages"] for group in page["groups"] for s in group["settings"]):
             s["value"] = now[s["key"]]  # (every copy of one listed twice)
-            # (only in what the app shows: settings.lua keeps a value set, for when the app is installed)
-            if not installed(s) and not s.get("readonly"):
-                s.update(readonly=True, label=f"{s['label']} (not installed)")
         print(json.dumps(pages))
     elif cmd in ("values", "now"):
         print(json.dumps(values(settings)))

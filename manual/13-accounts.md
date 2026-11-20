@@ -26,9 +26,9 @@ Click **Restore accounts** in the notification after your first login, or run `a
 and type your passphrase. Everything goes straight back where it belongs, and anything it replaces is backed up first.
 Capri, the desktop companion, installs right after: her code is in a private GitHub repo, so she installs only for a
 GitHub login that can read it. If your GitHub login only works once you've logged out and in again, she installs at
-that next login. Lutris and Proton VPN, open in the tray as they are after logging in (Proton VPN if you set it to
-start then), are closed for it (it asks first). Proton VPN's account comes back, but not its start at login: it
-starts at login only if you turn it on, in Desktop Settings → Startup.
+that next login. Lutris and Proton VPN, open in the tray as they are after logging in (if you added them to Startup),
+are closed for it (it asks first). Proton VPN's account comes back, but not its start at login: it starts at login
+only if you add it, in Desktop Settings → Startup.
 
 No stick? `agros-personal` opens each app for you to sign in instead.
 

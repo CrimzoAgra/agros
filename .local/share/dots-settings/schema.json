@@ -264,6 +264,18 @@
           ]
         },
         {
+          "title": "Night light (from the next login)",
+          "settings": [
+            {
+              "key": "nightlight",
+              "label": "Night light",
+              "description": "Warmer screens after sunset, from where your PC finds you on the network.",
+              "type": "bool",
+              "default": false
+            }
+          ]
+        },
+        {
           "title": "Screens",
           "from": "screens"
         }
@@ -1070,61 +1082,12 @@
       "icon": "rocket_launch",
       "groups": [
         {
-          "title": "AgrOS apps (from the next login)",
-          "settings": [
-            {
-              "key": "startup.lutris",
-              "label": "Lutris",
-              "description": "In its tray, no window: your games library, ready for the bar and launcher.",
-              "type": "bool",
-              "default": true
-            },
-            {
-              "key": "startup.protonvpn",
-              "label": "Proton VPN",
-              "description": "In its tray.",
-              "type": "bool",
-              "default": false
-            },
-            {
-              "key": "startup.nightlight",
-              "label": "Night light",
-              "description": "Warmer screens after sunset, from where your PC finds you on the network.",
-              "type": "bool",
-              "default": false
-            },
-            {
-              "key": "startup.solaar",
-              "label": "Solaar",
-              "description": "In its tray (your mouse's battery): puts the mouse DPI back when the mouse reconnects.",
-              "type": "bool",
-              "default": false,
-              "needs": ["solaar"]
-            },
-            {
-              "key": "startup.artcraft",
-              "label": "ArtCraft Launcher",
-              "description": "In its tray, no window (also when it restarts after updating itself).",
-              "type": "bool",
-              "default": false,
-              "needs": ["~/.local/share/flatpak/app/ai.storyteller.artcraft-launcher", "/var/lib/flatpak/app/ai.storyteller.artcraft-launcher"]
-            },
-            {
-              "key": "startup.capri",
-              "label": "Capri",
-              "description": "Put away, only her tray icon (it or her key, Shift+Space by default, brings her out), when she's installed.",
-              "type": "bool",
-              "default": true
-            }
-          ]
-        },
-        {
-          "title": "Your apps (from the next login)",
+          "title": "Apps started at login (from the next login)",
           "settings": [
             {
               "key": "startup.add",
               "label": "Add an app",
-              "description": "Any app you have installed, started when you log in: it joins the list below, switched on. Switching one you added off takes it out of the list again.",
+              "description": "Any app you have installed, started when you log in: it joins the list below, switched on. Lutris, Capri, Proton VPN, Solaar and ArtCraft start quietly, in their tray. Switching one you added off takes it out of the list again.",
               "type": "choice",
               "default": "",
               "startup_add": true

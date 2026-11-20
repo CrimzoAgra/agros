@@ -6,21 +6,9 @@ for _, tag in ipairs({ "music_player", "communication_app", "todo_app", "system_
     hl.window_rule({ match = { tag = tag }, workspace = "unset" })
 end
 
--- Apps started at login, each a switch in the Settings app (Startup page: startup.<app>; defaults in its schema: only
--- Lutris and Capri on)
-local function at_login(app, cmd)
-    if dots.setting("startup." .. app) then hl.on("hyprland.start", function() hl.exec_cmd(cmd) end) end
-end
-
--- Proton VPN at login, when you turn it on (off at first: a VPN at every login is yours to choose) (app-launch: in a
--- unit of its own under uwsm, like apps started from the launcher)
--- After keyring-default (desktop.lua) has made "login" the default keyring: started alongside, on a fresh install it
--- could ask for the old keyring's password while that's being moved
-at_login("protonvpn", "sh -c '~/.local/bin/keyring-default; exec ~/.local/bin/app-launch protonvpn-app'")
-
--- Lutris at login, in its tray only (the patched one, ~/.local/bin/lutris), in a unit of its own like apps from the
--- launcher. Store launchers (Steam...) aren't started: they start when a game needs them (Steam through steam-start)
-at_login("lutris", "~/.local/bin/app-launch env LUTRIS_START_HIDDEN=1 lutris")
+-- Apps started at login: only the ones you add (Settings app, Startup page: your autostart entries, each in a unit of
+-- its own). None preset. Lutris, Capri, Proton VPN, Solaar and ArtCraft added there start quietly, in their tray
+-- (dots-settings' LOGIN_EXEC)
 -- Steam's own notification toasts ("friend started playing...") are windows: tag them like its menus, so the dock
 -- doesn't show them
 hl.window_rule({ match = { class = "steam", title = "notificationtoasts_.*" }, tag = "+xwl_popup" })
@@ -122,6 +110,11 @@ local function tag_launcher(win)
 end
 hl.on("window.open", function(win) if win then tag_launcher(win) end end)
 for _, w in ipairs(hl.get_windows() or {}) do tag_launcher(w) end
+-- A store launcher's untitled windows are parts of its own, not windows: Epic draws its minimise, maximise and close
+-- buttons as a window of their own (73x36, at its top right). Tagged like X11 menus (Caelestia's xwl_popup), so the
+-- workspace icons, the dock and the switcher don't show them (as Caelestia does with Steam's untitled windows). A rule,
+-- not a tag set once: one that gets a title later is a window again
+hl.window_rule({ match = { tag = "store_launcher", title = "^$", xwayland = true }, tag = "+xwl_popup" })
 -- Edge resizing (windows.lua) off while a game is open: Hyprland grows every floating window on a shown workspace by
 -- 16 px for it, and a game, borderless over the whole screen but not fullscreen, then took a click on the next screen
 -- beside it, or in a screen corner (its rounded corner: an RTS's camera scroll), as the start of a resize. On again
@@ -282,17 +275,14 @@ function dots.spotify_show()
     end
 end
 
--- ArtCraft Launcher in its tray, also when it restarts after updating itself (~/.local/bin/artcraft-silent)
-at_login("artcraft", "~/.local/bin/artcraft-silent")
-
--- Solaar in its tray (the mouse's battery), which puts the mouse's settings back when it reconnects, and the mouse DPI
--- chosen in the Settings app set now (~/.local/bin/mouse-dpi)
-at_login("solaar", "~/.local/bin/app-launch solaar --window=hide")
+-- The mouse DPI chosen in the Settings app, set at login (~/.local/bin/mouse-dpi; Solaar, when you add it to Startup,
+-- puts the mouse's settings back when it reconnects)
 hl.on("hyprland.start", function() hl.exec_cmd("~/.local/bin/mouse-dpi") end)
 
 -- The night light (gammastep: warmer screens after sunset, ~/.config/gammastep/config.ini), when you turn it on (off
--- at first). Caelestia's execs.lua started it at every login: taken out there (agros-hyprland-settings' _execs_sed)
-at_login("nightlight", "gammastep")
+-- at first; Settings app, Screens page). Caelestia's execs.lua started it at every login: taken out there
+-- (agros-hyprland-settings' _execs_sed)
+if dots.setting("nightlight") then hl.on("hyprland.start", function() hl.exec_cmd("gammastep") end) end
 
 -- ...and keep it there when Caelestia (the tray) restarts or crashes; Spotify shows its window when the tray goes away.
 -- tray-keeper also brings back tray icons apps like Proton VPN don't re-add themselves
@@ -332,6 +322,4 @@ if (capri_run and capri_run ~= "" and file_exists(capri_run)) or file_exists(dat
         hl.on(ev, capri_keys_soon)
     end
     capri_keys_follow()
-    -- At login: silently (no intro)
-    at_login("capri", "~/.local/bin/capri --hidden")  -- put away, only her tray icon: it or Shift+Space brings her out
 end

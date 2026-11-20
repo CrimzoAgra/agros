@@ -26,15 +26,13 @@ here, dots = sys.argv[1], sys.argv[2]
 # program -> its package; "optional:" one that isn't always installed (each place that runs it says why that's fine)
 PROGRAMS = {
     "btop": "btop", "curl": "curl", "df": "coreutils", "fish": "fish", "flock": "util-linux", "foot": "foot",
-    "gtk-launch": "gtk3", "head": "coreutils", "hyprctl": "hyprland", "journalctl": "systemd", "nmcli": "networkmanager",
-    "protonvpn-app": "proton-vpn-gtk-app", "qs": "quickshell-git", "readlink": "coreutils", "setsid": "util-linux",
+    "gtk-launch": "gtk3", "head": "coreutils", "hyprctl": "hyprland", "journalctl": "systemd", "nmcli": "networkmanager", "qs": "quickshell-git", "readlink": "coreutils", "setsid": "util-linux",
     "sh": "bash", "sleep": "coreutils", "systemctl": "systemd", "tail": "coreutils", "cat": "coreutils",
-    "rm": "coreutils", "mkdir": "coreutils", "mv": "coreutils", "env": "coreutils", "timeout": "coreutils", "md5sum": "coreutils", "id": "coreutils",
+    "rm": "coreutils", "mkdir": "coreutils", "mv": "coreutils", "timeout": "coreutils", "md5sum": "coreutils", "id": "coreutils",
     "caelestia": "caelestia-cli", "loginctl": "systemd",
     # (the widgets' GPU meter: only with NVIDIA's driver loaded, which brings it)
     "nvidia-smi": "optional:nvidia-utils",
     # (its login start is off by default: agros-welcome --system installs it with a Logitech device plugged in)
-    "solaar": "optional:solaar",
 }
 # ...and Caelestia's
 CAELESTIA = {

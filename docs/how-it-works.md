@@ -191,9 +191,9 @@ SteamGridDB's key (`lutris-covers`); and the weather widget's place.
 plugged in, mounted if it isn't, or the folder you name after it), encrypted with a passphrase you pick (gpg, AES-256):
 a lost drive gives nothing without it. `agros-personal` decrypts it straight into place (nothing unencrypted written
 anywhere else) and backs up what it replaces; the keyring opens with your old login password. It refuses while an app
-whose files it brings back is open, but closes Lutris and Proton VPN when they're only in the tray (they start there at
-login, Proton VPN once you turn that on), asking first in a terminal. Proton VPN's start at login (`startup.protonvpn`,
-off at first) isn't in the file: a restore that brought its account back says where to turn it on. It's never in the
+whose files it brings back is open, but closes Lutris and Proton VPN when they're only in the tray (where they start at
+login once you add them to Startup), asking first in a terminal. Proton VPN's start at login (your autostart entry for
+it) isn't in the file: a restore that brought its account back says where to add it. It's never in the
 repo (`--save` refuses a folder inside a git repo): saved logins get past your password and 2FA, and git keeps every
 version. With no drive, it opens each app for you to sign in instead (LibreWolf's Firefox account brings bookmarks and
 passwords through Sync) and asks the weather widget's place. Save again now and then: logins expire.
@@ -467,8 +467,8 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
   environment (no `XDG_CURRENT_DESKTOP`: the shell would start with no Qt theme), it has Hyprland run it instead, once
 - **`.local/bin/caelestia-pin`**: pin apps to the launcher or dock from a picker
 - **Night light** (`.config/gammastep/config.ini`): off by default. Caelestia's `execs.lua` started gammastep at every
-  login; `agros-hyprland-settings` takes that line out (`_execs_sed`) and Settings > Startup > Night light
-  (`startup.nightlight`, `user/apps.lua`) starts it instead. geoclue's demo agent (Caelestia's `execs.lua`, both in
+  login; `agros-hyprland-settings` takes that line out (`_execs_sed`) and Settings > Screens > Night light
+  (`nightlight`, `user/apps.lua`) starts it instead. geoclue's demo agent (Caelestia's `execs.lua`, both in
   `agros-desktop`) gives it the location. It turns the screens warmer after sunset (6500 K by day, 4000 K at
   night, faded in). Its location comes from geoclue (Arch's: Wi-Fi networks and then the IP, looked up on BeaconDB, its
   default since Mozilla's service closed; nothing to set). `agros-system`'s `/etc/geoclue/conf.d/90-agros.conf` lets
@@ -958,7 +958,8 @@ helper a package update just brought works before `agros-links` has linked it), 
   `~/.cache/capri.log`, moved aside past 5 MB): native on Wayland, a layer-shell surface that lets the clicks around
   her through; `$CAPRI_RUN`, set in your session, names a start script run instead (a checkout of her code you work
   on). Started again while she runs, she comes back. At login she starts put away (`--hidden`: only her tray icon)
-  when the Settings app's Startup page says so (on by default); once she's installed (her build's `current/capri`),
+  when you add her on the Settings app's Startup page (none preset: `dots-settings`' `LOGIN_EXEC` gives her entry
+  `--hidden`); once she's installed (her build's `current/capri`),
   Shift+Space (Settings, Shortcuts; off while a game or a fullscreen window has the focus) puts her away or brings her
   back, through her local bridge (`POST 127.0.0.1:47823/toggle`). Her own keys (Ctrl+Alt+Space talk,
   Ctrl+Alt+Shift+Space always listening, Ctrl+Alt+K chat, Ctrl+Alt+X the scanner) are binds she makes herself while she

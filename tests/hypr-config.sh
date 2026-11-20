@@ -341,7 +341,7 @@ grep -qx 'no_hardware_cursors 2' <<<"$(run_config 'return { ["games.low_latency"
     fail "the cursor layer taken away with lower input lag off"
 good='return { ["keys.windows_next"] = { "ALT + TAB" }, ["keys.minimise"] = { "SUPER + M", "SUPER + DOWN" },
   ["keys.screenshot"] = {}, ["windows.cascade"] = true, ["windows.titlebars"] = true, ["windows.focus"] = "hover",
-  ["startup.lutris"] = true, ["caelestia-keys.kbTerminal"] = { "SUPER + RETURN" }, ["caelestia-keys.kbGoToWs"] = { "ALT" } }'
+  ["nightlight"] = true, ["caelestia-keys.kbTerminal"] = { "SUPER + RETURN" }, ["caelestia-keys.kbGoToWs"] = { "ALT" } }'
 for plugin in 0 1; do
     out=$(run_config "$good" $plugin) || fail "the config failed to load (plugin $plugin): $out"
     grep -q '^config error' <<<"$out" && fail "config errors (plugin $plugin): $(grep '^config error' <<<"$out")"
