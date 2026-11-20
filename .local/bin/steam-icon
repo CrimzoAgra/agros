@@ -1,0 +1,39 @@
+#!/usr/bin/python3 -I
+# steam-icon <appid> [steam folder]: a Steam game's icon, as steam_icon_<appid> in ~/.local/share/icons/hicolor/32x32/apps,
+# what the dock, the switcher and the Super menu look for (Steam makes it only with a game's desktop shortcut: none on a
+# new system). From Steam's library cache (its hash-named .jpg, not its banners). One there already is left alone; none
+# cached: nothing, no error. Used by game-focus (a game opened) and lutris-library (a game's menu entry). The Steam
+# folder: ~/.local/share/Steam unless given (Flathub's)
+import os
+import re
+import subprocess
+import sys
+
+
+def steam_icon(gid, steam=None):
+    """True when the game has its icon (made now or already there)"""
+    icons = os.path.expanduser("~/.local/share/icons/hicolor")
+    if not gid.isdigit():
+        return False
+    if any(os.path.exists(f"{icons}/{d}/apps/steam_icon_{gid}.png") for d in
+           (os.listdir(icons) if os.path.isdir(icons) else [])):
+        return True
+    cache = os.path.join(steam or os.path.expanduser("~/.local/share/Steam"), "appcache/librarycache", gid)
+    src = [f for f in (os.listdir(cache) if os.path.isdir(cache) else []) if re.fullmatch(r"[0-9a-f]{40}\.jpg", f)]
+    if not src:
+        return False
+    import gi
+    gi.require_version("GdkPixbuf", "2.0")
+    from gi.repository import GdkPixbuf
+    os.makedirs(f"{icons}/32x32/apps", exist_ok=True)
+    GdkPixbuf.Pixbuf.new_from_file(f"{cache}/{src[0]}").savev(f"{icons}/32x32/apps/steam_icon_{gid}.png", "png", [], [])
+    # (an icon cache older than the new file would hide it)
+    if os.path.exists(f"{icons}/icon-theme.cache"):
+        subprocess.run(["gtk-update-icon-cache", "-q", "-f", "-t", icons], check=False)
+    return True
+
+
+if __name__ == "__main__":
+    if len(sys.argv) not in (2, 3):
+        sys.exit("usage: steam-icon <appid> [steam folder]")
+    sys.exit(0 if steam_icon(*sys.argv[1:]) else 1)

@@ -8,6 +8,7 @@
 # - The store launchers (EA App, Ubisoft Connect, Battle.net, Epic, GOG Galaxy, Rockstar, Steam) are listed under Launchers in
 #   the sidebar, installed or not: opening one there installs it through Lutris (lutris-overlay keeps them out of the
 #   Games view)
+# - Installed games and launchers get an app menu entry (the Super menu), once each
 # Run by lutris-library.path whenever Lutris's database changes (a store sync), and by agros-welcome. An open Lutris
 # shows the changes at once (lutris-overlay's library_refresh action, asked over D-Bus); a plain one once restarted
 import fcntl
@@ -316,6 +317,127 @@ for name in os.listdir(bundled) if os.path.isdir(bundled) else []:
     if not glob.glob(os.path.join(settings.COVERART_PATH, slug + ".*")):
         os.makedirs(settings.COVERART_PATH, exist_ok=True)
         shutil.copyfile(os.path.join(bundled, name), os.path.join(settings.COVERART_PATH, name))
+
+
+# Installed games and launchers in the app menu (the Super menu): Lutris makes an entry only when asked (its install
+# window's "Create application menu shortcut", off by default, or the game's right-click menu), so Epic, EA App or a
+# store game installed through Lutris was in Lutris alone. Each installed one gets Lutris's own entry, once: one you
+# delete (right-click > "Delete application menu shortcut") isn't made again. None for a hidden copy (another store's
+# shows) or one an app in the menu already stands for (Steam: its own steam.desktop). One made here for a game no longer
+# installed (its store found it gone, or it left the library; Lutris's own uninstall removes it itself) goes too
+# A menu entry's icon and what the dock knows its windows by. The icon is made before the entry names it: the shell
+# remembers a name it once found no icon for (Qt's lookup), and shows none for it until it restarts
+#  - a Steam game: Steam's own icon for it (steam-icon, beside this: steam_icon_<id>, the one the dock and the switcher
+#    find a steam_app_<id> window's app by)
+#  - else Lutris's (lutris_<slug>, from lutris.net), or one taken from the game's .exe as Lutris does (its game info's
+#    "extract icon"): lutris.net has none for some (EA App)
+#  - a Wine game: its prefix and .exe (X-AgrOS-WinePrefix, X-AgrOS-WineExe). Under Proton every Lutris game's window
+#    has one class, steam_app_default: app-for-window tells them apart by the prefix their process runs in (and the
+#    .exe, for games sharing their store launcher's prefix)
+def entry_details(game_id, slug, service, appid, runner):
+    from lutris.util import system  # noqa: E402
+
+    icon = f"lutris_{slug}"
+    if service == "steam" and appid and subprocess.run(
+            [os.path.join(os.path.dirname(os.path.realpath(__file__)), "steam-icon"), appid] + ([steam_root] if steam_root else []),
+            capture_output=True).returncode == 0:
+        icon = f"steam_icon_{appid}"
+    keys = {}
+    if runner == "wine":
+        from lutris.game import Game  # noqa: E402
+        try:
+            game = Game(game_id)
+            if not glob.glob(os.path.join(settings.ICON_PATH, icon + ".*")) and game.runner.extract_icon(slug):
+                system.update_desktop_icons()  # (the icon cache: one older than the icon hides it)
+            prefix, exe = game.runner.prefix_path, game.runner.game_exe
+            if prefix:
+                keys["X-AgrOS-WinePrefix"] = os.path.realpath(prefix)
+            if exe:
+                keys["X-AgrOS-WineExe"] = os.path.basename(exe)
+        except Exception as e:  # noqa: BLE001 (a game whose config is broken: its entry anyway, Lutris's icon name)
+            logger.error("%s: %s", slug, e)
+    return icon, keys
+
+
+def fix_entry(path, icon, keys):
+    """The entry Lutris wrote with this icon and these keys"""
+    try:
+        with open(path, encoding="utf-8") as f:
+            lines = [line for line in f.read().splitlines() if line.split("=", 1)[0] not in keys]
+    except OSError:
+        return
+    lines = [f"Icon={icon}" if line.startswith("Icon=") else line for line in lines]
+    lines += [f"{k}={v}" for k, v in keys.items()]
+    text = "\n".join(lines).strip("\n") + "\n"
+    with open(path, encoding="utf-8") as f:
+        if f.read() == text:
+            return
+    with open(path + ".tmp", "w", encoding="utf-8") as f:
+        f.write(text)
+    os.replace(path + ".tmp", path)
+
+
+def menu_entries():
+    from gi.repository import GLib  # noqa: E402
+    from lutris.util import xdgshortcuts  # noqa: E402
+
+    made_file = os.path.join(os.path.dirname(mine_file), "lutris-library-menu")
+    try:
+        with open(made_file, encoding="utf-8") as f:
+            made = {int(k): v for k, v in json.load(f).items()}  # game id: its slug (to find its entry once it's gone)
+    except (OSError, ValueError, AttributeError):
+        made = {}
+    # The menu's other apps by name (Lutris's own entries left out: they're Lutris and these games)
+    apps = set()
+    for folder in [GLib.get_user_data_dir(), *GLib.get_system_data_dirs()]:
+        for entry in glob.glob(os.path.join(folder, "applications", "*.desktop")):
+            if os.path.basename(entry).startswith("net.lutris."):
+                continue
+            try:
+                with open(entry, encoding="utf-8", errors="replace") as f:
+                    name = next((line[5:].strip() for line in f if line.startswith("Name=")), "")
+            except OSError:
+                continue
+            if name:
+                apps.add(name.casefold())
+    (hidden_id,) = db.execute("SELECT id FROM categories WHERE name = '.hidden'").fetchone()
+    installed = {i: (slug, name) for i, slug, name in db.execute(
+        "SELECT id, slug, name FROM games WHERE installed = 1 AND slug IS NOT NULL AND name IS NOT NULL AND id NOT IN "
+        "(SELECT game_id FROM games_categories WHERE category_id = ?)", (hidden_id,))}
+    added = removed = 0
+    for i, slug in sorted(made.items()):
+        if i not in installed:
+            if xdgshortcuts.menu_launcher_exists(slug, i):
+                xdgshortcuts.remove_launcher(slug, i, menu=True)
+                removed += 1
+            del made[i]
+    rows = {i: (service, appid, runner) for i, service, appid, runner in db.execute(
+        "SELECT id, service, service_id, runner FROM games WHERE installed = 1")}
+    for i, (slug, name) in installed.items():
+        if i in made or name.casefold() in apps:
+            continue
+        # (one there already, made in Lutris: counted as made, so deleting it later is final too)
+        if not xdgshortcuts.menu_launcher_exists(slug, i):
+            icon, keys = entry_details(i, slug, *rows[i])  # (its icon first: see entry_details)
+            xdgshortcuts.create_launcher(slug, i, name, menu=True)
+            fix_entry(xdgshortcuts.get_menu_launcher_path(slug, i), icon, keys)
+            added += 1
+        made[i] = slug
+    # Ones made before (an older run's, or by Lutris): their icon and prefix brought up to date (written only when changed)
+    for i, slug in made.items():
+        path = xdgshortcuts.get_menu_launcher_path(slug, i)
+        if i in installed and os.path.exists(path):
+            fix_entry(path, *entry_details(i, slug, *rows[i]))
+    with open(made_file + ".tmp", "w", encoding="utf-8") as f:
+        json.dump({str(k): v for k, v in sorted(made.items())}, f)
+    os.replace(made_file + ".tmp", made_file)
+    return f"menu: {added} added, {removed} removed"
+
+
+try:
+    print(menu_entries())
+except Exception as e:  # noqa: BLE001 (the library's own changes above are made: Lutris still told of them)
+    logger.error("menu entries: %s", e)
 
 
 # Last, after every write: an open Lutris shows the changes now, through lutris-overlay's library-refresh action,

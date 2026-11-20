@@ -152,6 +152,45 @@ rows = {(sid, pt, gid in hidden) for gid, sid, pt in c.execute("SELECT id, servi
 want = {("game", 0.0, False), ("map", 0.0, True), ("synced", 5.0, False), ("route", 0.0, True), ("koln", 0.0, True)}
 assert {(s, p or 0.0, h) for s, p, h in rows} == want, rows
 P2
+# The app menu: an installed launcher (EA App here) and game (flat-game, Steam's, from above) get Lutris's entry; Steam none (its own steam.desktop stands for
+# it), nor games not installed. One you delete isn't made again; one made here goes when its game is no longer installed
+apps=$t/.local/share/applications
+rm -rf "$apps" "$t/.local/state/lutris-library-menu"  # (the runs above, on a library since made again)
+# (EA App a Wine game in its own prefix; flat-game's icon in its Steam's cache)
+mkdir -p "$t/Games/ea-app"
+python3 -I - "$t/.local/share/lutris/pga.db" "$t/Games/ea-app" <<'P'
+import gi, sqlite3, sys
+gi.require_version("Gtk", "3.0"); gi.require_version("Gdk", "3.0")
+from lutris.config import write_game_config
+config = write_game_config("ea-app", {"game": {"exe": "drive_c/EA/EALauncher.exe", "prefix": sys.argv[2]}})
+c = sqlite3.connect(sys.argv[1])
+c.execute("UPDATE games SET installed = 1, runner = 'wine', configpath = ? WHERE slug = 'ea-app'", (config,))
+c.commit()
+P
+cache=${lib%/steamapps}/appcache/librarycache/42
+mkdir -p "$cache" && python3 -Ic 'import gi; gi.require_version("GdkPixbuf", "2.0"); from gi.repository import GdkPixbuf; import sys; GdkPixbuf.Pixbuf.new(GdkPixbuf.Colorspace.RGB, False, 8, 32, 32).savev(sys.argv[1], "jpeg", [], [])' "$cache/$(printf 'b%.0s' {1..40}).jpg"
+mkdir -p "$apps" && printf '[Desktop Entry]\nType=Application\nName=Steam\nExec=steam\n' >"$apps/steam.desktop"
+run
+menu() { (cd "$apps" && ls net.lutris.* 2>/dev/null | sed 's/-[0-9]*\.desktop$//' | paste -sd,); }
+[[ $(menu) == net.lutris.ea-app,net.lutris.flat-game ]] || { echo "FAIL: menu entries are '$(menu)' (want EA App's and flat-game's)"; exit 1; }
+grep -q '^Exec=env LUTRIS_SKIP_INIT=1 lutris lutris:rungameid/[0-9]*$' "$apps"/net.lutris.ea-app-*.desktop ||
+    { echo "FAIL: EA App's menu entry doesn't start it through Lutris: $(cat "$apps"/net.lutris.ea-app-*.desktop)"; exit 1; }
+# Its icon and what the dock tells its windows by (Proton: one class for all): its prefix and .exe. A Steam game: Steam's
+# icon for it, the one the dock finds a steam_app_<id> window's app by
+e=$(cat "$apps"/net.lutris.ea-app-*.desktop)
+grep -qx 'Icon=lutris_ea-app' <<<"$e" && grep -qx "X-AgrOS-WinePrefix=$(realpath "$t/Games/ea-app")" <<<"$e" &&
+    grep -qx 'X-AgrOS-WineExe=EALauncher.exe' <<<"$e" || { echo "FAIL: EA App's entry lacks its icon, prefix or .exe: $e"; exit 1; }
+grep -qx 'Icon=steam_icon_42' "$apps"/net.lutris.flat-game-*.desktop && [[ -s $t/.local/share/icons/hicolor/32x32/apps/steam_icon_42.png ]] ||
+    { echo "FAIL: flat-game's entry has no Steam icon: $(grep Icon "$apps"/net.lutris.flat-game-*.desktop)"; exit 1; }
+rm "$apps"/net.lutris.ea-app-*.desktop
+run
+[[ $(menu) == net.lutris.flat-game ]] || { echo "FAIL: a menu entry you deleted was made again: $(menu)"; exit 1; }
+python3 -Ic 'import sqlite3, sys; c = sqlite3.connect(sys.argv[1]); c.execute("UPDATE games SET installed = 1, runner = '"'wine'"' WHERE slug = '"'gog-galaxy'"'"); c.commit()' "$t/.local/share/lutris/pga.db"
+run
+[[ $(menu) == net.lutris.flat-game,net.lutris.gog-galaxy ]] || { echo "FAIL: a launcher installed later got no menu entry: '$(menu)'"; exit 1; }
+python3 -Ic 'import sqlite3, sys; c = sqlite3.connect(sys.argv[1]); c.execute("UPDATE games SET installed = 0 WHERE slug = '"'gog-galaxy'"'"); c.commit()' "$t/.local/share/lutris/pga.db"
+run
+[[ $(menu) == net.lutris.flat-game ]] || { echo "FAIL: the menu entry of a launcher no longer installed stayed: $(menu)"; exit 1; }
 # One run at a time (agros-welcome's and lutris-library.path's overlapped): another holding its lock, this one waits
 flock "$XDG_RUNTIME_DIR/lutris-library.lock" sleep 3 &
 sleep 0.5

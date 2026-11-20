@@ -279,25 +279,9 @@ def is_game(c: dict) -> bool:
 
 
 def game_icon(gid: str) -> None:
-    """A Steam game with no icon of its own (Steam makes it only with the game's shortcut: none on a new system): its
-    small icon from Steam's library cache, as steam_icon_<id> (what the dock and the switcher look for)"""
-    icons = os.path.expanduser("~/.local/share/icons/hicolor")
-    if not gid.isdigit() or any(os.path.exists(f"{icons}/{d}/apps/steam_icon_{gid}.png") for d in
-                                (os.listdir(icons) if os.path.isdir(icons) else [])):
-        return
-    cache = os.path.expanduser(f"~/.local/share/Steam/appcache/librarycache/{gid}")
-    # the icon is the one named by its hash (the others: header.jpg, library_*.jpg)
-    src = [f for f in (os.listdir(cache) if os.path.isdir(cache) else []) if re.fullmatch(r"[0-9a-f]{40}\.jpg", f)]
-    if not src:
-        return
-    import gi
-    gi.require_version("GdkPixbuf", "2.0")
-    from gi.repository import GdkPixbuf
-    os.makedirs(f"{icons}/32x32/apps", exist_ok=True)
-    GdkPixbuf.Pixbuf.new_from_file(f"{cache}/{src[0]}").savev(f"{icons}/32x32/apps/steam_icon_{gid}.png", "png", [], [])
-    # an icon cache older than the new file would hide it
-    if os.path.exists(f"{icons}/icon-theme.cache"):
-        subprocess.run(["gtk-update-icon-cache", "-q", "-f", "-t", icons], check=False)
+    """A Steam game with no icon of its own: made from Steam's cache (steam-icon, beside this)"""
+    if gid:
+        subprocess.run([f"{HELPERS}/steam-icon", gid], capture_output=True)
 
 
 def remember_games(clients: list) -> None:
