@@ -162,7 +162,7 @@ change seven
 touch "$t/cargofail"
 for _ in 1 2; do
     out=$(run) && fail "a failed crates download reported success"
-    [[ $(head -1 "$failedf") != "$(git -C "$t/fork" rev-parse HEAD)" ]] || fail "a failed download written down as the commit's"
+    [[ $(head -1 "$failedf" 2>/dev/null) != "$(git -C "$t/fork" rev-parse HEAD)" ]] || fail "a failed download written down as the commit's"
 done
 out=$(run) && fail "a third failed download reported success"
 grep -q "didn't download.*3 runs in a row" "$failedf" || fail "the third failed download not written down: $(cat "$failedf")"
@@ -172,6 +172,10 @@ rm "$t/cargofail"
 # removed; her clone, Rust's build and a folder of yours there kept
 mkdir -p "$app/0dead00" "$app/rust"
 change eight
+# (the fork moved past the commit that failed: its failure out of date, gone at the next --check already)
+[[ -s $failedf ]] || fail "test setup: no failure written down before eight"
+run --check >/dev/null || fail "--check after a failed commit failed"
+[[ ! -e $failedf ]] || fail "a failure kept for a commit the fork moved past: $(head -2 "$failedf")"
 out=$(run) || fail "eight: $out"
 [[ $("$app/current/capri") == eight && ! -e $failedf ]] || fail "eight not installed, or the failure kept: $out"
 [[ ! -d $app/0dead00 && ! -d $app/$first && -d $app/$second ]] || fail "old builds not removed, or the one before not kept"

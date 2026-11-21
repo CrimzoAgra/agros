@@ -72,6 +72,10 @@ git fetch -q --no-tags origin main 2>/dev/null ||
 want=$(git rev-parse -q --verify 'origin/main^{commit}') || { echo "capri: no main branch in $src"; exit 1; }
 build=$(git rev-parse --short "$want")
 have=$(cat "$dir/current/.capri-build" 2>/dev/null)
+# A failure written down for a commit the fork has since moved past: out of date (that commit is never built again, and
+# this one gets its own try), gone, at a --check too (else agros-check said it at every login until an install went
+# through). One from before the fork was the Tauri app, the original's release that didn't merge, stayed for days
+[[ -s $failed && $(head -1 "$failed") != "$want" ]] && rm -f "$failed"
 if [[ $want == "$have" ]]; then
     $check || echo "capri: up to date ($build)"
     exit 0
