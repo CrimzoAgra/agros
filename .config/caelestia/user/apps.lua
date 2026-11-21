@@ -306,6 +306,33 @@ if not dots.verifying then
     for _, w in ipairs(hl.get_windows() or {}) do epic_tray(w) end
 end
 
+-- Wine's own tray window (its explorer.exe /desktop's, untitled): a Windows program's tray icon with no XEmbed tray to
+-- dock in (Hyprland has none, nor Wine's Wayland driver) shows in a window of its own, white and full-screen over a
+-- game under Wayland mode (Batman). Closed as it opens, whatever started Wine (Lutris, Steam's Proton, Heroic...):
+-- closing only hides it, Wine and the game go on. Lutris's games have it off already (ShowSystray=0, lutris-overlay's
+-- services_on_desktop and desktop_value_only); this is for when that's left out (a Lutris update it no longer fits)
+-- or another launcher started Wine. Not a virtual desktop's window (/desktop=name,size): that one has a title
+local function wine_tray(win)
+    if not (win and win.pid and win.pid > 0) or (win.title or "") ~= "" then return false end
+    local args = {}
+    for a in (proc(win.pid, "cmdline") or ""):gmatch("[^%z]+") do args[#args + 1] = a end
+    if not (args[1] or ""):lower():find("\\explorer%.exe$") then return false end
+    for i = 2, #args do
+        if args[i] == "/desktop" or args[i]:find("^/desktop=") then return true end
+    end
+    return false
+end
+-- (half a second on, once it's there, and still untitled: a window that gets its title late isn't the tray's)
+function dots.close_wine_tray(address)
+    local w = hl.get_window("address:" .. address)
+    if wine_tray(w) then hl.dispatch(hl.dsp.window.close({ window = w })) end
+end
+hl.on("window.open", function(win)
+    if wine_tray(win) then
+        hl.exec_cmd("sh -c 'sleep 0.5; exec hyprctl eval \"dots.close_wine_tray([[" .. win.address .. "]])\"'")
+    end
+end)
+
 function dots.minimise_launcher(address)
     -- Gone by then (a splash that closes at once): nothing, not the focused window minimise_window would take
     local w = hl.get_window("address:" .. address)
