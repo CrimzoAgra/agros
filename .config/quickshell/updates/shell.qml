@@ -93,7 +93,7 @@ ShellRoot {
         // that hangs (a network that connects but never answers: checkupdates, paru and flatpak have no time limit of
         // their own) fails after 10 minutes, with everything it started (timeout signals its whole process group), not
         // "Checking" for good with no way to check again
-        command: ["sh", "-c", 'if [ -n "$1" ] && [ -n "$(find "$1" -mmin -15 2>/dev/null)" ]; then cat "$1"; echo "end 0"; else timeout 10m "$0" --list; echo "end $?"; fi; [ -z "$1" ] || rm -f "$1"', root.script, root.listFile]
+        command: ["sh", "-c", 'if [ -n "$1" ] && [ "$(($(date +%s) - $(stat -c %Y "$1" 2>/dev/null || echo 0)))" -lt 900 ]; then cat "$1"; echo "end 0"; else timeout 10m "$0" --list; echo "end $?"; fi; [ -z "$1" ] || rm -f "$1"', root.script, root.listFile]
         stdout: StdioCollector {
             onStreamFinished: {
                 root.listFile = "";
