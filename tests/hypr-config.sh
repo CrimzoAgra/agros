@@ -759,6 +759,32 @@ check("snapped, minimised, back after the screen shrank: the left half of it", b
 -- An app's minimise request with no window to it (gone by then): nothing, not the focused window minimised instead
 fire("window.minimize", nil, true)
 check("minimise request with no window", steps(), "")
+-- An app opened over a game covering its screen (Overwatch borderless, Hyprland's fullscreen taken off it for the app,
+-- the app behind it): the game minimised, as Alt+Tab does; not for a menu (xwl_popup), a window of the game's own (a
+-- game too), nor over a game in a window; a fullscreen one in a window's size still covers it
+local game = { address = "0xg", class = "steam_app_2357570", title = "Overwatch", floating = true, fullscreen = 0, pid = -1,
+               tags = { "game*" }, workspace = ws(1), monitor = SCREENS[1], at = { x = 0, y = 0 },
+               size = { x = 1920, y = 1080 }, focus_history_id = 1 }
+local function over_game(tags, size, fullscreen)
+    game.size, game.fullscreen, game.workspace = size or { x = 1920, y = 1080 }, fullscreen or 0, ws(1)
+    local app = { address = "0xa", class = "thunar", title = "a", floating = false, fullscreen = 0, pid = -1, tags = tags or {},
+                  workspace = ws(1), monitor = SCREENS[1], at = { x = 0, y = 0 }, size = { x = 800, y = 600 }, focus_history_id = 0 }
+    WINDOWS, sent = { game, app }, {}
+    fire("window.open", app)
+    local minimised = false
+    for _, d in ipairs(sent) do
+        local a = d[2] or {}
+        if d[1] == "window.move" and (a.window == game or a.window == "address:0xg")
+            and tostring(a.workspace):find("^special:minimised") then minimised = true end
+    end
+    sent, WINDOWS = {}, {}
+    return minimised
+end
+check("an app opened over a game covering the screen: the game minimised", over_game(), true)
+check("a menu over a game: the game stays", over_game({ "xwl_popup*" }), false)
+check("the game's own window: the game stays", over_game({ "game*" }), false)
+check("over a game in a window: it stays", over_game(nil, { x = 1280, y = 720 }), false)
+check("over a fullscreen game: minimised", over_game(nil, { x = 1280, y = 720 }, 2), true)
 -- A notification's click: the app's most recently used window, not one never focused (Hyprland's focus_history_id -1:
 -- a launcher minimised as it opened), which came first
 local function app_win(address, history)

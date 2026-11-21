@@ -930,6 +930,40 @@ local function on_open(win, retried)
     place(win, maximised and maximised_box(win) or cascaded(win, standard_box(win)))
 end
 hl.on("window.open", function(win) on_open(win) end)
+
+-- An app opened over a game that covers its screen (fullscreen, or borderless over it: from the launcher, the dock, a
+-- link): the game minimised, as Alt+Tab does (focus_window), and the app shown, focused. Hyprland took the game out of
+-- fullscreen for it (on_focus_under_fullscreen) and left it over the whole screen, the app behind it and the shell's
+-- clicks going nowhere. Not for the game's own windows (a game, or started for one: its launcher, a dialog, its crash
+-- reporter), X11 menus and toasts (Caelestia's xwl_popup), nor one on a special workspace (minimised, the splash's)
+local function covers_screen(w)
+    local m = w.monitor
+    if not (m and m.width and m.scale and w.size and w.size.x) then return false end
+    local mw, mh = screen_size(m)
+    return w.size.x >= mw - 1 and w.size.y >= mh - 1
+end
+function dots.game_under(win)
+    if not (win and win.workspace and (win.workspace.id or 0) >= 1) then return nil end
+    if dots.is_game and dots.is_game(win) or dots.started_for_game and dots.started_for_game(win.pid) then return nil end
+    for _, t in ipairs(win.tags or {}) do
+        if t:find("^xwl_popup") then return nil end
+    end
+    for _, g in ipairs(hl.get_windows() or {}) do
+        if g.address ~= win.address and g.workspace and g.workspace.id == win.workspace.id and dots.is_game
+            and dots.is_game(g) and ((g.fullscreen or 0) >= 2 or covers_screen(g)) then
+            return g
+        end
+    end
+    return nil
+end
+hl.on("window.open", function(win)
+    local game = dots.game_under(win)
+    if not game then return end
+    dots.window_fades(false)
+    dots.minimise_window(game)
+    hl.dispatch(hl.dsp.focus({ window = win }))
+    hl.exec_cmd("sh -c 'sleep 0.5; exec hyprctl eval \"dots.window_fades(true)\"'")
+end)
 function dots.open_retry(address) on_open(by_address(address), true) end
 
 -- Window peek (the shell's WindowPeek.qml, resting on a preview in the dock or the workspace picker): only the windows

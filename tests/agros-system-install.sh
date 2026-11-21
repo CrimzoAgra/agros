@@ -90,6 +90,9 @@ cursor=$(sed -n 's/^ *cursorTheme = "\([^"]*\)",$/\1/p' "$here/.config/caelestia
 [[ -n $cursor ]] || fail "the desktop's pointer not found in hypr-vars.lua"
 grep -q "XCURSOR_THEME=$cursor " "$here/packages/agros-greeter/run" && grep -qF "Inherits=$cursor\\n" "$here/packages/agros-greeter/PKGBUILD" ||
     fail "the login screen's pointer isn't the desktop's, $cursor"
+# ...nor X11 apps' (uwsm's env.d: Hyprland alone had it, and Overwatch loaded with the black default)
+grep -qx "export XCURSOR_THEME=$cursor XCURSOR_SIZE=24" "$here/.config/uwsm/env.d/cursor.sh" ||
+    fail "X11 apps' pointer (.config/uwsm/env.d/cursor.sh) isn't the desktop's, $cursor"
 grep -qx "NoExtract = usr/share/icons/Bibata-\* !usr/share/icons/$cursor/\*" "$here/packages/agros-system/agros-noextract.conf" ||
     fail "the NoExtract list doesn't keep the desktop's pointer, $cursor: $(grep Bibata "$here/packages/agros-system/agros-noextract.conf")"
 
