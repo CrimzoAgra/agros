@@ -15,8 +15,8 @@ echo mine >"$h/foot/foot.ini"
 # dots-warn is the one beside it)
 cp "$here/.local/bin/agros-links" "$t/lib/bin/"
 run() {
-    HOME=$t/home XDG_STATE_HOME=$t/home/.local/state AGROS_LIB=$t/lib AGROS_SKEL=$t/skel \
-        AGROS_SKEL_VERSIONS=$t/versions "$t/lib/bin/agros-links" | cat
+    HOME=$t/home XDG_STATE_HOME=$t/home/.local/state XDG_CACHE_HOME=$t/home/.cache AGROS_PACMAN_DB=$t/pacman \
+        AGROS_LIB=$t/lib AGROS_SKEL=$t/skel AGROS_SKEL_VERSIONS=$t/versions "$t/lib/bin/agros-links" | cat
 }
 
 run
@@ -174,4 +174,29 @@ for h in $hooks; do
     [[ $h == "$links" ]] && break
     ! grep -q 'agros-each-user' "$sys/$h" || fail "$h, run for each user, comes before $links"
 done
+# NVIDIA's shaders: Steam's games' from Lutris's folder moved into the driver's own (one already there kept), and a
+# replaced driver's folders gone once its version changed, not on a same-version reinstall
+c=$t/home/.cache g=37427d949c5fe9ac
+mkdir -p "$c/lutris/shaders/steam/GLCache/new/$g" "$c/nvidia/GLCache/new/$g" "$c/nvidia/GLCache/old/$g" \
+    "$c/lutris/shaders/wine/GLCache/old/$g" "$t/pacman/nvidia-utils-620.73.04-1"
+for f in a.toc a.bin b.toc b.bin; do echo lutris >"$c/lutris/shaders/steam/GLCache/new/$g/$f"; done
+echo mine >"$c/nvidia/GLCache/new/$g/b.toc"
+echo old >"$c/nvidia/GLCache/old/$g/x.bin"; echo old >"$c/lutris/shaders/wine/GLCache/old/$g/y.bin"
+touch -d '-2 days' "$c/nvidia/GLCache/old/$g/x.bin" "$c/lutris/shaders/wine/GLCache/old/$g/y.bin"
+printf '%%NAME%%\nnvidia-utils\n\n%%VERSION%%\n620.73.04-1\n\n%%INSTALLDATE%%\n%s\n' "$(date -d '-1 day' +%s)" \
+    >"$t/pacman/nvidia-utils-620.73.04-1/desc"
+run >/dev/null
+[[ $(cat "$c/nvidia/GLCache/new/$g/a.toc" "$c/nvidia/GLCache/new/$g/a.bin" 2>&1) == $'lutris\nlutris' ]] ||
+    fail "Steam's shaders in Lutris's folder not moved into NVIDIA's"
+[[ $(cat "$c/nvidia/GLCache/new/$g/b.toc") == mine && ! -e $c/nvidia/GLCache/new/$g/b.bin ]] ||
+    fail "a game's shaders already in NVIDIA's folder replaced by Lutris's"
+[[ ! -e $c/lutris/shaders/steam/GLCache ]] || fail "Lutris's Steam shader folder left behind"
+[[ ! -e $c/nvidia/GLCache/old && ! -e $c/lutris/shaders/wine/GLCache/old ]] || fail "a replaced driver's shaders kept"
+[[ -e $c/nvidia/GLCache/new ]] || fail "the installed driver's shaders deleted"
+[[ $(cat "$t/home/.local/state/agros/nvidia-shaders-driver") == 620.73.04 ]] || fail "the driver's version not noted"
+mkdir -p "$c/nvidia/GLCache/unused/$g"; echo x >"$c/nvidia/GLCache/unused/$g/z.bin"
+touch -d '-2 days' "$c/nvidia/GLCache/unused/$g/z.bin"
+sed -i 's/^620.73.04-1$/620.73.04-2/' "$t/pacman/nvidia-utils-620.73.04-1/desc"
+run >/dev/null
+[[ -e $c/nvidia/GLCache/unused ]] || fail "shaders deleted on a same-version reinstall of the driver"
 echo "ok agros-links"

@@ -790,6 +790,18 @@ def desktop_value_only():
 """)
 
 
+def steam_shader_cache():
+    # Steam started by Lutris (to launch one of its games) inherited its NVIDIA shader folder, and every game of that
+    # Steam compiled there; Steam started any other way: in ~/.cache/nvidia, without them (a long black screen at the
+    # next start of each). Steam's games now always in the driver's own (agros-links moves the old folder's in)
+    edit("runners/runner.py", """        env["__GL_SHADER_DISK_CACHE"] = "1"
+        env["__GL_SHADER_DISK_CACHE_PATH"] = self.nvidia_shader_cache_path
+""", """        if self.name != "steam":  # lutris-overlay: steam_shader_cache
+            env["__GL_SHADER_DISK_CACHE"] = "1"
+            env["__GL_SHADER_DISK_CACHE_PATH"] = self.nvidia_shader_cache_path
+""")
+
+
 # Changes that can be turned off, by setting name, with their label in the Settings app. The others are always on: the
 # Steam fix keeps installed games from being deleted, starting hidden only happens when asked (at login), and the
 # start-up once is a plain fix
@@ -816,6 +828,7 @@ PLUMBING = {
     "source_page_ids": "A store's own page shows all its games (else some go missing at random)",
     "egs_refresh": "Epic: the login renewed, not expired a day and a half after signing in",
     "desktop_value_only": "Wine: Wine's other Explorer settings kept when its virtual desktop is off (its tray window stays hidden)",
+    "steam_shader_cache": "Steam's games keep their compiled shaders in one place, however Steam was started (no long black screen at their next start)",
     "services_on_desktop": "Wine: launchers' updater services get Vulkan (Epic's update no longer crashes and loops), and Epic's overlay is off (games no longer black)",
 }
 if sys.argv[1:] == ["--list"]:
@@ -832,7 +845,7 @@ except (OSError, ValueError):
     values = {}
 changes = [c for c in (sections, steam_placeholder, hide_uninstalled, launchers_apart, same_size_covers, start_hidden, startup_once,
                         vulkaninfo_once, rounded_covers, store_icons, window_after_game, reap_children, flathub_steam, library_refresh, tray_games, sync_all, revive_installed,
-                        bnet_not_installed, bnet_source, rockstar_source, bnet_login, source_page_ids, source_icons, tall_covers, egs_refresh, services_on_desktop, desktop_value_only) if values.get(f"lutris.{c.__name__}") is not False]
+                        bnet_not_installed, bnet_source, rockstar_source, bnet_login, source_page_ids, source_icons, tall_covers, egs_refresh, services_on_desktop, desktop_value_only, steam_shader_cache) if values.get(f"lutris.{c.__name__}") is not False]
 while True:
     try:
         for change in changes:

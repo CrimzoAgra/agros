@@ -440,6 +440,17 @@ WinePrefixManager(sys.argv[2]).set_virtual_desktop(False)
 text = open(sys.argv[2] + "/user.reg").read()
 assert '"ShowSystray"=dword:00000000' in text and '"Desktop"' not in text, text
 P
+# steam_shader_cache: the Steam Lutris starts gets no NVIDIA shader folder of Lutris's (its games then compiled apart
+# from Steam started any other way); other runners still get theirs
+HOME=$t XDG_CACHE_HOME=$t/cache python3 -I - "$t/cache/lutris-overlay" <<'P' || fail "Lutris still points the Steam it starts at a shader folder of its own"
+import sys
+sys.path.insert(0, sys.argv[1])
+import lutris.gui.application  # noqa: F401
+from lutris.runners import import_runner
+steam, linux = import_runner("steam")(), import_runner("linux")()
+assert "__GL_SHADER_DISK_CACHE_PATH" not in steam.get_env(os_env=False), steam.get_env(os_env=False)
+assert "__GL_SHADER_DISK_CACHE_PATH" in linux.get_env(os_env=False)
+P
 
 note=
 if timeout 120 git clone -q --depth 1 https://github.com/lutris/lutris "$t/lutris-main" 2>/dev/null; then

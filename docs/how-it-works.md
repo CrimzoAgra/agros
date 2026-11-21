@@ -683,6 +683,11 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
 
 - **`.config/environment.d/shader-cache.conf`**: keeps compiled game shaders (the NVIDIA driver would otherwise trim
   its cache, and games stutter again)
+  - Steam's games keep theirs in the driver's own folder (`~/.cache/nvidia`) however Steam was started: Lutris no
+    longer points the Steam it starts at a folder of its own (lutris-overlay's `steam_shader_cache`), where they were
+    compiled again apart (a long black screen at a game's start). `agros-links` moves the ones already there in, once
+  - A replaced driver's shaders (a folder per driver build, never read again) go once the driver's version changes
+    (`agros-links`, at login and after an update: those last written before the driver was installed)
 - **`.local/bin/steam-start`**: Steam in the tray, in a scope of its own (listed as an app, with its games inside).
   Lutris starts Steam games through it, so one launched while Steam is closed doesn't open Steam's window. No store
   launcher starts at login: Lutris does, in its tray

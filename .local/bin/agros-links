@@ -125,6 +125,35 @@ fi
 # showed a red "Error" (Usage refresh failed) until Claude Code had run once. Once: one you delete stays deleted
 mark=$state/claude-projects
 [[ -e $mark ]] || { mkdir -p "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects" && touch "$mark"; }
+# NVIDIA's compiled game shaders (never trimmed: __GL_SHADER_DISK_CACHE_SKIP_CLEANUP). Steam's games kept theirs in
+# Lutris's folder whenever Lutris had started Steam (before lutris-overlay's steam_shader_cache): moved into the
+# driver's own, so their next start doesn't compile them all again (a game's already there kept: the newer)
+cache=${XDG_CACHE_HOME:-$HOME/.cache}
+nv=$cache/nvidia/GLCache old=$cache/lutris/shaders/steam/GLCache
+if [[ -d $old ]]; then
+    for f in "$old"/*/*/*.toc; do
+        [[ -f $f ]] || continue
+        stem=${f%.toc} rel=${f#"$old"/}
+        to=$nv/${rel%/*} name=${stem##*/}
+        [[ -e $to/$name.toc || -e $to/$name.bin ]] || { mkdir -p "$to" && mv -n -- "$stem.toc" "$stem.bin" "$to/" 2>/dev/null; }
+    done
+    rm -rf -- "$old"
+fi
+# A replaced driver's shaders (a folder per driver build) are never read again: once the driver's version changed,
+# the folders last written before it was installed go (GBs at each update otherwise; a same-version reinstall keeps them)
+desc=$(echo "${AGROS_PACMAN_DB:-/var/lib/pacman/local}"/nvidia-utils-[0-9]*/desc)
+if [[ -f $desc ]]; then
+    ver=$(sed -n '/^%VERSION%$/{n;s/-[^-]*$//;p}' "$desc") since=$(sed -n '/^%INSTALLDATE%$/{n;p}' "$desc")
+    mark=$state/nvidia-shaders-driver
+    if [[ -n $since && $(cat "$mark" 2>/dev/null) != "$ver" ]]; then
+        for d in "$nv"/*/ "$cache"/lutris/shaders/*/GLCache/*/; do
+            [[ -d $d ]] || continue
+            newest=$(find "$d" -type f -printf '%T@\n' | sort -n | tail -1)
+            [[ -n $newest && ${newest%.*} -lt $since ]] && rm -rf -- "$d"
+        done
+        printf '%s\n' "$ver" >"$mark"
+    fi
+fi
 # (in the background: Caelestia, the notification server, isn't up yet; agros-links.service keeps it alive). Marked as
 # said only once it was: one that never got through is said at the next login
 ((${#new[@]})) && { "$(dirname "$(readlink -f "$0")")/dots-warn" "AgrOS updated settings you've changed" \
