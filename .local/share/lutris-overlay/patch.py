@@ -155,6 +155,49 @@ def library_refresh():
     def do_activate(self)""")
 
 
+# Tray menu: every installed game, not the 10 last played, and no store launchers (lutris-library's Launchers category).
+# Lutris built it once at start: a game installed since (Batman, from Epic) never showed. Now it's built again when a game
+# changes or lutris-library's changes come in (once per burst: a sync fires a change per game)
+def tray_games():
+    rel = "gui/widgets/status_icon.py"
+    edit(rel, "from lutris.game import Game\n",
+         "from gi.repository import GLib\n\nfrom lutris.game import GAME_INSTALLED, GAME_UPDATED, Game\n")
+    edit(rel, """            self.set_visible(True)
+""", """            self.set_visible(True)
+            # lutris-overlay: tray_games
+            self._rebuild_pending = False
+            GAME_UPDATED.register(self.refresh_menu)
+            GAME_INSTALLED.register(self.refresh_menu)
+
+    def refresh_menu(self, *_args):
+        \"\"\"lutris-overlay: tray_games (the menu built again, once for a burst of changes)\"\"\"
+        if self.menu is None or self._rebuild_pending:
+            return
+        self._rebuild_pending = True
+
+        def rebuild():
+            self._rebuild_pending = False
+            self.menu = self._get_menu()
+            if self.indicator:
+                self.indicator.set_menu(self.menu)
+            self.update_present_menu()
+            return False
+
+        GLib.timeout_add(500, rebuild)
+""")
+    edit(rel, """        number_of_games_in_menu = 10
+        for game in installed_games[:number_of_games_in_menu]:""", """        for game in installed_games:  # lutris-overlay: tray_games (all of them)""")
+    edit(rel, """categories.get_game_ids_for_categories([".hidden"])""",
+         """categories.get_game_ids_for_categories([".hidden", "Launchers"])  # lutris-overlay: tray_games""")
+    app = "gui/application.py"
+    if "def on_library_refresh(self):" in read(app):
+        edit(app, """            self.window.update_store()
+""", """            self.window.update_store()
+        if self.tray:  # lutris-overlay: tray_games
+            self.tray.refresh_menu()
+""")
+
+
 # Header bar, top right: one button that syncs every store Lutris shows in the sidebar (what each one's Reload does),
 # the signed-in ones only. lutris-library then adds the new games as it does after any sync
 def sync_all():
@@ -757,6 +800,7 @@ OPTIONAL = {
 # one that no longer fits is left out like an optional change (the script then makes do), not the whole build
 PLUMBING = {
     "library_refresh": "An open Lutris shows lutris-library's changes at once (else once it restarts)",
+    "tray_games": "The tray menu lists every installed game, no store launchers, kept up to date",
     "source_page_ids": "A store's own page shows all its games (else some go missing at random)",
     "egs_refresh": "Epic: the login renewed, not expired a day and a half after signing in",
     "services_on_desktop": "Wine: launchers' updater services get Vulkan (Epic's update no longer crashes and loops), and Epic's overlay is off (games no longer black)",
@@ -774,7 +818,7 @@ try:
 except (OSError, ValueError):
     values = {}
 changes = [c for c in (sections, steam_placeholder, hide_uninstalled, launchers_apart, same_size_covers, start_hidden, startup_once,
-                        vulkaninfo_once, rounded_covers, store_icons, window_after_game, reap_children, flathub_steam, library_refresh, sync_all, revive_installed,
+                        vulkaninfo_once, rounded_covers, store_icons, window_after_game, reap_children, flathub_steam, library_refresh, tray_games, sync_all, revive_installed,
                         bnet_not_installed, bnet_source, rockstar_source, bnet_login, source_page_ids, source_icons, tall_covers, egs_refresh, services_on_desktop) if values.get(f"lutris.{c.__name__}") is not False]
 while True:
     try:

@@ -179,6 +179,8 @@ run >/dev/null
 [[ $(cat "$t/cache/lutris-overlay/stamp") != "$before" ]] || fail "not rebuilt once Lutris had closed"
 settings; run >/dev/null
 grep -q '"library-refresh"' "$t/cache/lutris-overlay/lutris/gui/application.py" || fail "the library-refresh action isn't in the build"
+grep -q '".hidden", "Launchers"' "$t/cache/lutris-overlay/lutris/gui/widgets/status_icon.py" && grep -q 'tray.refresh_menu' "$t/cache/lutris-overlay/lutris/gui/application.py" ||
+    fail "the tray menu still leaves games out (tray_games)"
 HOME=$t python3 -I - "$t/cache/lutris-overlay" "$t" <<'P' || fail "the patched Lutris doesn't find Flathub's Steam in .local/share/Steam"
 import os, sys
 sys.path.insert(0, sys.argv[1])
@@ -403,6 +405,25 @@ os.utime(reg, ns=(0, 0))
 services_on_desktop(sys.argv[2])
 assert os.stat(reg).st_mtime_ns == 0, "written with nothing to change"
 services_on_desktop(sys.argv[2] + "/missing")  # (no prefix yet: nothing, no error)
+# Wine's standalone tray window off (ShowSystray=0 in user.reg's Explorer key): added to the key, its other values and
+# the next key kept; a prefix without the key gets it; once there, not written again
+user = os.path.join(sys.argv[2], "user.reg")
+head = 'WINE REGISTRY Version 2\n\n[Console] 1\n"CloseOnExit"=dword:00000001\n\n'
+explorer = "[Software\\\\Wine\\\\Explorer]"
+open(user, "w").write(head + explorer[:-1] + '] 1\n"ShowSystray"=dword:00000001\n"Other"="x"\n\n'
+                      + explorer[:-1] + '\\\\Desktops] 1\n"Default"="1920x1080"\n')
+services_on_desktop(sys.argv[2])
+text = open(user).read()
+want = explorer[:-1] + '] 1\n"Other"="x"\n"ShowSystray"=dword:00000000\n\n' + explorer[:-1] + '\\\\Desktops] 1\n"Default"'
+assert want in text and text.startswith(head) and text.count("ShowSystray") == 1, text
+os.utime(user, ns=(0, 0))
+services_on_desktop(sys.argv[2])
+assert os.stat(user).st_mtime_ns == 0, "user.reg written with nothing to change"
+open(user, "w").write(head)
+services_on_desktop(sys.argv[2])
+text = open(user).read()
+assert text.startswith(head) and re.fullmatch(r'\n\n\[Software\\\\Wine\\\\Explorer\] \d+\n"ShowSystray"=dword:00000000\n',
+                                               text[len(head) - 2:]), text
 P
 grep -q 'services_on_desktop(prefix_path)' "$t/cache/lutris-overlay/lutris/runners/wine.py" ||
     fail "Lutris's Wine start doesn't flag the prefix's services (services_on_desktop not in its prelaunch)"

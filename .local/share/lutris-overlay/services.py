@@ -9,10 +9,16 @@ service is flagged so before each start (Wine's own, under C:\\windows, left as 
 
 And Epic's overlay (Epic Online Services, which its launcher installs and puts back on every update) turned off before
 each start, as Heroic turns it off: its path taken out of the registry, so no game loads it. Hooked into a game's
-Direct3D under DXVK it left the game black, and the mouse dead in it (Batman: Arkham Knight)"""
+Direct3D under DXVK it left the game black, and the mouse dead in it (Batman: Arkham Knight)
+
+And Wine's standalone tray window off (user.reg: HKCU\\Software\\Wine\\Explorer, ShowSystray=0): with no XEmbed tray to
+dock in (Hyprland has none, Wine's Wayland driver none either) a program's tray icon showed as a small untitled window
+of its own (class steam_app_default) beside Epic and every game started through it. Its icons had nowhere to go anyway
+(Epic's menu is epic-tray's, in the shell)"""
 
 import os
 import re
+import time
 
 # A service's key in system.reg, with its values: up to the next key
 _SERVICE = re.compile(r"^\[System\\\\ControlSet001\\\\Services\\\\[^\\\]]+\][^\n]*\n(?:(?!\[)[^\n]*\n?)*", re.M)
@@ -23,6 +29,9 @@ OWN_PROCESS, SHARE_PROCESS, INTERACTIVE = 0x10, 0x20, 0x100
 # Epic Online Services' key (64- and 32-bit views), with its values: up to the next key
 _EOS = re.compile(r"^\[Software\\\\(?:Wow6432Node\\\\)?Epic Games\\\\EOS\][^\n]*\n(?:(?!\[)[^\n]*\n?)*", re.M)
 _OVERLAY = re.compile(r'^"OverlayPath"=[^\n]*\n?', re.M)
+# Wine's Explorer key in user.reg (its own, not Explorer\\Desktops), with its values: up to the next key
+_EXPLORER = re.compile(r"^\[Software\\\\Wine\\\\Explorer\][^\n]*\n(?:(?!\[)[^\n]*\n?)*", re.M)
+_SYSTRAY = re.compile(r'^"ShowSystray"=[^\n]*\n?', re.M)
 
 
 def _flag(match):
@@ -34,17 +43,31 @@ def _flag(match):
     return block[:kind.start(1)] + f"{int(kind.group(1), 16) | INTERACTIVE:08x}" + block[kind.end(1):]
 
 
+def _no_systray(text):
+    key = _EXPLORER.search(text)
+    if key and '"ShowSystray"=dword:00000000' in key.group(0):
+        return text
+    if not key:  # (as Wine writes a key: its time after the name)
+        return text.rstrip("\n") + f'\n\n[Software\\\\Wine\\\\Explorer] {int(time.time())}\n"ShowSystray"=dword:00000000\n'
+    block = _SYSTRAY.sub("", key.group(0)).rstrip("\n") + '\n"ShowSystray"=dword:00000000\n'
+    return text[:key.start()] + block + ("\n" if key.end() < len(text) else "") + text[key.end():]
+
+
 def services_on_desktop(prefix):
-    """Flag the prefix's own (non-Wine) services interactive, and turn Epic's overlay off. Written only when one changes, and whole (a new file
+    """Flag the prefix's own (non-Wine) services interactive, turn Epic's overlay and Wine's tray window off. Written only when one changes, and whole (a new file
     swapped in): Wine reading it at that moment gets the old one or the new one. (A wineserver of the prefix already
     running keeps the old values in memory and can write them back: flagged again at the next start)"""
-    path = os.path.join(prefix, "system.reg")
+    _edit(os.path.join(prefix, "system.reg"), lambda text: _EOS.sub(lambda m: _OVERLAY.sub("", m.group(0)), _SERVICE.sub(_flag, text)))
+    _edit(os.path.join(prefix, "user.reg"), _no_systray)
+
+
+def _edit(path, change):
     try:
         with open(path, encoding="utf-8", errors="surrogateescape") as f:
             text = f.read()
     except OSError:
-        return
-    new = _EOS.sub(lambda m: _OVERLAY.sub("", m.group(0)), _SERVICE.sub(_flag, text))
+        return  # (no prefix yet: Wine makes it, and the next start edits it)
+    new = change(text)
     if new == text:
         return
     tmp = path + ".lutris-overlay"
