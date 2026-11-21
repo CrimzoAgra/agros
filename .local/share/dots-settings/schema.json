@@ -1051,7 +1051,7 @@
             {
               "key": "games.close_clients",
               "label": "Closing a game closes its client",
-              "description": "The store launcher (EA App, Ubisoft Connect, Epic...) closes a minute after the game, Steam 15 s after it when it's only in its tray (however it was started). One with its window open stays. What still runs of a closed Proton game two minutes on (one that doesn't exit) is ended too.",
+              "description": "The store launcher (EA App, Ubisoft Connect, Epic...) closes a minute after the game, Steam 15 s after it when it's only in its tray (however it was started). One with its window open stays, unless Lutris started it just to launch the game (Epic shows its window again as the game ends: minimised, then closed). What still runs of a closed Proton game two minutes on (one that doesn't exit) is ended too.",
               "type": "bool",
               "default": true,
               "apply": "hypr"

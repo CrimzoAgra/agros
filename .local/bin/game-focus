@@ -290,12 +290,36 @@ def remember_games(clients: list) -> None:
         game_closed(a)  # closed while this wasn't listening (a reconnect)
     for c in clients:
         if c["address"] not in games_open and is_game(c):
-            games_open[c["address"]] = {"prefix": prefix_of(environ(c.get("pid", -1))), "steam": bool(game_id(c)),
+            env = environ(c.get("pid", -1))
+            games_open[c["address"]] = {"prefix": prefix_of(env), "steam": bool(game_id(c)), "run": env.get(RUN, b""),
                                         "gid": game_id(c), "proton": c.get("class", "").startswith("steam_app_")}
             try:
                 game_icon(game_id(c))
             except Exception:  # (no icon: the dock shows Steam's; the game's audio and the rest go on)
                 traceback.print_exc()
+
+
+# Lutris's id for one start of a game, in the environment of all it starts: a store launcher with the game's is one
+# Lutris started for that game (its entry runs the launcher with the game to launch: Epic's, EA's, Ubisoft's...)
+RUN = b"LUTRIS_GAME_UUID"
+
+
+def launchers_for(game: dict, clients: list) -> list:
+    """The windows on a workspace of the store launcher Lutris started for this game, once no game of its prefix is
+    left (none for a launcher you opened yourself: a run of its own)"""
+    if not game.get("run") or any(is_game(c) and prefix_of(environ(c.get("pid", -1))) == game["prefix"] for c in clients):
+        return []
+    return [c for c in clients if c["workspace"].get("id", 0) > 0 and launcher(cmdline(c.get("pid", -1)))
+            and environ(c.get("pid", -1)).get(RUN) == game["run"]]
+
+
+@logged
+def hide_launcher(game: dict) -> None:
+    """The game closed: the launcher started for it minimised as it shows its window again (Epic's, white under the
+    game's Wayland mode), until close_launcher closes it"""
+    if setting("games.close_clients") and setting("games.launchers_minimised"):
+        for c in launchers_for(game, json.loads(hypr("clients", "-j") or "[]")):
+            hypr("eval", f"dots.minimise_launcher([[{c['address']}]])")
 
 
 @logged
@@ -314,6 +338,8 @@ def close_launcher(game: dict) -> None:
         # (minimised counts too for anything but the launcher: a mod manager waiting in the dock)
         shown = {c.get("pid") for c in clients
                  if c["workspace"].get("id", 0) > 0 or not launcher(cmdline(c.get("pid", -1)))}
+        # (but not the launcher Lutris started for this game: Epic shows its window again as the game ends)
+        shown -= {c.get("pid") for c in launchers_for(game, clients)}
         if any(launcher(cmd) for _, cmd in procs) and not any(pid in shown for pid, _ in procs):
             for pid, _ in procs:  # the launcher and what's left of the prefix (its helpers, Wine's services)
                 try:
@@ -510,7 +536,9 @@ def game_closed(address: str) -> None:
         if game["gid"]:
             last_closed[game["gid"]] = time.monotonic()
             game["reapers"] = reapers_of(game["gid"])  # this run's, not one started after
-        for delay, fn, wanted in ((60, close_launcher, game["prefix"]), (15, close_steam, game["steam"])):
+        # (Epic shows its window a few seconds after the game's closed: looked for a while)
+        hides = [(d, hide_launcher, game.get("run")) for d in (1, 3, 6, 12, 25, 45)]
+        for delay, fn, wanted in ((60, close_launcher, game["prefix"]), (15, close_steam, game["steam"]), *hides):
             if wanted:
                 later(delay, fn, game)
         # (one look at its leftovers at a time: a game closing several windows started one each, all looking on)

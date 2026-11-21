@@ -69,6 +69,23 @@ clients = [{"address": "0x3", "pid": int(first.split()[0]), "class": "steam_app_
             "tags": ["game*"]}]
 gf.close_launcher(game)
 if alive(first) or alive(second): fail(f"the launcher left in the prefix wasn't closed ({alive(first)} {alive(second)})")
+# A launcher Lutris started for the game (the same run, LUTRIS_GAME_UUID): its window back on a workspace as the game
+# ended (Epic's) is minimised, and it's closed all the same; for another run (you opened it) it stays
+import subprocess
+epic = subprocess.Popen(["bash", "-c", 'exec -a "C:\\Epic\\EpicGamesLauncher.exe" sleep 60'],
+                        env={**os.environ, "WINEPREFIX": f"{t}/pfx", "LUTRIS_GAME_UUID": "run-a"})
+time.sleep(0.2)
+clients = [{"address": "0x7", "pid": epic.pid, "class": "steam_app_default", "workspace": {"id": 1}, "tags": ["game*"]}]
+evals = []
+gf.hypr = lambda *a: json.dumps(clients) if a[:1] == ("clients",) else evals.append(a) or ""
+gf.hide_launcher(dict(game, run=b"run-b"))
+gf.close_launcher(dict(game, run=b"run-b"))
+if evals or not alive(str(epic.pid)): fail("a launcher you opened (another run) minimised or closed with its window open")
+gf.hide_launcher(dict(game, run=b"run-a"))
+if evals != [("eval", "dots.minimise_launcher([[0x7]])")]: fail(f"the game's own launcher not minimised: {evals}")
+gf.close_launcher(dict(game, run=b"run-a"))
+epic.wait(timeout=5)
+gf.hypr = lambda *a: json.dumps(clients) if a[:1] == ("clients",) else ""
 # Steam: no Steam game left, its window not open: shut down
 clients = [{"address": "0x2", "pid": 1, "class": "steam", "workspace": {"id": 1}, "tags": []}]
 gf.close_steam({"prefix": b"", "steam": True})

@@ -749,7 +749,9 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
   - When a game asks for attention (what flashes orange on the Windows taskbar), a notification shows until you clear
     it or go back to the game (also while it's minimised); clicking it takes you there
   - Closing a game closes its client: its store launcher (EA app, Ubisoft Connect, Epic...) a minute later (after its
-    cloud save upload) unless its window is open, and Steam 15 s later if it's only in its tray (its window isn't
+    cloud save upload) unless its window is open: one Lutris started just to launch the game (the same
+    `LUTRIS_GAME_UUID`) is minimised as it shows its window again (Epic does, white under the game's Wayland mode) and
+    closed all the same. Steam 15 s later if it's only in its tray (its window isn't
     open) and no other game is running or starting. What still runs of a Proton game two minutes after its
     last window closed (a game that doesn't exit, its crash reporter) is ended once it's idle, so Steam doesn't count it
     as running (not while it reads or writes the disk, a save; using CPU alone for about 10 minutes: hung, ended)
