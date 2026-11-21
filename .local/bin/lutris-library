@@ -405,6 +405,33 @@ for name in os.listdir(bundled) if os.path.isdir(bundled) else []:
 #  - a Wine game: its prefix and .exe (X-AgrOS-WinePrefix, X-AgrOS-WineExe). Under Proton every Lutris game's window
 #    has one class, steam_app_default: app-for-window tells them apart by the prefix their process runs in (and the
 #    .exe, for games sharing their store launcher's prefix)
+def epic_game_exe(prefix, appid):
+    """An Epic game's own .exe in its launcher's prefix (its manifest's install folder and program), None if not there"""
+    m = (epic_manifests(prefix) or {}).get(appid) or {}
+    where, exe = m.get("InstallLocation") or "", m.get("LaunchExecutable") or ""
+    if not where.lower().startswith("c:\\") or not exe:
+        return None
+    path = os.path.join(prefix, "drive_c", *where[3:].split("\\"), *exe.replace("\\", "/").split("/"))
+    return path if os.path.isfile(path) else None
+
+
+def extract_exe_icon(exe, path):
+    """A .exe's icon saved as a 128x128 PNG at path, as Lutris's extract_icon does it; false if it has none"""
+    try:
+        from lutris.util.wine.extract_icon import PEFILE_AVAILABLE, IconExtractor  # noqa: E402
+        if not PEFILE_AVAILABLE:
+            return False
+        icon = IconExtractor(exe).get_best_icon()
+        if icon.size != (128, 128):
+            icon = icon.resize((128, 128))
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        icon.save(path)
+        return True
+    except Exception as e:  # noqa: BLE001 (no icon in it, an odd .exe: Lutris's icon name stays)
+        logger.error("%s: no icon taken: %s", exe, e)
+        return False
+
+
 def entry_details(game_id, slug, service, appid, runner):
     from lutris.util import system  # noqa: E402
 
@@ -418,15 +445,23 @@ def entry_details(game_id, slug, service, appid, runner):
         from lutris.game import Game  # noqa: E402
         try:
             game = Game(game_id)
-            if not glob.glob(os.path.join(settings.ICON_PATH, icon + ".*")) and game.runner.extract_icon(slug):
-                system.update_desktop_icons()  # (the icon cache: one older than the icon hides it)
             prefix, exe = game.runner.prefix_path, game.runner.game_exe
-            if prefix:
-                keys["X-AgrOS-WinePrefix"] = os.path.realpath(prefix)
             # An Epic game runs through its launcher (the config's .exe): its own .exe from its manifest, or its window
-            # was told apart as the launcher's
+            # was told apart as the launcher's, and its icon was the launcher's (Epic's logo): taken from its own .exe,
+            # under a name of its own (agros_egs_<app>: the launcher's, made under Lutris's name, left aside)
             if service == "egs" and prefix:
                 exe = ((epic_manifests(prefix) or {}).get(appid) or {}).get("LaunchExecutable") or exe
+            own = epic_game_exe(prefix, appid) if service == "egs" and prefix else None
+            if own:
+                path = os.path.join(settings.ICON_PATH, f"agros_egs_{appid}.png")
+                if not os.path.exists(path) and extract_exe_icon(own, path):
+                    system.update_desktop_icons()
+                if os.path.exists(path):
+                    icon = f"agros_egs_{appid}"
+            elif not glob.glob(os.path.join(settings.ICON_PATH, icon + ".*")) and game.runner.extract_icon(slug):
+                system.update_desktop_icons()  # (the icon cache: one older than the icon hides it)
+            if prefix:
+                keys["X-AgrOS-WinePrefix"] = os.path.realpath(prefix)
             if exe:
                 keys["X-AgrOS-WineExe"] = os.path.basename(exe.replace("\\", "/"))
         except Exception as e:  # noqa: BLE001 (a game whose config is broken: its entry anyway, Lutris's icon name)

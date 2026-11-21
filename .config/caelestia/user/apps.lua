@@ -253,6 +253,20 @@ hl.on("window.open", function(win)
     hl.exec_cmd("sh -c 'sleep 0.3; exec hyprctl eval \"dots.minimise_launcher([[" .. win.address .. "]])\"'")
 end)
 
+-- Epic's tray icon, its menu in the shell's (~/.local/bin/epic-tray: your installed Epic games, Library, Store, Unreal
+-- Engine, Exit): started as Epic's window opens, and quits with Epic. Under a Proton that gives it no tray icon of its
+-- own (CachyOS's) Epic had none; one that does (GE-Proton) showed its menu as Epic's own window. One at a time: a second
+-- one quits. Epic's window already open at a config load too
+local function epic_tray(win)
+    if win and (win.initial_title == "Epic Games Launcher" or win.title == "Epic Games Launcher") then
+        hl.exec_cmd("~/.local/bin/epic-tray")
+    end
+end
+hl.on("window.open", epic_tray)
+if not dots.verifying then
+    for _, w in ipairs(hl.get_windows() or {}) do epic_tray(w) end
+end
+
 function dots.minimise_launcher(address)
     -- Gone by then (a splash that closes at once): nothing, not the focused window minimise_window would take
     local w = hl.get_window("address:" .. address)
