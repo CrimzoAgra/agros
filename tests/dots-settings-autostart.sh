@@ -75,7 +75,35 @@ assert offered() == ["editor.desktop"], "switched off, not offered again"
 open(f"{apps}/net.lutris.Lutris.desktop", "w").write("[Desktop Entry]\nType=Application\nName=Lutris\nExec=lutris %U\n\n[Desktop Action x]\nName=X\nExec=lutris --x\n")
 ds.startup_add("net.lutris.Lutris.desktop")
 text = open(f"{mine}/net.lutris.Lutris.desktop").read()
-assert "\nExec=env LUTRIS_START_HIDDEN=1 lutris\n" in text and "Exec=lutris --x" in text, text
+assert "\nExec=sh -c \"gdbus wait --session --timeout 60 org.kde.StatusNotifierWatcher; exec env LUTRIS_START_HIDDEN=1 lutris\"\n" in text \
+    and "Exec=lutris --x" in text, text
+# migrate: an account from before the Startup rework gets its old switches as entries (Lutris and Capri were on unless
+# turned off), once; the old keys go, the night light's becomes its own. An entry added with an older quiet start gets
+# the new one. A new account gets none, then or later
+import json
+ds.write_lua = lambda settings: None
+ds.CONFIG = f"{t}/config"
+ds.SETTINGS = f"{ds.CONFIG}/settings.json"
+os.makedirs(ds.CONFIG)
+for name in ("proton.vpn.app.gtk.desktop", "capri.desktop"):
+    open(f"{apps}/{name}", "w").write(f"[Desktop Entry]\nType=Application\nName={name}\nExec=x\n")
+os.remove(f"{mine}/net.lutris.Lutris.desktop")
+json.dump({"startup.protonvpn": True, "startup.capri": False, "startup.nightlight": True, "x": 1}, open(ds.SETTINGS, "w"))
+ds.migrate({}, True)
+assert sorted(n for n in os.listdir(mine) if n in ds.LOGIN_EXEC) == ["net.lutris.Lutris.desktop", "proton.vpn.app.gtk.desktop"], os.listdir(mine)
+assert json.load(open(ds.SETTINGS)) == {"nightlight": True, "x": 1}, open(ds.SETTINGS).read()
+assert "--start-minimized" in ds.desktop_entry(f"{mine}/proton.vpn.app.gtk.desktop")["Exec"]
+os.remove(f"{mine}/net.lutris.Lutris.desktop")  # (switched off since: stays off)
+stale = open(f"{mine}/proton.vpn.app.gtk.desktop").read().replace("--start-minimized", "")
+open(f"{mine}/proton.vpn.app.gtk.desktop", "w").write(stale)
+ds.migrate({}, True)
+assert not os.path.exists(f"{mine}/net.lutris.Lutris.desktop"), "migrated twice: an app switched off came back"
+assert ds.desktop_entry(f"{mine}/proton.vpn.app.gtk.desktop")["Exec"] == ds.LOGIN_EXEC["proton.vpn.app.gtk.desktop"], "an older quiet start kept"
+os.remove(f"{ds.CONFIG}/.startup-moved")
+os.remove(f"{mine}/proton.vpn.app.gtk.desktop")
+ds.migrate({}, False)
+ds.migrate({}, True)
+assert not os.path.exists(f"{mine}/net.lutris.Lutris.desktop"), "a new account got AgrOS's old presets"
 try:
     ds.startup_add("../hello.desktop")
     raise AssertionError("a path taken as an app")

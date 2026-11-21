@@ -16,6 +16,7 @@ The list of settings, their defaults and how each one applies: ~/.local/share/do
                                      apply when Lutris next starts. Prints "deferred" when hypr or caelestia waits
                                      for a game to close
   dots-settings lua                  write settings.lua again (Hyprland's config does when the schema changed)
+  dots-settings migrate [--old-account]  settings an update moved, put where they are now (agros-links, at login)
 A setting with "get"/"set" shell commands in the schema lives elsewhere (the window mode: ~/.local/state/window-mode);
 "set" gets the value in $VALUE. A group with "from" lists the changes of a patch that can be turned off, from the
 patch itself (patch.py --list), so a new one shows without editing the schema; "from": "autostart" lists the apps
@@ -97,15 +98,23 @@ APPLICATIONS = [f"{HOME}/.local/share/applications", f"{HOME}/.local/share/flatp
 # even without an icon
 ADDED = "X-AgrOS-Startup"
 # Apps "Add an app" starts quietly at login, by launcher entry: in their tray, no window (AgrOS used to preset these)
-LOGIN_EXEC = {
-    "net.lutris.Lutris.desktop": "env LUTRIS_START_HIDDEN=1 lutris",  # (the patched one, ~/.local/bin/lutris)
-    "capri.desktop": "capri --hidden",  # put away, only her tray icon: it or her key brings her out
+# Each once the tray (Caelestia's) is up, a minute at most: Proton VPN looks for it once, for 0.3 s, and started before it
+# showed its window, and closing that quit it ("your connection will be closed") instead of putting it in the tray
+TRAY_WAIT = "gdbus wait --session --timeout 60 org.kde.StatusNotifierWatcher"
+LOGIN_EXEC = {name: f'sh -c "{TRAY_WAIT}; {cmd}"' for name, cmd in {
+    "net.lutris.Lutris.desktop": "exec env LUTRIS_START_HIDDEN=1 lutris",  # (the patched one, ~/.local/bin/lutris)
+    "capri.desktop": "exec capri --hidden",  # put away, only her tray icon: it or her key brings her out
     # (after keyring-default has made "login" the default keyring: on a fresh install it could ask for the old one's
     # password while that's being moved)
-    "proton.vpn.app.gtk.desktop": 'sh -c "keyring-default; exec protonvpn-app"',
-    "solaar.desktop": "solaar --window=hide",  # (puts the mouse's settings back when it reconnects)
-    "ai.storyteller.artcraft-launcher.desktop": "artcraft-silent",  # (also when it restarts after updating itself)
-}
+    "proton.vpn.app.gtk.desktop": "keyring-default; exec protonvpn-app --start-minimized",
+    "solaar.desktop": "exec solaar --window=hide",  # (puts the mouse's settings back when it reconnects)
+    "ai.storyteller.artcraft-launcher.desktop": "exec artcraft-silent",  # (also when it restarts after updating itself)
+}.items()}
+# Startup's switches until 2026-11-20 (startup.<app> in settings.json, Lutris and Capri on unless turned off), by the
+# launcher entry "Add an app" now adds for each; the night light's is its own setting now
+OLD_STARTUP = {"lutris": ("net.lutris.Lutris.desktop", True), "capri": ("capri.desktop", True),
+               "protonvpn": ("proton.vpn.app.gtk.desktop", False), "solaar": ("solaar.desktop", False),
+               "artcraft": ("ai.storyteller.artcraft-launcher.desktop", False)}
 
 
 def desktop_entry(path):
@@ -192,6 +201,37 @@ def startup_add(name):
     os.makedirs(AUTOSTART[1], exist_ok=True)
     with open(os.path.join(AUTOSTART[1], name), "w") as f:
         f.write("\n".join(lines) + "\n")
+
+
+def migrate(settings, old_account):
+    """At every login (agros-links): apps "Add an app" added before their quiet start changed get it; and once, an
+    account from before the Startup page's rework (old_account) gets its old switches as entries (the update dropped
+    them: Proton VPN, Lutris, Capri no longer started), and the old keys go"""
+    for name in LOGIN_EXEC:
+        mine = os.path.join(AUTOSTART[1], name)
+        entry = desktop_entry(mine) if os.path.exists(mine) else {}
+        if entry.get(ADDED) == "true" and entry.get("Exec") != LOGIN_EXEC[name]:
+            startup_add(name)
+    moved = f"{CONFIG}/.startup-moved"  # (once: an account made since is "old" at its next login)
+    if os.path.exists(moved):
+        return
+    with settings_lock():
+        saved = stored()
+        if old_account:
+            for app, (name, default) in OLD_STARTUP.items():
+                if saved.get(f"startup.{app}", default) and not os.path.exists(os.path.join(AUTOSTART[1], name)):
+                    try:
+                        startup_add(name)
+                    except SystemExit:
+                        pass  # (not installed)
+            if saved.get("startup.nightlight"):
+                saved["nightlight"] = True
+        if [saved.pop(k) for k in list(saved) if k.startswith("startup.")]:
+            with open(f"{SETTINGS}.tmp", "w") as f:
+                json.dump(saved, f, indent=2, sort_keys=True)
+            os.replace(f"{SETTINGS}.tmp", SETTINGS)
+            write_lua(settings)
+        open(moved, "w").close()
 
 
 def autostart_set(name, on):
@@ -919,6 +959,8 @@ def main(args):
             print(how)
         else:
             apply(how)
+    elif cmd == "migrate" and args[1:] in ([], ["--old-account"]):
+        migrate(settings, args[1:] == ["--old-account"])
     elif cmd == "lua":
         # (under the lock too: settings.json read before a set wrote it, its settings.lua went over the set's)
         with settings_lock():

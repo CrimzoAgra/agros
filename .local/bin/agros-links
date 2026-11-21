@@ -35,6 +35,9 @@ done
 # home). Not the rest of ~/.local/share: lutris-library adds Lutris's covers its own way
 root=${AGROS_SKEL:-/etc/skel} state=${XDG_STATE_HOME:-$HOME/.local/state}/agros
 seen=$state/configs-seen
+# (an account from before this run's update: it had run this already)
+old_account=()
+[[ -s $seen ]] && old_account=(--old-account)
 mkdir -p "$state" && : >>"$seen"
 declare -A had
 while IFS= read -r n; do had[$n]=1; done <"$seen"
@@ -48,6 +51,8 @@ for part in .config .local/share/applications .local/share/firefox Pictures/Wall
         { [[ -e $to || -L $to ]] || { mkdir -p "$(dirname "$to")" && cp -P "$f" "$to"; }; } && echo "$n" >>"$seen"
     done < <(find "$skel" \( -type f -o -type l \) -print0 2>/dev/null)
 done
+# Settings an update moved (dots-settings migrate: Startup's old switches as the apps' autostart entries)
+[[ -x $lib/bin/dots-settings ]] && "$lib/bin/dots-settings" migrate "${old_account[@]}"
 # Settings an update changed (/usr/share/agros/skel-versions: every version each has had, all but those yours to
 # change): yours replaced while it's one of those (you never edited it), else kept, with AgrOS's new one beside it as
 # <file>.agros-new and said once
