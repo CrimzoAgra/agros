@@ -765,12 +765,12 @@ check("minimise request with no window", steps(), "")
 local game = { address = "0xg", class = "steam_app_2357570", title = "Overwatch", floating = true, fullscreen = 0, pid = -1,
                tags = { "game*" }, workspace = ws(1), monitor = SCREENS[1], at = { x = 0, y = 0 },
                size = { x = 1920, y = 1080 }, focus_history_id = 1 }
-local function over_game(tags, size, fullscreen)
+local function over_game(tags, size, fullscreen, event)
     game.size, game.fullscreen, game.workspace = size or { x = 1920, y = 1080 }, fullscreen or 0, ws(1)
     local app = { address = "0xa", class = "thunar", title = "a", floating = false, fullscreen = 0, pid = -1, tags = tags or {},
                   workspace = ws(1), monitor = SCREENS[1], at = { x = 0, y = 0 }, size = { x = 800, y = 600 }, focus_history_id = 0 }
     WINDOWS, sent = { game, app }, {}
-    fire("window.open", app)
+    fire(event or "window.open", app)
     local minimised = false
     for _, d in ipairs(sent) do
         local a = d[2] or {}
@@ -785,6 +785,8 @@ check("a menu over a game: the game stays", over_game({ "xwl_popup*" }), false)
 check("the game's own window: the game stays", over_game({ "game*" }), false)
 check("over a game in a window: it stays", over_game(nil, { x = 1280, y = 720 }), false)
 check("over a fullscreen game: minimised", over_game(nil, { x = 1280, y = 720 }, 2), true)
+check("an app already open focused over a fullscreen game: the game minimised", over_game(nil, nil, 2, "window.active"), true)
+check("the game's own window focused: the game stays", over_game({ "game*" }, nil, 2, "window.active"), false)
 -- A game Hyprland took out of fullscreen (another window focused) is fullscreen again as you go back to it, while it
 -- still covers the screen; not one made smaller in its own settings, nor a game that never left fullscreen. Also one
 -- found out of fullscreen at a config load (dots.games_out_of_fullscreen)

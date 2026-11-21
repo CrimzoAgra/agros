@@ -956,14 +956,17 @@ function dots.game_under(win)
     end
     return nil
 end
-hl.on("window.open", function(win)
+-- Also an app already open, focused over the game (the dock, the bar, the Super menu bringing its window forward)
+local function off_game(win, opened)
     local game = dots.game_under(win)
     if not game then return end
     dots.window_fades(false)
     dots.minimise_window(game)
-    hl.dispatch(hl.dsp.focus({ window = win }))
+    if opened then hl.dispatch(hl.dsp.focus({ window = win })) end
     hl.exec_cmd("sh -c 'sleep 0.5; exec hyprctl eval \"dots.window_fades(true)\"'")
-end)
+end
+hl.on("window.open", function(win) off_game(win, true) end)
+hl.on("window.active", function(win) off_game(win) end)
 
 -- A game Hyprland took out of fullscreen as another window took the focus (on_focus_under_fullscreen): fullscreen again
 -- as you go back to it (a click, Alt+Tab, the dock) while it still covers its screen. The game doesn't ask again

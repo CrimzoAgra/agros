@@ -590,7 +590,8 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
     cascade down and right from there, one title bar apart, as on Windows
   - A Steam game shows in the dock under its own name and icon (Steam's shortcut for it), as in the switchers
   - Super+M minimises: the window stays in the dock, dimmed; clicking it, Alt+Tab or Super+Alt+M brings it back.
-    Alt+Tab away from a fullscreen window (a game) minimises it, as on Windows; it comes back fullscreen
+    Alt+Tab away from a fullscreen window (a game) minimises it, as on Windows; it comes back fullscreen. So does
+    an app opened or focused over a game covering its screen (from the Super menu, the dock, the bar)
   - Super+Alt+F, the title bar button, a double-click on the title bar or an app's own button maximises inside the
     same gaps as tiled windows; dragging a maximised window by its title bar (the plugin's, or the app's own: GTK
     header bars, LibreWolf's tabs, VSCodium's) un-maximises it round the pointer and the drag goes on; resizing it
