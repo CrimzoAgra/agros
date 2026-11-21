@@ -33,10 +33,10 @@ pub_db() {
     done
     return 0
 }
-sed -n '/^built_against() {$/,/^}$/p; /^contents() {$/,/^}$/p; /^keep_published() {$/,/^}$/p' "$b" >"$t/fns"
+sed -n '/^built_against() {$/,/^}$/p; /^contents() {$/,/^}$/p; /^pkg_parts() {$/,/^}$/p; /^relabel() {$/,/^}$/p; /^keep_published() {$/,/^}$/p' "$b" >"$t/fns"
 # shellcheck disable=SC1091
 . "$t/fns"
-for f in verify_sig built_against contents keep_published; do declare -F "$f" >/dev/null || fail "$f not found in build-repo.sh"; done
+for f in verify_sig built_against contents pkg_parts relabel keep_published; do declare -F "$f" >/dev/null || fail "$f not found in build-repo.sh"; done
 chown() { :; }  # (the builder account, CI's)
 echo 'pkgname=agros-foo' >"$root/packages/agros-foo/PKGBUILD"
 printf 'pkgname=agros-bar\npkgver() { echo r1; }\n' >"$root/packages/agros-bar/PKGBUILD"
@@ -125,9 +125,26 @@ pkg "$t/pub" "$aur" 'file = usr/lib/python3.11/thing.py a'
 pkg "$out" "$aur" 'file = usr/lib/python3.11/thing.py b'
 keep "$aur" >/dev/null && cmp -s "$out/$aur" "$t/pub/$aur" || fail "an AUR package unchanged in what it's built against not kept as published"
 pkg "$out" "$aur" 'file = usr/lib/python3.12/thing.py a'
-cp "$out/$aur" "$t/aur"
-o=$(keep "$aur") && cmp -s "$out/$aur" "$t/aur" && [[ $o == *"the rebuild published"* ]] ||
-    fail "an AUR package built against another Python: not its rebuild published: $o"
+# ...as its version's next release (machines that had it kept the old build under the same name: its library gone,
+# Caelestia didn't start), the same contents, the build under the old name gone
+r1=python-thing-1-1.1-x86_64.pkg.tar.zst
+o=$(keep "$aur") && [[ $o == *"$r1: the rebuild published"* && -f $out/$r1 && ! -e $out/$aur ]] ||
+    fail "an AUR package built against another Python: not published as its next release: $o"
+[[ $(bsdtar -xOf "$out/$r1" .PKGINFO | sed -n 's/^pkgver = //p') == 1-1.1 ]] || fail "the next release's .PKGINFO not 1-1.1"
+[[ $(bsdtar -xOf "$out/$r1" usr/lib/python3.12/thing.py) == a ]] || fail "the next release lost the package's files"
+mtree=$(bsdtar -xOf "$out/$r1" .MTREE | zcat)
+grep -q '^\./usr/lib/python3.12/thing.py ' <<<"$mtree" || fail "the next release's .MTREE not made again"
+# Published as 1-1.1: the next build of 1-1 is that release's (kept as published), not the plain one, older to pacman
+mv "$out/$r1" "$t/pub/" && gpg --batch --quiet --yes -u agros@agros.invalid --detach-sign "$t/pub/$r1" 2>/dev/null
+rm -f "$t/pub/$aur" "$t/pub/$aur.sig"
+pkg "$out" "$aur" 'file = usr/lib/python3.12/thing.py a'
+o=$(keep "$aur") && [[ $o == *"$r1: the published file kept"* ]] && cmp -s "$out/$r1" "$t/pub/$r1" && [[ ! -e $out/$aur ]] ||
+    fail "a build of a version published as its next release: not kept as that release: $o"
+# ...and built against yet another Python: 1-1.2
+pkg "$out" "$aur" 'file = usr/lib/python3.13/thing.py a'
+o=$(keep "$aur") && [[ $o == *"python-thing-1-1.2-x86_64.pkg.tar.zst: the rebuild published"* && -f $out/python-thing-1-1.2-x86_64.pkg.tar.zst ]] ||
+    fail "a release-1.1 package rebuilt against other libraries: not published as 1-1.2: $o"
+rm -f "$out"/python-thing-*
 
 # The installer's checksum: build-repo.sh's own lines (its pins, the swaps it writes, the check), with the patch as it
 # is, then changed

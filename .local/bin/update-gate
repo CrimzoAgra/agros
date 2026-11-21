@@ -33,7 +33,17 @@ if [[ $EUID -eq 0 ]]; then cache=${AGROS_GATE_CACHE:-/var/lib/agros/agros-approv
 mkdir -p "${cache%/*}" 2>/dev/null
 cp -- "$base" "$out" || exit 1
 read -ra gated < <(sed -n 's/^[[:space:]]*IgnorePkg[[:space:]]*=[[:space:]]*//p' "$gate" 2>/dev/null | tr '\n' ' ')
-((${#gated[@]})) || exit 0
+# A library whose update would take away one an installed [agros] package loads, with no newer build of that package
+# in the same update (soname-hold: sndio 1.11's libsndio.so.9 for .so.7, libcava and with it Caelestia not starting):
+# held in <out> until [agros] has the rebuild, said. Before the dry run below, which then holds what needs its new version
+hold_sonames() {
+    local holds lib by so
+    holds=$("$(dirname "$(readlink -f "$0")")/soname-hold" "$out" "${db[@]}") || return 0
+    [[ -n $holds ]] || return 0
+    while read -r lib by so; do echo "$lib (waits for AgrOS's rebuild of $by: its update takes away $so, which $by loads)"; done <<<"$holds"
+    sed -i "/^\\[options\\]/a IgnorePkg = $(cut -d' ' -f1 <<<"$holds" | sort -u | paste -sd' ')" "$out"
+}
+((${#gated[@]})) || { hold_sonames; exit 0; }
 # (the approved list from the [agros] repo's own servers, fetched beside its database: each in turn, as the boot's copy
 # of agros-arch-ok, so a GitHub Pages outage doesn't hold Hyprland's updates while the R2 mirror has the list. One
 # unreachable, or whose list has no good signature, gives way to the next)
@@ -85,6 +95,7 @@ fi
 # A held one a library's update would break (a new soname, its own rebuild waiting with it): that library held too, in
 # <out>, until the next lists (a few tries: one held can hold another). Found by pacman's own dry run, as the update
 # it's for would fail on it whole
+hold_sonames
 for try in 1 2 3 4 5 6; do
     ((try < 6)) || { echo "update-gate: the update still can't be worked out (pacman says why as it runs)" >&2; break; }
     dry=$(LC_ALL=C pacman -Sup --config "$out" "${db[@]}" --print-format '%n' 2>&1) && break

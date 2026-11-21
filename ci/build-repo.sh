@@ -67,6 +67,10 @@ make_db() {
             # (those checked after their build, above, or in CI's agros job)
             [[ $f == agros-*-any.pkg.tar.zst || ( -n ${AGROS_SKIP_OWN:-} && $f == agros-* ) ]] || keep_published "$f"
         done
+        # (listed again: a rebuild published as its version's next release has a new name)
+        shopt -s nullglob
+        pkgs=(*.pkg.tar?(.zst|.xz|.gz|.bz2|.lz4|.lzo|.lrz|.Z))
+        shopt -u nullglob
     fi
     # The database made again from the packages here (paru's local repo already holds the AUR ones: added over it, each
     # warned that its entry already existed)
@@ -161,14 +165,59 @@ contents() {
             print $1, "type=" a["type"], "mode=" a["mode"], "link=" a["link"], "sha256=" a["sha256digest"]
         }' | sort
 }
+# A package file's name, version, release and architecture (<name>-<version>-<release>-<arch>.pkg.tar.*)
+pkg_parts() {
+    local b=${1%.pkg.tar*} arch rel ver
+    arch=${b##*-} b=${b%-*}
+    rel=${b##*-} b=${b%-*}
+    ver=${b##*-}
+    echo "${b%-*} $ver $rel $arch"
+}
+# <file> <release>: the same package as another release of its version: its .PKGINFO's version changed, its .MTREE
+# made again (as makepkg makes it), packed again under its new name, the old file and signature gone. Prints the new
+# name
+relabel() {
+    local f=$1 rel=$2 name ver arch new d files
+    read -r name ver _ arch < <(pkg_parts "$f")
+    new=$name-$ver-$rel-$arch.pkg.tar.zst
+    d=$work/relabel
+    rm -rf "$d" && mkdir "$d" && bsdtar -xpf "$f" -C "$d" || return 1
+    sed -i "s/^pkgver = .*/pkgver = $ver-$rel/" "$d/.PKGINFO"
+    rm -f "$d/.MTREE"
+    (cd "$d" && mapfile -t files < <(LC_ALL=C ls -A) &&
+        LANG=C bsdtar -czf .MTREE --format=mtree \
+            --options='!all,use-set,type,uid,gid,mode,time,size,md5,sha256,link' "${files[@]}" &&
+        LANG=C bsdtar -cf "$OLDPWD/$new" --zstd .MTREE "${files[@]}") || return 1
+    rm -rf "$d" "$f" "$f.sig"
+    chown builder: "$new"
+    echo "$new"
+}
 # The published file kept for <file>, when its version is already published: the published database (signed, read once)
 # lists it, else it's a new version. Not asked of Pages by its file: a file not there yet came back as a 503 as often as
 # a 404, for minutes at a time, and the build stopped (a 404 could also be the CDN's from before it was published, and a
 # rebuild went out under a name users already have)
+# An AUR package rebuilt against other libraries than the published one (a library it needs renamed: sndio's
+# libsndio.so.7 to .so.9) goes out as the next release of its version (1.0.0-1 to 1.0.0-1.1, then 1.0.0-1.2): under
+# the same name, machines that had it kept the old build (pacman installs no version it has), its library gone, and
+# Caelestia didn't start. Republished once like that, each build of that version is that release's (compared with it,
+# kept as it), not the plain one, older to pacman. The next version from the AUR starts plain again. Prints the file it
+# kept or made (its name may have changed): make_db lists the folder again after
 # shellcheck disable=SC2154  # ($stamp: published.sh's)
 keep_published() {
-    local f=$1 code d listed=
+    local f=$1 code d listed= name ver rel arch p mid k=0
     pub_db || exit 1
+    if [[ $f != agros-* ]]; then
+        read -r name ver rel arch < <(pkg_parts "$f")
+        for d in "$pubdb"/*/desc; do
+            p=$(field "$d" FILENAME)
+            [[ $p == "$name-$ver-$rel."* ]] || continue
+            mid=${p#"$name-$ver-$rel."}
+            [[ ${mid%%-*} =~ ^[0-9]+$ && ${mid#*-} == "$arch.pkg.tar."* ]] && ((${mid%%-*} > k)) && k=${mid%%-*}
+        done
+        if ((k)); then
+            f=$(relabel "$f" "$rel.$k") || { echo "!! $1: couldn't be made release $rel.$k"; exit 1; }
+        fi
+    fi
     for d in "$pubdb"/*/desc; do [[ $(field "$d" FILENAME) == "$f" ]] && { listed=1; break; }; done
     [[ -n $listed ]] || return 0
     # Listed: read, or stopped here (Pages down, a timeout), not a rebuild published under its name
@@ -181,6 +230,10 @@ keep_published() {
     verify_sig "$work/pub.sig" "$work/pub" ||
         { echo "!! $f: the published copy's signature doesn't check out"; exit 1; }
     if [[ $f != agros-*-any.pkg.tar.zst && $(built_against "$work/pub") != "$(built_against "$f")" ]]; then
+        # (AgrOS's own compiled ones keep their name: their version counts the commits that touch them already)
+        if [[ $f != agros-* ]]; then
+            f=$(relabel "$f" "$rel.$((k + 1))") || { echo "!! $1: couldn't be made release $rel.$((k + 1))"; exit 1; }
+        fi
         echo "-- $f: the rebuild published (built against other libraries, Qt or Python than the published one)"
         return 0
     fi

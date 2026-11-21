@@ -70,6 +70,14 @@ Server = https://pub-f1a3a482900748e8b69cd81361ab96e1.r2.dev/repo/$arch
 Its database is signed too, and required to be (`DatabaseRequired`: pacman's default takes an unsigned one, so a
 server could list packages CI never put together).
 
+A package whose version hasn't changed keeps the file already published. An AUR package rebuilt against other
+libraries than the published one (a library it loads renamed: sndio's `libsndio.so.7` to `.so.9`) goes out as the next
+release of its version instead (`1.0.0-1` to `1.0.0-1.1`, its package repacked, not built again): under the same name,
+machines that had it kept the old build, as pacman installs no version it already has. Each later build of that
+version is compared with that release and kept as it, and the AUR's next version starts plain again. Machines don't
+take a library's update that would break one of these before its rebuild is out (the upstream gate's `soname-hold`,
+below).
+
 The second server is a mirror on Cloudflare R2 (the bucket agros-iso's ISO is downloaded from, under `repo/x86_64`), so
 a GitHub Pages outage doesn't stop every machine's updates: pacman tries Pages first and the mirror only when Pages
 fails. `.github/workflows/mirror.yml` fills it after each CI run on `main`, also one that failed after Pages was
@@ -1026,7 +1034,10 @@ brings each change; nothing to run by hand).
     is (held together, and said: "waits for AgrOS's check"); a library whose update would break a held one held with it,
     and a package whose update needs one held (one rebuilt for a held library's new version; pacman's
     own dry run says which); and the set, approved too, whose update would break a package not held (`agros-hyprbars`
-    built for the last Hyprland series): it waits for that one's rebuild, rather than the whole update failing). Held,
+    built for the last Hyprland series): it waits for that one's rebuild, rather than the whole update failing); and any
+    library whose update takes away one an installed `[agros]` package loads, with no newer build of that package in the
+    same update (`.local/bin/soname-hold`: sndio 1.11 dropped `libsndio.so.7`, `libcava` built against it, and Caelestia
+    didn't start), until `[agros]` has the rebuild: said, "waits for AgrOS's rebuild of <package>". Held,
     it's held by the gate's Include even when `pacman.conf` lost its own (a merged `.pacnew`). Every place that works
     out what to update goes through it, on the lists it uses: the boot's download and AUR builds (one needing a held
     package, or a newer version of one, isn't built: said; one `pacman.conf` itself holds back, `IgnorePkg`, isn't built
