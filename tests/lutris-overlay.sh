@@ -427,6 +427,19 @@ assert text.startswith(head) and re.fullmatch(r'\n\n\[Software\\\\Wine\\\\Explor
 P
 grep -q 'services_on_desktop(prefix_path)' "$t/cache/lutris-overlay/lutris/runners/wine.py" ||
     fail "Lutris's Wine start doesn't flag the prefix's services (services_on_desktop not in its prelaunch)"
+# desktop_value_only: the virtual desktop turned off (every launch without one) takes out its value alone, Wine's
+# ShowSystray=0 beside it kept (Lutris emptied the whole Explorer key: Wine's tray window came back over the game)
+mkdir -p "$t/vd"
+printf 'WINE REGISTRY Version 2\n\n[Software\\\\Wine\\\\Explorer] 1\n"Desktop"="WineDesktop"\n"ShowSystray"=dword:00000000\n' >"$t/vd/user.reg"
+HOME=$t XDG_CACHE_HOME=$t/cache python3 -I - "$t/cache/lutris-overlay" "$t/vd" <<'P' || fail "the virtual desktop turned off took Wine's other Explorer settings with it"
+import sys
+sys.path.insert(0, sys.argv[1])
+import lutris.gui.application  # noqa: F401
+from lutris.util.wine.prefix import WinePrefixManager
+WinePrefixManager(sys.argv[2]).set_virtual_desktop(False)
+text = open(sys.argv[2] + "/user.reg").read()
+assert '"ShowSystray"=dword:00000000' in text and '"Desktop"' not in text, text
+P
 
 note=
 if timeout 120 git clone -q --depth 1 https://github.com/lutris/lutris "$t/lutris-main" 2>/dev/null; then

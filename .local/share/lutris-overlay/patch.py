@@ -778,6 +778,18 @@ def services_on_desktop():
 """)
 
 
+# Wine's virtual desktop off (as every Wine and Proton start sets it, when it isn't on): only its own value taken out.
+# Lutris emptied the whole Explorer key, Wine's other settings there with it: services_on_desktop's ShowSystray=0
+# went at every launch, and Wine's own tray window came back over the game (full-screen, white, as Batman started)
+def desktop_value_only():
+    edit("util/wine/prefix.py", """        else:
+            self.clear_registry_key(path)
+""", """        else:
+            # lutris-overlay: desktop_value_only (its value alone, not the whole Explorer key)
+            self.clear_registry_subkeys(path, ["Desktop"])
+""")
+
+
 # Changes that can be turned off, by setting name, with their label in the Settings app. The others are always on: the
 # Steam fix keeps installed games from being deleted, starting hidden only happens when asked (at login), and the
 # start-up once is a plain fix
@@ -803,6 +815,7 @@ PLUMBING = {
     "tray_games": "The tray menu lists every installed game, no store launchers, kept up to date",
     "source_page_ids": "A store's own page shows all its games (else some go missing at random)",
     "egs_refresh": "Epic: the login renewed, not expired a day and a half after signing in",
+    "desktop_value_only": "Wine: Wine's other Explorer settings kept when its virtual desktop is off (its tray window stays hidden)",
     "services_on_desktop": "Wine: launchers' updater services get Vulkan (Epic's update no longer crashes and loops), and Epic's overlay is off (games no longer black)",
 }
 if sys.argv[1:] == ["--list"]:
@@ -819,7 +832,7 @@ except (OSError, ValueError):
     values = {}
 changes = [c for c in (sections, steam_placeholder, hide_uninstalled, launchers_apart, same_size_covers, start_hidden, startup_once,
                         vulkaninfo_once, rounded_covers, store_icons, window_after_game, reap_children, flathub_steam, library_refresh, tray_games, sync_all, revive_installed,
-                        bnet_not_installed, bnet_source, rockstar_source, bnet_login, source_page_ids, source_icons, tall_covers, egs_refresh, services_on_desktop) if values.get(f"lutris.{c.__name__}") is not False]
+                        bnet_not_installed, bnet_source, rockstar_source, bnet_login, source_page_ids, source_icons, tall_covers, egs_refresh, services_on_desktop, desktop_value_only) if values.get(f"lutris.{c.__name__}") is not False]
 while True:
     try:
         for change in changes:
