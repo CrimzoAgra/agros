@@ -400,7 +400,8 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
       the result (also if the menu was closed meanwhile) and opens the Updates app with that list, not checking again
       (`UPDATES_LIST`, as the 6-hourly check's "Update now"; a list older than 15 minutes is checked anew)
     - Opens over fullscreen games and videos too (`general.showOverFullscreen` in `shell.json`; notifications and
-      toasts stay off fullscreen windows)
+      toasts stay off fullscreen windows), with the whole shell (bar, border) while it's open, hidden again as it
+      closes (with the dashboard, power menu and popouts opened from it)
   - Panels that open on hover (dashboard, Super menu, sidebar, volume, the bottom-right
     panel) open only from the screen's last 3
     pixels (not the last alone: Caelestia's dots' `cursor:hotspot_padding` keeps the pointer a pixel short of every

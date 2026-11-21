@@ -1079,8 +1079,28 @@ def launcher_fullscreen():
     sc = swap(sc, '["launcher", "session", "dashboard"].includes(drawer)', '["session", "dashboard"].includes(drawer)',
               "launcher ipc")
     window = read("modules/drawers/ContentWindow.qml")
-    window = swap(window, "    mask: hasFullscreen ? emptyRegion : regions\n",
-                  "    mask: hasFullscreen && !screenState.launcher ? emptyRegion : regions\n", "launcher mask")
+    window = swap(window, "    mask: hasFullscreen ? emptyRegion : regions\n", "    mask: shellHidden ? emptyRegion : regions\n",
+                  "launcher mask")
+    # The whole shell (bar, border) shows while it's open, as over no fullscreen window, and hides again as it closes
+    # (with what was opened from it meanwhile). Above the fullscreen window all along (the layer: hasFullscreen)
+    window = insert(window, "    property real fsTransitionProg: hasFullscreen ? 1 : 0\n",
+                    "    readonly property bool shellHidden: hasFullscreen && !screenState.launcher\n"
+                    "    onShellHiddenChanged: {\n"
+                    "        if (!shellHidden)\n"
+                    "            return;\n"
+                    "        screenState.session = false;\n"
+                    "        screenState.dashboard = false;\n"
+                    "        panels.popouts.close();\n"
+                    "    }\n")
+    window = swap(window, "fsTransitionProg: hasFullscreen ? 1 : 0", "fsTransitionProg: shellHidden ? 1 : 0",
+                  "launcher shell")
+    window = swap(window, "borderLayoutThickness: hasFullscreen ? 0", "borderLayoutThickness: shellHidden ? 0",
+                  "launcher border")
+    window = swap(window, "WlrLayershell.layer: (fsTransitionProg > 0 && ",
+                  "WlrLayershell.layer: ((hasFullscreen || fsTransitionProg > 0) && ", "launcher layer")
+    if window.count("fullscreen: root.hasFullscreen\n") != 2:  # the clicks' and the bar's
+        raise LookupError("launcher bar")
+    window = window.replace("fullscreen: root.hasFullscreen\n", "fullscreen: root.shellHidden\n")
     return {shortcuts: sc, "modules/drawers/ContentWindow.qml": window}
 
 
