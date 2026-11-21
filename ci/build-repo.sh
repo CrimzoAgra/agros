@@ -204,7 +204,7 @@ relabel() {
 # kept or made (its name may have changed): make_db lists the folder again after
 # shellcheck disable=SC2154  # ($stamp: published.sh's)
 keep_published() {
-    local f=$1 code d listed= name ver rel arch p mid k=0
+    local f=$1 code d listed="" name ver rel arch p mid k=0
     pub_db || exit 1
     if [[ $f != agros-* ]]; then
         read -r name ver rel arch < <(pkg_parts "$f")
