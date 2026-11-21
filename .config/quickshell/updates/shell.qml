@@ -2,6 +2,8 @@
 // Proton builds, developer tools), with "Update all", which runs ~/.local/bin/update-apps and shows its progress.
 //   qs -c updates -n                  open it (Super menu: "Updates", ~/.local/bin/updates)
 //   UPDATES_START=1 qs -c updates -n  open it and start updating (the "Update now" notification)
+//   UPDATES_LIST=<file>               with what a check just found (update-apps --check, --check-now: their
+//                                     notification): shown at once, not checked again (older than 15 minutes: checked)
 // Closing the window quits it (an update already running carries on, its log in $XDG_RUNTIME_DIR/update-apps.log).
 // Separate from Caelestia, so Caelestia updates don't touch it.
 pragma ComponentBehavior: Bound
@@ -35,6 +37,7 @@ ShellRoot {
     property bool failed: false
     property bool listFailed: false // the list couldn't be made (update-apps missing or broken): not "nothing to update"
     property bool startWhenReady: Quickshell.env("UPDATES_START") === "1"
+    property string listFile: Quickshell.env("UPDATES_LIST") || "" // (used once: after an update, checked anew)
     // An admin's (wheel) alone can install them (update-apps uses sudo): another account sees the list, told so, and
     // no "Update all", which only failed (the boot's update installs them all the same)
     property bool admin: true
@@ -90,9 +93,10 @@ ShellRoot {
         // that hangs (a network that connects but never answers: checkupdates, paru and flatpak have no time limit of
         // their own) fails after 10 minutes, with everything it started (timeout signals its whole process group), not
         // "Checking" for good with no way to check again
-        command: ["sh", "-c", 'timeout 10m "$0" --list; echo "end $?"', root.script]
+        command: ["sh", "-c", 'if [ -n "$1" ] && [ -n "$(find "$1" -mmin -15 2>/dev/null)" ]; then cat "$1"; echo "end 0"; else timeout 10m "$0" --list; echo "end $?"; fi; [ -z "$1" ] || rm -f "$1"', root.script, root.listFile]
         stdout: StdioCollector {
             onStreamFinished: {
+                root.listFile = "";
                 root.listFailed = !/^end 0$/m.test(text);
                 root.items = root.listFailed ? [] : text.split("\n").filter(l => l.includes("\t")).map(l => {
                     const [kind, name, old, now] = l.split("\t");

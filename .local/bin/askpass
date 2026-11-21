@@ -1,3 +1,5 @@
 #!/usr/bin/env bash
-# sudo's password dialog (SUDO_ASKPASS) for apps with no terminal: the Updates app's system and AUR updates
+# sudo's password dialog (SUDO_ASKPASS) for apps with no terminal: the Updates app's system and AUR updates. Within an
+# update-apps run, the password it asked for once (AGROS_ASKPASS_FILE): every sudo of the run gets it from there
+[[ -n ${AGROS_ASKPASS_FILE:-} && -r $AGROS_ASKPASS_FILE ]] && exec cat -- "$AGROS_ASKPASS_FILE"
 exec zenity --password --title="${1:-Password}" 2>/dev/null

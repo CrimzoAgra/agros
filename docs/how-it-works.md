@@ -393,7 +393,8 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
       a word starting with the text ("files": a File Manager) first, so Enter opens foot, not Micro (its keyword
       "terminal")
     - A "check for updates" button next to the search bar: its icon spins while checking, then a notification says
-      the result (also if the menu was closed meanwhile) and opens the Updates app
+      the result (also if the menu was closed meanwhile) and opens the Updates app with that list, not checking again
+      (`UPDATES_LIST`, as the 6-hourly check's "Update now"; a list older than 15 minutes is checked anew)
     - Opens over fullscreen games and videos too (`general.showOverFullscreen` in `shell.json`; notifications and
       toasts stay off fullscreen windows)
   - Panels that open on hover (dashboard, Super menu, sidebar, volume, the bottom-right
@@ -1086,7 +1087,11 @@ brings each change; nothing to run by hand).
   them without that review (it lists which ones first, in its log), leaving out those the boot's builds hold for review
   (`aur-maintainer-changed`'s bases, a signed repository's package now foreign: paru's `--ignore`, said with "run
   update-apps in a terminal"; built unreviewed there, the next boot took the new maintainers as reviewed), and sudo asks
-  for the password in a dialog (`.local/bin/askpass`, zenity, as `SUDO_ASKPASS`). After its `paru -Syu` it rebuilds
+  for the password in a dialog (`.local/bin/askpass`, zenity, as `SUDO_ASKPASS`), once for the whole run: each `paru`
+  is a process of its own and sudo, with no terminal, remembers the password per calling process, so `update-apps`
+  asks for it and checks it first (again when wrong, three tries), keeps it for that run only in a file of yours in
+  `$XDG_RUNTIME_DIR` (RAM), which `askpass` gives each sudo (`AGROS_ASKPASS_FILE`), and removes it when the run ends.
+  After its `paru -Syu` it rebuilds
   what's built on a runtime it changed (the boot's list, below), and on a Qt changed since they were last built, once
   the runtime is in: `[agros]`'s own at the version installed with AgrOS's Quickshell fix (through `auto-update-aur
   --fetch`, as the boot's), the AUR's others at their newest. VSCodium's own updater (which only opens the website) is

@@ -11,6 +11,7 @@
 #                         (update-check.timer); the same updates aren't announced twice
 #   update-apps --check-now   check and always say the result in a notification; clicking it opens the Updates app.
 #                         Returns as soon as the check is done (the Super menu's button spins until then)
+#   (both checks hand the app what they found, UPDATES_LIST: it shows that list at once, not checking again)
 #   update-apps --qt-mark / --qt-rebuild   this run's own steps around its pacman -Syu, alone (tests/update-apps.sh):
 #                         the Qt Quickshell and Caelestia were built for written down (when it isn't yet), then what's
 #                         built on it rebuilt if Qt changed since
@@ -141,8 +142,13 @@ snapshot() { [[ $(findmnt -no FSTYPE / 2>/dev/null) == overlay ]]; }
 # An admin's (wheel) alone: another account can't sudo (the boot's update installs them all the same)
 admin() { [[ " $(id -nG 2>/dev/null) " == *" wheel "* ]]; }
 
+# found <list>: what a check found, in a file of yours (RAM) the Updates app opened from its notification shows at once
+# (UPDATES_LIST; it checks again when it's older than 15 minutes, and removes it)
+found() { local f; f=$(mktemp "${XDG_RUNTIME_DIR:-/tmp}/update-apps-list.XXXXXX") && printf '%s\n' "$1" >"$f" && echo "$f"; }
+
 if [[ ${1:-} == --check-now ]]; then
     all=$(list_updates)
+    listed=$(found "$all")
     list=$(grep -v '^offline' <<<"$all" | cut -f2 | sed '/^$/d' | sort -u)
     if grep -q '^offline' <<<"$all"; then
         title="Couldn't check for updates"
@@ -156,7 +162,8 @@ if [[ ${1:-} == --check-now ]]; then
     # The notification waits on its own, so this returns now (sh's own $1/$2/$3, not this script's)
     # shellcheck disable=SC2016
     setsid sh -c 'a=$(timeout 1h "$3/notify-wait" -a Updates -i system-software-update -A "default=Open Updates" "$1" "$2")
-        [ "$a" = default ] && exec "$3/app-launch" "$3/updates"' sh "$title" "$names" "$helpers" >/dev/null 2>&1 &
+        [ "$a" = default ] && exec "$3/app-launch" env UPDATES_LIST="$4" "$3/updates"; rm -f "$4"' \
+        sh "$title" "$names" "$helpers" "$listed" >/dev/null 2>&1 &
     exit 0
 fi
 
@@ -164,11 +171,13 @@ if [[ ${1:-} == --check ]]; then
     # (an admin's only: another account's "Update now" only failed)
     admin || exit 0
     ! snapshot || exit 0
-    list=$(list_updates | grep -v '^offline' | cut -f2 | sort -u)
+    all=$(list_updates)
+    list=$(grep -v '^offline' <<<"$all" | cut -f2 | sed '/^$/d' | sort -u)
     [[ -n $list ]] || exit 0
     seen="${XDG_CACHE_HOME:-$HOME/.cache}/update-apps-notified"
     [[ $list == "$(cat "$seen" 2>/dev/null)" ]] && exit 0
     summary "$list"
+    listed=$(found "$all")
     # Noted as announced once the notification was there (not if Caelestia restarted under it: offered again next time).
     # Until the next check at most: a notification no one clicks never says it's gone, and this check would wait (its
     # unit "starting") through the ones after it, so updates that came since went unannounced
@@ -177,7 +186,8 @@ if [[ ${1:-} == --check ]]; then
     rc=$?
     ((rc == 0 || rc == 124)) && printf '%s\n' "$list" >"$seen"
     # In a unit of its own, as from the launcher: closing the window (this service ending) doesn't stop the update
-    [[ $action == default ]] && exec "$helpers/app-launch" env UPDATES_START=1 "$helpers/updates"
+    [[ $action == default ]] && exec "$helpers/app-launch" env UPDATES_START=1 UPDATES_LIST="$listed" "$helpers/updates"
+    rm -f "$listed"
     exit 0
 fi
 
@@ -197,6 +207,24 @@ fi
 if charge=$("$helpers/battery-low"); then
     echo "On battery, nearly empty ($charge percent): nothing updated. Plug the charger in, then update."
     exit 1
+fi
+# Your password once for the whole run (the Updates app's, no terminal): each paru of it (the lists, the keyrings, the
+# update, the rebuilds) is a process of its own, and with no terminal sudo remembers it per calling process, so each
+# asked again (three dialogs). Asked here and checked, then kept for this run only in a file only you can read, in your
+# runtime folder (RAM), which askpass hands each sudo; gone when the run ends. Not asked when sudo needs none
+if [[ ! -t 0 ]] && ! sudo -n true 2>/dev/null; then
+    pass_file=$(mktemp "${XDG_RUNTIME_DIR:-/tmp}/update-apps-pass.XXXXXX") || { echo "!! Couldn't start: no room for the run's files"; exit 1; }
+    trap 'rm -f "$pass_file"' EXIT
+    ok=
+    for _ in 1 2 3; do
+        pw=$(AGROS_ASKPASS_FILE='' "$helpers/askpass" "Your password, to install the updates") ||
+            { echo "Not updated: no password given."; exit 1; }
+        if printf '%s\n' "$pw" | sudo -S -p '' -v 2>/dev/null; then ok=1; break; fi
+    done
+    [[ $ok ]] || { echo "Not updated: the password was wrong three times."; exit 1; }
+    printf '%s\n' "$pw" >"$pass_file"
+    unset pw
+    export AGROS_ASKPASS_FILE=$pass_file
 fi
 status=0 # 1 if any step failed (the Updates app says "Finished, with problems")
 echo "== System and AUR apps"

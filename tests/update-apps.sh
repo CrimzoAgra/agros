@@ -44,6 +44,20 @@ check
 stub notify-send 'exec sleep 30'
 check
 [[ $(cat "$seen" 2>/dev/null) == linux ]] || fail "an unclicked notification (its time ran out) not noted: announced again every check"
+# Clicked: the Updates app opened with what the check found (UPDATES_LIST, in your runtime folder), not checking again;
+# --check's "Update now" starting the update, --check-now's (the Super menu's button) only opening it
+stub uwsm 'exit 1'; stub hyprctl 'true'; stub notify-send 'echo default'
+stub qs 'echo "${UPDATES_START:-0} $(cat "$UPDATES_LIST")" >'"$t"'/opened'
+mkdir -p "$t/run"; rm -f "$seen"
+XDG_RUNTIME_DIR=$t/run check
+[[ $(cat "$t/opened" 2>/dev/null) == "1 "$'system\tlinux\t6.1-1\t6.2-1' ]] ||
+    fail "\"Update now\" didn't hand the app what the check found: $(cat "$t/opened" 2>/dev/null)"
+rm -f "$t/opened" "$t/run"/*
+XDG_RUNTIME_DIR=$t/run HOME=$t/home XDG_CACHE_HOME=$t/home/.cache PATH=$t/bin:$PATH "$here/.local/bin/update-apps" --check-now
+for _ in $(seq 50); do [[ -s $t/opened ]] && break; sleep 0.1; done
+[[ $(cat "$t/opened" 2>/dev/null) == "0 "$'system\tlinux\t6.1-1\t6.2-1' ]] ||
+    fail "the Super menu's check didn't hand the app what it found: $(cat "$t/opened" 2>/dev/null)"
+rm -rf "$t/opened" "$t/run" "$t/bin/"{uwsm,hyprctl,qs}
 # An account that can't sudo (not in wheel): no "Update now" offered (it only failed); the boot's update covers it
 rm -f "$seen"; stub id 'echo users'; stub notify-send 'echo sent >>"'"$t"'/sent"'
 check
@@ -55,6 +69,26 @@ out=$(HOME=$t/home XDG_STATE_HOME=$t/state XDG_CACHE_HOME=$t/home/.cache PATH=$t
 [[ ! -e $t/paru && $out == "Only an administrator can install updates"* ]] ||
     fail "an update tried by an account that can't sudo, or not said: $out / $(cat "$t/paru" 2>/dev/null)"
 stub id 'echo users wheel'  # (an admin's, from here on)
+
+# Your password once for the whole run (no terminal: the Updates app): asked again when it was wrong, then every sudo
+# of the run (each paru's) given it by askpass with no dialog, and its copy gone once the run ends. Cancelled: nothing
+stub sudo 'case "$1" in -n) exit 1 ;; -S) read -r p; [ "$p" = right ] ;; esac'
+stub zenity 'n=$(cat '"$t"'/asked 2>/dev/null || echo 0); echo $((n + 1)) >'"$t"'/asked; [ "$n" = 0 ] && echo wrong || echo right'
+stub paru 'echo "paru $*" >>"'"$t"'/paru"; "$SUDO_ASKPASS" >>"'"$t"'/given"'
+mkdir -p "$t/run"
+pw_update() { XDG_RUNTIME_DIR=$t/run HOME=$t/home XDG_STATE_HOME=$t/state-pw XDG_CACHE_HOME=$t/home/.cache PATH=$t/bin:$PATH \
+    "$here/.local/bin/update-apps" </dev/null 2>&1; }
+pw_update >/dev/null || true
+[[ $(cat "$t/asked") == 2 ]] || fail "the password not asked once more after a wrong one, or asked again: $(cat "$t/asked") dialogs"
+[[ $(grep -c . "$t/given") -ge 2 && $(sort -u "$t/given") == right ]] ||
+    fail "a sudo of the run not given the password without a dialog: $(cat "$t/given" 2>/dev/null)"
+[[ -z $(ls -A "$t/run") ]] || fail "the run's password left behind: $(ls -A "$t/run")"
+stub zenity 'exit 1'; rm -f "$t/paru"
+out=$(pw_update) && fail "an update with no password given reported success"
+[[ ! -e $t/paru && $out == *"no password given"* ]] || fail "updated with the dialog cancelled, or not said: $out"
+stub sudo 'exit 0'  # (from here on: sudo asks for none, as with NOPASSWD)
+stub paru 'echo "paru $*" >>"'"$t"'/paru"'
+rm -rf "$t/paru" "$t/given" "$t/asked" "$t/run" "$t/state-pw"
 
 # The update, with no state folder yet: the Qt Quickshell was built for written down the first time, not taken for a
 # new Qt at every run (each one rebuilding Quickshell and Caelestia)

@@ -6,13 +6,22 @@ set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 qml=$here/.config/quickshell/updates/shell.qml
-cmd=$(sed -n "s/^ *command: \[\"sh\", \"-c\", '\(.*\)', root.script\]\$/\1/p" "$qml" | grep -- --list) ||
+cmd=$(sed -n "s/^ *command: \[\"sh\", \"-c\", '\(.*\)', root.script, root.listFile\]\$/\1/p" "$qml" | grep -- --list) ||
     fail "the Updates app's list command not found"
 printf '#!/bin/sh\nprintf "system\tfoo\t1\t2\n"\n' >"$t/list" && chmod +x "$t/list"
 [[ $(sh -c "$cmd" "$t/list") == $'system\tfoo\t1\t2\nend 0' ]] || fail "a list made: $(sh -c "$cmd" "$t/list")"
 printf '#!/bin/sh\nexit 3\n' >"$t/broken" && chmod +x "$t/broken"
 [[ $(sh -c "$cmd" "$t/broken") == "end 3" ]] || fail "a list that failed: $(sh -c "$cmd" "$t/broken")"
 [[ $(sh -c "$cmd" "$t/missing" 2>/dev/null) == "end 127" ]] || fail "a missing update-apps: $(sh -c "$cmd" "$t/missing" 2>&1)"
+# Opened from a check's notification (UPDATES_LIST): what it found shown, update-apps not run again, the file removed;
+# one older than 15 minutes checked anew (and removed too)
+printf 'system\tbar\t1\t2\n' >"$t/found"
+[[ $(sh -c "$cmd" "$t/broken" "$t/found") == $'system\tbar\t1\t2\nend 0' && ! -e $t/found ]] ||
+    fail "a check's list not shown as it was, or checked again"
+printf 'system\tbar\t1\t2\n' >"$t/found" && touch -d '20 minutes ago' "$t/found"
+[[ $(sh -c "$cmd" "$t/list" "$t/found") == $'system\tfoo\t1\t2\nend 0' && ! -e $t/found ]] ||
+    fail "a check's list from 20 minutes ago shown, not checked anew"
+grep -q 'root.listFile = "";' "$qml" || fail "the check's list used again after an update"
 # One that hangs: failed at its time limit (1 s here, not 10 minutes), the part it started in the background too (it
 # kept the output open, and the app waited on it for good)
 [[ $cmd == *"timeout 10m "* ]] || fail "the list has no time limit: $cmd"
