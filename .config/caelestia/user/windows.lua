@@ -964,6 +964,34 @@ hl.on("window.open", function(win)
     hl.dispatch(hl.dsp.focus({ window = win }))
     hl.exec_cmd("sh -c 'sleep 0.5; exec hyprctl eval \"dots.window_fades(true)\"'")
 end)
+
+-- A game Hyprland took out of fullscreen as another window took the focus (on_focus_under_fullscreen): fullscreen again
+-- as you go back to it (a click, Alt+Tab, the dock) while it still covers its screen. The game doesn't ask again
+-- itself: it stayed a window over the whole screen with Caelestia's bar and borders drawn over it (Overwatch). One made
+-- smaller (windowed in the game's own settings) stays as it is; a store launcher's windows aren't a game's
+local out_of_fullscreen = {}
+hl.on("window.fullscreen", function(win)
+    if win and (win.fullscreen or 0) == 0 and dots.is_game and dots.is_game(win) then out_of_fullscreen[win.address] = true end
+end)
+hl.on("window.active", function(win)
+    if not (win and out_of_fullscreen[win.address]) then return end
+    out_of_fullscreen[win.address] = nil
+    if (win.fullscreen or 0) == 0 and win.workspace and (win.workspace.id or 0) > 0 and covers_screen(win) then
+        hl.dispatch(hl.dsp.window.fullscreen({ mode = "fullscreen", action = "set", window = win }))
+    end
+end)
+-- (and at a config load, the games over their screen out of fullscreen by then: a moment after, once apps.lua, loaded
+-- after this file, has given dots.is_game)
+function dots.games_out_of_fullscreen()
+    for _, w in ipairs(hl.get_windows() or {}) do
+        if (w.fullscreen or 0) == 0 and dots.is_game and dots.is_game(w) and covers_screen(w) then
+            out_of_fullscreen[w.address] = true
+        end
+    end
+end
+if not dots.verifying then
+    hl.exec_cmd("sh -c 'sleep 1; exec hyprctl eval \"dots.games_out_of_fullscreen()\"'")
+end
 function dots.open_retry(address) on_open(by_address(address), true) end
 
 -- Window peek (the shell's WindowPeek.qml, resting on a preview in the dock or the workspace picker): only the windows

@@ -785,6 +785,29 @@ check("a menu over a game: the game stays", over_game({ "xwl_popup*" }), false)
 check("the game's own window: the game stays", over_game({ "game*" }), false)
 check("over a game in a window: it stays", over_game(nil, { x = 1280, y = 720 }), false)
 check("over a fullscreen game: minimised", over_game(nil, { x = 1280, y = 720 }, 2), true)
+-- A game Hyprland took out of fullscreen (another window focused) is fullscreen again as you go back to it, while it
+-- still covers the screen; not one made smaller in its own settings, nor a game that never left fullscreen. Also one
+-- found out of fullscreen at a config load (dots.games_out_of_fullscreen)
+local function back_to(size, left, scan)
+    game.size, game.workspace, game.address = size or { x = 1920, y = 1080 }, ws(1), "0xg" .. tostring(math.random(1e6))
+    WINDOWS, sent = { game }, {}
+    game.fullscreen = 0
+    if left then fire("window.fullscreen", game) end
+    if scan then dots.games_out_of_fullscreen() end
+    sent = {}
+    fire("window.active", game)
+    local full = false
+    for _, d in ipairs(sent) do
+        local a = d[2] or {}
+        if d[1] == "window.fullscreen" and a.mode == "fullscreen" and a.action == "set" then full = true end
+    end
+    sent, WINDOWS = {}, {}
+    return full
+end
+check("a game out of fullscreen, gone back to: fullscreen again", back_to(nil, true), true)
+check("a game made smaller: stays a window", back_to({ x = 1280, y = 720 }, true), false)
+check("a game that never left fullscreen: nothing", back_to(nil, false), false)
+check("found out of fullscreen at a config load: fullscreen again", back_to(nil, false, true), true)
 -- A notification's click: the app's most recently used window, not one never focused (Hyprland's focus_history_id -1:
 -- a launcher minimised as it opened), which came first
 local function app_win(address, history)
