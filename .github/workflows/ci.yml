@@ -16,11 +16,13 @@ on:
     - cron: '17 3 * * *'
   workflow_dispatch:
 
-# One run at a time, the newest push queued behind it (an older one waiting is dropped): runs finishing out of order
-# published an older commit over a newer one, and cancelling the running one meant a busy day published nothing
+# One run at a time: a new push cancels the one still running (its commit superseded, its result never published).
+# Safe at any point: nothing is put out before the publish job's Pages deploy, which goes through whole or not at all,
+# and an older commit is never published over a newer one (ci/newer.sh). Pushes closer together than a run's length
+# (about 15 minutes) publish only the last one
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 # (each job with a time limit a few times its usual length: a hang stopped, not run on to GitHub's 6 hours with the
 # queued run behind it waiting all that time)
 
@@ -40,7 +42,8 @@ jobs:
   test:
     needs: [agros, repo]
     # (the build skipped, a pull request: on the published repo; not when AgrOS's own packages didn't build)
-    if: ${{ always() && needs.agros.result != 'failure' && (needs.repo.result == 'success' || needs.repo.result == 'skipped') }}
+    # (!cancelled(), not always(): a run a newer push cancelled tests nothing)
+    if: ${{ !cancelled() && needs.agros.result != 'failure' && (needs.repo.result == 'success' || needs.repo.result == 'skipped') }}
     outputs:
       result: ${{ steps.tests.outputs.result }}
       gated: ${{ steps.gated.outputs.gated }}
@@ -562,7 +565,8 @@ jobs:
     # One issue for what this run held back or didn't put out (ci/report.sh), closed once a run puts all out (Pages'
     # deploy too: a release signed but never deployed closed the issue as all out)
     needs: [agros, repo, test, release, sign, publish]
-    if: ${{ always() && github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
+    # (not for a run a newer push cancelled: its "nothing published" would open an issue the newer run then closes)
+    if: ${{ !cancelled() && github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
     runs-on: ubuntu-26.04
     timeout-minutes: 10
     permissions:
