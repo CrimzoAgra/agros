@@ -211,23 +211,23 @@ local function covers_screen(w)
     return m and w.size and w.fullscreen == 0 and not (w.workspace and (w.workspace.name or ""):find("^special:"))
         and w.size.x == math.floor(m.width / m.scale + 0.5) and w.size.y == math.floor(m.height / m.scale + 0.5)
 end
-function dots.game_cover_check(address, again)
+function dots.game_cover_check(address)
     local w = hl.get_window("address:" .. address)
-    if not w then return end
-    if covers_screen(w) then hl.dispatch(hl.dsp.window.fullscreen({ mode = "fullscreen", window = w })) end
-    if again then
-        hl.timer(function() dots.game_cover_check(address, true) end, { timeout = 1000, type = "oneshot" })
+    if w and covers_screen(w) and dots.is_game(w) then
+        hl.dispatch(hl.dsp.window.fullscreen({ mode = "fullscreen", window = w }))
     end
 end
-hl.on("window.open", function(win)
-    if win and dots.is_game(win) then dots.game_cover_check(win.address, true) end
-end)
--- (a config reload drops the timers: the games already open looked after again)
-for _, w in ipairs(hl.get_windows() or {}) do
-    if dots.is_game(w) then
-        local address = w.address
-        hl.timer(function() dots.game_cover_check(address, true) end, { timeout = 1000, type = "oneshot" })
-    end
+-- (one timer for all of them, made again at each config load; the size looked at first: cheap, is_game reads /proc).
+-- Not for a check of the config (dots.verifying): Hyprland --verify-config never ended with it, and with it the
+-- update's check of the config
+if not dots.verifying then
+    hl.timer(function()
+        for _, w in ipairs(hl.get_windows() or {}) do
+            if covers_screen(w) and dots.is_game(w) then
+                hl.dispatch(hl.dsp.window.fullscreen({ mode = "fullscreen", window = w }))
+            end
+        end
+    end, { timeout = 1000, type = "repeat" })
 end
 -- ...and again after each change Alt+Tab makes: Wine takes a game out of fullscreen as it loses the focus (as Windows
 -- does), and a quick Alt+Tab brought it back as a window. A moment after (its own resize comes after the event)
@@ -235,7 +235,7 @@ local function recheck(win)
     if not (win and dots.is_game(win)) then return end
     local address = win.address
     for _, ms in ipairs({ 300, 1000 }) do
-        hl.timer(function() dots.game_cover_check(address, false) end, { timeout = ms, type = "oneshot" })
+        hl.timer(function() dots.game_cover_check(address) end, { timeout = ms, type = "oneshot" })
     end
 end
 hl.on("window.active", recheck)
