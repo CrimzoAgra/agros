@@ -227,6 +227,23 @@ grep -qx 'X-AgrOS-WineExe=Game.exe' "$apps"/net.lutris.epic-game-*.desktop ||
 rm "$man/A.item"
 run
 [[ -z $(epic) ]] || { echo "FAIL: a game uninstalled in Epic's launcher is still installed in Lutris: $(epic)"; exit 1; }
+# A Wine game its store's launcher starts (its config's .exe the launcher's): its own program as noted when it ran
+# (user/apps.lua's wine-games.tsv) is the one its menu entry names for the dock, not the launcher's
+mkdir -p "$t/Games/ea-app/drive_c/Games/Racer" "$t/.local/state/agros" && touch "$t/Games/ea-app/drive_c/Games/Racer/racer.exe"
+python3 -I - "$t/.local/share/lutris/pga.db" "$t/Games/ea-app" <<'P'
+import gi, sqlite3, sys
+gi.require_version("Gtk", "3.0"); gi.require_version("Gdk", "3.0")
+from lutris.config import write_game_config
+config = write_game_config("racer", {"game": {"exe": "drive_c/EA/EALauncher.exe", "prefix": sys.argv[2]}})
+c = sqlite3.connect(sys.argv[1])
+c.execute("INSERT INTO games (name, slug, runner, installed, configpath, directory) VALUES ('Racer', 'racer', 'wine', 1, ?, ?)",
+          (config, sys.argv[2]))
+c.commit()
+P
+printf 'Racer\t%s\n' "$t/Games/ea-app/drive_c/Games/Racer/racer.exe" >"$t/.local/state/agros/wine-games.tsv"
+run
+grep -qx 'X-AgrOS-WineExe=racer.exe' "$apps"/net.lutris.racer-*.desktop ||
+    { echo "FAIL: a game its launcher starts names the launcher for the dock: $(grep WineExe "$apps"/net.lutris.racer-*.desktop)"; exit 1; }
 # One run at a time (agros-welcome's and lutris-library.path's overlapped): another holding its lock, this one waits
 flock "$XDG_RUNTIME_DIR/lutris-library.lock" sleep 3 &
 sleep 0.5

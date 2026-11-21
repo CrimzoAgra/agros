@@ -405,6 +405,20 @@ for name in os.listdir(bundled) if os.path.isdir(bundled) else []:
 #  - a Wine game: its prefix and .exe (X-AgrOS-WinePrefix, X-AgrOS-WineExe). Under Proton every Lutris game's window
 #    has one class, steam_app_default: app-for-window tells them apart by the prefix their process runs in (and the
 #    .exe, for games sharing their store launcher's prefix)
+def noted_exes():
+    """Wine games' own programs, by their Lutris name, as user/apps.lua noted them when they ran"""
+    out = {}
+    try:
+        with open(os.path.expanduser("~/.local/state/agros/wine-games.tsv"), encoding="utf-8") as f:
+            for line in f:
+                name, _, path = line.rstrip("\n").partition("\t")
+                if name and path:
+                    out[name] = os.path.realpath(path)
+    except OSError:
+        pass
+    return out
+
+
 def epic_game_exe(prefix, appid):
     """An Epic game's own .exe in its launcher's prefix (its manifest's install folder and program), None if not there"""
     m = (epic_manifests(prefix) or {}).get(appid) or {}
@@ -452,12 +466,18 @@ def entry_details(game_id, slug, service, appid, runner):
             if service == "egs" and prefix:
                 exe = ((epic_manifests(prefix) or {}).get(appid) or {}).get("LaunchExecutable") or exe
             own = epic_game_exe(prefix, appid) if service == "egs" and prefix else None
+            own_icon = f"agros_egs_{appid}"
+            # Any other Wine game: its program as noted when it last ran (user/apps.lua), when it's not the one its
+            # config starts (a store's launcher: EA's, Ubisoft's...)
+            noted = noted_exes().get(game.name or "")
+            if not own and noted and os.path.isfile(noted) and os.path.basename(noted) != os.path.basename(exe or ""):
+                own, exe, own_icon = noted, noted, f"agros_game_{slug}"
             if own:
-                path = os.path.join(settings.ICON_PATH, f"agros_egs_{appid}.png")
+                path = os.path.join(settings.ICON_PATH, own_icon + ".png")
                 if not os.path.exists(path) and extract_exe_icon(own, path):
                     system.update_desktop_icons()
                 if os.path.exists(path):
-                    icon = f"agros_egs_{appid}"
+                    icon = own_icon
             elif not glob.glob(os.path.join(settings.ICON_PATH, icon + ".*")) and game.runner.extract_icon(slug):
                 system.update_desktop_icons()  # (the icon cache: one older than the icon hides it)
             if prefix:

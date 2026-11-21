@@ -242,6 +242,45 @@ function dots.started_for_game(pid)
     if name == "" then return false end
     return not launcher_names[name]
 end
+
+-- A Wine game's own program, noted as its window opens: its Lutris name (GAME_NAME, as Lutris starts it) and its .exe
+-- on disk, in ~/.local/state/agros/wine-games.tsv. lutris-library takes the game's menu icon from it and tells the dock
+-- its windows by it: a game a store's launcher starts (Epic's, EA's, Ubisoft's...) had the launcher's icon and was
+-- told apart as the launcher. Not the launchers' own windows (started for themselves, or not games); once per game
+-- and program (the file written only when one is new or changed)
+local wine_games_file = (os.getenv("HOME") or "") .. "/.local/state/agros/wine-games.tsv"
+hl.on("window.open", function(win)
+    if not (win and win.pid and win.pid > 0 and dots.is_game(win)) then return end
+    local env = proc(win.pid, "environ")
+    if not env then return end
+    env = "\0" .. env
+    local name, prefix = env:match("%zGAME_NAME=([^%z]+)"), env:match("%zWINEPREFIX=([^%z]+)")
+    if not name or not prefix or launcher_names[name:lower()] then return end
+    local exe = (proc(win.pid, "cmdline") or ""):match("^([^%z]+)") or ""
+    local drive, rest = exe:match("^(%a):[\\/](.+%.[eE][xX][eE])$")
+    if not drive then return end
+    local path = prefix:gsub("/+$", "") .. "/dosdevices/" .. drive:lower() .. ":/" .. rest:gsub("\\", "/")
+    local lines, found, changed = {}, false, true
+    local f = io.open(wine_games_file, "r")
+    for line in f and f:lines() or function() end do
+        local n, p = line:match("^([^\t]+)\t(.*)$")
+        if n == name then
+            found, changed = true, p ~= path
+            lines[#lines + 1] = name .. "\t" .. path
+        else
+            lines[#lines + 1] = line
+        end
+    end
+    if f then f:close() end
+    if found and not changed then return end
+    if not found then lines[#lines + 1] = name .. "\t" .. path end
+    os.execute("mkdir -p " .. (os.getenv("HOME") or "") .. "/.local/state/agros")
+    f = io.open(wine_games_file, "w")
+    if not f then return end
+    f:write(table.concat(lines, "\n") .. "\n")
+    f:close()
+    hl.exec_cmd("systemctl --user start lutris-library.service")
+end)
 hl.on("window.open", function(win)
     if dots.setting("games.launchers_minimised") == false then return end
     if not (win and (launcher_classes[(win.initial_class or ""):lower()] or launcher_titles[win.initial_title or ""])) then return end
