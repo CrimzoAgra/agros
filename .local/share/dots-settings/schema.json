@@ -1087,7 +1087,7 @@
             {
               "key": "startup.add",
               "label": "Add an app",
-              "description": "Any app you have installed, started when you log in: it joins the list below, switched on. Lutris, Capri, Proton VPN, Solaar and ArtCraft start quietly, in their tray. Switching one you added off takes it out of the list again.",
+              "description": "Any app you have installed, started each time you log in",
               "type": "choice",
               "default": "",
               "startup_add": true

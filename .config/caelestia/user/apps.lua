@@ -312,6 +312,19 @@ function dots.minimise_launcher(address)
     if w then dots.minimise_window(w) end
 end
 
+-- An app you start at login minimised (Settings app, Startup: dots-settings writes its entry's command with
+-- AGROS_START_MINIMISED=1): its windows of the first minute go to the dock as they open. Lutris, Capri, Proton VPN...
+-- start in their tray by their own options instead
+hl.on("window.open", function(win)
+    if not (win and win.pid and win.pid > 0) then return end
+    local env = proc(win.pid, "environ")
+    if not (env and ("\0" .. env):find("%zAGROS_START_MINIMISED=1%z")) then return end
+    local age = process_age(win.pid)
+    if not age or age > 60 then return end
+    -- (once it's on a workspace, as the launchers above)
+    hl.exec_cmd("sh -c 'sleep 0.3; exec hyprctl eval \"dots.minimise_launcher([[" .. win.address .. "]])\"'")
+end)
+
 -- Lutris lists every owned store game, the uninstalled ones below the installed (~/.local/bin/lutris-library)
 hl.on("hyprland.start", function() hl.exec_cmd("systemctl --user start lutris-library.path") end)
 

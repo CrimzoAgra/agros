@@ -290,15 +290,19 @@ Changes apply right away.
     of game-focus's four behaviours, store launchers starting minimised, each Lutris change, and
     each change to Caelestia (listed from `caelestia-overlay`'s and the Lutris overlay's `patch.py --list`, so new ones
     show up by themselves). A Caelestia change turned off is left out of the rebuild (`Off:`, not a warning)
-  - **Startup**: every app with a standard autostart entry (`/etc/xdg/autostart`, `~/.config/autostart`), none preset;
-    turning one off writes your copy of it with `Hidden=true`, as GNOME's startup settings do. "Add an app" offers
-    every installed app in the menus (not terminal ones, nor one listed already) and copies its launcher entry into
-    `~/.config/autostart`, marked `X-AgrOS-Startup=true`: one added that way, switched off, is removed instead of
-    hidden, and is offered again. Lutris, Capri, Proton VPN, Solaar and ArtCraft start quietly, in their tray
-    (`dots-settings`' `LOGIN_EXEC`), once the tray is up (`gdbus wait` for `org.kde.StatusNotifierWatcher`: Proton VPN
-    looks for it once, and started before it, showed its window and quit when closed). `dots-settings migrate`
-    (`agros-links`, at login) gives entries added with an older quiet start the current one, and gave accounts from
-    before this page's rework their old switches (`startup.<app>`) as entries, once
+  - **Startup**: your apps started at login (`~/.config/autostart`; not the system's own, `/etc/xdg/autostart`: the
+    keyring, accessibility, the print queue applet), none preset, each with its icon, **Minimised** or **Open
+    normally**, and a button that removes it; below them a dashed "Add an app" row opens the list of installed apps (not
+    terminal ones, nor one listed already), whose entry is copied into `~/.config/autostart`, marked
+    `X-AgrOS-Startup=true`, its mode in `X-AgrOS-Startup-Mode` and its own command in `X-AgrOS-Exec` (to switch back).
+    Minimised: Lutris, Capri, Proton VPN, Solaar and ArtCraft start in their tray (`dots-settings`' `LOGIN_EXEC`),
+    once the tray is up (`gdbus wait` for `org.kde.StatusNotifierWatcher`: Proton VPN looks for it once, and started
+    before it, showed its window and quit when closed); any other app gets `AGROS_START_MINIMISED=1`, and
+    `user/apps.lua` minimises its windows of the first minute to the dock. Removed: one added here is deleted, any other
+    (an app's own entry) hidden with `Hidden=true`. `dots-settings migrate` (`agros-links`, at login) gives minimised
+    entries added with an older quiet start the current one, and gave accounts from before this page's rework their old
+    switches (`startup.<app>`) as entries, once; an entry from before the choice counts as minimised when AgrOS had a
+    quiet start for it
   - **Shortcuts**: my shortcuts (`dots.bind` in `user/keys.lua`, `user/windows.lua` and `user/apps.lua`; defaults in the
     schema), Caelestia's (its `kb*` variables, by its sections, minus the ones `hypr-vars.lua` turns off; your changes
     go back through `hypr-vars.lua`), and the fixed ones neither can change (Caelestia's arrows, media keys...:

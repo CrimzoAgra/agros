@@ -8,8 +8,10 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Shapes
 import Quickshell
 import Quickshell.Io
+import Quickshell.Widgets
 
 ShellRoot {
     id: root
@@ -1165,8 +1167,11 @@ ShellRoot {
                                                     readonly property bool wide: kind === "json" || kind === "image"
                                                     readonly property bool resettable: modelData.default !== undefined && !modelData.get && !modelData.readonly
                                                     readonly property bool changed: resettable && JSON.stringify(value) !== JSON.stringify(modelData.default)
+                                                    // Startup's "Add an app": the skeleton row at the list's end
+                                                    readonly property bool adder: !!modelData.startup_add
                                                     readonly property var control: ({
                                                             bool: boolControl,
+                                                            startup: startupControl,
                                                             choice: (modelData.options?.length ?? 0) > 7 || modelData.open ? dropControl : choiceControl,
                                                             keys: keysControl,
                                                             number: numberControl,
@@ -1178,6 +1183,8 @@ ShellRoot {
                                                     Layout.fillWidth: true
                                                     Layout.margins: 14
                                                     spacing: 10
+                                                    // (one just removed: gone at once, not when the list is read again)
+                                                    visible: row.value !== "removed"
 
                                                     Component {
                                                         id: boolControl
@@ -1185,6 +1192,25 @@ ShellRoot {
                                                         Switch {
                                                             checked: row.value === true
                                                             onToggled: on => root.set(row.modelData.key, on)
+                                                        }
+                                                    }
+                                                    // An app started at login: minimised or as it opens, and removed
+                                                    Component {
+                                                        id: startupControl
+
+                                                        Row {
+                                                            spacing: 8
+
+                                                            Choice {
+                                                                options: row.modelData.options ?? []
+                                                                value: row.value ?? ""
+                                                                onPicked: v => root.set(row.modelData.key, v)
+                                                            }
+                                                            IconButton {
+                                                                anchors.verticalCenter: parent.verticalCenter
+                                                                icon: "delete"
+                                                                onClicked: root.set(row.modelData.key, "removed")
+                                                            }
                                                         }
                                                     }
                                                     Component {
@@ -1256,7 +1282,16 @@ ShellRoot {
 
                                                     RowLayout {
                                                         Layout.fillWidth: true
+                                                        visible: !row.adder
                                                         spacing: 20
+
+                                                        // (an app's icon, Startup's)
+                                                        IconImage {
+                                                            visible: row.kind === "startup"
+                                                            Layout.rightMargin: -6
+                                                            implicitSize: 32
+                                                            source: visible ? Quickshell.iconPath(row.modelData.icon ?? "", "application-x-executable") : ""
+                                                        }
 
                                                         ColumnLayout {
                                                             Layout.fillWidth: true
@@ -1323,6 +1358,90 @@ ShellRoot {
                                                             enabled: row.changed
                                                             icon: "restart_alt"
                                                             onClicked: root.set(row.modelData.key, row.modelData.default)
+                                                        }
+                                                    }
+
+                                                    // "Add an app": a dashed outline of an app's row, + where its icon
+                                                    // goes; the installed apps to choose from (the menu, as a dropdown's)
+                                                    Item {
+                                                        id: adderRow
+
+                                                        visible: row.adder
+                                                        Layout.fillWidth: true
+                                                        implicitHeight: 56
+
+                                                        Shape {
+                                                            id: dashes
+
+                                                            anchors.fill: parent
+                                                            preferredRendererType: Shape.CurveRenderer
+
+                                                            ShapePath {
+                                                                strokeColor: adderMouse.containsMouse ? root.c("primary") : root.c("outline")
+                                                                strokeWidth: 1.5
+                                                                strokeStyle: ShapePath.DashLine
+                                                                dashPattern: [4, 3]
+                                                                fillColor: adderMouse.containsMouse ? root.c("surfaceContainerHigh") : "transparent"
+
+                                                                PathRectangle {
+                                                                    x: 1
+                                                                    y: 1
+                                                                    width: dashes.width - 2
+                                                                    height: dashes.height - 2
+                                                                    radius: 16
+                                                                }
+                                                            }
+                                                        }
+                                                        RowLayout {
+                                                            anchors.fill: parent
+                                                            anchors.leftMargin: 12
+                                                            anchors.rightMargin: 16
+                                                            spacing: 14
+
+                                                            Rectangle {
+                                                                implicitWidth: 32
+                                                                implicitHeight: 32
+                                                                radius: 16
+                                                                color: root.c("surfaceContainerHighest")
+
+                                                                Icon {
+                                                                    anchors.centerIn: parent
+                                                                    text: "add"
+                                                                    font.pixelSize: 20
+                                                                    color: root.c("primary")
+                                                                }
+                                                            }
+                                                            ColumnLayout {
+                                                                Layout.fillWidth: true
+                                                                spacing: 2
+
+                                                                Label {
+                                                                    text: row.modelData.label
+                                                                    font.weight: Font.Medium
+                                                                }
+                                                                Label {
+                                                                    Layout.fillWidth: true
+                                                                    text: row.modelData.description ?? ""
+                                                                    elide: Text.ElideRight
+                                                                    font.pixelSize: 12
+                                                                    color: root.c("onSurfaceVariant")
+                                                                }
+                                                            }
+                                                            // (where an app's choice goes: its outline)
+                                                            Rectangle {
+                                                                implicitWidth: 150
+                                                                implicitHeight: 12
+                                                                radius: 6
+                                                                color: root.c("surfaceContainerHighest")
+                                                            }
+                                                        }
+                                                        MouseArea {
+                                                            id: adderMouse
+
+                                                            anchors.fill: parent
+                                                            hoverEnabled: true
+                                                            cursorShape: Qt.PointingHandCursor
+                                                            onClicked: root.menu = row.modelData
                                                         }
                                                     }
 

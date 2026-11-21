@@ -19,10 +19,10 @@ The list of settings, their defaults and how each one applies: ~/.local/share/do
   dots-settings migrate [--old-account]  settings an update moved, put where they are now (agros-links, at login)
 A setting with "get"/"set" shell commands in the schema lives elsewhere (the window mode: ~/.local/state/window-mode);
 "set" gets the value in $VALUE. A group with "from" lists the changes of a patch that can be turned off, from the
-patch itself (patch.py --list), so a new one shows without editing the schema; "from": "autostart" lists the apps
-with a standard autostart entry (system ones in /etc/xdg/autostart, yours in ~/.config/autostart), each on unless
-your copy says Hidden=true, as GNOME's startup settings do it (turning one off writes that copy; one added from
-Startup's "Add an app", a "startup_add" choice of every installed app, is removed instead); "from":
+patch itself (patch.py --list), so a new one shows without editing the schema; "from": "autostart" lists your apps
+started at login (your ~/.config/autostart, not the system's /etc/xdg/autostart), each a "startup" setting: minimised or
+normal, or "removed" (one added from Startup's "Add an app", a "startup_add" choice of every installed app, deleted;
+any other given Hidden=true, as GNOME's startup settings do it); "from":
 "caelestia-keys" lists Caelestia's shortcuts (the kb* variables of ~/.config/hypr/variables.lua, by its sections),
 except those hypr-vars.lua turns off (its other keys are their defaults), which reads your changes back as
 caelestia-keys.<variable>.
@@ -131,24 +131,36 @@ def desktop_entry(path):
     return entry
 
 
+# How an app of yours starts at login (Startup's choice for each): minimised (Lutris, Capri, Proton VPN... in their
+# tray, LOGIN_EXEC; any other app's first window minimised, user/apps.lua by AGROS_START_MINIMISED) or as it opens
+# from the menu. Kept in its entry (MODE), with the app's own command (OWN_EXEC) to switch back
+MODES = [{"value": "minimised", "label": "Minimised"}, {"value": "normal", "label": "Open normally"}]
+MODE, OWN_EXEC = "X-AgrOS-Startup-Mode", "X-AgrOS-Exec"
+
+
 def autostart_settings():
-    """Apps with an autostart entry: by file name, your copy over the system's. Not ones without an icon or hidden from
-    menus (background services: the keyring, accessibility...), nor ones for other desktops"""
-    entries = {}
-    for folder in AUTOSTART:
-        for name in sorted(os.listdir(folder)) if os.path.isdir(folder) else []:
-            if name.endswith(".desktop"):
-                # Your copy may be only "Hidden=true": the name and icon come from the system's
-                entries[name] = {**entries.get(name, {}), **desktop_entry(os.path.join(folder, name))}
+    """Your apps started at login: the entries in your autostart folder, each with its icon and how it starts. Not the
+    system's own (/etc/xdg/autostart: the keyring, accessibility, the print queue applet: background parts, not apps
+    you chose), nor ones switched off, without an icon or hidden from menus, or for other desktops"""
     out = []
-    for name, entry in entries.items():
+    for folder, name in ((f, n) for f in AUTOSTART[1:] for n in (sorted(os.listdir(f)) if os.path.isdir(f) else [])):
+        entry = desktop_entry(os.path.join(folder, name)) if name.endswith(".desktop") else {}
         only = entry.get("OnlyShowIn", "")
-        if entry.get(ADDED) != "true" and (not entry.get("Icon") or entry.get("NoDisplay") == "true"
-                                           or (only and "Hyprland" not in only)):
+        if not entry or not enabled(entry) or not entry.get("Exec") or entry.get(ADDED) != "true" and (
+                not entry.get("Icon") or entry.get("NoDisplay") == "true" or (only and "Hyprland" not in only)):
             continue
-        out.append({"key": f"autostart.{name[:-8]}", "label": entry.get("Name", name[:-8]),
-                    "description": entry.get("Comment", ""), "type": "bool", "default": True, "autostart": name})
-    return out
+        out.append({"key": f"autostart.{name[:-8]}", "label": entry.get("Name", name[:-8]), "icon": entry.get("Icon", ""),
+                    "description": entry.get("Comment", ""), "type": "startup", "options": MODES, "autostart": name})
+    return sorted(out, key=lambda o: o["label"].lower())
+
+
+def autostart_mode(name):
+    """minimised or normal: as its entry says; one added before the choice was there, minimised when AgrOS had a quiet
+    start for it (it always got that one), else normal"""
+    entry = desktop_entry(os.path.join(AUTOSTART[1], name)) if os.path.exists(os.path.join(AUTOSTART[1], name)) else {}
+    if entry.get(MODE) in ("minimised", "normal"):
+        return entry[MODE]
+    return "minimised" if entry.get(ADDED) == "true" and name in LOGIN_EXEC else "normal"
 
 
 def enabled(entry):
@@ -182,22 +194,29 @@ def startup_apps():
     return sorted(out, key=lambda o: o["label"].lower())
 
 
-def startup_add(name):
-    """An app started at login: its launcher entry copied into your autostart folder, marked as added here, shown (not
-    hidden); started quietly when it's one LOGIN_EXEC knows"""
-    path = next((p for p in (os.path.join(d, name) for d in APPLICATIONS) if os.path.exists(p)), None)
+def startup_add(name, minimised=True):
+    """An app started at login, minimised or not: its launcher entry copied into your autostart folder (else, for an app
+    that has only its own autostart entry, that one), marked as added here, shown (not hidden)"""
+    mine = os.path.join(AUTOSTART[1], name)
+    path = next((p for p in (os.path.join(d, name) for d in APPLICATIONS) if os.path.exists(p)), None) or \
+        (mine if os.path.exists(mine) else None)
     if os.sep in name or not path:
         sys.exit(f"startup.add: {name}: no such app")
+    own = desktop_entry(path).get(OWN_EXEC) or desktop_entry(path).get("Exec", "")
     with open(path, errors="replace") as f:
         lines = [l for l in f.read().splitlines()
-                 if not l.startswith(("Hidden=", "NoDisplay=", "X-GNOME-Autostart-enabled=", f"{ADDED}="))]
-    if name in LOGIN_EXEC:  # (the entry's own Exec, not its actions')
-        section = ""
-        for i, l in enumerate(lines):
-            section = l.strip() if l.strip().startswith("[") else section
-            if section == "[Desktop Entry]" and l.startswith("Exec="):
-                lines[i] = f"Exec={LOGIN_EXEC[name]}"
-    lines.insert([l.strip() for l in lines].index("[Desktop Entry]") + 1, f"{ADDED}=true")
+                 if not l.startswith(("Hidden=", "NoDisplay=", "X-GNOME-Autostart-enabled=", f"{ADDED}=", f"{MODE}=",
+                                      f"{OWN_EXEC}="))]
+    # (the entry's own Exec, not its actions')
+    exec_line = LOGIN_EXEC[name] if minimised and name in LOGIN_EXEC else \
+        f"env AGROS_START_MINIMISED=1 {own}" if minimised else own
+    section = ""
+    for i, l in enumerate(lines):
+        section = l.strip() if l.strip().startswith("[") else section
+        if section == "[Desktop Entry]" and l.startswith("Exec="):
+            lines[i] = f"Exec={exec_line}"
+    head = [l.strip() for l in lines].index("[Desktop Entry]") + 1
+    lines[head:head] = [f"{ADDED}=true", f"{MODE}={'minimised' if minimised else 'normal'}", f"{OWN_EXEC}={own}"]
     os.makedirs(AUTOSTART[1], exist_ok=True)
     with open(os.path.join(AUTOSTART[1], name), "w") as f:
         f.write("\n".join(lines) + "\n")
@@ -210,7 +229,7 @@ def migrate(settings, old_account):
     for name in LOGIN_EXEC:
         mine = os.path.join(AUTOSTART[1], name)
         entry = desktop_entry(mine) if os.path.exists(mine) else {}
-        if entry.get(ADDED) == "true" and entry.get("Exec") != LOGIN_EXEC[name]:
+        if entry.get(ADDED) == "true" and autostart_mode(name) == "minimised" and entry.get("Exec") != LOGIN_EXEC[name]:
             startup_add(name)
     moved = f"{CONFIG}/.startup-moved"  # (once: an account made since is "old" at its next login)
     if os.path.exists(moved):
@@ -707,7 +726,8 @@ def schema(live=True, lists=True):
             for s in group["settings"]:
                 if s.get("startup_add"):
                     s["options"] = [{"value": "", "label": "Choose an app…"}] + (startup_apps() if live else [])
-            group["settings"] = group["settings"] + autostart_settings()
+            # (your apps first, "Add an app" after them, the list's last row)
+            group["settings"] = autostart_settings() + group["settings"]
             continue
         try:
             changes = json.loads(subprocess.run(["python3", "-I", PATCHES[name], "--list"], capture_output=True,
@@ -741,7 +761,7 @@ def current(setting, saved):
     if setting.get("startup_add"):
         return ""  # (nothing chosen: each pick adds that app, and the list starts over)
     if "autostart" in setting:
-        return autostart_on(setting["autostart"])
+        return autostart_mode(setting["autostart"])
     if "get" in setting:
         out = subprocess.run(["sh", "-c", setting["get"]], capture_output=True, text=True).stdout.strip()
         return out if setting["type"] != "bool" else out == "true"
@@ -851,6 +871,8 @@ def check(key, setting, value):
         return f"{key}: a list of shortcuts"
     if kind == "keys" and setting.get("modifier") and len(value) > 1:
         return f"{key}: one modifier (it + 0-9)"
+    if kind == "startup" and value not in [o["value"] for o in MODES] + ["removed"]:
+        return f"{key}: minimised, normal or removed"
     if kind in ("choice", "image") and not setting.get("open") and value not in [o["value"] for o in setting["options"]]:
         return f"{key}: one of {', '.join(o['value'] for o in setting['options'])}"
     if kind == "number":
@@ -938,7 +960,10 @@ def main(args):
                               stdout=sys.stderr).returncode != 0:
                 sys.exit(f"{setting['label']}: not changed")
         elif "autostart" in setting:
-            return autostart_set(setting["autostart"], value)
+            # (removed: as switching it off was, out of the list; one that's a copy of the system's, hidden)
+            if value == "removed":
+                return autostart_set(setting["autostart"], False)
+            return startup_add(setting["autostart"], value == "minimised")
         elif setting.get("startup_add"):
             if value:
                 startup_add(value)

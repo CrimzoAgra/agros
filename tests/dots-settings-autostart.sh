@@ -104,6 +104,40 @@ os.remove(f"{mine}/proton.vpn.app.gtk.desktop")
 ds.migrate({}, False)
 ds.migrate({}, True)
 assert not os.path.exists(f"{mine}/net.lutris.Lutris.desktop"), "a new account got AgrOS's old presets"
+# Startup's list: your apps only, each minimised or open normally, and removable. The system's entries (the print
+# queue applet) not listed; one added before the choice: minimised when AgrOS knew a quiet start for it, else normal
+open(f"{system}/print-applet.desktop", "w").write("[Desktop Entry]\nType=Application\nName=Print Queue Applet\nExec=applet\nIcon=printer\n")
+listed = lambda: {s["autostart"]: s for s in ds.autostart_settings()}
+assert "print-applet.desktop" not in listed(), "the system's print queue applet listed among your apps"
+ds.startup_add("net.lutris.Lutris.desktop")
+old = open(f"{mine}/net.lutris.Lutris.desktop").read()
+open(f"{mine}/net.lutris.Lutris.desktop", "w").write("".join(l + "\n" for l in old.splitlines() if not l.startswith("X-AgrOS-Startup-Mode=")))
+assert ds.autostart_mode("net.lutris.Lutris.desktop") == "minimised", "Lutris added before the choice not read as minimised"
+ds.startup_add("editor.desktop", False)
+assert ds.autostart_mode("editor.desktop") == "normal" and ds.desktop_entry(f"{mine}/editor.desktop")["Exec"] == "editor %F", \
+    open(f"{mine}/editor.desktop").read()
+s = listed()["editor.desktop"]
+assert s["type"] == "startup" and [o["value"] for o in s["options"]] == ["minimised", "normal"], s
+# Minimised: an app AgrOS has no quiet start for marked for user/apps.lua; normal again: its own command back
+ds.startup_add("editor.desktop", True)
+assert ds.desktop_entry(f"{mine}/editor.desktop")["Exec"] == "env AGROS_START_MINIMISED=1 editor %F", open(f"{mine}/editor.desktop").read()
+ds.startup_add("editor.desktop", False)
+assert ds.desktop_entry(f"{mine}/editor.desktop")["Exec"] == "editor %F", "its own command not back"
+# Lutris open normally: its own command, and migrate leaves it so (it rewrites only minimised ones' quiet start)
+ds.startup_add("net.lutris.Lutris.desktop", False)
+os.remove(f"{ds.CONFIG}/.startup-moved")
+ds.migrate({}, False)
+assert ds.desktop_entry(f"{mine}/net.lutris.Lutris.desktop")["Exec"] == "lutris %U", "migrate made Lutris quiet again"
+# An app's own entry (no launcher, its own autostart file): its mode switches from that file
+open(f"{mine}/own-tray.desktop", "w").write("[Desktop Entry]\nType=Application\nName=Own\nExec=own --tray\nIcon=own\n")
+assert listed()["own-tray.desktop"]["type"] == "startup" and ds.autostart_mode("own-tray.desktop") == "normal"
+ds.startup_add("own-tray.desktop", True)
+ds.startup_add("own-tray.desktop", False)
+assert ds.desktop_entry(f"{mine}/own-tray.desktop")["Exec"] == "own --tray", open(f"{mine}/own-tray.desktop").read()
+# Removed: gone from the list (and from your folder, one added here)
+ds.autostart_set("editor.desktop", False)
+assert "editor.desktop" not in listed() and not os.path.exists(f"{mine}/editor.desktop"), "a removed app still listed"
+assert ds.check("autostart.x", {"type": "startup"}, "removed") is None and ds.check("autostart.x", {"type": "startup"}, True)
 try:
     ds.startup_add("../hello.desktop")
     raise AssertionError("a path taken as an app")
