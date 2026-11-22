@@ -71,6 +71,8 @@ qt_rebuild() {
     local agros=() rc=0
     for p in $("$helpers/update-kinds" --built-on <<<"$changes"); do
         [[ $p != *-bin ]] || continue
+        # (one this run's update brought in itself: its repo's rebuild for the new runtime, as the boot's skips it)
+        grep -q "^${p//./\\.} " <<<"$changes" && continue
         if grep -qxF -- "$p" <<<"$(pacman -Slq agros 2>/dev/null)"; then agros+=("$p")
         elif [[ " ${held[*]} " == *" $p "* ]]; then
             echo "!! $p wasn't rebuilt for the new runtime: held for review (to review it, run update-apps in a terminal)"
@@ -93,7 +95,7 @@ qt_rebuild() {
 # boot's rebuild does them, through auto-update-aur --fetch: the AUR's build files of the version installed (what CI built
 # and tested), AgrOS's fix added, the sources checked. paru -S's would be the AUR's newest, without the fix
 rebuild_agros() {
-    local p base have tmp rc=0 done=' ' cache=${XDG_CACHE_HOME:-$HOME/.cache}
+    local p base have rel dots built tmp rc=0 done=' ' cache=${XDG_CACHE_HOME:-$HOME/.cache}
     # (in your cache, on disk: a build in /tmp takes memory)
     mkdir -p "$cache" || return 1
     # (one a run cut off left there (logged out or shut down mid-build, a power cut: nothing took it away), a whole build
@@ -109,6 +111,15 @@ rebuild_agros() {
         have=$(pacman -Q "$p" 2>/dev/null | cut -d' ' -f2)
         "${AUTO_UPDATE_AUR:-/usr/lib/agros/auto-update-aur}" --fetch "$tmp" "$base${have:+=$have}" ||
             { echo "!! $base: its build files of $have, with AgrOS's fix, couldn't be had: not rebuilt"; rc=1; continue; }
+        # One CI relabelled (2.5.0-1.1: its own rebuild for new libraries, a release makepkg can't make): built here at
+        # the AUR's release it would be older than CI's, and the next update put CI's back, built for the old libraries.
+        # Left to the boot's rebuild, which relabels it as CI does (auto-update-aur), or to [agros]'s next rebuild
+        rel=$(cd "$tmp/$base" && bash -c '. ./PKGBUILD >/dev/null 2>&1; echo "$pkgrel"')
+        dots=${have##*-} dots=${dots//[^.]/} built=${rel//[^.]/}
+        if ((${#dots} > ${#built})); then
+            echo "!! $p: its version installed, $have, is AgrOS's own rebuild: left for AgrOS's next one"
+            rc=1; continue
+        fi
         # (its sources already fetched and checked there: not again)
         (cd "$tmp/$base" && SRCDEST=$tmp/src/$base "${paru[@]}" -Ui --noconfirm) || rc=1
     done

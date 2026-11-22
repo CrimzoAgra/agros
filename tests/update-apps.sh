@@ -130,7 +130,8 @@ stub curl 'echo "{\"results\":[{\"PackageBase\":\"quickshell-git\"}]}"'
 # shellcheck disable=SC2016
 stub paru 'echo "paru $* in ${PWD##*/}" >>"'"$t"'/paru"'
 # shellcheck disable=SC2016
-stub auto-update-aur 'echo "$*" >>"'"$t"'/fetch"; [ "$1" = --fetch ] && mkdir -p "$2/${3%%=*}"'
+stub auto-update-aur 'echo "$*" >>"'"$t"'/fetch"; [ "$1" = --fetch ] && mkdir -p "$2/${3%%=*}" &&
+    printf "pkgrel=1\npkgrel+=.2\n" >"$2/${3%%=*}/PKGBUILD"'
 export AUTO_UPDATE_AUR=$t/bin/auto-update-aur
 # (a build folder a run cut off left, hours old, taken away; one of a run going on now, and anything else there, kept)
 mkdir -p "$t/home/.cache/agros-rebuild.OLDone/quickshell-git" "$t/home/.cache/agros-rebuild.NEWone" "$t/home/.cache/agros-rebuild-mine"
@@ -145,6 +146,13 @@ grep -q -- "-Ui --noconfirm in quickshell-git$" "$t/paru" && ! grep -q "aur/quic
     fail "[agros]'s Quickshell not built from those build files: $(cat "$t/paru")"
 grep -q -- "-S --rebuild --noconfirm aur/caelestia-shell in" "$t/paru" || fail "the AUR's own not rebuilt: $(cat "$t/paru")"
 [[ -z $(compgen -G "$t/home/.cache/agros-rebuild.*") ]] || fail "the rebuild's build folder left behind"
+# One CI relabelled (1.2.1, a release makepkg can't make): not built here at an older one, said; nothing else changes
+rm -f "$t/paru" "$t/state/quickshell-qt"
+sed -i 's/0.2.1.r5.gabc1234-1.2"/0.2.1.r5.gabc1234-1.2.1"/' "$t/bin/pacman"
+out=$(qt 6.9.0 --qt-mark && qt 6.10.0 --qt-rebuild 2>&1) && fail "a relabelled rebuild left out reported success"
+[[ $out == *"quickshell-git: its version installed, 0.2.1.r5.gabc1234-1.2.1, is AgrOS's own rebuild"* ]] &&
+    ! grep -q -- "-Ui .* in quickshell-git$" "$t/paru" || fail "CI's relabelled Quickshell rebuilt at an older release: $out"
+sed -i 's/0.2.1.r5.gabc1234-1.2.1"/0.2.1.r5.gabc1234-1.2"/' "$t/bin/pacman"
 unset AUTO_UPDATE_AUR; rm "$t/bin/curl"
 # Part of Qt not installed (an edition without qt6-declarative): --qt-mark doesn't fail, the stamp names each one
 # ("none"), and nothing is rebuilt with Qt unchanged
