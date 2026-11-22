@@ -101,6 +101,20 @@ run
 echo newest-still >"$s/caelestia/mine.lua"; run
 [[ $(cat "$h/caelestia/mine.lua.agros-new") == newest-still && $(grep -c . "$t/warned") == 4 ]] ||
     fail "a newer version not offered again"
+# A home with AgrOS's own repo (its settings made there, dotfiles-sync's): a file of yours that is a version committed
+# there (copied in ahead of the package) left as it is and not said; one that isn't, offered as before
+d=$t/home/Projects/agros
+mkdir -p "$d/packages/agros-hyprland-settings" "$d/.config/caelestia" && : >"$d/packages/agros-hyprland-settings/PKGBUILD"
+echo ahead >"$d/.config/caelestia/mine.lua"
+git -C "$d" init -q && git -C "$d" add -A && git -C "$d" -c user.name=t -c user.email=t@t commit -qm ahead
+echo ahead >"$h/caelestia/mine.lua"; rm -f "$h/caelestia/mine.lua.agros-new"
+echo from-the-package >"$s/caelestia/mine.lua"; was=$(grep -c . "$t/warned"); run
+[[ $(cat "$h/caelestia/mine.lua") == ahead && ! -e $h/caelestia/mine.lua.agros-new && $(grep -c . "$t/warned") == "$was" ]] ||
+    fail "a file that is AgrOS's own repo's version offered or said as one you changed"
+echo mine-really >"$h/caelestia/mine.lua"; run
+[[ $(cat "$h/caelestia/mine.lua.agros-new") == from-the-package && $(grep -c . "$t/warned") == $((was + 1)) ]] ||
+    fail "an edit of yours not in AgrOS's repo no longer offered"
+rm -rf "$d"
 # The bar's status icons (the sound one): an install from before AgrOS listed them gets /etc/skel's list in its own
 # shell.json, once, its other settings kept; a list of its own left alone; no shell.json left with none (json-edit, beside
 # it, starts a missing one as {})

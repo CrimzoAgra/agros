@@ -58,6 +58,17 @@ done
 # <file>.agros-new and said once
 versions=${AGROS_SKEL_VERSIONS:-/usr/share/agros/skel-versions} offered=$state/settings-offered
 sum() { sha256sum <"$1" | cut -d' ' -f1; }
+# A home with AgrOS's own repo in it (where its settings are made: dotfiles-sync's, ~/Projects/agros): a file of yours
+# that is one of its versions there, committed (a change copied in ahead of the package that brings it), is AgrOS's,
+# not an edit of yours: left as it is (never put back to the older package's) and not said ("AgrOS updated settings
+# you've changed", for a file nobody changed). The update after brings it as it is
+dots=${DOTFILES_DIR:-$HOME/Projects/agros}
+in_repo() {
+    [[ -f $dots/packages/agros-hyprland-settings/PKGBUILD ]] || return 1
+    local h
+    h=$(git -C "$dots" hash-object -- "$1" 2>/dev/null) || return 1
+    git -C "$dots" log --all --format= --raw --no-abbrev -- "$2" 2>/dev/null | awk -v h="$h" '$4 == h { f = 1 } END { exit !f }'
+}
 declare -A known told
 new=() offer=()
 if [[ -r $versions ]]; then
@@ -75,7 +86,7 @@ if [[ -r $versions ]]; then
             # (an .agros-new an earlier run left beside it gone too: yours is AgrOS's now, nothing to compare)
             cp "$f" "$to.agros-tmp" && chmod --reference="$to" "$to.agros-tmp" && mv -f "$to.agros-tmp" "$to" &&
                 rm -f "$to.agros-new"
-        elif [[ ! ${told[$s $n]-} ]]; then
+        elif [[ ! ${told[$s $n]-} ]] && ! in_repo "$to" "$n"; then
             cp "$f" "$to.agros-new" && new+=("$n") && offer+=("$s $n")
         fi
     done < <(awk '!x[substr($0, 67)]++' "$versions")  # (each file once: by its name, after the sum and two spaces)
