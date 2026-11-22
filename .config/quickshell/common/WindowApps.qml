@@ -48,7 +48,8 @@ Scope {
         const pid = ownPid ?? Hyprland.toplevels.values.find(t => t.lastIpcObject?.class === cls)?.lastIpcObject.pid;
         if (pid && !asked[id]) {
             asked[id] = true;
-            asker.createObject(root, { cls: id, command: [`${Quickshell.env("HOME")}/.local/bin/app-for-window`, cls, String(pid)] });
+            // (timeout: one that hangs answers nothing, not never)
+            asker.createObject(root, { cls: id, command: ["timeout", "5", `${Quickshell.env("HOME")}/.local/bin/app-for-window`, cls, String(pid)] });
         }
         return null;
     }
@@ -72,14 +73,19 @@ Scope {
 
             property string cls
 
+            // Its answer once (its output, or none: not there, not runnable, timed out), then gone, once it has ended:
+            // one that never answered was kept for good
+            function answer(): void {
+                if (!(cls in root.answers))
+                    root.answers = Object.assign({}, root.answers, { [cls]: out.text.trim() });
+            }
+
             running: true
+            onRunningChanged: if (!running) Qt.callLater(() => { proc.answer(); proc.destroy(); })
             stdout: StdioCollector {
                 id: out
 
-                onStreamFinished: {
-                    root.answers = Object.assign({}, root.answers, { [proc.cls]: out.text.trim() });
-                    Qt.callLater(proc.destroy);
-                }
+                onStreamFinished: proc.answer()
             }
         }
     }
