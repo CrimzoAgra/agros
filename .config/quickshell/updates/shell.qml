@@ -465,6 +465,30 @@ ShellRoot {
                     }
                 }
 
+                // After an update: restart for what only takes effect then (a kernel, a driver). Asks for a second click,
+                // as it appears where "Update all" was, under the pointer, and closes everything
+                Button {
+                    id: restart
+
+                    primary: root.pending.length === 0
+                    label: confirm.running ? "Click again to restart" : "Restart"
+                    icon: "restart_alt"
+                    visible: root.phase === "done"
+                    onVisibleChanged: confirm.stop()
+                    onClicked: {
+                        if (confirm.running)
+                            Quickshell.execDetached(["systemctl", "reboot"]);
+                        else
+                            confirm.restart();
+                    }
+
+                    Timer {
+                        id: confirm
+
+                        interval: 4000
+                    }
+                }
+
                 Button {
                     primary: true
                     label: "Update all"
