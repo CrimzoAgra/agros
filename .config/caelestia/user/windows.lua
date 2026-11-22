@@ -280,15 +280,24 @@ function dots.minimise_window(win)
     end
     hl.dispatch(hl.dsp.window.move({ workspace = "special:minimised-" .. win.workspace.id, follow = false, window = win }))
 end
+-- Moved off its hidden workspace, a window coming back hands the focus to another on its workspace for a moment (its
+-- hidden one closing): no app focused over a game (off_game), which minimised a game again as it came back, left on
+-- its hidden workspace shown over the screen with the shell over it (the dock, Super menu open)
+local restoring = false
 local function restore(win, ws)
-    hl.dispatch(hl.dsp.window.move({ workspace = ws, window = win }))
-    dots.refit_window(by_address(win.address))
-    if has_tag(win, "minimised_pinned") then
-        hl.dispatch(hl.dsp.window.tag({ tag = "-minimised_pinned", window = "address:" .. win.address }))
-        hl.dispatch(hl.dsp.window.pin({ action = "on", window = win }))
-    end
-    hl.dispatch(hl.dsp.focus({ window = win }))
-    raise(win)
+    restoring = true
+    local ok, err = pcall(function()
+        hl.dispatch(hl.dsp.window.move({ workspace = ws, window = win }))
+        dots.refit_window(by_address(win.address))
+        if has_tag(win, "minimised_pinned") then
+            hl.dispatch(hl.dsp.window.tag({ tag = "-minimised_pinned", window = "address:" .. win.address }))
+            hl.dispatch(hl.dsp.window.pin({ action = "on", window = win }))
+        end
+        hl.dispatch(hl.dsp.focus({ window = win }))
+        raise(win)
+    end)
+    restoring = false
+    if not ok then error(err, 0) end
 end
 dots.bind("minimise", function() dots.minimise_window() end)
 -- An app's own request: to minimise, or (false) to come back, which isn't one to minimise
@@ -958,6 +967,7 @@ function dots.game_under(win)
 end
 -- Also an app already open, focused over the game (the dock, the bar, the Super menu bringing its window forward)
 local function off_game(win, opened)
+    if restoring then return end
     local game = dots.game_under(win)
     if not game then return end
     dots.window_fades(false)

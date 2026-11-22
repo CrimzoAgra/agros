@@ -787,6 +787,27 @@ check("over a game in a window: it stays", over_game(nil, { x = 1280, y = 720 })
 check("over a fullscreen game: minimised", over_game(nil, { x = 1280, y = 720 }, 2), true)
 check("an app already open focused over a fullscreen game: the game minimised", over_game(nil, nil, 2, "window.active"), true)
 check("the game's own window focused: the game stays", over_game({ "game*" }, nil, 2, "window.active"), false)
+-- A minimised game brought back (the dock focuses it on its hidden workspace): moving it back hands the focus to the
+-- app on its workspace for a moment, which isn't an app focused over it: it stays back, not minimised again
+do
+    local app = { address = "0xa", class = "librewolf", title = "a", floating = true, fullscreen = 0, pid = -1, tags = {},
+                  workspace = ws(1), monitor = SCREENS[1], at = { x = 0, y = 0 }, size = { x = 800, y = 600 }, focus_history_id = 0 }
+    game.size, game.fullscreen, game.workspace = { x = 1920, y = 1080 }, 0, ws(nil, "special:minimised-1")
+    WINDOWS = { game, app }
+    local plain = hl.dispatch
+    hl.dispatch = function(d)
+        plain(d)
+        local a = d[2] or {}
+        if d[1] == "window.move" and (a.window == game or a.window == "address:0xg") and a.workspace then
+            game.workspace = type(a.workspace) == "number" and ws(a.workspace) or ws(nil, a.workspace)
+            if game.workspace.id then fire("window.active", app) end
+        end
+    end
+    fire("window.active", game)
+    hl.dispatch = plain
+    check("a minimised game brought back: stays back", game.workspace.name, "1")
+    sent, WINDOWS = {}, {}
+end
 -- A game Hyprland took out of fullscreen (another window focused) is fullscreen again as you go back to it, while it
 -- still covers the screen; not one made smaller in its own settings, nor a game that never left fullscreen. Also one
 -- found out of fullscreen at a config load (dots.games_out_of_fullscreen)
