@@ -293,7 +293,7 @@ def main() -> None:
     args = args[1:] if install_only else args
     if len(args) != 1 or not os.path.isfile(args[0]):
         sys.exit(__doc__)
-    src = os.path.abspath(args[0])
+    src = os.path.realpath(args[0])  # (a link to the installed file is that file: not moved over it, which deleted it)
     if not install_only and not ask_to_run(src):
         sys.exit(0)
     # Made executable. On a drive that won't run it (a USB stick's FAT, a read-only or noexec mount; a file not yours):
@@ -304,6 +304,7 @@ def main() -> None:
         os.chmod(src, os.stat(src).st_mode | 0o111)
     except OSError:
         pass
+    copy = ""
     if not os.access(src, os.X_OK):
         os.makedirs(APPS, exist_ok=True)
         copy = f"{APPS}/.{os.path.basename(src)}.copy"
@@ -319,6 +320,8 @@ def main() -> None:
             if not install_only:
                 shutil.rmtree(tmp, ignore_errors=True)  # exec leaves the with block without cleaning up
                 signal.signal(signal.SIGHUP, signal.SIG_DFL)  # the app itself ends with its terminal as usual
+                if copy:  # (run beside it, not exec'd: exec skips atexit, and every run left its copy behind)
+                    sys.exit(subprocess.run([src]).returncode)
                 os.execv(src, [src])
             sys.exit(f"{src}: no launcher entry inside, not installed")
         app, text, icon = found

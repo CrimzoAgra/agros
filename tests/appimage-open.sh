@@ -237,4 +237,30 @@ out=$(stick "$t/upd-home" "$t/demo.AppImage" IMG="$t/ff-img" APPIMAGE_WEBSITE=ht
     fail "an update from a drive renaming its launcher entry installed: $out"
 cmp -s "$t/orig.AppImage" "$t/upd-home/Applications/demo.AppImage" && [[ $(ls -A "$t/upd-home/Applications") == demo.AppImage ]] ||
     fail "a refused file from a drive wrote over the installed app, or its copy was left: $(ls -A "$t/upd-home/Applications")"
+# A link to the installed file (a desktop shortcut) opened: that file, not the link moved over it (which deleted the app)
+mkdir -p "$t/home/Desktop"; ln -sf "$t/home/Applications/demo.AppImage" "$t/home/Desktop/Demo"
+HOME=$t/home PATH=$t/bin:$PATH python3 "$here/.local/bin/appimage-open" --install "$t/home/Desktop/Demo" >/dev/null 2>&1 ||
+    fail "a link to the installed AppImage failed"
+[[ -f $t/home/Applications/demo.AppImage && ! -L $t/home/Applications/demo.AppImage ]] ||
+    fail "a link to the installed AppImage took its place: $(ls -l "$t/home/Applications")"
+# Run from a drive that won't run it, with no launcher entry inside: its copy gone once it ends (exec skipped that)
+mkdir -p "$t/noent-img"; cp "$t/orig.AppImage" "$t/noent.AppImage"
+printf 'import sys\nsys.argv[1:] = ["--appimage-extract", "x"]\n' >/dev/null
+stick_run() {
+    env IMG="$t/noent-img" HOME="$1" PATH=$t/bin:$PATH python3 -I - "$here/.local/bin/appimage-open" "$2" <<'Q'
+import importlib.machinery, importlib.util, os, sys
+script, stick = sys.argv[1:]
+loader = importlib.machinery.SourceFileLoader("appimage_open", script)
+mod = importlib.util.module_from_spec(importlib.util.spec_from_loader("appimage_open", loader))
+loader.exec_module(mod)
+access, chmod = os.access, os.chmod
+os.access = lambda p, m, **k: False if p == stick else access(p, m, **k)
+os.chmod = lambda p, *a, **k: (_ for _ in ()).throw(PermissionError(1, "no", p)) if p == stick else chmod(p, *a, **k)
+mod.ask_to_run = lambda src: True
+sys.argv = ["appimage-open", stick]
+mod.main()
+Q
+}
+stick_run "$t/run-home" "$t/noent.AppImage" >/dev/null 2>&1 || true
+[[ -z $(ls -A "$t/run-home/Applications" 2>/dev/null) ]] || fail "a run from a drive left its copy: $(ls -A "$t/run-home/Applications")"
 echo "ok appimage-open"
