@@ -168,8 +168,14 @@ ShellRoot {
     Connections {
         target: Hyprland.toplevels
         function onValuesChanged(): void {
-            if (!root.open || root.mode !== "windows")
+            if (!root.open)
                 return;
+            // (Super+Tab: a workspace whose last window closed meanwhile, but the one you're on: releasing on it went to
+            // an empty workspace)
+            if (root.mode === "workspaces") {
+                root.keepCards(root.cards.filter(c => c === root.current || Hyprland.toplevels.values.some(t => root.columnOf(t) === c)));
+                return;
+            }
             root.keepCards(root.cards.filter(c => Hyprland.toplevels.values.includes(c)));
             if (!root.cards.length)
                 root.open = false;
@@ -541,8 +547,9 @@ ShellRoot {
                             }
 
                             Repeater {
-                                // One icon per app, at most six
-                                model: [...new Set(card.wins.map(t => root.windowId(t.lastIpcObject)))].slice(0, 6)
+                                // One icon per app, at most six, and no more than fit under its card (26 px for the
+                                // number, 28 an icon): wider, the cards ran off the screen
+                                model: [...new Set(card.wins.map(t => root.windowId(t.lastIpcObject)))].slice(0, Math.max(0, Math.min(6, Math.floor((win.cardW + 8 - 26) / 28))))
 
                                 IconImage {
                                     required property string modelData
@@ -638,7 +645,8 @@ ShellRoot {
                         // App icon and title, in the middle under the preview
                         Row {
                             Layout.alignment: Qt.AlignHCenter
-                            Layout.maximumWidth: Math.max(wcard.frameW, 120)
+                            // (its floor never wider than a card: with many windows the cards ran off the screen)
+                            Layout.maximumWidth: Math.max(wcard.frameW, Math.min(120, win.cardW))
                             spacing: 6
 
                             IconImage {
@@ -649,7 +657,7 @@ ShellRoot {
 
                             Text {
                                 anchors.verticalCenter: parent.verticalCenter
-                                width: Math.min(implicitWidth, Math.max(wcard.frameW, 120) - 28)
+                                width: Math.min(implicitWidth, Math.max(wcard.frameW, Math.min(120, win.cardW)) - 28)
                                 text: wcard.ipc.title || wcard.ipc.class
                                 elide: Text.ElideRight
                                 font.family: "Rubik"
