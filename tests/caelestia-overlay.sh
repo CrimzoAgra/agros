@@ -143,6 +143,9 @@ const r = [search('term'), search('files'), search('foot'), [keys.join('+')], se
 console.log(r.map(x => x.join(',')).join(' '));")
     [[ $seq == "termius,foot,micro thunar,desktop-settings foot name micro,foot,termius" ]] ||
         fail "the Super menu's search by what an app is: $seq (want: termius,foot,micro thunar,desktop-settings foot name micro,foot,termius)"
+    # (without changing the search's keys: each change rebuilt its whole index, twice a keystroke)
+    ! sed -n '/then the apps found by what they are/,/return byName.concat(byKind)/p' "$dst/modules/launcher/services/Apps.qml" |
+        grep -q 'keys = ' || fail "the Super menu's search by what an app is changes the search's keys (its index rebuilt)"
 else
     skipped "no node: the Super menu's search not run"
 fi

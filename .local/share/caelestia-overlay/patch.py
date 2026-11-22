@@ -334,17 +334,16 @@ def launcher_by_kind():
     return {rel: swap(read(rel), old, """            // caelestia-overlay: then the apps found by what they are (generic name, keywords), after those by name
             if (!search.startsWith(`${prefix}t `)) {
                 const byName = query(search).map(e => e.entry);
-                keys = ["genericName", "keywords"];
-                weights = [0.5, 0.5];
-                const found = query(search).filter(e => !byName.includes(e.entry));
                 const q = ` ${search.trim().toLowerCase().replace(/\\s+/g, " ").replace(/s$/, "")}`;
-                const word = t => ` ${String(t ?? "").toLowerCase().replace(/[\\s,;.\\/_-]+/g, " ")}`.includes(q);
-                const rank = e => word(e.genericName) ? 0 : word(e.keywords) ? 1 : 2;
-                // (no flatMap: QML's JavaScript has none, and the menu came up empty)
+                const text = t => ` ${String(t ?? "").toLowerCase().replace(/[\\s,;.\\/_-]+/g, " ")}`;
+                const word = t => text(t).includes(q);
+                const rank = e => word(e.genericName) ? 0 : word(e.keywords) ? 1
+                    : text(e.genericName).includes(q.slice(1)) || text(e.keywords).includes(q.slice(1)) ? 2 : 3;
+                // (a plain look at each app, not query() with other keys: changing keys rebuilt the whole search index,
+                // twice a keystroke. No flatMap: QML's JavaScript has none, and the menu came up empty)
+                const found = list.filter(e => !byName.includes(e.entry) && rank(e) < 3);
                 const byKind = found.filter(e => rank(e) === 0).concat(found.filter(e => rank(e) === 1),
                     found.filter(e => rank(e) === 2)).map(e => e.entry);
-                keys = ["name"];
-                weights = [1];
                 return byName.concat(byKind);
             }
 """, "the Super menu's search by name")}
