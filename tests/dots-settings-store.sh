@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # dots-settings' saved choices: a broken settings.json (not JSON, or not an object) reads as the defaults instead of
-# failing every read; a value that isn't JSON, or a number that's NaN or Infinity, is refused with a message (a whole
-# number's NaN crashed it); a change keeps the other saved ones
+# failing every read, but a change refuses to write over it (every other setting in it went with it); a value that
+# isn't JSON, or a number that's NaN or Infinity, is refused with a message (a whole number's NaN crashed it); a change
+# keeps the other saved ones
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
@@ -24,9 +25,6 @@ open(f"{t}/.config/caelestia/hypr-vars.lua", "w").close()
 ds.HOME = t
 settings = ds.all_settings(ds.schema())
 b = [k for k, s in settings.items() if s["type"] == "bool" and "get" not in s and "autostart" not in s][:2]
-for broken in ("{not json", "[1, 2]", "null"):
-    open(ds.SETTINGS, "w").write(broken)
-    assert ds.values(settings)[b[0]] == settings[b[0]]["default"], f"broken file {broken!r}: not the default"
 
 
 def run(*args):
@@ -39,6 +37,13 @@ def run(*args):
     return out.getvalue()
 
 
+for broken in ("{not json", "[1, 2]", "null"):
+    open(ds.SETTINGS, "w").write(broken)
+    assert ds.values(settings)[b[0]] == settings[b[0]]["default"], f"broken file {broken!r}: not the default"
+    # ...and not written over by a change (every other setting in it went with it)
+    err = run("set", b[0], json.dumps(not settings[b[0]]["default"]), "--later")
+    assert "isn't valid settings" in err and open(ds.SETTINGS).read() == broken, f"broken file {broken!r} written over: {err!r}"
+os.remove(ds.SETTINGS)
 err = run("set", b[0], "notjson", "--later")
 assert err.startswith(b[0] + ":"), f"a value that isn't JSON: {err!r}"
 n = next(k for k, s in settings.items() if s["type"] == "number" and s.get("integer") and "get" not in s)

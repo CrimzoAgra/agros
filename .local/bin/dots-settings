@@ -748,13 +748,22 @@ def all_settings(pages):
     return {s["key"]: s for page in pages["pages"] for group in page["groups"] for s in group["settings"]}
 
 
-def stored():
+def stored(writing=False):
+    """Your saved settings. A broken file reads as the defaults (not a crash on every read), but isn't written over:
+    writing (to change one), it's an error, or every other setting in it was lost with the next change"""
     try:
         with open(SETTINGS) as f:
             saved = json.load(f)
-    except (OSError, ValueError):
+    except FileNotFoundError:
         return {}
-    return saved if isinstance(saved, dict) else {}  # (a broken file: the defaults, not a crash on every read)
+    except (OSError, ValueError) as e:
+        saved = e
+    if isinstance(saved, dict):
+        return saved
+    if writing:
+        sys.exit(f"{SETTINGS} isn't valid settings ({saved if isinstance(saved, Exception) else 'not an object'}): "
+                 "fix or delete it, nothing changed")
+    return {}
 
 
 def current(setting, saved):
@@ -970,7 +979,7 @@ def main(args):
             return
         else:
             with settings_lock():
-                saved = stored()
+                saved = stored(writing=True)
                 if value == setting["default"]:
                     saved.pop(args[1], None)
                 else:
