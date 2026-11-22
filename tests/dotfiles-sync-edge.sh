@@ -59,10 +59,20 @@ printf '[Install1]\nDefault=p.default\n' >"$lw/profiles.ini"
 printf 'user_pref("a.b", true);\n' >"$lw/p.default/prefs.js"
 out=$(run -n)
 [[ $out != *"changed: LibreWolf settings"* ]] || fail "settings.js refreshed from a profile it was never applied to: $out"
-# ...and refreshed from one it was (agros-welcome's mark): a setting gone from prefs.js is back to its default, dropped
+# ...and refreshed from one it was (agros-welcome's mark): a setting it never had (another machine's, added since) kept;
+# one it had at the last refresh and gone from prefs.js since (back to its default) dropped
 touch "$lw/p.default/.dotfiles-imported"
 out=$(run -n)
-[[ $out == *"changed: LibreWolf settings"* ]] || fail "settings.js not refreshed from a profile it was applied to: $out"
+[[ $out != *"changed: LibreWolf settings"* ]] || fail "a setting this profile never had dropped from settings.js: $out"
+printf 'a.b\nc.d\n' >"$lw/p.default/.dotfiles-prefs-seen"
+out=$(run -n)
+[[ $out == *"changed: LibreWolf settings"* ]] || fail "a setting gone from prefs.js since the last refresh not dropped: $out"
+# ...but not over a change to settings.js not yet committed (an edit in progress there)
+echo '// mine' >>"$repo/.local/share/firefox/settings.js"
+out=$(run -n)
+[[ $out == *"skipped: LibreWolf settings"* && $out != *"changed: LibreWolf settings"* ]] ||
+    fail "settings.js refreshed over a change not committed: $out"
+git -C "$repo" checkout -q -- .local/share/firefox/settings.js
 # "add" with no file named: the usage, exit 1, nothing synced, committed or pushed
 head=$(git -C "$repo" rev-parse HEAD)
 echo add-alone >"$home/.config/app/conf"

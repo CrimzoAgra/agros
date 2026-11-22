@@ -266,7 +266,13 @@ mapfile -d '' -t files < <(git -C "$repo" ls-files -z .config .local | grep -zvE
 # Browser settings: refresh the values of the settings listed in settings.js from LibreWolf
 # (failing, e.g. an unreadable profile: the rest of the sync goes on)
 prof=$("$(dirname "$(readlink -f "$0")")/firefox-bookmarks-export" --profile 2>/dev/null) || prof=""
-python3 -I - "$repo/.local/share/firefox/settings.js" "$dry" "$prof" <<'EOF' || echo "  LibreWolf settings not refreshed (an error above)"
+# (nor over a change to it not yet committed, as for the other files: unless it's the sync's own, from a run cut off)
+prefs=.local/share/firefox/settings.js
+if ! git -C "$repo" diff --quiet HEAD -- "$prefs" 2>/dev/null && ! own_copy "$repo" "$prefs"; then
+    echo "  skipped: LibreWolf settings (the repo's copy has changes not committed: commit or undo them there first)"
+    prof=""
+fi
+python3 -I - "$repo/$prefs" "$dry" "$prof" <<'EOF' || echo "  LibreWolf settings not refreshed (an error above)"
 import os, re, sys
 path, dry, prof = sys.argv[1], sys.argv[2] == "true", sys.argv[3]
 if not prof or not os.path.exists(path) or not os.path.exists(f"{prof}/prefs.js"):
@@ -281,19 +287,34 @@ for line in open(f"{prof}/prefs.js"):
     m = re.match(r'user_pref\("([^"]+)",', line)
     if m:
         live[m.group(1)] = line.rstrip("\n")
-out = []
+# The settings this profile had at the last refresh: one gone from prefs.js since is back to LibreWolf's default here,
+# dropped; one it never had (another machine's, added since this profile was applied) kept, not dropped and pushed to
+# every machine. None noted yet (a profile from before this): nothing dropped this time
+seen_path = f"{prof}/.dotfiles-prefs-seen"
+try:
+    seen = set(open(seen_path).read().split())
+except OSError:
+    seen = set()
+out, has = [], set()
 for line in open(path):
     m = re.match(r'user_pref\("([^"]+)",', line)
     if not m:
         out.append(line.rstrip("\n"))
-    elif m.group(1) in live:  # gone from prefs.js = back to LibreWolf's default, so dropped
+    elif m.group(1) in live:
         out.append(live[m.group(1)])
+        has.add(m.group(1))
+    elif m.group(1) not in seen:
+        out.append(line.rstrip("\n"))
 new = "\n".join(out) + "\n"
 if new != open(path).read():
     print("  changed: LibreWolf settings")
     if not dry:
         open(path, "w").write(new)
+if not dry and has != seen:
+    open(seen_path + ".new", "w").write("\n".join(sorted(has)) + "\n")
+    os.replace(seen_path + ".new", seen_path)
 EOF
+$dry || git -C "$repo" diff --quiet HEAD -- "$prefs" 2>/dev/null || wrote "$repo" "$prefs"
 sync "$repo" "$HOME" "${files[@]}"
 # VSCodium extensions: the list, not the extensions themselves
 if command -v codium >/dev/null; then
