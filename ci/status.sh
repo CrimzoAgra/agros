@@ -10,9 +10,10 @@ set -uo pipefail
 iso=${AGROS_ISO_REPO:-CrimzoAgra/agros-iso}
 site=${AGROS_SITE:-https://crimzoagra.github.io/agros/x86_64}
 here=$(cd "$(dirname "$0")/.." && pwd)
+# (last week's issue, read once: its sizes and the Capri release it noted)
+last=$(gh issue list --label status --state all -L 1 --json body -q '.[0].body' 2>/dev/null)
 last_sizes() {
-    gh issue list --label status --state all -L 1 --json body -q '.[0].body' 2>/dev/null |
-        sed -n 's|.*<!-- agros-sizes:\([A-Za-z0-9+/=]*\) -->.*|\1|p' | base64 -d 2>/dev/null | gunzip 2>/dev/null
+    sed -n 's|.*<!-- agros-sizes:\([A-Za-z0-9+/=]*\) -->.*|\1|p' <<<"$last" | base64 -d 2>/dev/null | gunzip 2>/dev/null
 }
 if [[ ${1:-} == --last-sizes ]]; then
     last_sizes
@@ -221,8 +222,7 @@ fi
 # it by hand, so a new release of theirs is news, not a task: said for information when its newest release isn't the
 # one last week's issue noted (in its body, a comment, as the sizes' baseline). The first one noted quietly; theirs not
 # readable: last week's kept for next week, the table says so
-capri_noted=$(gh issue list --label status --state all -L 1 --json body -q '.[0].body' 2>/dev/null |
-    sed -n 's|.*<!-- agros-capri:\([A-Za-z0-9._+-]*\) -->.*|\1|p' | head -n1)
+capri_noted=$(sed -n 's|.*<!-- agros-capri:\([A-Za-z0-9._+-]*\) -->.*|\1|p' <<<"$last" | head -n1)
 if capri=$(gh api repos/nunezValen/CapriDesktop/releases/latest -q .tag_name 2>/dev/null) && [[ $capri =~ ^[A-Za-z0-9._+-]+$ ]]; then
     capri_cell="latest release $capri"
     [[ -z $capri_noted || $capri_noted == "$capri" ]] ||
