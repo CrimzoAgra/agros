@@ -121,13 +121,12 @@ fi
 # (its version ends .r<count>.g<commit>): its one git source pinned at that commit, the build files as they are. Any
 # other: the AUR's newest commit of its build files whose .SRCINFO has that version. Neither found: 1, nothing built
 pin() {
-    local base=$1 v=$2 epoch='' ver rel c s hash
+    local base=$1 v=$2 epoch='' ver rel c s r hash
     [[ $v == *:* ]] && epoch=${v%%:*} v=${v#*:}
     ver=${v%-*} rel=${v##*-}
-    # (AgrOS's fix puts a .<n> after the AUR's pkgrel: aur-agros-patch)
-    [[ ! -f $(dirname "$self")/aur-patches/$base.patch ]] || rel=${rel%.*}
-    if [[ $ver =~ \.r[0-9]+\.g([0-9a-f]{7,40})$ ]]; then
-        hash=${BASH_REMATCH[1]}
+    # (a git version: 0.3.0.r5.gabc1234, or r50.8a6fe89 alone, its "g" left out)
+    if [[ $ver =~ (^|\.)r[0-9]+\.g?([0-9a-f]{7,40})$ ]]; then
+        hash=${BASH_REMATCH[2]}
         [[ $(grep -cE '^[[:space:]]*source(_x86_64)? = ([^:]*::)?git\+' .SRCINFO) == 1 ]] ||
             { echo "$base: not one git source to pin at $hash"; return 1; }
         # (the quoted git+ URL in its source array, any #branch= or #tag= after it replaced; checked as makepkg reads it)
@@ -138,8 +137,9 @@ pin() {
     fi
     while read -r c; do
         s=$(git show "$c:.SRCINFO" 2>/dev/null) || continue
-        [[ $(sed -n 's/^[[:space:]]*pkgver = //p' <<<"$s" | head -1) == "$ver" &&
-            $(sed -n 's/^[[:space:]]*pkgrel = //p' <<<"$s" | head -1) == "$rel" &&
+        # (the release the AUR's, or with a .<n> after it: AgrOS's fix, aur-agros-patch, and CI's relabelled rebuilds)
+        r=$(sed -n 's/^[[:space:]]*pkgrel = //p' <<<"$s" | head -1)
+        [[ $(sed -n 's/^[[:space:]]*pkgver = //p' <<<"$s" | head -1) == "$ver" && -n $r && ($rel == "$r" || $rel == "$r".*) &&
             $(sed -n 's/^[[:space:]]*epoch = //p' <<<"$s" | head -1) == "$epoch" ]] || continue
         git checkout -q "$c" && return 0
         break
@@ -502,6 +502,18 @@ box run --ro "$cache" -- timeout 30m "$self" --unpack "$dir/stage" "${files[@]}"
 # reads nothing of anyone's), only the packages the plan names, as their file names them (not sudo, pacman or linux,
 # which a build could leave there), and only when it made them all; unpacked from root's copy for the next ones, which
 # may build on it
+# relabel <package file> <version>: its version made that one, in place (.PKGINFO, and .MTREE anew), as CI's relabel
+relabel() {
+    local d rc=0
+    d=$(mktemp -d) || return 1
+    bsdtar -xpf "$1" -C "$d" && sed -i "s/^pkgver = .*/pkgver = $2/" "$d/.PKGINFO" && rm -f "$d/.MTREE" &&
+        (cd "$d" && mapfile -t files < <(LC_ALL=C ls -A) &&
+            LANG=C bsdtar -czf .MTREE --format=mtree \
+                --options='!all,use-set,type,uid,gid,mode,time,size,md5,sha256,link' "${files[@]}" &&
+            LANG=C bsdtar -cf "$1.new" --zstd .MTREE "${files[@]}") && mv -f "$1.new" "$1" || rc=1
+    rm -rf "$d" "$1.new"
+    return $rc
+}
 mkdir -p "$aur/repo"
 for b in "${order[@]}"; do
     echo "$b: building"
@@ -518,6 +530,13 @@ for b in "${order[@]}"; do
         read -r n v a < <(bsdtar -xOf "$aur/repo/.part" .PKGINFO 2>/dev/null |
             awk '/^pkgname = / { n = $3 } /^pkgver = / { v = $3 } /^arch = / { a = $3 } END { print n, v, a }')
         want=$(awk -v n="$n" '$1 == n { print $2 }' "$aur/wanted")
+        # A rebuild of one CI relabelled (2.5.0-1.1: its own rebuild for new libraries, a release makepkg can't make):
+        # given that release as CI does (ci/build-repo.sh's relabel), or pacman took it for an older one and the next
+        # update put CI's, built for the old libraries, back over it
+        if [[ -n $n && -n $want && $f == "$n-$v-$a.pkg.tar.zst" && ${want%-*} == "${v%-*}" && ${want##*-} == "${v##*-}".* ]] &&
+            relabel "$aur/repo/.part" "$want"; then
+            v=$want f=$n-$want-$a.pkg.tar.zst
+        fi
         if [[ -n $n && $names == *" $n "* && $f == "$n-$v-$a.pkg.tar."* && ($a == x86_64 || $a == any) && -n $want ]] &&
             (($(vercmp "$v" "$want") >= 0)); then
             mv "$aur/repo/.part" "$aur/repo/$f"

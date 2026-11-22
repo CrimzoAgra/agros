@@ -80,4 +80,27 @@ rm -rf "$t/build"
 rc=0; fetch quickshell-git=0.3.0.r5.gabc1234-1.2 >"$t/out" 2>&1 || rc=$?
 [[ $rc == 3 && $(cat "$t/out") == *"quickshell-git: not one git source to pin at abc1234"* && -z $(calls) ]] ||
     fail "quickshell-git with two git sources: exit $rc, $(cat "$t/out")"
+# A git version with no "g" before its commit (r50.8a6fe89, qt6-m3shapes-git's): pinned all the same
+# shellcheck disable=SC2016
+commit m3shapes-git r38.1111111 1 'source=("$_pkgname"::"git+$url.git")'
+rm -rf "$t/build"
+fetch m3shapes-git=r50.8a6fe89-1 >"$t/out" 2>&1 && [[ $(calls) == *"m3shapes::git+https://example.invalid/m3shapes-git.git#commit=8a6fe89" ]] ||
+    fail "a git version without its g not pinned: $(cat "$t/out")"
+# CI's relabelled rebuilds (1.1-2.1; a patched one's 2.0-1.2.1): the AUR's build files of that version found
+rm -rf "$t/build"
+fetch caelestia-shell=1.1-2.1 >"$t/out" 2>&1 && [[ $(calls) == "verify caelestia-shell 1.1-2 a.tar.gz" ]] ||
+    fail "CI's relabelled caelestia-shell 1.1-2.1 not found at the AUR's 1.1-2: $(cat "$t/out")"
+rm -rf "$t/build"
+fetch patched=2.0-1.2.1 >"$t/out" 2>&1 && [[ $(calls) == "verify patched 2.0-1.2 a.tar.gz" ]] ||
+    fail "CI's relabelled patched 2.0-1.2.1 not found: $(cat "$t/out")"
+# ...and the rebuild, made at the AUR's release (makepkg can't make 1.1-2.1), given CI's as CI does: its .PKGINFO's
+# version, its file listing made anew
+eval "$(sed -n '/^relabel() {$/,/^}$/p' "$here/packages/agros-system/auto-update-aur")"
+mkdir -p "$t/pkg/usr/bin"; echo x >"$t/pkg/usr/bin/caelestia"
+printf 'pkgname = caelestia-shell\npkgver = 1.1-2\narch = x86_64\n' >"$t/pkg/.PKGINFO"
+(cd "$t/pkg" && bsdtar -cf "$t/c.pkg.tar.zst" --zstd .PKGINFO usr)
+relabel "$t/c.pkg.tar.zst" 1.1-2.1 || fail "relabel failed"
+[[ $(bsdtar -xOf "$t/c.pkg.tar.zst" .PKGINFO | sed -n 's/^pkgver = //p') == 1.1-2.1 &&
+    $(bsdtar -xOf "$t/c.pkg.tar.zst" usr/bin/caelestia) == x && -n $(bsdtar -tf "$t/c.pkg.tar.zst" .MTREE) ]] ||
+    fail "the rebuild not given CI's release, or its files lost: $(bsdtar -tvf "$t/c.pkg.tar.zst")"
 echo "ok auto-update-aur-pin"
