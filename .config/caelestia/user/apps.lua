@@ -207,13 +207,10 @@ if low_latency then hl.config({ general = { allow_tearing = true } }) end
 -- Game audio only while the game is focused, a notification when a game wants attention (like Windows' orange
 -- flash), fullscreen games on a free workspace (~/.local/bin/game-focus)
 hl.on("hyprland.start", function() hl.exec_cmd("systemctl --user start game-focus") end)  -- a service: restarted if it crashes
--- Store launchers a game needs running (EA App, Ubisoft Connect, Epic, under Wine from Lutris) start minimised: only
+-- Store launchers a game needs running (EA App, Ubisoft Connect, Epic... under Wine from Lutris) start minimised: only
 -- when a game started them, and only windows their program opens in its first 2 minutes, so bringing one back from its
 -- tray icon later still shows it. Opened yourself (from Lutris or a shortcut) they show. Can be turned off in the
 -- Settings app
-local launcher_classes = { ["eadesktop.exe"] = true, ["upc.exe"] = true, ["ubisoftconnect.exe"] = true,
-                           ["epicgameslauncher.exe"] = true }
-local launcher_titles = { ["EA"] = true, ["Ubisoft Connect"] = true, ["Epic Games Launcher"] = true }
 local function process_age(pid)
     local stat, uptime = io.open("/proc/" .. pid .. "/stat"), io.open("/proc/uptime")
     local text, up = stat and stat:read("a"), uptime and uptime:read("a")
@@ -283,7 +280,8 @@ hl.on("window.open", function(win)
 end)
 hl.on("window.open", function(win)
     if dots.setting("games.launchers_minimised") == false then return end
-    if not (win and (launcher_classes[(win.initial_class or ""):lower()] or launcher_titles[win.initial_title or ""])) then return end
+    -- (any of ~/.local/bin/store-launchers' list: Battle.net, GOG Galaxy and Rockstar's too, which stayed shown)
+    if not (win and store_launcher(win.pid)) then return end
     if not dots.started_for_game(win.pid) then return end
     local age = win.pid and process_age(win.pid)
     if not age or age > 120 then return end
