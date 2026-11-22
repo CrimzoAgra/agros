@@ -318,8 +318,9 @@ def hide_launcher(game: dict) -> None:
     """The game closed: the launcher started for it minimised as it shows its window again (Epic's, white under the
     game's Wayland mode), until close_launcher closes it"""
     if setting("games.close_clients") and setting("games.launchers_minimised"):
-        for c in launchers_for(game, json.loads(hypr("clients", "-j") or "[]")):
-            hypr("eval", f"dots.minimise_launcher([[{c['address']}]])")
+        with update_lock:  # (steam_ids, which is_game fills and _update prunes on another thread)
+            for c in launchers_for(game, json.loads(hypr("clients", "-j") or "[]")):
+                hypr("eval", f"dots.minimise_launcher([[{c['address']}]])")
 
 
 @logged
@@ -335,6 +336,11 @@ def close_launcher(game: dict) -> None:
             return
         procs = [(int(d), cmdline(int(d))) for d in os.listdir("/proc")
                  if d.isdigit() and int(d) != os.getpid() and prefix_of(environ(int(d))) == game["prefix"]]
+        # A game started again in the prefix meanwhile (a relaunch still loading, no window yet: a Lutris run, or a Steam
+        # launch, new since this one closed): not closed under it (its own close comes later)
+        runs = {environ(pid).get(RUN, b"") for pid, _ in procs} - {b"", game.get("run") or b""}
+        if runs or game.get("gid") and set(reapers_of(game["gid"])) - set(game.get("reapers", [])):
+            return
         # (minimised counts too for anything but the launcher: a mod manager waiting in the dock)
         shown = {c.get("pid") for c in clients
                  if c["workspace"].get("id", 0) > 0 or not launcher(cmdline(c.get("pid", -1)))}

@@ -83,7 +83,17 @@ gf.close_launcher(dict(game, run=b"run-b"))
 if evals or not alive(str(epic.pid)): fail("a launcher you opened (another run) minimised or closed with its window open")
 gf.hide_launcher(dict(game, run=b"run-a"))
 if evals != [("eval", "dots.minimise_launcher([[0x7]])")]: fail(f"the game's own launcher not minimised: {evals}")
+# The game started again meanwhile, still loading (no window yet): a new Lutris run in the prefix, or a new Steam launch
+# (a reaper not there when it closed): the launcher it uses not closed under it
+again = subprocess.Popen(["bash", "-c", 'exec -a "C:\\Games\\Game.exe" sleep 60'],
+                         env={**os.environ, "WINEPREFIX": f"{t}/pfx", "LUTRIS_GAME_UUID": "run-c"})
+time.sleep(0.2)
 gf.close_launcher(dict(game, run=b"run-a"))
+if not alive(str(epic.pid)) or not alive(str(again.pid)): fail("a game started again in the prefix closed while loading")
+again.kill(); again.wait()
+gf.close_launcher(dict(game, run=b"run-a", gid="4242", reapers=[]))
+if not alive(str(epic.pid)): fail("closed while a new Steam launch of the game loads (a reaper new since it closed)")
+gf.close_launcher(dict(game, run=b"run-a", gid="4242", reapers=[int(reaper)]))
 epic.wait(timeout=5)
 gf.hypr = lambda *a: json.dumps(clients) if a[:1] == ("clients",) else ""
 # Steam: no Steam game left, its window not open: shut down
