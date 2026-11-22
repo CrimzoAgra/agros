@@ -26,7 +26,7 @@ here, dots = sys.argv[1], sys.argv[2]
 # program -> its package; "optional:" one that isn't always installed (each place that runs it says why that's fine)
 PROGRAMS = {
     "btop": "btop", "curl": "curl", "df": "coreutils", "fish": "fish", "flock": "util-linux", "foot": "foot",
-    "gtk-launch": "gtk3", "head": "coreutils", "hyprctl": "hyprland", "journalctl": "systemd", "nmcli": "networkmanager", "qs": "quickshell-git", "readlink": "coreutils", "setsid": "util-linux",
+    "gtk-launch": "gtk3", "head": "coreutils", "hyprctl": "hyprland", "journalctl": "systemd", "nmcli": "networkmanager", "qs": "quickshell-git", "readlink": "coreutils", "setsid": "util-linux", "setpriv": "util-linux",
     "sh": "bash", "sleep": "coreutils", "systemctl": "systemd", "tail": "coreutils", "cat": "coreutils",
     "rm": "coreutils", "mkdir": "coreutils", "mv": "coreutils", "timeout": "coreutils", "md5sum": "coreutils", "id": "coreutils", "date": "coreutils", "stat": "coreutils",
     "caelestia": "caelestia-cli", "loginctl": "systemd",
