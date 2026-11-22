@@ -54,7 +54,10 @@ sed -e 's/^Name=cachyos-bootanimation$/Name=cachyos-bootanimation-fast/' \
     -e '/^\[boot-up\]/,/^\[/ s/^UseEndAnimation=true/UseEndAnimation=false/' \
     -e 's/^TitleFont=.*/TitleFont=Noto Sans Medium 26/' \
     -e "/^\[shutdown\]\$/a _Title=$shut" -e "/^\[reboot\]\$/a _Title=$restart" \
-    "$src/cachyos-bootanimation.plymouth" >"$dst/cachyos-bootanimation-fast.plymouth"
+    "$src/cachyos-bootanimation.plymouth" >"$dst/cachyos-bootanimation-fast.plymouth.new"
+# (put in place whole: written over in place, a power cut or a full disk midway left a broken theme, which the next
+# kernel update built into the boot images)
+mv -f "$dst/cachyos-bootanimation-fast.plymouth.new" "$dst/cachyos-bootanimation-fast.plymouth"
 case $mode in
     --update) [[ $(cat "$dst/cachyos-bootanimation-fast.plymouth") != "$old" &&
         $(plymouth-set-default-theme 2>/dev/null) == cachyos-bootanimation-fast ]] || exit 0 ;;

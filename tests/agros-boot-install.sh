@@ -125,6 +125,7 @@ rm -f "$t/calls"; "$b/splash-theme" >/dev/null
 f=$dst/cachyos-bootanimation-fast.plymouth
 grep -qx 'Name=cachyos-bootanimation-fast' "$f" && grep -qx 'UseEndAnimation=false' "$f" && grep -qx '_Title=A encerrar...' "$f" ||
     fail "the faster splash not made: $(cat "$f")"
+[[ ! -e $f.new ]] || fail "the theme's copy left beside it (put in place through a copy)"
 [[ $(cat "$t/theme") == cachyos-bootanimation-fast && $(calls) == "mkinitcpio -P" ]] || fail "not set, or no boot images: $(calls)"
 rm -f "$t/calls"; "$b/splash-theme" --update; [[ -z $(calls) ]] || fail "--update unchanged made the boot images"
 echo 'LANG=de_DE.UTF-8' >"$r/etc/locale.conf"
