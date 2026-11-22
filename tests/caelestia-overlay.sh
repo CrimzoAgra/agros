@@ -29,6 +29,8 @@ sleep_cmd=$(sed -n 's/^ *onTriggered: Quickshell.execDetached(\["sh", "-c", "\(.
 [[ -n $sleep_cmd ]] || fail "a critical battery doesn't run the hibernate-or-suspend command: $(grep -A3 'id: hibernateTimer' "$battery")"
 grep -qF "\"$sleep_cmd\"] : Config.session.commands.hibernate" "$dst/modules/session/Content.qml" ||
     fail "the session menu's Hibernate not the same: $(grep 'commands.hibernate' "$dst/modules/session/Content.qml")"
+grep -qF 'icon: String(Config.session.icons.hibernate) === "downloading" ? "bedtime"' "$dst/modules/session/Content.qml" ||
+    fail "the session menu's Hibernate not a moon: $(grep 'icons.hibernate' "$dst/modules/session/Content.qml")"
 mkdir -p "$t/sleep-bin"
 for can in 0 1; do
     printf '#!/bin/sh\necho "$1" >>"%s/slept"\n[ "$1" != hibernate ] || exit %s\n' "$t" "$can" >"$t/sleep-bin/systemctl"
