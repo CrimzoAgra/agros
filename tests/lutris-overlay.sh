@@ -240,6 +240,25 @@ s._watch(View(), ended.append)
 View.handlers["resource-load-started"](None, None, Request())
 assert ended == [None], ended
 assert logged == ["Rockstar: the handed-over games couldn't be read"], logged
+# ...caught as it's asked for and never sent (the account's data, its name and email, went to the site in its address);
+# any other page let through
+class Action:
+    def __init__(self, url): self.url = url
+    def get_request(self): return type("R", (), {"get_uri": lambda r: self.url})()
+class Decision:
+    def __init__(self, url): self.url, self.ignored = url, False
+    def get_navigation_action(self): return Action(self.url)
+    def ignore(self): self.ignored = True
+names_seen = []
+s._names = lambda data: names_seen.append(data) or ["GTAV"]
+ended.clear()
+s._watch(View(), ended.append)
+nav = signin.WebKit2.PolicyDecisionType.NAVIGATION_ACTION
+d = Decision(s.hand_over + "d=%7B%22data%22%3A%7B%7D%7D")
+assert View.handlers["decide-policy"](None, d, nav) is True and d.ignored, "the hand-over let through to the site"
+assert ended == [["GTAV"]] and names_seen == [{"data": {}}], (ended, names_seen)
+other = Decision("https://www.rockstargames.com/account")
+assert View.handlers["decide-policy"](None, other, nav) is False and not other.ignored, "another page stopped"
 P
 }
 rockstar_check

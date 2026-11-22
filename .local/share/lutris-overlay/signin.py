@@ -81,15 +81,31 @@ class SignInService(OnlineService):
             elif self._games_page(url):
                 view.run_javascript(self._read_games, None, None)
 
+        def handed_over(url):
+            try:
+                names = self._names(json.loads((parse_qs(urlparse(url).query).get("d") or ["{}"])[0]))
+            except Exception:  # noqa: BLE001 (not left on the hand-over page, or an unseen reload waiting 45 s)
+                logger.exception("%s: the handed-over games couldn't be read", self.label)
+                names = None
+            finish(names)
+
+        # The hand-over read as it's asked for, and never sent: let through, the account's data (its name and email
+        # with the games) went to the site's server in its address, into its logs and the browser's history
+        def on_policy(view, decision, kind):
+            if kind != WebKit2.PolicyDecisionType.NAVIGATION_ACTION:
+                return False
+            url = decision.get_navigation_action().get_request().get_uri() or ""
+            if not url.startswith(self.hand_over):
+                return False
+            decision.ignore()
+            handed_over(url)
+            return True
+
+        # (a hand-over that reached the network all the same: read there)
         def on_request(view, resource, request):
             url = request.get_uri() or ""
             if url.startswith(self.hand_over):
-                try:
-                    names = self._names(json.loads((parse_qs(urlparse(url).query).get("d") or ["{}"])[0]))
-                except Exception:  # noqa: BLE001 (not left on the hand-over page, or an unseen reload waiting 45 s)
-                    logger.exception("%s: the handed-over games couldn't be read", self.label)
-                    names = None
-                finish(names)
+                handed_over(url)
 
         def on_failed(view, event, url, error):
             if unseen:  # offline, or the site down: not 45 s waiting
@@ -97,6 +113,7 @@ class SignInService(OnlineService):
             return False
 
         view.connect("load-changed", on_load)
+        view.connect("decide-policy", on_policy)
         view.connect("resource-load-started", on_request)
         view.connect("load-failed", on_failed)
         return finish
