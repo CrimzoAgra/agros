@@ -831,6 +831,17 @@ check("a game out of fullscreen, gone back to: fullscreen again", back_to(nil, t
 check("a game made smaller: stays a window", back_to({ x = 1280, y = 720 }, true), false)
 check("a game that never left fullscreen: nothing", back_to(nil, false), false)
 check("found out of fullscreen at a config load: fullscreen again", back_to(nil, false, true), true)
+-- ...but not once it closed: a new window given its address isn't made fullscreen
+game.address, WINDOWS = "0xreused", { game }
+game.fullscreen = 0
+fire("window.fullscreen", game)
+fire("window.close", game)
+sent = {}
+fire("window.active", game)
+local refull = false
+for _, d in ipairs(sent) do if d[1] == "window.fullscreen" and (d[2] or {}).action == "set" then refull = true end end
+sent, WINDOWS = {}, {}
+check("a closed game's address given to a new window: not made fullscreen", refull, false)
 -- A notification's click: the app's most recently used window, not one never focused (Hyprland's focus_history_id -1:
 -- a launcher minimised as it opened), which came first
 local function app_win(address, history)

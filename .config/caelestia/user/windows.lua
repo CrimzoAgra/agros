@@ -983,6 +983,8 @@ hl.on("window.active", function(win) off_game(win) end)
 -- itself: it stayed a window over the whole screen with Caelestia's bar and borders drawn over it (Overwatch). One made
 -- smaller (windowed in the game's own settings) stays as it is; a store launcher's windows aren't a game's
 local out_of_fullscreen = {}
+-- (gone with its window: Hyprland gives a closed window's address to a new one, which would be made fullscreen)
+hl.on("window.close", function(win) if win then out_of_fullscreen[win.address] = nil end end)
 hl.on("window.fullscreen", function(win)
     if win and (win.fullscreen or 0) == 0 and dots.is_game and dots.is_game(win) then out_of_fullscreen[win.address] = true end
 end)
