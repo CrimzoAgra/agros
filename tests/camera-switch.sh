@@ -23,6 +23,13 @@ for text, want in (("on", True), ("on\n", True), ("off", False), ("", False), ("
     assert cs.saved_on() is want, f"{text!r} read as {cs.saved_on()}"
 os.remove(cs.STATE)
 assert cs.saved_on() is False, "no saved position read as on"
+# A write to the camera that fails (re-appearing on the bus after a resume): the position saved all the same, for the
+# udev rule to apply as it comes back (saved after it, the old "on" stayed: the camera back with the switch off)
+cs.apply(True, announce=False)
+cs.camera_dir = lambda: f"{sys.argv[2]}/gone"
+cs.apply(False, announce=False)
+assert open(cs.STATE).read() == "off", "a failed write to the camera left the old position saved"
+cs.camera_dir = lambda: None
 # notify: the group from the account, never the bus file's (a user's bus a link to a root-group file gave group root);
 # a bus not owned by the uid in its path skipped
 import pwd, types

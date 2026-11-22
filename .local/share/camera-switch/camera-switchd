@@ -88,18 +88,22 @@ def apply(on: bool, announce: bool) -> None:
 
 
 def _apply(on: bool) -> None:
-    d = camera_dir()
-    if d:
-        with open(f"{d}/authorized", "w") as f:
-            f.write("1" if on else "0")
-    # Written beside it and renamed over it: a crash or power cut mid-write leaves the old position or the new one,
-    # never an empty file (read as on: the camera back at boot with the switch off)
+    # The position saved first: a write to the camera that fails (it's re-appearing on the bus, just after a resume)
+    # left the old one saved, and the camera came back on with the switch off. Written beside it and renamed over it: a
+    # crash or power cut mid-write leaves the old position or the new one, never an empty file
     os.makedirs(os.path.dirname(STATE), exist_ok=True)
     with open(STATE + ".new", "w") as f:
         f.write("on" if on else "off")
         f.flush()
         os.fsync(f.fileno())
     os.replace(STATE + ".new", STATE)
+    d = camera_dir()
+    if d:
+        try:
+            with open(f"{d}/authorized", "w") as f:
+                f.write("1" if on else "0")
+        except OSError:
+            pass  # (gone meanwhile: the udev rule applies the saved position as it comes back)
     print(f"camera {'on' if on else 'off'}", flush=True)
 
 
