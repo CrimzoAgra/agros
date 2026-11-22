@@ -50,6 +50,8 @@ import math
 import os
 import pwd
 import re
+import shlex
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -149,9 +151,20 @@ def autostart_settings():
         if not entry or not enabled(entry) or not entry.get("Exec") or entry.get(ADDED) != "true" and (
                 not entry.get("Icon") or entry.get("NoDisplay") == "true" or (only and "Hyprland" not in only)):
             continue
+        # (an app uninstalled since: not listed; its TryExec keeps it from starting)
+        if entry.get(ADDED) == "true" and program_of(entry) and not shutil.which(program_of(entry)):
+            continue
         out.append({"key": f"autostart.{name[:-8]}", "label": entry.get("Name", name[:-8]), "icon": entry.get("Icon", ""),
                     "description": entry.get("Comment", ""), "type": "startup", "options": MODES, "autostart": name})
     return sorted(out, key=lambda o: o["label"].lower())
+
+
+def program_of(entry):
+    """The program an added app's entry starts ("": not known)"""
+    try:
+        return (shlex.split(entry.get("TryExec") or entry.get(OWN_EXEC) or "") or [""])[0]
+    except ValueError:  # (quotes that don't close)
+        return ""
 
 
 def autostart_mode(name):
@@ -217,6 +230,11 @@ def startup_add(name, minimised=True):
             lines[i] = f"Exec={exec_line}"
     head = [l.strip() for l in lines].index("[Desktop Entry]") + 1
     lines[head:head] = [f"{ADDED}=true", f"{MODE}={'minimised' if minimised else 'normal'}", f"{OWN_EXEC}={own}"]
+    # (its program, for the login's autostart to check: uninstalled, it isn't started (minimised, it waited a minute for
+    # the tray, then failed, every login))
+    program = program_of({OWN_EXEC: own})
+    if program and not desktop_entry(path).get("TryExec"):
+        lines.insert(head, f"TryExec={program}")
     os.makedirs(AUTOSTART[1], exist_ok=True)
     with open(os.path.join(AUTOSTART[1], name), "w") as f:
         f.write("\n".join(lines) + "\n")

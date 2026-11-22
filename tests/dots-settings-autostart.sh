@@ -12,6 +12,8 @@ loader = importlib.machinery.SourceFileLoader("ds", f"{here}/.local/bin/dots-set
 ds = importlib.util.module_from_spec(importlib.util.spec_from_loader("ds", loader))
 loader.exec_module(ds)
 system, mine = f"{t}/xdg", f"{t}/home/autostart"
+gone = set()  # (the apps' programs installed, but those named here)
+ds.shutil.which = lambda p: None if p in gone else f"/usr/bin/{p}"
 os.makedirs(system)
 ds.AUTOSTART = [system, mine]
 open(f"{system}/hello.desktop", "w").write("[Desktop Entry]\nType=Application\nName=Hello\nExec=hello\nIcon=hello\n")
@@ -68,6 +70,11 @@ ds.startup_add("editor.desktop")
 assert starts("editor.desktop"), "added, doesn't start"
 assert "autostart.editor" in [s["key"] for s in ds.autostart_settings()], "added, not listed"
 assert "editor.desktop" not in offered(), "added, still offered"
+# ...with its program for the login's autostart to check (TryExec); uninstalled since, it isn't listed (nor started)
+assert "\nTryExec=editor\n" in open(f"{mine}/editor.desktop").read(), open(f"{mine}/editor.desktop").read()
+gone.add("editor")
+assert "autostart.editor" not in [s["key"] for s in ds.autostart_settings()], "an uninstalled app still listed"
+gone.clear()
 ds.autostart_set("editor.desktop", False)
 assert not os.path.exists(f"{mine}/editor.desktop"), "one you added, switched off, still listed"
 assert offered() == ["editor.desktop"], "switched off, not offered again"
