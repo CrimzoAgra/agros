@@ -277,4 +277,8 @@ grep -qx '    add_file /usr/lib/agros/snapshot-overlay /usr/lib/agros/snapshot-o
     grep -q '^    add_file /usr/lib/agros/snapshot-overlay.service /usr/lib/systemd/system/agros-snapshot-overlay.service ' "$b/snapshot-overlay-hook" &&
     grep -qx 'ExecStart=/usr/lib/agros/snapshot-overlay' "$b/snapshot-overlay.service" ||
     fail "the snapshot hook's script or unit not where it takes them from"
+# The settings boot-menu sets are the ones removal puts back: a key added to one alone was never put back
+set_keys=$(PATH=/usr/bin:/bin; sed -n '/for kv in GRUB_TIMEOUT_STYLE/,/; do$/p' "$here/packages/agros-boot/boot-menu" | grep -oE 'GRUB_[A-Z_]+=' | tr -d = | sort | tr '\n' ' ')
+back_keys=$(PATH=/usr/bin:/bin; grep -oE 'for key in (GRUB_[A-Z_]+ ?)+' "$here/packages/agros-boot/agros-boot.install" | grep -oE 'GRUB_[A-Z_]+' | sort | tr '\n' ' ')
+[[ -n $set_keys && $set_keys == "$back_keys" ]] || fail "boot-menu's settings ($set_keys) aren't the ones removal puts back ($back_keys)"
 echo "ok agros-boot-install"
