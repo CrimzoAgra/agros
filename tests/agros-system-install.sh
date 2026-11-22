@@ -44,7 +44,11 @@ pac post_install; pac post_upgrade
 # all of them added, the gate's Include too
 printf '%s\n' '[options]' 'HoldPkg = pacman glibc' 'NoExtract = usr/share/doc/* # agros-iso' 'Architecture = auto' '' \
     '[agros]' 'Server = https://crimzoagra.github.io/agros/$arch' '' '[core]' 'Include = /etc/pacman.d/mirrorlist' >"$conf"
+chmod 640 "$conf"
 pac post_upgrade
+# (put in place through a copy, its mode kept: written over in place, a full disk midway left it empty)
+[[ $(stat -c %a "$conf") == 640 && ! -e $conf.agros-new ]] || fail "pacman.conf's mode not kept, or its copy left: $(ls -l "$r/etc")"
+chmod 644 "$conf"
 grep -qx 'Include = /etc/pacman.d/agros-gate.conf' "$conf" ||
     fail "an upgrade didn't add the upstream gate's Include (Hyprland not held from a manual pacman -Syu): $(cat "$conf")"
 [[ $(cat "$conf") == "$want" ]] || fail "pacman.conf after an upgrade from an older AgrOS: $(cat "$conf")"

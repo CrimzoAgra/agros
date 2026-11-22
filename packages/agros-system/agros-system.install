@@ -55,8 +55,10 @@ agros_repo() {
                 if (mode == "add" && i == last && !hasmirror) print mirror
             }
         }' "$conf") || return 0
-    # (written over in place: pacman.conf keeps its owner and mode)
-    [[ $new == "$(cat "$conf")" ]] || printf '%s\n' "$new" >"$conf"
+    # (a copy beside it, its owner and mode, then put in its place: written over in place, a full disk or a power cut
+    # midway left it empty, and pacman with no repos)
+    [[ $new == "$(cat "$conf")" ]] || { printf '%s\n' "$new" >"$conf.agros-new" && chown --reference="$conf" "$conf.agros-new" &&
+        chmod --reference="$conf" "$conf.agros-new" && mv -f "$conf.agros-new" "$conf"; } || rm -f "$conf.agros-new"
 }
 
 # pacman_include <name>: pacman.conf's Include of this package's /etc/pacman.d/<name>.conf, after [options], where it
