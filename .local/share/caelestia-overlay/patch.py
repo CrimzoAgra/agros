@@ -388,7 +388,13 @@ def internal_brightness():
     s = s.replace("Config.osd.enableBrightness", "(Config.osd.enableBrightness && root.builtIn)")
     s = insert(s, "    required property real brightness\n", """    readonly property bool builtIn: /^(eDP|LVDS|DSI)/.test(monitor?.modelData?.name ?? "")
 """, before=False)
-    return {rel: s}
+    # ...nor the popup for an external screen's brightness change (the bar's scroll, its late DDC read): it showed with
+    # volume alone. Its level is only the slider's, not shown there
+    w = "modules/osd/Wrapper.qml"
+    osd = insert(read(w), "        function onBrightnessChanged(): void {\n", """            if (!/^(eDP|LVDS|DSI)/.test(root.screen?.name ?? ""))
+                return;
+""", before=False)
+    return {rel: s, w: osd}
 
 
 def bar_space_refit():
@@ -1497,12 +1503,11 @@ def osd_quiet_start():
         screenState.osd = true;""", "osd show()")
     # ...nor when the screen's brightness is first read: over DDC (an external screen) that takes several seconds, past
     # the 3 s above, and the 0 it starts at "changing" to the real level showed the popup at every start
-    s = swap(s, """        function onBrightnessChanged(): void {
-            root.show();
+    # (its body alone, not its head: internal_brightness puts a line before it)
+    s = swap(s, """            root.show();
             root.brightness = root.monitor?.brightness ?? 0;
         }
-""", """        function onBrightnessChanged(): void {
-            if (root.brightnessRead)
+""", """            if (root.brightnessRead)
                 root.show();
             root.brightnessRead = true;
             root.brightness = root.monitor?.brightness ?? 0;
@@ -1861,10 +1866,11 @@ def turned_off():
     return {f.__name__ for _, f in FEATURES if values.get(f"caelestia.{f.__name__}") is False}
 
 
-# Features that build on another's version of a file (or, the utilities sidebar, on its trigger's geometry) and don't
-# fit without it: off when that one is off or skipped. Several: it needs one of them (window peek: the dock's or the
+# Features that build on another's version of a file (or, the utilities sidebar, on its trigger's geometry; the sidebar's
+# shape on the utilities panel's height, known while closed only with sidebar_notifs_only) and don't fit without it: off when that one is off or skipped. Several: it needs one of them (window peek: the dock's or the
 # workspace preview's popout, the previews it works on), off when all are
-NEEDS = {"sidebar_from_top": ("sidebar_shape",), "sidebar_with_utilities": ("sidebar_from_top",),
+NEEDS = {"sidebar_shape": ("sidebar_notifs_only",), "sidebar_from_top": ("sidebar_shape",),
+         "sidebar_with_utilities": ("sidebar_from_top",),
          "window_peek": ("dock", "workspace_preview")}
 
 if sys.argv[1:] == ["--list"]:

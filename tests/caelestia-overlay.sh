@@ -170,6 +170,14 @@ w=$dst/modules/drawers/ContentWindow.qml
 { grep -q 'shellHidden: hasFullscreen && !screenState.launcher' "$w" && grep -q 'fsTransitionProg: shellHidden ? 1' "$w" &&
     [[ $(grep -c 'fullscreen: root.shellHidden' "$w") == 2 ]] && grep -q 'layer: ((hasFullscreen || fsTransitionProg > 0)' "$w"; } ||
     fail "the Super menu over a fullscreen window doesn't show the whole shell: $(grep -n 'shellHidden\|layer:' "$w")"
+# An external screen's brightness change shows no popup (its slider isn't there: volume alone showed); a built-in one's
+# does, once its level was read
+w=$dst/modules/osd/Wrapper.qml
+grep -A6 'function onBrightnessChanged' "$w" | grep -q 'eDP|LVDS|DSI' && grep -A6 'function onBrightnessChanged' "$w" | grep -q 'root.brightnessRead' ||
+    fail "the brightness popup not kept to built-in screens, or its first read shown: $(grep -A8 'function onBrightnessChanged' "$w")"
+# The sidebar's shape needs the utilities panel kept built (sidebar_notifs_only): off with it
+grep -q '"sidebar_shape": ("sidebar_notifs_only",)' "$here/.local/share/caelestia-overlay/patch.py" ||
+    fail "the sidebar's shape not off with sidebar_notifs_only (its geometry needs it)"
 # The bar's window icons with a window Hyprland hasn't given its details yet (no lastIpcObject): no TypeError as it opens
 grep -qF 'Icons.getAppCategoryIcon(modelData.lastIpcObject?.class ?? "", "terminal")' "$dst/modules/bar/components/workspaces/Workspace.qml" ||
     fail "the bar's window icons not guarded against a window with no details yet"
