@@ -21,7 +21,7 @@ mirror=${CACHYOS_MIRROR:-https://mirror.cachyos.org/repo}
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 failed=0
-found=()
+found=() unread=()
 # seen <what> <said>: one for the record
 seen() {
     local s=${2//$'\t'/ }
@@ -60,6 +60,7 @@ for level in "$@"; do
     if ! out=$(pacman --config "$c" --dbpath "$db" -Sy 2>&1); then
         echo "!! CachyOS's $level repos couldn't be read: $(tail -n3 <<<"$out")"
         seen "$level unreadable" "CachyOS's $level repos couldn't be read: $(tail -n1 <<<"$out")"
+        unread+=("$level")
         failed=1
         continue
     fi
@@ -115,6 +116,11 @@ if [[ -n ${AGROS_CPU_STATE:-} ]]; then
             since=$(awk -F'\t' -v w="${f%%$'\t'*}" '$2 == w { print $1; exit }' "${AGROS_CPU_BEFORE:-/dev/null}" 2>/dev/null)
             [[ $since =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || since=$today
             printf '%s\t%s\n' "$since" "$f"
+        done
+        # (a level whose repos couldn't be read this time: what the record before had of it, kept as it was. Dropped,
+        # one of a hiccup's day started again from today, and the status said a long-standing one 3 days late)
+        for l in "${unread[@]}"; do
+            awk -F'\t' -v l="$l " 'index($2, l) == 1 && $2 != l "unreadable"' "${AGROS_CPU_BEFORE:-/dev/null}" 2>/dev/null
         done
     } >"$AGROS_CPU_STATE"
 fi

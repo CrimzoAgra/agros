@@ -109,6 +109,12 @@ touch "$t/noresolve"
 [[ $(rec v3) == "# checked 2026-11-18"$'\n'"2026-11-10"$'\t'"v3 unresolved"$'\t'"agros-desktop doesn't resolve with CachyOS's v3 repos above [cachyos] (their lag behind Arch's: error: target not found: agros-foo)" ]] ||
     fail "not resolving not in the record, since the day first seen: $(cat -A "$t/state")"
 rm "$t/noresolve"
+# A level whose repos couldn't be read this time: what the record before had of it kept as it was (its days not started
+# again from today by one bad run)
+touch "$t/nosync"
+[[ $(rec v3) == "# checked 2026-11-18"$'\n'"2026-11-18"$'\t'"v3 unreadable"$'\t'"CachyOS's v3 repos couldn't be read: error: failed retrieving file 'cachyos-v3.db'"$'\n'"2026-11-15"$'\t'"v3 skew libplacebo"$'\t'"said before"$'\n'"2026-11-10"$'\t'"v3 unresolved"$'\t'"said before" ]] ||
+    fail "a level not read this time lost what the record before had of it: $(cat -A "$t/state")"
+rm "$t/nosync"
 grep -q 'AGROS_CPU_BEFORE=/tmp/cpu-before AGROS_CPU_STATE=out/x86_64/agros-cpu-repos ci/cpu-repos.sh v3 znver4' "$here/.github/workflows/ci.yml" ||
     fail "CI's install check doesn't publish the record beside the repo, from the one before"
 echo "ok ci-cpu-repos"
