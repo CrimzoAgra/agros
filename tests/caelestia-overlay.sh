@@ -144,8 +144,8 @@ console.log(r.map(x => x.join(',')).join(' '));")
     [[ $seq == "termius,foot,micro thunar,desktop-settings foot name micro,foot,termius" ]] ||
         fail "the Super menu's search by what an app is: $seq (want: termius,foot,micro thunar,desktop-settings foot name micro,foot,termius)"
     # (without changing the search's keys: each change rebuilt its whole index, twice a keystroke)
-    ! sed -n '/then the apps found by what they are/,/return byName.concat(byKind)/p' "$dst/modules/launcher/services/Apps.qml" |
-        grep -q 'keys = ' || fail "the Super menu's search by what an app is changes the search's keys (its index rebuilt)"
+    ! grep -q 'keys = ' <<<"$(sed -n '/then the apps found by what they are/,/return byName.concat(byKind)/p' "$dst/modules/launcher/services/Apps.qml")" ||
+        fail "the Super menu's search by what an app is changes the search's keys (its index rebuilt)"
 else
     skipped "no node: the Super menu's search not run"
 fi
@@ -176,7 +176,8 @@ w=$dst/modules/drawers/ContentWindow.qml
 # An external screen's brightness change shows no popup (its slider isn't there: volume alone showed); a built-in one's
 # does, once its level was read
 w=$dst/modules/osd/Wrapper.qml
-grep -A6 'function onBrightnessChanged' "$w" | grep -q 'eDP|LVDS|DSI' && grep -A6 'function onBrightnessChanged' "$w" | grep -q 'root.brightnessRead' ||
+b=$(grep -A6 'function onBrightnessChanged' "$w")
+grep -q 'eDP|LVDS|DSI' <<<"$b" && grep -q 'root.brightnessRead' <<<"$b" ||
     fail "the brightness popup not kept to built-in screens, or its first read shown: $(grep -A8 'function onBrightnessChanged' "$w")"
 # The sidebar's shape needs the utilities panel kept built (sidebar_notifs_only): off with it
 grep -q '"sidebar_shape": ("sidebar_notifs_only",)' "$here/.local/share/caelestia-overlay/patch.py" ||
