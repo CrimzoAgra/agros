@@ -1,7 +1,8 @@
 -- The pointer between screens as LittleBigMouse does it on Windows: it comes out on the next screen at the same height
 -- on your desk, in millimetres (each screen's size from its EDID), whatever their resolutions, the screens standing as
--- the Screens page lines them up (tops, bottoms or middles together, or in between); and the whole edge of one leads
--- to the other, no dead corner where the pointer stops (past the other's end: onto its nearest corner). Settings app:
+-- the Screens page lines them up (tops, bottoms or middles together, or in between). Where that height isn't on the
+-- other screen (past its end), the pointer stays on its own, held at the edge, not thrown onto the other's nearest
+-- corner. Settings app:
 -- Screens, "Moving between screens" (screens.crossing): "" that; "matched" the edges matched end to end instead (top
 -- corner to top corner, bottom to bottom; also a screen with no size in its EDID: a VM's, a projector). Out of a
 -- fullscreen game too, its pointer pushed into the edge, the focus taken to the other screen with it (the game keeps
@@ -66,7 +67,8 @@ local function by_size(a, b, q, k)
 end
 
 -- Where a pointer at p, leaving screen a, lands across the line: on the screens there, by millimetres or (matched, or a
--- size unknown) each side's whole span along the line matched to the other's. nil: no screen on the far side
+-- size unknown) each side's whole span along the line matched to the other's. nil: no screen on the far side, or that
+-- place on none of them (past their ends: it doesn't go over)
 -- shortcut: matched counts every screen with an edge on the line as one side, so two separate pairs on one line (far
 -- apart) would share a span; fine for desks of two or three screens, split by overlap if that ever comes up
 local function target(p, line, k, a)
@@ -80,13 +82,16 @@ local function target(p, line, k, a)
     end
     if #to == 0 or fhi <= flo then return nil end
     local matched = tlo + (p[k.q] - flo) / (fhi - flo) * (thi - tlo)
-    -- (onto the screen there it falls on, else the closest: a gap along the line, past the far screen's end)
-    local best, off, onto
+    -- (onto the screen there it falls on, a pixel's rounding either side)
+    local best, onto
     for _, b in ipairs(to) do
         local v = crossing.mode ~= "matched" and by_size(a, b, p[k.q], k) or matched
-        local c = math.max(b[k.q], math.min(b[k.q] + b[k.t] - 1, v))
-        if not off or math.abs(c - v) < off then best, off, onto = c, math.abs(c - v), b end
+        if v >= b[k.q] - 1 and v <= b[k.q] + b[k.t] then
+            best, onto = math.max(b[k.q], math.min(b[k.q] + b[k.t] - 1, v)), b
+            break
+        end
     end
+    if not onto then return nil, to end
     local out = { x = p.x, y = p.y }
     out[k.q] = best
     out[k.p] = entering(onto, k) + (k.dir == 1 and 1 or -1)
@@ -103,8 +108,15 @@ function crossing.step(p, last)
             -- It crossed where the edges meet: same distance across (Hyprland's), the matched place along it
             if across(now, k, line) and math.abs(p[k.p] - line) < 64 + gap() and math.abs(last[k.p] - line) < 64 then
                 local out = target(last, line, k, was)
-                if out then out[k.p] = p[k.p] end
-                return out
+                if out then
+                    out[k.p] = p[k.p]
+                    return out
+                end
+                -- (that height not on it: back on this screen, at its edge, where it was along it)
+                local back = { x = p.x, y = p.y }
+                back[k.p] = k.dir == 1 and line - 1 or line
+                back[k.q] = math.max(was[k.q], math.min(was[k.q] + was[k.t] - 1, last[k.q]))
+                return back
             end
         elseif (p[k.p] - last[k.p]) * k.dir > 0 and math.abs(p[k.p] - line) < 2 then
             -- Pushed into its edge where nothing's right beyond, a screen further along: over to it (Hyprland stops it

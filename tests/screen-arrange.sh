@@ -24,22 +24,24 @@ say(c.step({ x = 0, y = 700 }, { x = 1, y = 700 }))           -- the left edge, 
     want=$'2561,405\n2561,975\n2558,1333\n-\n-\n-\n-'
     [[ $out == "$want" ]] || fail "the pointer between screens: got"$'\n'"$out"$'\n'"want"$'\n'"$want"
     # By real size: a 27" 2560x1440 (600x330 mm) beside a 24" 1080p one standing on its side (290x520 mm): the pointer
-    # at the same height in millimetres, tops lined up, then bottoms; past the shorter one's end onto its corner; and
-    # the edges matched end to end when asked to
+    # at the same height in millimetres, tops lined up, then bottoms; past the shorter one's end it stays on its own
+    # screen (pushed into the edge: left there; crossed where Hyprland crosses itself: put back at the edge); and the
+    # edges matched end to end when asked to
     out=$(cd "$here" && lua -e '
 hl, dots = {}, { setting = function() end }
 local c = dofile(".config/caelestia/user/crossing.lua")
 local function say(p) io.write(p and string.format("%.0f,%.0f", p.x, p.y) or "-", "\n") end
 c.set_boxes({ { x = 0, y = 0, w = 2560, h = 1440, mw = 600, mh = 330 }, { x = 2560, y = 0, w = 1080, h = 1920, mw = 290, mh = 520 } })
 say(c.step({ x = 2561, y = 720 }, { x = 2559, y = 720 }))         -- 165 mm down: 609 px down the tall one
-say(c.step({ x = 2560.5, y = 1500 }, { x = 2562, y = 1500 }))     -- 406 mm down, below the short one: its corner
+say(c.step({ x = 2560.5, y = 1500 }, { x = 2562, y = 1500 }))     -- 406 mm down, below the short one: stays
+say(c.step({ x = 2558, y = 1400 }, { x = 2561, y = 1400 }))       -- crossed by Hyprland at 379 mm, below it: back
 c.set_boxes({ { x = 0, y = 480, w = 2560, h = 1440, mw = 600, mh = 330 }, { x = 2560, y = 0, w = 1080, h = 1920, mw = 290, mh = 520 } })
 say(c.step({ x = 2561, y = 1200 }, { x = 2559, y = 1200 }))       -- bottoms lined up: 355 mm down the tall one
 say(c.step({ x = 2558, y = 1311 }, { x = 2561, y = 1311 }))       -- and back
 c.mode = "matched"
 say(c.step({ x = 2561, y = 1200 }, { x = 2559, y = 1200 }))       -- matched: halfway down to halfway down
 ')
-    want=$'2561,609\n2559,1439\n2561,1311\n2558,1200\n2561,960'
+    want=$'2561,609\n-\n2560,1400\n2561,1311\n2558,1200\n2561,960'
     [[ $out == "$want" ]] || fail "the pointer between screens by real size: got"$'\n'"$out"$'\n'"want"$'\n'"$want"
     # With monitors.lua's gap between them (Hyprland can't cross it, so never shows the pointer at the old pixel row
     # first): the pointer pushed into the edge goes over it, onto the other screen at its height
@@ -51,8 +53,9 @@ c.set_boxes({ { x = 0, y = 187, w = 2560, h = 1440, mw = 600, mh = 330 }, { x = 
 say(c.step({ x = 2558.9999, y = 907 }, { x = 2550, y = 907 }))  -- right, 165 mm down the short one
 say(c.step({ x = 2624.5, y = 880 }, { x = 2630, y = 880 }))      -- and back
 say(c.step({ x = 2558.9999, y = 907 }, { x = 2558.9999, y = 900 })) -- sliding along the edge: stays
+say(c.step({ x = 2624.5, y = 1850 }, { x = 2630, y = 1850 }))     -- 501 mm down the tall one, below the short one: stays
 ')
-    want=$'2625,883\n2559,904\n-'
+    want=$'2625,883\n2559,904\n-\n-'
     [[ $out == "$want" ]] || fail "the pointer over the gap between screens: got"$'\n'"$out"$'\n'"want"$'\n'"$want"
     # The gap itself (monitors.lua): each screen placed in the Settings app moved on by it past every screen edge before
     # it; none while a screen has no position of its own there
