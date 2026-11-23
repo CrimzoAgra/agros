@@ -545,8 +545,8 @@ index 3d88b57..becaed9 100644
 +
 +// The seam between two snapped windows (the config's snapping tags them "snapped"), as on Windows: a two-way resize
 +// cursor over the gap between them, side by side (left-right) or one above the other, and a press there resizes the
-+// left or top one by that one edge (seamPress, below), the config moving the other's edge with it. The gap alone, cursor
-+// and press alike (as on Windows): within a window, its scrollbar or edge is the app's. None when the seam is covered there (a window over it that isn't snapped:
++// left or top one by that one edge (seamPress, below), the config moving the other's edge with it. The gap and 6 px into
++// each window, cursor and press alike: apps that resize themselves (Electron's ~5 px inside its edge) showed their own one-window resize there. None when the seam is covered there (a window over it that isn't snapped:
 +// another floating one, a fullscreen game, an open special workspace; a panel of the shell's)
 +struct SSeam {
 +    std::string shape; // "" when not on one
@@ -557,7 +557,7 @@ index 3d88b57..becaed9 100644
 +    // (an open special workspace over it: the dimmed one behind isn't the one in use)
 +    if (!MON || !MON->m_activeWorkspace || MON->m_activeSpecialWorkspace)
 +        return {};
-+    constexpr double INSIDE = 0;
++    constexpr double INSIDE = 6;
 +    std::vector<std::pair<CBox, PHLWINDOW>> boxes;
 +    for (auto const& w : Desktop::viewState()->windows()) {
 +        if (!w->mapped() || w->isHidden() || !w->isFloating() || w->m_workspace != MON->m_activeWorkspace ||
