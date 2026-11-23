@@ -4,9 +4,11 @@
 -- to the other, no dead corner where the pointer stops (past the other's end: onto its nearest corner). Settings app:
 -- Screens, "Moving between screens" (screens.crossing): "" that; "matched" the edges matched end to end instead (top
 -- corner to top corner, bottom to bottom; also a screen with no size in its EDID: a VM's, a projector). Out of a
--- fullscreen game too, its pointer pushed into the edge (one it holds still for aiming doesn't move, and one it puts
--- back in the middle after each move, older games, jumps rather than moving: left alone). Nothing with one screen (a game's aim). Hyprland has no pointer-motion event: its position read every
--- 8 ms here, in Hyprland itself (no IPC), nothing done while it doesn't move
+-- fullscreen game too, its pointer pushed into the edge, the focus taken to the other screen with it (the game keeps
+-- the pointer in its window while it has it); one it holds still for aiming doesn't move, and one it puts back in the
+-- middle after each move (older games) jumps a quarter of the screen and more at once: left alone. Nothing with one
+-- screen. Hyprland has no pointer-motion event: its position read every 8 ms here, in Hyprland itself (no IPC), nothing
+-- done while it doesn't move
 local crossing = { mode = "" }
 
 -- Each side a pointer can leave a screen by: p the axis it crosses along, q the one along the edge
@@ -29,7 +31,7 @@ local function read_boxes()
             local w, h = m.width / m.scale, m.height / m.scale
             local mw, mh = m.physical_width or 0, m.physical_height or 0
             if (m.transform or 0) % 2 == 1 then w, h, mw, mh = h, w, mh, mw end
-            list[#list + 1] = { x = m.x, y = m.y, w = w, h = h, mw = mw, mh = mh }
+            list[#list + 1] = { name = m.name, x = m.x, y = m.y, w = w, h = h, mw = mw, mh = mh }
         end
     end
     return list
@@ -125,11 +127,20 @@ local function tick()
     local p = hl.get_cursor_pos()
     if not p or last and p.x == last.x and p.y == last.y then return end
     local out = last and crossing.step(p, last)
-    local jump = last and math.abs(p.x - last.x) + math.abs(p.y - last.y) or 0
+    -- (how far it went since the last reading, against a quarter of its screen: a flick goes 70 px and more in 8 ms, a
+    -- game putting it back in the middle half the screen)
+    local was = last and box_at(last)
+    local jump = was and (math.abs(p.x - last.x) + math.abs(p.y - last.y)) / (math.min(was.w, was.h) / 4) or 0
     last = { x = p.x, y = p.y }
     if not out then return end
     local w = hl.get_active_window()
-    if w and w.fullscreen and w.fullscreen ~= 0 and jump > 64 then return end
+    if w and w.fullscreen and w.fullscreen ~= 0 then
+        if jump > 1 then return end
+        -- (a game keeps the pointer inside its window while it has the focus, and Hyprland put it straight back: the
+        -- focus to the other screen first)
+        local to = box_at(out)
+        if to and to.name then hl.dispatch(hl.dsp.focus({ monitor = to.name })) end
+    end
     hl.dispatch(hl.dsp.cursor.move({ x = out.x, y = out.y }))
     last = out
 end
