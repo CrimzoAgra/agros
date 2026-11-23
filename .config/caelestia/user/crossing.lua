@@ -98,6 +98,15 @@ local function target(p, line, k, a)
     return out, to
 end
 
+-- Held at an edge: a pixel back from it (Hyprland stops a pushed pointer on the edge and it doesn't move there, so a push
+-- on into it, further along where the other screen does line up, was never seen: it stayed held)
+local function held(p, line, k, q)
+    local back = { x = p.x, y = p.y }
+    back[k.p] = k.dir == 1 and line - 2 or line + 1
+    back[k.q] = q
+    return back
+end
+
 -- One reading of the pointer: where to move it (nil: leave it). last: the reading before
 function crossing.step(p, last)
     local was, now = box_at(last), box_at(p)
@@ -113,10 +122,7 @@ function crossing.step(p, last)
                     return out
                 end
                 -- (that height not on it: back on this screen, at its edge, where it was along it)
-                local back = { x = p.x, y = p.y }
-                back[k.p] = k.dir == 1 and line - 1 or line
-                back[k.q] = math.max(was[k.q], math.min(was[k.q] + was[k.t] - 1, last[k.q]))
-                return back
+                return held(p, line, k, math.max(was[k.q], math.min(was[k.q] + was[k.t] - 1, last[k.q])))
             end
         elseif (p[k.p] - last[k.p]) * k.dir > 0 and math.abs(p[k.p] - line) < 2 then
             -- Pushed into its edge where nothing's right beyond, a screen further along: over to it (Hyprland stops it
@@ -126,6 +132,8 @@ function crossing.step(p, last)
                 -- (Hyprland crosses where their edges meet with no gap)
                 if near(entering(b, k), line) and p[k.q] >= b[k.q] and p[k.q] < b[k.q] + b[k.t] then return nil end
             end
+            -- (a screen across, but not at this height: held)
+            if not out and to then return held(p, line, k, p[k.q]) end
             return out
         end
     end
