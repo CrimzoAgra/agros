@@ -1858,6 +1858,18 @@ def screen_wallpapers():
     return {bg: b, rel: w}
 
 
+def wallpaper_in_borders():
+    # The wallpaper inside Caelestia's frame (the bar on the left, its border round the rest), not under it: the
+    # background window kept clear of their exclusive zones, as a window is. The desktop clock's margin then counts
+    # from the bar's edge, no longer from the screen's
+    bg = "modules/background/Background.qml"
+    b = swap(read(bg), "        WlrLayershell.exclusionMode: ExclusionMode.Ignore\n",
+             "        WlrLayershell.exclusionMode: ExclusionMode.Normal\n", "the background's exclusion")
+    b = swap(b, "            anchors.leftMargin: Tokens.padding.extraLargeIncreased + Tokens.sizes.bar.innerWidth + Math.max(Tokens.padding.small, Config.border.thickness)\n",
+             "", "the desktop clock's left margin")
+    return {bg: b}
+
+
 def lock_main_screen():
     # The lock screen's card (clock, password, its buttons: lock_power's too) on the main screen only: the Settings
     # app's (screens.main), else the one focused when it locked; the others show the blurred background alone. Typed
@@ -1955,6 +1967,7 @@ FEATURES = (
     ("windows fitted again when the bar's space changes", bar_space_refit),
     ("a rotated or changed screen keeps its bar's workspaces", screens_followed),
     ("a wallpaper of its own for each screen", screen_wallpapers),
+    ("the wallpaper inside the bar and border", wallpaper_in_borders),
     ("lock screen on the main screen only", lock_main_screen),
 )
 
