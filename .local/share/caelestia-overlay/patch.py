@@ -1858,6 +1858,54 @@ def screen_wallpapers():
     return {bg: b, rel: w}
 
 
+def lock_main_screen():
+    # The lock screen's card (clock, password, its buttons: lock_power's too) on the main screen only: the Settings
+    # app's (screens.main), else the one focused when it locked; the others show the blurred background alone. Typed
+    # there, the password still goes in (the one shared with the main screen's field, its dots shown there): Hyprland
+    # gives the keyboard to the lock surface of the screen the pointer is on
+    rel = "modules/lock/LockSurface.qml"
+    s = read(rel)
+    if s.count("        visible: Config.lock.enabled\n") < 1:
+        raise LookupError("the lock card's visible")
+    s = s.replace("        visible: Config.lock.enabled\n", "        visible: Config.lock.enabled && root.mainScreen\n")
+    s = swap(s, "import Quickshell.Wayland\n", "import Quickshell.Wayland\nimport Quickshell.Io\nimport Quickshell.Hyprland\n",
+             "its imports")
+    s = swap(s, "    readonly property alias unlocking: unlockAnim.running\n", """    readonly property alias unlocking: unlockAnim.running
+
+    // caelestia-overlay: the card on the main screen only (read at once: no screen without it while it loads)
+    property string focusedAtLock
+    Component.onCompleted: focusedAtLock = Hyprland.focusedMonitor?.name ?? ""
+    readonly property bool mainScreen: {
+        let main = "";
+        try {
+            main = JSON.parse(dotsSettings.text())["screens.main"] ?? "";
+        } catch (e) {}
+        const desc = s => Hyprland.monitorFor(s)?.description ?? "";
+        if (typeof main === "string" && main && Quickshell.screens.some(s => desc(s) === main))
+            return desc(screen) === main;
+        return !focusedAtLock || screen?.name === focusedAtLock;
+    }
+
+    FileView {
+        id: dotsSettings
+
+        path: `${Quickshell.env("HOME")}/.config/dots/settings.json`
+        blockLoading: true
+        printErrors: false
+    }
+
+    // (the keyboard on another screen: the password into the same one)
+    Item {
+        focus: !root.mainScreen
+        Keys.onPressed: event => {
+            if (!root.unlocking)
+                root.pam.handleKey(event);
+        }
+    }
+""", "the main screen's card")
+    return {rel: s}
+
+
 FEATURES = (
     ("launcher pin buttons", launcher),
     ("bar dock", dock),
@@ -1907,6 +1955,7 @@ FEATURES = (
     ("windows fitted again when the bar's space changes", bar_space_refit),
     ("a rotated or changed screen keeps its bar's workspaces", screens_followed),
     ("a wallpaper of its own for each screen", screen_wallpapers),
+    ("lock screen on the main screen only", lock_main_screen),
 )
 
 
