@@ -673,7 +673,7 @@ index 3d88b57..becaed9 100644
 +    }
 +
      g_pGlobalState->buttons.push_back(std::move(button));
-@@ -174,2 +401,121 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
+@@ -174,2 +401,130 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
      static auto P3 = Event::bus()->m_events.window.updateRules.listen([&](PHLWINDOW w) { onUpdateWindowRules(w); });
 +    // A drag's end shows the cursor for where the pointer is, as the next motion would (Hyprland's, or the bar's resize
 +    // cursor: onMouseMove). Until then the one left from the drag showed: Hyprland's top corner where the bar meets the
@@ -709,8 +709,10 @@ index 3d88b57..becaed9 100644
 +    });
 +    // While a window is moved, the pointer stays inside the screen's free part (Caelestia's border and bar reserve the
 +    // rest), as a screen's edge would keep it: it reaches the snap edges there (the config's snapping) without passing
-+    // over the shell. Not on a side with another screen beyond: it crosses over to that one. Before Hyprland moves the
-+    // window (this event comes first), so the window follows the pointer where it's kept
++    // over the shell. Not on a side with another screen beyond (its edge on this one's, or across the gap AgrOS's
++    // monitors.lua leaves between screens, up to 64 px, which its crossing.lua takes the pointer over, anywhere along the
++    // edge): it goes on to that one. Before Hyprland moves the window (this event comes first), so the window follows
++    // the pointer where it's kept
 +    // A press where the seam cursor shows: the seam's (seamAt), the left or top window resized by that one edge; its
 +    // release ends it. Taken from everyone else (cancelled: the bar, the app, Hyprland's own resize from a corner)
 +    static auto P8 = Event::bus()->m_events.input.mouse.button.listen([](IPointer::SButtonEvent e, Event::SCallbackInfo& info) {
@@ -760,17 +762,24 @@ index 3d88b57..becaed9 100644
 +            return;
 +        const auto FULL   = MON->logicalBox();
 +        const auto FREE   = MON->logicalBoxMinusReserved();
-+        const auto BEYOND = [&MON](const Vector2D& p) {
-+            return std::ranges::any_of(State::monitorState()->monitors(), [&](const auto& m) { return m != MON && m->logicalBox().containsPoint(p); });
++        // (side: 0 left, 1 right, 2 above, 3 below; how far past this screen's edge the other's facing edge is)
++        const auto BEYOND = [&MON, &FULL](int side) {
++            return std::ranges::any_of(State::monitorState()->monitors(), [&](const auto& m) {
++                if (m == MON)
++                    return false;
++                const auto   B = m->logicalBox();
++                const double D = side == 0 ? FULL.x - (B.x + B.w) : side == 1 ? B.x - (FULL.x + FULL.w) : side == 2 ? FULL.y - (B.y + B.h) : B.y - (FULL.y + FULL.h);
++                return D >= -1 && D <= 65;
++            });
 +        };
 +        Vector2D to = POS;
-+        if (to.x < FREE.x && !BEYOND({FULL.x - 1, to.y}))
++        if (to.x < FREE.x && !BEYOND(0))
 +            to.x = FREE.x;
-+        else if (to.x > FREE.x + FREE.w - 1 && !BEYOND({FULL.x + FULL.w, to.y}))
++        else if (to.x > FREE.x + FREE.w - 1 && !BEYOND(1))
 +            to.x = FREE.x + FREE.w - 1;
-+        if (to.y < FREE.y && !BEYOND({to.x, FULL.y - 1}))
++        if (to.y < FREE.y && !BEYOND(2))
 +            to.y = FREE.y;
-+        else if (to.y > FREE.y + FREE.h - 1 && !BEYOND({to.x, FULL.y + FULL.h}))
++        else if (to.y > FREE.y + FREE.h - 1 && !BEYOND(3))
 +            to.y = FREE.y + FREE.h - 1;
 +        if (to != POS)
 +            Pointer::mgr()->warpTo(to);
