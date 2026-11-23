@@ -1825,6 +1825,39 @@ def screens_followed():
     return {hypr: h, rel: w}
 
 
+def screen_wallpapers():
+    # A wallpaper of its own for a screen, set in the Settings app (Look, Wallpaper: screens.<its description>.wallpaper
+    # in ~/.config/dots/settings.json, read here as it changes); the others show Caelestia's (whose colours follow it)
+    bg = "modules/background/Background.qml"
+    b = swap(read(bg), "                sourceComponent: Wallpaper {}\n",
+             "                sourceComponent: Wallpaper {\n                    screen: win.modelData\n                }\n",
+             "the background's wallpaper")
+    rel = "modules/background/Wallpaper.qml"
+    w = swap(read(rel), "import QtQuick\n", "import QtQuick\nimport Quickshell\nimport Quickshell.Io\n", "its imports")
+    w = swap(w, "    property string source: Wallpapers.current\n", """    // caelestia-overlay: this screen's own wallpaper, if the Settings app has one for it
+    property ShellScreen screen
+    property var settings: ({})
+    readonly property string own: settings[`screens.${Hypr.monitorFor(screen)?.description ?? ""}.wallpaper`] ?? ""
+    property string source: typeof own === "string" && own !== "" ? own : Wallpapers.current
+
+    FileView {
+        path: `${Quickshell.env("HOME")}/.config/dots/settings.json`
+        watchChanges: true
+        onFileChanged: reload()
+        onLoaded: {
+            try {
+                const all = JSON.parse(text());
+                root.settings = all && typeof all === "object" ? all : {};
+            } catch (e) {
+                root.settings = {};
+            }
+        }
+        onLoadFailed: root.settings = {}
+    }
+""", "its source")
+    return {bg: b, rel: w}
+
+
 FEATURES = (
     ("launcher pin buttons", launcher),
     ("bar dock", dock),
@@ -1873,6 +1906,7 @@ FEATURES = (
     ("panels open from the screen's very edge, not while dragging", edge_triggers),
     ("windows fitted again when the bar's space changes", bar_space_refit),
     ("a rotated or changed screen keeps its bar's workspaces", screens_followed),
+    ("a wallpaper of its own for each screen", screen_wallpapers),
 )
 
 

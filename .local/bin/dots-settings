@@ -654,6 +654,18 @@ def arrange_row():
             "screens": screens}
 
 
+def wallpaper_rows(every):
+    """With two screens or more, a wallpaper of its own for each (caelestia-overlay's screen_wallpapers shows it), from
+    the same pictures as every's (the Look page's one for all of them); empty: that one"""
+    monitors = [m for m in hyprctl("monitors") or [] if screen_id(m) and m.get("name") != "FALLBACK"]
+    if len(monitors) < 2:
+        return []
+    return [{"key": f"screens.{screen_id(m)}.wallpaper", "type": "image", "open": True, "default": "",
+             "label": f"{m['name']}{': ' + m['model'] if m.get('model') else ''}",
+             "description": "This screen's own wallpaper, or the same as the others.",
+             "options_cmd": "printf '\\tSame as the others\\n'; " + every["options_cmd"]} for m in monitors]
+
+
 # What a keyboard's media keys do (Caelestia binds them, to wpctl or its shell's media and brightness actions)
 MEDIA_KEYS = {
     "XF86AudioMute": "Mute", "XF86AudioMicMute": "Mute the microphone", "XF86AudioRaiseVolume": "Volume up",
@@ -733,6 +745,8 @@ def schema(live=True, lists=True):
             return groups
         if source == "screens":
             return screens_groups() if live else []
+        if group.get("per_screen") and live:
+            group["settings"] = group["settings"] + wallpaper_rows(group["settings"][0])
         if group.get("arrange"):
             group["settings"] = ([arrange_row()] if live else []) + group["settings"]
         if source:

@@ -298,11 +298,12 @@
       "groups": [
         {
           "title": "Wallpaper",
+          "per_screen": true,
           "settings": [
             {
               "key": "look.wallpaper",
               "label": "Wallpaper",
-              "description": "Pictures in Pictures/Wallpapers (add your own there). The colours follow it with the Dynamic scheme.",
+              "description": "Pictures in Pictures/Wallpapers (add your own there). The colours follow it with the Dynamic scheme. With more than one screen, each can have its own below.",
               "type": "image",
               "open": true,
               "get": "cat ~/.local/state/caelestia/wallpaper/path.txt 2>/dev/null",

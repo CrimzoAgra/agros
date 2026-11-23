@@ -925,10 +925,21 @@ ShellRoot {
                 radius: 14
                 color: pic.selected ? root.c("primary") : picMouse.containsMouse ? root.c("surfaceContainerHighest") : root.c("surfaceContainerHigh")
 
+                // (no picture: "Same as the others", a screen's own wallpaper left to the one for every screen)
+                Label {
+                    visible: !pic.modelData.value
+                    anchors.centerIn: parent
+                    width: parent.width - 16
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.WordWrap
+                    text: pic.modelData.label
+                    color: pic.selected ? root.c("onPrimary") : root.c("onSurface")
+                }
                 Image {
+                    visible: !!pic.modelData.value
                     anchors.fill: parent
                     anchors.margins: pic.selected ? 4 : 2
-                    source: "file://" + pic.modelData.value.split("/").map(encodeURIComponent).join("/")
+                    source: pic.modelData.value ? "file://" + pic.modelData.value.split("/").map(encodeURIComponent).join("/") : ""
                     sourceSize.width: 312
                     asynchronous: true
                     fillMode: Image.PreserveAspectCrop
