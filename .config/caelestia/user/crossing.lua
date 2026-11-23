@@ -3,8 +3,9 @@
 -- the Screens page lines them up (tops, bottoms or middles together, or in between); and the whole edge of one leads
 -- to the other, no dead corner where the pointer stops (past the other's end: onto its nearest corner). Settings app:
 -- Screens, "Moving between screens" (screens.crossing): "" that; "matched" the edges matched end to end instead (top
--- corner to top corner, bottom to bottom; also a screen with no size in its EDID: a VM's, a projector). Nothing with
--- one screen, nor while a fullscreen window has focus (a game's aim). Hyprland has no pointer-motion event: its position read every
+-- corner to top corner, bottom to bottom; also a screen with no size in its EDID: a VM's, a projector). Out of a
+-- fullscreen game too, its pointer pushed into the edge (one it holds still for aiming doesn't move, and one it puts
+-- back in the middle after each move, older games, jumps rather than moving: left alone). Nothing with one screen (a game's aim). Hyprland has no pointer-motion event: its position read every
 -- 8 ms here, in Hyprland itself (no IPC), nothing done while it doesn't move
 local crossing = { mode = "" }
 
@@ -124,10 +125,11 @@ local function tick()
     local p = hl.get_cursor_pos()
     if not p or last and p.x == last.x and p.y == last.y then return end
     local out = last and crossing.step(p, last)
+    local jump = last and math.abs(p.x - last.x) + math.abs(p.y - last.y) or 0
     last = { x = p.x, y = p.y }
     if not out then return end
     local w = hl.get_active_window()
-    if w and w.fullscreen and w.fullscreen ~= 0 then return end
+    if w and w.fullscreen and w.fullscreen ~= 0 and jump > 64 then return end
     hl.dispatch(hl.dsp.cursor.move({ x = out.x, y = out.y }))
     last = out
 end
