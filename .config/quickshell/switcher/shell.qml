@@ -7,6 +7,10 @@
 // back when picked), most recently used first, so a quick Alt+Tab goes to the previous window; releasing Alt picks.
 // A × on the selected card and the one under the mouse closes that window (Alt+Tab), or moves that workspace's windows
 // to the nearest one with windows (Super+Tab: dots.clean_workspace in user/workspaces.lua); the switcher stays open.
+// Snap Assist, as on Windows: a window snapped into a half with the other half empty (user/windows.lua tells it:
+// "agros_assist <screen> <half> <the window> x y w h"), the same window cards for the workspace's other windows, in
+// that half; the one clicked (or Enter) fills it (dots.snap_to), Esc or a click elsewhere leaves it empty. Letting go
+// of Super or Alt picks nothing there (a window dropped with Super held)
 // The keys are bound in ~/.config/caelestia/user/keys.lua to these global shortcuts: Hyprland hands them over in the
 // order they happen, so a quick Super+Tab (Super let go before this has even opened) still switches. Workspaces are
 // columns as in the synced Super+N: workspace N is N on every screen, and switching goes through
@@ -55,14 +59,18 @@ ShellRoot {
     property bool open: false
     // Super+click free for the previews while open (Caelestia's window drag otherwise takes it: keys.lua)
     onOpenChanged: {
-        openedOn = open ? Hyprland.focusedMonitor : null;
+        openedOn = open ? (mode === "assist" ? Hyprland.monitors.values.find(m => m.name === assistScreen) ?? Hyprland.focusedMonitor : Hyprland.focusedMonitor) : null;
         cleaning = [];
         Quickshell.execDetached(["hyprctl", "eval", `dots.switcher_open(${open})`]);
     }
-    property string mode: "workspaces" // or "windows" (Alt+Tab)
+    property string mode: "workspaces" // or "windows" (Alt+Tab), "assist" (Snap Assist)
     property var cards: [] // workspace columns (1-10), or windows, in the order shown
     property int selected: 0
     property var wasActive: null // Alt+Tab: the window active when it opened (its first card)
+    // Snap Assist: the half to fill, its screen, and its box on that screen
+    property string assistZone
+    property string assistScreen
+    property var assistArea: null
 
     // The screen it opened on, kept while it's open: the focused screen follows the pointer, and the switcher jumped to
     // the other screen (its previews that screen's) when the mouse crossed over. One unplugged meanwhile: the focused one
@@ -140,6 +148,23 @@ ShellRoot {
         selected = (selected + dir + cards.length) % cards.length;
     }
 
+    // Snap Assist (f: the event's words): the current workspace's windows but the one just snapped, minimised ones too
+    function assist(f: var): void {
+        if (open || f.length !== 8)
+            return;
+        const list = workspaceWindows().filter(t => `0x${t.address}` !== f[3]);
+        if (!list.length)
+            return;
+        assistScreen = f[1];
+        assistZone = f[2];
+        assistArea = Qt.rect(+f[4], +f[5], +f[6], +f[7]);
+        cards = list;
+        wasActive = null;
+        selected = 0;
+        mode = "assist";
+        open = true;
+    }
+
     function step(dir: int): void {
         if (open && mode !== "workspaces")
             return;
@@ -198,6 +223,12 @@ ShellRoot {
         if (!open)
             return;
         open = false;
+        if (mode === "assist") {
+            const w = cards[selected];
+            if (w)
+                Quickshell.execDetached(["hyprctl", "eval", `dots.snap_to("0x${w.address}", "${assistZone}", "${assistScreen}")`]);
+            return;
+        }
         if (mode === "windows") {
             const w = cards[selected];
             // dots.focus_window (user/windows.lua) also brings a floating window to the front and a minimised one back;
@@ -323,8 +354,8 @@ ShellRoot {
         appid: "switcher"
         name: "commit"
         // Sent when Super or Alt is let go (user/keys.lua's key hook, as a global shortcut): handled as a press or a release
-        onPressed: root.commit()
-        onReleased: root.commit()
+        onPressed: if (root.mode !== "assist") root.commit()
+        onReleased: if (root.mode !== "assist") root.commit()
     }
 
     // The same from scripts: qs -c switcher ipc call switcher next|prev|commit|cancel
@@ -353,6 +384,11 @@ ShellRoot {
             const n = event.name;
             if (n.endsWith("v2"))
                 return;
+            if (n === "custom" && event.data.startsWith("agros_assist ")) {
+                Hyprland.refreshToplevels();
+                root.assist(event.data.split(" "));
+                return;
+            }
             if (["openwindow", "closewindow", "movewindow", "activewindow", "windowtitle", "changefloatingmode", "fullscreen"].includes(n))
                 Hyprland.refreshToplevels();
             if (["workspace", "focusedmon", "moveworkspace", "openwindow", "closewindow", "movewindow"].includes(n))
@@ -374,8 +410,9 @@ ShellRoot {
         readonly property real monW: root.monitor ? (turned ? root.monitor.height : root.monitor.width) / root.monitor.scale : 1920
         readonly property real monH: root.monitor ? (turned ? root.monitor.width : root.monitor.height) / root.monitor.scale : 1080
         readonly property int spacing: 16
-        // Previews as big as fit on the screen, at most 300 px wide
-        readonly property real cardW: Math.min(300, (monW * 0.9 - 48 - (root.cards.length - 1) * spacing) / Math.max(1, root.cards.length))
+        // Previews as big as fit on the screen (Snap Assist: in its half), at most 300 px wide
+        readonly property real availW: root.mode === "assist" && root.assistArea ? root.assistArea.width : monW
+        readonly property real cardW: Math.min(300, (availW * 0.9 - 48 - (root.cards.length - 1) * spacing) / Math.max(1, root.cards.length))
         readonly property real scaleF: cardW / monW
 
         screen: Quickshell.screens.find(s => s.name === root.monitor?.name) ?? Quickshell.screens[0]
@@ -397,7 +434,7 @@ ShellRoot {
             focus: true
             // Releasing Super (workspaces) or Alt (windows) picks (user/keys.lua's key hook does too; whichever comes first)
             Keys.onReleased: event => {
-                if (root.mode === "windows" ? event.key === Qt.Key_Alt : (event.key === Qt.Key_Super_L || event.key === Qt.Key_Super_R || event.key === Qt.Key_Meta))
+                if (root.mode === "windows" ? event.key === Qt.Key_Alt : root.mode === "workspaces" && (event.key === Qt.Key_Super_L || event.key === Qt.Key_Super_R || event.key === Qt.Key_Meta))
                     root.commit();
             }
             Keys.onEscapePressed: root.open = false
@@ -406,10 +443,29 @@ ShellRoot {
             Keys.onRightPressed: root.move(1)
         }
 
+        // Snap Assist: the empty half, faintly (as Windows shows it)
+        Rectangle {
+            readonly property var a: root.assistArea
+
+            visible: root.mode === "assist" && a !== null
+            x: a?.x ?? 0
+            y: a?.y ?? 0
+            width: a?.width ?? 0
+            height: a?.height ?? 0
+            radius: 16
+            color: Qt.alpha(root.c("surface"), 0.25)
+            border.color: Qt.alpha(root.c("outlineVariant"), 0.6)
+            border.width: 1
+        }
+
         Rectangle {
             id: panel
 
-            anchors.centerIn: parent
+            readonly property var a: root.mode === "assist" ? root.assistArea : null
+
+            // (in the middle of the screen; Snap Assist's, of its half)
+            x: a ? a.x + (a.width - width) / 2 : (parent.width - width) / 2
+            y: a ? a.y + (a.height - height) / 2 : (parent.height - height) / 2
             implicitWidth: row.implicitWidth + 48
             implicitHeight: row.implicitHeight + 48
             radius: 28
@@ -568,7 +624,7 @@ ShellRoot {
                 Repeater {
                     // (kept per window as windows close: see the toplevels Connections above)
                     model: ScriptModel {
-                        values: root.open && root.mode === "windows" ? root.cards : []
+                        values: root.open && root.mode !== "workspaces" ? root.cards : []
                         objectProp: "address"
                     }
 

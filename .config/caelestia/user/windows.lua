@@ -406,8 +406,8 @@ end
 
 -- Snapping ------------------------------------------------------------------------------------------------------------
 
--- As on Windows: a floating window let go with the pointer at a screen's top edge is maximised; at its left or right
--- edge it takes that half; in a corner, that quarter (near a corner: the last sixth of the edge). A see-through preview
+-- As on Windows: a floating window let go with the pointer at a screen's top edge is maximised; at its left, right or
+-- bottom edge it takes that half; in a corner, that quarter (near a corner: the last sixth of the edge). A see-through preview
 -- shows where while it's dragged (Caelestia's drawers draw it: SnapPreview.qml in ~/.local/share/caelestia-overlay, told
 -- through Hyprland's custom events, "agros_snap <screen> x y w h" or "agros_snap none"), and Caelestia's panels don't
 -- open meanwhile ("agros_drag 1"/"agros_drag 0"). Dragged away, it gets back the size it had. Snapped windows next to
@@ -433,8 +433,9 @@ end
 local function seam() return 2 * (gaps_in() + border()) end
 
 -- The zone the pointer is in on its screen, or nil; and its box there (with the title bar: the window goes below it)
-local zones = { left = { 0, 0, 1, 2 }, right = { 1, 0, 1, 2 }, tl = { 0, 0, 1, 1 }, tr = { 1, 0, 1, 1 },
-                bl = { 0, 1, 1, 1 }, br = { 1, 1, 1, 1 } }  -- column, row, columns wide, rows high (of 2 x 2)
+local zones = { left = { 0, 0, 1, 2 }, right = { 1, 0, 1, 2 }, bottom = { 0, 1, 2, 1 }, tl = { 0, 0, 1, 1 },
+                tr = { 1, 0, 1, 1 }, bl = { 0, 1, 1, 1 }, br = { 1, 1, 1, 1 },
+                top = { 0, 0, 2, 1 } }  -- column, row, columns wide, rows high (of 2 x 2). (top: Snap Assist's only, below)
 -- Another screen at that point (beside or above this one: a window, or the pointer, may go on across there)
 local function screen_beyond(m, px, py)
     for _, o in ipairs(hl.get_monitors() or {}) do
@@ -465,6 +466,7 @@ local function zone_at(m, c)
     if top then return "max" end
     if left then return "left" end
     if right then return "right" end
+    if bottom then return "bottom" end
 end
 local function zone_box(m, zone)
     local a, g = snap_area(m), seam()
@@ -686,6 +688,67 @@ local function snapped_zone(win)
     end
 end
 
+-- A window into a zone on screen m (before: its size to go back to, dragged away)
+local function snap_into(win, m, zone, before)
+    -- (on another screen than most of it is on: onto that screen's workspace too)
+    local mws = m.active_workspace
+    if mws and mws.id and win.workspace and mws.id ~= win.workspace.id then
+        hl.dispatch(hl.dsp.window.move({ workspace = mws.id, follow = false, window = win }))
+    end
+    if zone == "max" then
+        set_maximised(win, true)
+        place(win, maximised_box(win, m))
+    else
+        if is_maximised(win) then set_maximised(win, false) end
+        unsnap(win)
+        hl.dispatch(hl.dsp.window.tag({ tag = "+snapped", window = "address:" .. win.address }))
+        hl.dispatch(hl.dsp.window.tag({ tag = "+snap_" .. zone, window = "address:" .. win.address }))
+        place_in_zone(win, m, zone)
+    end
+    snap_before[win.address] = before
+    raise(win)
+end
+
+-- Snap Assist, as on Windows: a window snapped into a half, the other half empty (no window snapped into any of it on
+-- that workspace), the switcher (~/.config/quickshell/switcher, its "assist" mode) shows the workspace's other windows
+-- there: "agros_assist <screen> <the other half> <the snapped window> x y w h" (the half's box on the screen). The
+-- one picked fills it (dots.snap_to); Esc or a click elsewhere leaves it empty
+local opposite = { left = "right", right = "left", bottom = "top", top = "bottom" }
+local function overlap(a, b)
+    a, b = zones[a], zones[b]
+    return a[1] < b[1] + b[3] and b[1] < a[1] + a[3] and a[2] < b[2] + b[4] and b[2] < a[2] + a[4]
+end
+local function assist(win, m, zone)
+    local other = opposite[zone]
+    if not (other and win.workspace) then return end
+    for _, w in ipairs(hl.get_windows() or {}) do
+        local z = w.address ~= win.address and w.workspace and w.workspace.id == win.workspace.id and snapped_zone(w)
+        if z and overlap(z, other) then return end
+    end
+    local b = zone_box(m, other)
+    local x, y = px(b.x), px(b.y)
+    tell(string.format("agros_assist %s %s %s %d %d %d %d", m.name, other, win.address, x - m.x, y - m.y,
+        px(b.x + b.w) - x, px(b.y + b.h) - y))
+end
+-- The window Snap Assist picked (a minimised one back first), into that half of that screen
+function dots.snap_to(address, zone, screen)
+    local win = by_address(address)
+    if not (win and zones[zone]) then return end
+    local ws = win.workspace and tonumber((win.workspace.name or ""):match("^special:minimised%-(%d+)$"))
+    if ws then
+        restore(win, ws)
+        win = by_address(address)
+    end
+    if not snappable(win) then return end
+    local m
+    for _, o in ipairs(hl.get_monitors() or {}) do if o.name == screen then m = o end end
+    if not m then return end
+    local before = snap_before[win.address]
+    if not (before and (has_tag(win, "snapped") or is_maximised(win))) then before = { w = win.size.x, h = win.size.y } end
+    snap_into(win, m, zone, before)
+    hl.dispatch(hl.dsp.focus({ window = win }))
+end
+
 snap_drag_start = function(win, kind)
     tell("agros_drag 1")  -- (any drag: Caelestia's panels wait)
     if not snappable(win) then return nil end
@@ -729,23 +792,8 @@ snap_drag_end = function(win, kind)
     local m
     for _, o in ipairs(hl.get_monitors() or {}) do if o.name == screen then m = o end end
     if not m then return keep_reachable(win) end
-    local before = { w = win.size.x, h = win.size.y }
-    -- (let go on another screen than most of it is on: onto that screen's workspace too)
-    local mws = m.active_workspace
-    if mws and mws.id and win.workspace and mws.id ~= win.workspace.id then
-        hl.dispatch(hl.dsp.window.move({ workspace = mws.id, follow = false, window = win }))
-    end
-    if zone == "max" then
-        set_maximised(win, true)
-        place(win, maximised_box(win, m))
-    else
-        unsnap(win)
-        hl.dispatch(hl.dsp.window.tag({ tag = "+snapped", window = "address:" .. win.address }))
-        hl.dispatch(hl.dsp.window.tag({ tag = "+snap_" .. zone, window = "address:" .. win.address }))
-        place_in_zone(win, m, zone)
-    end
-    snap_before[win.address] = before
-    raise(win)
+    snap_into(win, m, zone, { w = win.size.x, h = win.size.y })
+    assist(by_address(win.address) or win, m, zone)
 end
 function dots.window_drag_step(_, kind)
     if kind == "move" and moving then update_zone() elseif follow then follow_step() end

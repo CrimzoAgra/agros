@@ -943,13 +943,34 @@ ed.tags = {}
 dots.window_drag_start("0xa", "move"); dots.window_drag_end("0xa", "move"); result()
 r = snap("0xa", 960, 540)
 check("mid-screen: nothing", r.tag, nil)
+-- The bottom edge: the bottom half, Snap Assist offering the top half (agros_assist, for the switcher); the window
+-- picked there (dots.snap_to) fills it, below its title bar
+events = {}
+r = snap("0xa", 960, 1079)
+check("bottom edge: the bottom half", tags(ed) .. " " .. tostring(r.x == a.x and r.y > 540 and math.abs(r.w - a.w) <= 1), "snap_bottom snapped true")
+check("bottom half: Snap Assist offers the top half", table.concat(events, "|"):match("agros_assist DP%-1 top 0xa 11 51 %d+ %d+") ~= nil, true)
+local pick = { address = "0xd", class = "thunar", title = "f", floating = true, fullscreen = 0, pid = 1, tags = {},
+               workspace = ws(1), monitor = SCREENS[1], at = { x = 300, y = 300 }, size = { x = 700, y = 500 },
+               focus_history_id = 1 }
+WINDOWS = { ed, pick }
+dots.snap_to("0xd", "top", "DP-1")
+r = result()
+check("Snap Assist's pick: the top half", tags(pick) .. " " .. r.x .. "," .. r.y, "snap_top snapped " .. a.x .. "," .. (a.y + bar))
+check("Snap Assist's pick: half the height, a seam between", math.abs(2 * (r.h + bar) + 12 - a.h) <= 1 and math.abs(r.w - a.w) <= 1, true)
+WINDOWS = { ed }
+dots.window_drag_start("0xa", "move"); dots.window_drag_end("0xa", "move"); result()
+ed.size, ed.tags = { x = 800, y = 600 }, {}
 -- Two snapped side by side: resizing the left one moves the right one's edge with it
 local right = { address = "0xb", class = "thunar", title = "f", floating = true, fullscreen = 0, pid = 1, tags = {},
                 workspace = ws(1), monitor = SCREENS[1], at = { x = 0, y = 0 }, size = { x = 800, y = 600 },
                 focus_history_id = 1 }
 WINDOWS = { ed, right }
+events = {}
 r = snap("0xa", 0, 540); ed.at, ed.size = { x = r.x, y = r.y }, { x = r.w, y = r.h }
+check("left half, the right one empty: Snap Assist offers it", table.concat(events, "|"):match("agros_assist DP%-1 right 0xa %d+ 51 %d+ %d+") ~= nil, true)
+events = {}
 r = snap("0xb", 1919, 540); right.at, right.size = { x = r.x, y = r.y }, { x = r.w, y = r.h }
+check("right half, the left one taken: no Snap Assist", table.concat(events, "|"):match("agros_assist") == nil, true)
 local right_end = right.at.x + right.size.x
 dots.window_drag_start("0xa", "resize")
 ed.size = { x = ed.size.x + 100, y = ed.size.y }
