@@ -284,9 +284,18 @@ ShellRoot {
         readonly property var outputs: Quickshell.screens
         readonly property real originX: Math.min(...outputs.map(o => o.x))
         readonly property real originY: Math.min(...outputs.map(o => o.y))
-        // The login card on an external monitor when one is connected (a docked laptop's lid may be shut, and cage
-        // still lists its panel), the laptop's panel when it's alone
-        readonly property var mainOutput: outputs.find(o => !/^(eDP|LVDS|DSI)/.test(o.name)) ?? outputs[0]
+        // The login card on the main screen alone (the desktop's: theme.json's, by connector and model), else on an
+        // external monitor when one is connected (a docked laptop's lid may be shut, and cage still lists its panel),
+        // the laptop's panel when it's alone
+        // shortcut: a laptop panel as the main screen is passed over while an external one is connected (its lid may be
+        // shut: cage can't say); read the lid if someone sets the panel as main on a dock
+        readonly property var external: outputs.find(o => !/^(eDP|LVDS|DSI)/.test(o.name))
+        readonly property var mainOutput: {
+            const want = root.theme.screen;
+            const found = want ? outputs.find(o => o.name === want.name && (!want.model || o.model === want.model))
+                ?? outputs.find(o => !!want.model && o.model === want.model) : null;
+            return (found && !(external && /^(eDP|LVDS|DSI)/.test(found.name)) ? found : null) ?? external ?? outputs[0];
+        }
 
         function rectOf(o: var): rect {
             return spansOutputs && o ? Qt.rect(o.x - originX, o.y - originY, o.width, o.height) : Qt.rect(0, 0, width, height);

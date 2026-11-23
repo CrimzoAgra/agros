@@ -5,9 +5,11 @@ hl.layer_rule({ match = { namespace = "desktop-widgets" }, blur = true, ignore_a
 -- Started once Caelestia has loaded (~/.local/bin/widgets-start)
 hl.on("hyprland.start", function() hl.exec_cmd("~/.local/bin/widgets-start") end)
 
--- Login screen: copy the current wallpaper and Caelestia colours to it
+-- Login screen: copy the current wallpaper and Caelestia colours to it, and which screen is the main one (again at each
+-- config reload: a main screen set in the Settings app, screens plugged in, reload it)
 -- Code: ~/.local/share/caelestia-greeter (installed by the agros-greeter package)
 hl.on("hyprland.start", function() hl.exec_cmd("~/.local/bin/greeter-theme-sync") end)
+hl.on("config.reloaded", function() hl.exec_cmd("~/.local/bin/greeter-theme-sync") end)
 
 -- Clear the text console under the desktop, so no old text shows when the desktop closes (shutdown)
 hl.on("hyprland.start", function() hl.exec_cmd("~/.local/bin/console-clear") end)
