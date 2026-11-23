@@ -79,7 +79,8 @@ end
 
 -- Screens set in the Settings app (Screens page), by their full description (make, model and serial), or by their
 -- connector's name for a screen with none (a VM's, with no EDID: Virtual-1), as the Settings app and workspaces.lua name
--- them: screens.<description>.mode ("1920x1080@143.98"), .scale ("1.5"), .position ("1920x0"), .enabled; each one left
+-- them: screens.<description>.mode ("1920x1080@143.98"), .scale ("1.5"), .position ("1920x0"), .transform ("1": turned
+-- 90°), .enabled; each one left
 -- empty keeps the rule above (the host file's, the fastest refresh rate). screens.main: that one at 0x0 (the first
 -- screen: workspaces 1-10), the others to its right unless given a position (here, or by the host file). After the
 -- rules above, so these win, and before the lid's, which starts from them
@@ -170,6 +171,9 @@ for _, m in ipairs(hl.get_monitors({ all = true }) or {}) do
     local position = type(s.position) == "string" and s.position:match("^%d+x%d+$") or nil
     local scale = tonumber(s.scale)
     scale = scale and scale >= 0.5 and scale <= 4 and scale or nil
+    -- (rotation: 0 as it stands, 1 90°, 2 upside down, 3 270°, as Hyprland numbers them)
+    local transform = tonumber(s.transform)
+    transform = transform and transform >= 0 and transform <= 3 and math.floor(transform) == transform and transform or nil
     -- A main screen: it at 0x0, the others where the host file puts them (not at 0x0: that's the main's now), else to
     -- its right
     local placed = applied.position ~= nil and applied.position ~= "auto" and applied.position ~= "0x0"
@@ -184,6 +188,7 @@ for _, m in ipairs(hl.get_monitors({ all = true }) or {}) do
         rule.mode = mode or rule.mode or "preferred"
         rule.scale = scale or rule.scale or "auto"
         rule.position = position or rule.position or "auto"
+        rule.transform = transform or rule.transform
         rule.disabled = set_off[m.name] or nil
         if rule.disabled then off[m.name] = rule.output end
         named[rule.output] = rule

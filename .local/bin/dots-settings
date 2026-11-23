@@ -619,6 +619,11 @@ def screens_groups():
              "options": [{"value": "", "label": "Automatic"}] + [
                  {"value": x, "label": f"{float(x):.0%}"}
                  for x in scales(m.get("width"), m.get("height"), saved.get(f"screens.{d}.scale"))]},
+            {"key": f"screens.{d}.transform", "label": "Orientation", "type": "choice", "default": "",
+             "apply": "hypr", "description": "Turned on its stand: portrait for a screen standing on its side.",
+             "options": [{"value": "", "label": "Landscape"}, {"value": "1", "label": "Portrait"},
+                         {"value": "2", "label": "Landscape (flipped)"},
+                         {"value": "3", "label": "Portrait (flipped)"}]},
             # (checked here: a typo reached Hyprland's monitor rule)
             {"key": f"screens.{d}.position", "label": "Position", "type": "text", "default": "", "apply": "hypr",
              "placeholder": "Automatic", "pattern": r"(\d+x\d+)?", "format": "whole pixels as WxH, like 1920x0",
@@ -627,6 +632,26 @@ def screens_groups():
                             " the mouse somewhere else than the pointer."},
         ]})
     return groups
+
+
+def arrange_row():
+    """The screens drawn where they are, to drag into place as on Windows (the Settings app's "arrange" row): each one's
+    position and size at its scale (turned for a rotated one), and the setting its position is saved in"""
+    screens = []
+    for m in hyprctl("monitors") or []:
+        if not screen_id(m) or m.get("name") == "FALLBACK" or not m.get("scale") or \
+                any(not isinstance(m.get(f), (int, float)) for f in ("x", "y", "width", "height")):
+            continue
+        w, h = round(m["width"] / m["scale"]), round(m["height"] / m["scale"])
+        if m.get("transform", 0) % 2:
+            w, h = h, w
+        d = screen_id(m)
+        screens.append({"id": d, "name": m["name"], "model": m.get("model") or "", "x": m["x"], "y": m["y"],
+                        "w": w, "h": h, "key": f"screens.{d}.position"})
+    return {"key": "screens.layout", "label": "Drag the screens to where they stand on your desk", "type": "arrange",
+            "default": None,  # (no value of its own: each screen's position is a setting)
+            "description": "Each one snaps to the side of another, lined up with its top, bottom or middle when close to it.",
+            "screens": screens}
 
 
 # What a keyboard's media keys do (Caelestia binds them, to wpctl or its shell's media and brightness actions)
@@ -708,6 +733,8 @@ def schema(live=True, lists=True):
             return groups
         if source == "screens":
             return screens_groups() if live else []
+        if group.get("arrange"):
+            group["settings"] = ([arrange_row()] if live else []) + group["settings"]
         if source:
             group.setdefault("settings", [])  # (filled below; binds last: it needs every other shortcut)
         return [group]

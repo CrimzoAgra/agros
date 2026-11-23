@@ -96,6 +96,7 @@ end
 local failed = {}
 for _, name in ipairs({
     "user.monitors",    -- screen layout and refresh rates
+    "user.crossing",    -- the pointer between screens, edges matched end to end (LittleBigMouse's way)
     "user.workspaces",  -- workspaces synced across screens (Super+N)
     "user.keys",        -- Super+Tab / Alt+Tab switchers, Scroll Lock, my binds
     "user.windows",     -- floating by default, minimise / maximise, the clicked window to the front

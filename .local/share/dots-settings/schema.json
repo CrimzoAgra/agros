@@ -250,16 +250,26 @@
       "groups": [
         {
           "title": "Arrangement",
+          "arrange": true,
           "settings": [
             {
               "key": "screens.main",
               "label": "Main screen",
-              "description": "At the top left: it gets workspaces 1-10, and the windows of a screen unplugged. The others go to its right, unless they have a position of their own.",
+              "description": "It gets workspaces 1-10, and the windows of a screen unplugged. Until the screens are dragged into place above (or given a position), it's at the top left and the others go to its right.",
               "type": "choice",
               "default": "",
               "apply": "hypr",
               "options_cmd": "printf '\\tAutomatic\\n'; hyprctl -j monitors all 2>/dev/null | jq -r '.[] | select(.name != \"FALLBACK\") | \"\\(if .description != \"\" then .description else .name end)\\t\\(.name)\\(if .model != \"\" then \": \" + .model else \"\" end)\"'",
               "open": true
+            },
+            {
+              "key": "screens.crossing",
+              "label": "Moving between screens",
+              "description": "Matched: a screen's whole edge leads to the one beside it, even where it's taller, and the pointer comes out as far along the edge as it left (top to top, bottom to bottom), as LittleBigMouse does on Windows. Where they meet: only where the edges touch, at the same height.",
+              "type": "choice",
+              "default": "",
+              "apply": "hypr",
+              "options": [{"value": "", "label": "Matched"}, {"value": "off", "label": "Where they meet"}]
             }
           ]
         },

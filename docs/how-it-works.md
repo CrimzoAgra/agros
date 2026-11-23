@@ -263,7 +263,8 @@ Changes apply right away.
     (`caelestia-managed` in the schema), the Super menu's pins can only be changed from the Super menu
   - `caelestia-vars.<variable>`: one of Caelestia's Hyprland variables (gaps, border, rounding, blur, touchpad), set
     through `hypr-vars.lua` like its shortcuts, only once changed
-  - `screens.<description>.<mode|scale|position|enabled>` and `screens.main`: read by `user/monitors.lua` (below)
+  - `screens.<description>.<mode|scale|transform|position|enabled>` and `screens.main`: read by `user/monitors.lua`
+    (below); `screens.crossing` by `user/crossing.lua`. The page's drag view (`arrange` row) saves every screen's position
   - a `get` / `set` shell command (the window mode, the wallpaper and colour scheme through the `caelestia` command,
     the keyboard layout through `localectl`); `options_cmd` lists a choice's options from a command (fonts, schemes,
     wallpapers, the screens)
@@ -325,6 +326,7 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
   key repeat, the `dots` table ([Lua API](#lua-api-dots)), and the modules in `user/`
 - **`.config/caelestia/user/`**: the rest of my Hyprland settings, by topic (saving one reloads Hyprland):
   - `monitors.lua`: layout and refresh rates; `hosts/<hostname>.lua`: one machine's own screens
+  - `crossing.lua`: the pointer between screens of different sizes, their shared edges matched end to end
   - `workspaces.lua`: workspaces synced across screens
   - `keys.lua`: the switchers, Scroll Lock, lock badges and my binds
   - `windows.lua`: windows like on Windows

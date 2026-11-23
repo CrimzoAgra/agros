@@ -85,6 +85,38 @@ ShellRoot {
         next();
     }
 
+    // Screens dragged on the Screens page (the "arrange" row), in Hyprland's layout pixels. Where screen i, let go at x,
+    // y, goes: against the side of another screen nearest to there, sharing at least a quarter of the shorter edge,
+    // lined up with its top, bottom or middle (or left, right, centre) when within 48 px of that; never over a screen.
+    // Back where it was if no side fits
+    function arrangeSnap(list: var, i: int, x: real, y: real): var {
+        const d = list[i], others = list.filter((_, j) => j !== i);
+        if (!others.length)
+            return { x: 0, y: 0 };
+        const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+        const align = (v, o, size, osize) => [o, o + osize - size, o + (osize - size) / 2].find(c => Math.abs(v - c) <= 48) ?? v;
+        const over = (cx, cy) => others.some(o => cx < o.x + o.w && cx + d.w > o.x && cy < o.y + o.h && cy + d.h > o.y);
+        let best = null, dist = Infinity;
+        for (const o of others) {
+            const sy = Math.min(d.h, o.h) / 4, sx = Math.min(d.w, o.w) / 4;
+            const ay = align(clamp(y, o.y - d.h + sy, o.y + o.h - sy), o.y, d.h, o.h);
+            const ax = align(clamp(x, o.x - d.w + sx, o.x + o.w - sx), o.x, d.w, o.w);
+            for (const [cx, cy] of [[o.x + o.w, ay], [o.x - d.w, ay], [ax, o.y + o.h], [ax, o.y - d.h]]) {
+                const away = Math.hypot(cx - x, cy - y);
+                if (away < dist && !over(cx, cy)) {
+                    best = { x: Math.round(cx), y: Math.round(cy) };
+                    dist = away;
+                }
+            }
+        }
+        return best ?? { x: d.x, y: d.y };
+    }
+    // The layout moved so its top left is 0,0: none left of or above it (Proton games aim the mouse elsewhere there)
+    function arrangeNormal(list: var): var {
+        const mx = Math.min(...list.map(s => s.x)), my = Math.min(...list.map(s => s.y));
+        return list.map(s => Object.assign({}, s, { x: s.x - mx, y: s.y - my }));
+    }
+
     // Why a change failed, by the setting's label, as the app names it: dots-settings names its key ("keys.screenshot:
     // CTRL + ALT + K is Capri's (her chat): choose other keys")
     // (by loops: the pages' lists, kept in a var property, aren't JS arrays to flatMap)
@@ -789,6 +821,88 @@ ShellRoot {
     }
 
     // Pictures to pick one from (the wallpaper)
+    // The screens to drag into place, as on Windows: drawn where Hyprland has them, each one let go snaps to a side of
+    // another, and every screen's position is saved (moved so the top left one is at 0,0)
+    component Arrange: Item {
+        id: arr
+
+        property var setting
+        property var screens: []
+        onSettingChanged: screens = setting?.screens ?? []
+        readonly property real minX: Math.min(...screens.map(s => s.x))
+        readonly property real minY: Math.min(...screens.map(s => s.y))
+        readonly property real spanW: Math.max(...screens.map(s => s.x + s.w)) - minX
+        readonly property real spanH: Math.max(...screens.map(s => s.y + s.h)) - minY
+        // (room around them to drag one to any side)
+        readonly property real k: screens.length ? Math.min(width / (spanW * 1.8), height / (spanH * 1.8)) : 1
+        readonly property real ox: (width - spanW * k) / 2
+        readonly property real oy: (height - spanH * k) / 2
+
+        implicitHeight: 240
+        visible: screens.length > 0
+
+        Repeater {
+            model: arr.screens
+
+            Rectangle {
+                id: scr
+
+                required property var modelData
+                required property int index
+                readonly property bool main: modelData.id === (root.values["screens.main"] ?? "")
+
+                x: arr.ox + (modelData.x - arr.minX) * arr.k
+                y: arr.oy + (modelData.y - arr.minY) * arr.k
+                width: modelData.w * arr.k
+                height: modelData.h * arr.k
+                radius: 10
+                color: drag.active ? root.c("primaryContainer") : root.c("surfaceContainerHighest")
+                border.width: 2
+                border.color: drag.active || hover.hovered ? root.c("primary") : root.c("outlineVariant")
+                z: drag.active ? 1 : 0
+
+                Column {
+                    anchors.centerIn: parent
+                    spacing: 2
+
+                    Label {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: scr.modelData.model || scr.modelData.name
+                        font.weight: Font.Medium
+                    }
+                    Label {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: `${scr.modelData.name} · ${scr.modelData.w}×${scr.modelData.h}${scr.main ? " · main" : ""}`
+                        font.pixelSize: 11
+                        color: root.c("onSurfaceVariant")
+                    }
+                }
+
+                HoverHandler {
+                    id: hover
+
+                    cursorShape: arr.screens.length > 1 ? (drag.active ? Qt.ClosedHandCursor : Qt.OpenHandCursor) : Qt.ArrowCursor
+                }
+                DragHandler {
+                    id: drag
+
+                    enabled: arr.screens.length > 1
+                    onActiveChanged: {
+                        if (active)
+                            return;
+                        const list = arr.screens.map(s => Object.assign({}, s));
+                        const at = root.arrangeSnap(list, scr.index, (scr.x - arr.ox) / arr.k + arr.minX, (scr.y - arr.oy) / arr.k + arr.minY);
+                        list[scr.index] = Object.assign(list[scr.index], at);
+                        const placed = root.arrangeNormal(list);
+                        arr.screens = placed; // (drawn there at once; the reading after the apply says where Hyprland put them)
+                        for (const s of placed)
+                            root.set(s.key, `${s.x}x${s.y}`);
+                    }
+                }
+            }
+        }
+    }
+
     component Pictures: Flow {
         id: pics
 
@@ -1164,8 +1278,8 @@ ShellRoot {
                                                     readonly property var value: root.values[modelData.key]
                                                     readonly property string kind: modelData.type
                                                     // (JSON and pictures: under the label, the row's whole width)
-                                                    readonly property bool wide: kind === "json" || kind === "image"
-                                                    readonly property bool resettable: modelData.default !== undefined && !modelData.get && !modelData.readonly
+                                                    readonly property bool wide: kind === "json" || kind === "image" || kind === "arrange"
+                                                    readonly property bool resettable: modelData.default !== undefined && !modelData.get && !modelData.readonly && kind !== "arrange"
                                                     readonly property bool changed: resettable && JSON.stringify(value) !== JSON.stringify(modelData.default)
                                                     // Startup's "Add an app": the skeleton row at the list's end
                                                     readonly property bool adder: !!modelData.startup_add
@@ -1177,7 +1291,8 @@ ShellRoot {
                                                             number: numberControl,
                                                             text: textControl,
                                                             json: jsonControl,
-                                                            image: imageControl
+                                                            image: imageControl,
+                                                            arrange: arrangeControl
                                                         })[kind] ?? null
 
                                                     Layout.fillWidth: true
@@ -1269,6 +1384,13 @@ ShellRoot {
                                                                     root.error = `${row.modelData.label}: not valid JSON`;
                                                                 }
                                                             }
+                                                        }
+                                                    }
+                                                    Component {
+                                                        id: arrangeControl
+
+                                                        Arrange {
+                                                            setting: row.modelData
                                                         }
                                                     }
                                                     Component {
