@@ -622,20 +622,28 @@ ShellRoot {
         }
     }
 
-    // Whether Caelestia's wallpaper sits inside its bar and border (caelestia-overlay's wallpaper_in_borders, on unless
-    // turned off in the Settings app's Features): the stage then fits that area too, so it lines up with him
-    property bool wallInBorders: true
+    // Whether Caelestia's wallpaper sits inside its bar and border (caelestia-overlay's wallpaper_in_borders): the stage
+    // then fits that area too (Hyprland's reserved area, which they keep), so it lines up with him. Read from the
+    // Caelestia that runs (its built background), not the setting: a rebuild waits for a game to close. Every 10 s: a
+    // rebuild swaps the whole folder, which a watch loses; the reserved area then too (the bar's width can change)
+    property bool wallInBorders: false
 
     FileView {
-        path: `${root.home}/.config/dots/settings.json`
-        watchChanges: true
-        onFileChanged: reload()
-        onLoaded: {
-            try {
-                root.wallInBorders = JSON.parse(text())["caelestia.wallpaper_in_borders"] !== false;
-            } catch (e) {
-                root.wallInBorders = true;
-            }
+        id: caelestiaBg
+
+        path: `${root.home}/.config/quickshell/caelestia/modules/background/Background.qml`
+        onLoaded: root.wallInBorders = text().includes("ExclusionMode.Normal")
+        onLoadFailed: root.wallInBorders = false
+    }
+
+    Timer {
+        running: true
+        repeat: true
+        interval: 10000
+        triggeredOnStart: true
+        onTriggered: {
+            caelestiaBg.reload();
+            Hyprland.refreshMonitors();
         }
     }
 
@@ -649,7 +657,8 @@ ShellRoot {
 
             screen: modelData
             anchors { top: true; bottom: true; left: true; right: true }
-            exclusionMode: root.wallInBorders ? ExclusionMode.Normal : ExclusionMode.Ignore
+            // (full screen, the stage fitted inside: the window resized when the wallpaper moved in kept its old size)
+            exclusionMode: ExclusionMode.Ignore
             // Over the windows while the location is being edited: what's typed is seen, and a click on a window reaches
             // clickAway (below them, it went to the window)
             WlrLayershell.layer: cityEdit.editing ? WlrLayer.Top : WlrLayer.Bottom
@@ -704,12 +713,16 @@ ShellRoot {
             Item {
                 id: stage
 
-                readonly property real fit: Math.max(win.width / width, win.height / height)
+                // The wallpaper's area: left, top, right and bottom kept clear of it
+                readonly property var inset: root.wallInBorders ? Hyprland.monitorFor(win.modelData)?.lastIpcObject?.reserved ?? [0, 0, 0, 0] : [0, 0, 0, 0]
+                readonly property real areaW: win.width - inset[0] - inset[2]
+                readonly property real areaH: win.height - inset[1] - inset[3]
+                readonly property real fit: Math.max(areaW / width, areaH / height)
 
                 width: 1920
                 height: 1080
-                x: (win.width - width * fit) / 2
-                y: (win.height - height * fit) / 2
+                x: inset[0] + (areaW - width * fit) / 2
+                y: inset[1] + (areaH - height * fit) / 2
                 scale: fit
                 transformOrigin: Item.TopLeft
                 // How far all three columns move down together (0 at 1920x1080 and larger): the left column's top kept below
