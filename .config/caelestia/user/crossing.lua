@@ -1,11 +1,13 @@
--- The pointer between screens as LittleBigMouse does it on Windows: an edge two screens share is matched end to end, so
--- the whole edge of a taller screen leads to the shorter one beside it (no dead corner where the pointer stops at the
--- edge), and the pointer comes out the same fraction of the way along it (top corner to top corner, bottom to bottom),
--- not at the same pixel row. Settings app: Screens, "Moving between screens" (screens.crossing; "off": Hyprland's own,
--- the pointer crosses only where the two edges meet, at the same row). Nothing with one screen, nor while a fullscreen
--- window has focus (a game's aim). Hyprland has no pointer-motion event: its position read every 8 ms here, in
--- Hyprland itself (no IPC), nothing done while it doesn't move
-local crossing = {}
+-- The pointer between screens as LittleBigMouse does it on Windows: it comes out on the next screen at the same height
+-- on your desk, in millimetres (each screen's size from its EDID), whatever their resolutions, the screens standing as
+-- the Screens page lines them up (tops, bottoms or middles together, or in between); and the whole edge of one leads
+-- to the other, no dead corner where the pointer stops (past the other's end: onto its nearest corner). Settings app:
+-- Screens, "Moving between screens" (screens.crossing): "" that; "matched" the edges matched end to end instead (top
+-- corner to top corner, bottom to bottom; also a screen with no size in its EDID: a VM's, a projector); "off"
+-- Hyprland's own, the pointer crossing only where the edges meet, at the same pixel row. Nothing with one screen, nor
+-- while a fullscreen window has focus (a game's aim). Hyprland has no pointer-motion event: its position read every
+-- 8 ms here, in Hyprland itself (no IPC), nothing done while it doesn't move
+local crossing = { mode = "" }
 
 -- Each side a pointer can leave a screen by: p the axis it crosses along, q the one along the edge
 local SIDES = {
@@ -17,15 +19,17 @@ local SIDES = {
 
 local boxes = {}
 
--- The screens as Hyprland lays them out: position, and size at their scale, turned for a rotated one
+-- The screens as Hyprland lays them out: position, and size at their scale, turned for a rotated one; mw, mh its size
+-- in millimetres (0: unknown)
 function crossing.set_boxes(list) boxes = list end
 local function read_boxes()
     local list = {}
     for _, m in ipairs(hl.get_monitors() or {}) do
         if m.enabled ~= false and m.name ~= "FALLBACK" then
             local w, h = m.width / m.scale, m.height / m.scale
-            if (m.transform or 0) % 2 == 1 then w, h = h, w end
-            list[#list + 1] = { x = m.x, y = m.y, w = w, h = h }
+            local mw, mh = m.physical_width or 0, m.physical_height or 0
+            if (m.transform or 0) % 2 == 1 then w, h, mw, mh = h, w, mh, mw end
+            list[#list + 1] = { x = m.x, y = m.y, w = w, h = h, mw = mw, mh = mh }
         end
     end
     return list
@@ -41,11 +45,22 @@ local function box_at(p)
     end
 end
 
--- Where a pointer at p crossing the line lands: the screens on each side of the line, each side's whole span along it
--- matched to the other's. nil: no screen on the far side
--- shortcut: every screen with an edge on the line counts as one side, so two separate pairs on one line (far apart)
--- would share a span; fine for desks of two or three screens, split by overlap if that ever comes up
-local function target(p, line, k)
+-- Where on b a pointer at q along a's edge comes out, by millimetres: b stood beside a as the layout lines them up (the
+-- fraction of the way from tops together to bottoms together that their pixels are, the same in millimetres; equal
+-- lengths in pixels: their offset, in a's millimetres). nil: a size unknown
+local function by_size(a, b, q, k)
+    local am, bm = a[k.q == "x" and "mw" or "mh"] or 0, b[k.q == "x" and "mw" or "mh"] or 0
+    if am <= 0 or bm <= 0 then return nil end
+    local a0, al, b0, bl = a[k.q], a[k.t], b[k.q], b[k.t]
+    local off = math.abs(al - bl) > 1 and (b0 - a0) / (al - bl) * (am - bm) or (b0 - a0) * am / al
+    return b0 + ((q - a0) * am / al - off) * bl / bm
+end
+
+-- Where a pointer at p, leaving screen a, lands across the line: on the screens there, by millimetres or (matched, or a
+-- size unknown) each side's whole span along the line matched to the other's. nil: no screen on the far side
+-- shortcut: matched counts every screen with an edge on the line as one side, so two separate pairs on one line (far
+-- apart) would share a span; fine for desks of two or three screens, split by overlap if that ever comes up
+local function target(p, line, k, a)
     local flo, fhi, tlo, thi, to = math.huge, -math.huge, math.huge, -math.huge, {}
     for _, b in ipairs(boxes) do
         if near(leaving(b, k), line) then flo, fhi = math.min(flo, b[k.q]), math.max(fhi, b[k.q] + b[k.t]) end
@@ -55,10 +70,11 @@ local function target(p, line, k)
         end
     end
     if #to == 0 or fhi <= flo then return nil end
-    local v = tlo + (p[k.q] - flo) / (fhi - flo) * (thi - tlo)
-    -- (a gap along the line between two screens there: onto the closer one)
+    local matched = tlo + (p[k.q] - flo) / (fhi - flo) * (thi - tlo)
+    -- (onto the screen there it falls on, else the closest: a gap along the line, past the far screen's end)
     local best, gap
     for _, b in ipairs(to) do
+        local v = crossing.mode ~= "matched" and by_size(a, b, p[k.q], k) or matched
         local c = math.max(b[k.q], math.min(b[k.q] + b[k.t] - 1, v))
         if not gap or math.abs(c - v) < gap then best, gap = c, math.abs(c - v) end
     end
@@ -77,14 +93,14 @@ function crossing.step(p, last)
         if now ~= was then
             -- It crossed where the edges meet: same distance across (Hyprland's), the matched place along it
             if near(entering(now, k), line) and math.abs(p[k.p] - line) < 64 and math.abs(last[k.p] - line) < 64 then
-                local out = target(last, line, k)
+                local out = target(last, line, k, was)
                 if out then out[k.p] = p[k.p] end
                 return out
             end
         elseif (p[k.p] - last[k.p]) * k.dir > 0 and math.abs(p[k.p] - line) < 2 then
             -- Pushed into its edge where nothing's right beyond, a screen further along: over to it (Hyprland stops it
             -- a hair short of the last pixel: 2558.999... on a 2560-wide screen)
-            local out, to = target(p, line, k)
+            local out, to = target(p, line, k, was)
             for _, b in ipairs(to or {}) do
                 if p[k.q] >= b[k.q] and p[k.q] < b[k.q] + b[k.t] then return nil end  -- (Hyprland crosses here)
             end
@@ -94,7 +110,8 @@ function crossing.step(p, last)
 end
 
 if not hl.timer or dots.verifying then return crossing end  -- (the config check, the tests: no timer)
-if dots.setting("screens.crossing") == "off" then return crossing end
+crossing.mode = dots.setting("screens.crossing") or ""
+if crossing.mode == "off" then return crossing end
 
 local timer, last
 local function tick()
