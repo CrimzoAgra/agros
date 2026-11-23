@@ -637,7 +637,7 @@ def screens_groups():
 def arrange_row():
     """The screens drawn where they are, to drag into place as on Windows (the Settings app's "arrange" row): each one's
     position and size at its scale (turned for a rotated one), and the setting its position is saved in"""
-    screens = []
+    screens, saved = [], stored()
     for m in hyprctl("monitors") or []:
         if not screen_id(m) or m.get("name") == "FALLBACK" or not m.get("scale") or \
                 any(not isinstance(m.get(f), (int, float)) for f in ("x", "y", "width", "height")):
@@ -648,6 +648,12 @@ def arrange_row():
         d = screen_id(m)
         screens.append({"id": d, "name": m["name"], "model": m.get("model") or "", "x": m["x"], "y": m["y"],
                         "w": w, "h": h, "key": f"screens.{d}.position"})
+    # Where they were dragged to, all of them placed here: monitors.lua puts a gap between them in Hyprland's layout
+    # (the pointer's crossing), not shown here
+    at = [re.fullmatch(r"(\d+)x(\d+)", str(saved.get(s["key"], ""))) for s in screens]
+    if screens and all(at):
+        for s, a in zip(screens, at):
+            s["x"], s["y"] = int(a[1]), int(a[2])
     return {"key": "screens.layout", "label": "Drag the screens to where they stand on your desk", "type": "arrange",
             "default": None,  # (no value of its own: each screen's position is a setting)
             "description": "Each one snaps to the side of another, lined up with its top, bottom or middle when close to it.",

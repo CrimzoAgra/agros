@@ -41,6 +41,36 @@ say(c.step({ x = 2561, y = 1200 }, { x = 2559, y = 1200 }))       -- matched: ha
 ')
     want=$'2561,609\n2559,1439\n2561,1311\n2558,1200\n2561,960'
     [[ $out == "$want" ]] || fail "the pointer between screens by real size: got"$'\n'"$out"$'\n'"want"$'\n'"$want"
+    # With monitors.lua's gap between them (Hyprland can't cross it, so never shows the pointer at the old pixel row
+    # first): the pointer pushed into the edge goes over it, onto the other screen at its height
+    out=$(cd "$here" && lua -e '
+hl, dots = {}, { setting = function() end, screen_gap = 64 }
+local c = dofile(".config/caelestia/user/crossing.lua")
+local function say(p) io.write(p and string.format("%.0f,%.0f", p.x, p.y) or "-", "\n") end
+c.set_boxes({ { x = 0, y = 187, w = 2560, h = 1440, mw = 600, mh = 330 }, { x = 2624, y = 0, w = 1080, h = 1920, mw = 290, mh = 520 } })
+say(c.step({ x = 2558.9999, y = 907 }, { x = 2550, y = 907 }))  -- right, 165 mm down the short one
+say(c.step({ x = 2624.5, y = 880 }, { x = 2630, y = 880 }))      -- and back
+say(c.step({ x = 2558.9999, y = 907 }, { x = 2558.9999, y = 900 })) -- sliding along the edge: stays
+')
+    want=$'2625,883\n2559,904\n-'
+    [[ $out == "$want" ]] || fail "the pointer over the gap between screens: got"$'\n'"$out"$'\n'"want"$'\n'"$want"
+    # The gap itself (monitors.lua): each screen placed in the Settings app moved on by it past every screen edge before
+    # it; none while a screen has no position of its own there
+    gaps() { cd "$here" && HOME=$t lua -e '
+hl = { get_monitors = function() return {
+         { name = "DP-1", description = "MSI X", width = 2560, height = 1440, scale = 1, transform = 0 },
+         { name = "HDMI-A-1", description = "Sam Y", width = 1920, height = 1080, scale = 1, transform = 0 } } end,
+       monitor = function(r) if (r.output or ""):match("^desc:") then io.write(r.output, " ", r.position, "\n") end end,
+       bind = function() end }
+local v = { ["screens.MSI X.position"] = "0x187", ["screens.Sam Y.position"] = os.getenv("SAM") or "2560x0",
+            ["screens.Sam Y.transform"] = "3" }
+dots = { setting = function(k) return v[k] end,
+         settings = function(p) local o = {} for k, x in pairs(v) do if k:sub(1, #p) == p then o[k] = x end end return o end }
+dofile(".config/caelestia/user/monitors.lua")'; }
+    [[ $(gaps) == $'desc:MSI X 0x187\ndesc:Sam Y 2624x0' ]] || fail "no gap between the screens: $(gaps)"
+    # (the other one under it instead: the gap down, not across)
+    [[ $(SAM=none gaps) == $'desc:MSI X 0x187\ndesc:Sam Y auto' ]] || fail "a gap with a screen not placed: $(SAM=none gaps)"
+    [[ $(SAM=0x1627 gaps) == $'desc:MSI X 0x187\ndesc:Sam Y 0x1691' ]] || fail "a screen below: $(SAM=0x1627 gaps)"
 else
     skipped "no lua: the pointer's crossing not checked"
 fi

@@ -265,11 +265,11 @@
             {
               "key": "screens.crossing",
               "label": "Moving between screens",
-              "description": "Real size: the pointer comes out at the same height on your desk, in millimetres, whatever each screen's resolution, as LittleBigMouse does on Windows (line the screens up above as they stand: tops, bottoms or middles together). Matched: top corner to top corner, bottom to bottom. Either way a screen's whole edge leads to the next. Where they meet: only where the edges touch, at the same pixel row.",
+              "description": "Real size: the pointer comes out at the same height on your desk, in millimetres, whatever each screen's resolution, as LittleBigMouse does on Windows (line the screens up above as they stand: tops, bottoms or middles together). Matched: top corner to top corner, bottom to bottom. Either way a screen's whole edge leads to the next.",
               "type": "choice",
               "default": "",
               "apply": "hypr",
-              "options": [{"value": "", "label": "Real size"}, {"value": "matched", "label": "Matched"}, {"value": "off", "label": "Where they meet"}]
+              "options": [{"value": "", "label": "Real size"}, {"value": "matched", "label": "Matched"}]
             }
           ]
         },

@@ -149,6 +149,44 @@ local function screens_off(closed, output)
     return lid, set
 end
 
+-- The pointer between screens (crossing.lua): a gap between them in Hyprland's layout, wider than the
+-- pointer's picture, so Hyprland never takes the pointer across by itself at the same pixel row, drawing it there for a
+-- frame before crossing.lua puts it at its height (it flickered), nor draws its picture on the next screen at that row
+-- as it nears the edge: crossing.lua takes it over the gap, as LittleBigMouse does. Only when every screen showing has
+-- its position from the Settings app (dragged into place there, where they're shown touching, as saved): each moved on
+-- by one gap per screen edge before it, across and down
+dots.screen_gap = 0
+local gapped = {}
+do
+    local desk = {}
+    for _, m in ipairs(hl.get_monitors() or {}) do
+        local s = mine[id(m)] or {}
+        local x, y = (type(s.position) == "string" and s.position or ""):match("^(%d+)x(%d+)$")
+        if not x then desk = {}; break end
+        -- (its size as this load sets it: a new mode, scale or rotation from the Settings app, else as it is)
+        local w, h = (type(s.mode) == "string" and s.mode or ""):match("^(%d+)x(%d+)")
+        w, h = tonumber(w) or m.width, tonumber(h) or m.height
+        local sc, t = tonumber(s.scale) or m.scale or 1, tonumber(s.transform) or m.transform or 0
+        w, h = w / sc, h / sc
+        if t % 2 == 1 then w, h = h, w end
+        desk[#desk + 1] = { name = m.name, x = tonumber(x), y = tonumber(y), w = w, h = h }
+    end
+    if #desk > 1 then
+        dots.screen_gap = 64
+        local function edges(d, p, s)  -- (the other screens' far edges at or before this one's start, each line once)
+            local seen, n = {}, 0
+            for _, o in ipairs(desk) do
+                local e = math.floor(o[p] + o[s] + 0.5)
+                if o ~= d and e <= d[p] and not seen[e] then seen[e], n = true, n + 1 end
+            end
+            return n
+        end
+        for _, d in ipairs(desk) do
+            gapped[d.name] = string.format("%dx%d", d.x + 64 * edges(d, "x", "w"), d.y + 64 * edges(d, "y", "h"))
+        end
+    end
+end
+
 local off = {}  -- (the screens this load or the lid turned off: name to its rule's output (desc: or its name), or false)
 local _, set_off = screens_off(lid_closed())
 for _, m in ipairs(hl.get_monitors({ all = true }) or {}) do
@@ -187,7 +225,7 @@ for _, m in ipairs(hl.get_monitors({ all = true }) or {}) do
         rule.output = rule_output(m)
         rule.mode = mode or rule.mode or "preferred"
         rule.scale = scale or rule.scale or "auto"
-        rule.position = position or rule.position or "auto"
+        rule.position = gapped[m.name] or position or rule.position or "auto"
         rule.transform = transform or rule.transform
         rule.disabled = set_off[m.name] or nil
         if rule.disabled then off[m.name] = rule.output end
