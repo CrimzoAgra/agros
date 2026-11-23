@@ -120,9 +120,6 @@ hl.window_rule({ match = { tag = "store_launcher", title = "^$", xwayland = true
 -- beside it, or in a screen corner (its rounded corner: an RTS's camera scroll), as the start of a resize. On again
 -- once the last one closes. Counted at every load (it sets this back on), as windows open and close (the closing one
 -- still mapped then), and as one is tagged a game later (the tag above, a class rule matching after a class change)
--- With lower input lag on (below), the pointer drawn into the picture too while a game is open: Hyprland allows no
--- tearing while the graphics card's cursor layer shows a pointer (a game's menus, a strategy game's camera), so the
--- lag came back there. The cursor layer again once the last game closes (no lag behind the mouse on the desktop)
 local edges = true
 local low_latency = dots.setting("games.low_latency") ~= false
 local function game_edges(closing)
@@ -132,11 +129,27 @@ local function game_edges(closing)
     end
     if edges == not game then return end
     edges = not game
-    hl.config({ general = { resize_on_border = edges }, cursor = { no_hardware_cursors = (game and low_latency) and 1 or 2 } })
+    hl.config({ general = { resize_on_border = edges } })
 end
 game_edges()
 hl.on("window.open", function() game_edges() end)
 hl.on("window.close", function(win) game_edges(win and win.address) end)
+-- With lower input lag on (below), the pointer drawn into the picture while a game has the focus: Hyprland allows no
+-- tearing while the graphics card's cursor layer shows a pointer (a game's menus, a strategy game's camera), so the
+-- lag came back there. The cursor layer whenever anything else has it: drawn into the picture, the pointer on another
+-- screen (taken out of the game, crossing.lua) went at that screen's refresh rate and left ghosts behind it
+local soft
+local function game_cursor()
+    local w = hl.get_active_window()
+    local want = low_latency and w ~= nil and is_game(w)
+    if want == soft then return end
+    soft = want
+    hl.config({ cursor = { no_hardware_cursors = soft and 1 or 2 } })
+end
+game_cursor()
+hl.on("window.active", function() game_cursor() end)
+hl.on("window.close", function() game_cursor() end)
+hl.on("monitor.focused", function() game_cursor() end)  -- (onto a screen with no window: none active)
 -- (on every rule change, a focus or title too: only the tag looked at, no count unless a game makes it matter)
 hl.on("window.update_rules", function(win) if edges and win and is_game(win) then game_edges() end end)
 -- Games don't take focus back by themselves: Overwatch asks for attention the moment it loses focus, and Hyprland

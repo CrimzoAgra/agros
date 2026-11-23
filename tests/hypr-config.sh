@@ -204,7 +204,7 @@ hl = {
     end,
     get_active_monitor = function() return SCREENS[FOCUS] or SCREENS[1] end,
     get_active_workspace = function() return (SCREENS[FOCUS] or SCREENS[1]).active_workspace end,
-    get_active_window = function() return ACTIVE or WINDOWS[1] end,
+    get_active_window = function() return ACTIVE or WINDOWS[os.getenv("GAME_FOCUSED") and 2 or 1] end,
     get_workspace = function(id)
         for _, m in ipairs(SCREENS) do
             if m.active_workspace and m.active_workspace.id == id then return { id = id, monitor = m } end
@@ -334,11 +334,13 @@ run_config() {
     (cd "$t" && HOME=$t/home PLUGIN=$2 ONE_SCREEN=${3:-0} DOTS_VERIFY_CONFIG=${VERIFY:-} XDG_CONFIG_HOME=${XCH:-} XDG_RUNTIME_DIR=$t/run HYPRLAND_INSTANCE_SIGNATURE=test \
         lua run.lua stub.lua 2>&1)
 }
-# A game open at the load (the stand-in's): the pointer drawn into the picture with lower input lag on (tearing
-# allowed), the cursor layer kept with it off (no tearing to keep from it)
-grep -qx 'no_hardware_cursors 1' <<<"$(run_config '' 0)" || fail "the pointer not drawn into the picture with a game open"
-grep -qx 'no_hardware_cursors 2' <<<"$(run_config 'return { ["games.low_latency"] = false }' 0)" ||
+# A game focused at the load (the stand-in's): the pointer drawn into the picture with lower input lag on (tearing
+# allowed), the cursor layer kept with it off (no tearing to keep from it), and with the game open but another window
+# focused (the pointer on another screen ghosted at that one's refresh rate)
+grep -qx 'no_hardware_cursors 1' <<<"$(GAME_FOCUSED=1 run_config '' 0)" || fail "the pointer not drawn into the picture in a game"
+grep -qx 'no_hardware_cursors 2' <<<"$(GAME_FOCUSED=1 run_config 'return { ["games.low_latency"] = false }' 0)" ||
     fail "the cursor layer taken away with lower input lag off"
+grep -qx 'no_hardware_cursors 2' <<<"$(run_config '' 0)" || fail "the pointer drawn into the picture with another window focused"
 good='return { ["keys.windows_next"] = { "ALT + TAB" }, ["keys.minimise"] = { "SUPER + M", "SUPER + DOWN" },
   ["keys.screenshot"] = {}, ["windows.cascade"] = true, ["windows.titlebars"] = true, ["windows.focus"] = "hover",
   ["nightlight"] = true, ["caelestia-keys.kbTerminal"] = { "SUPER + RETURN" }, ["caelestia-keys.kbGoToWs"] = { "ALT" } }'
@@ -652,10 +654,17 @@ end
 -- the stand-in's game 0x2 at the load, closing (still listed then), another opening, a non-game, a window tagged later
 local function fire(name, ...) for _, fn in ipairs(handlers[name] or {}) do fn(...) end end
 check("edges with a game open at load", general.resize_on_border, false)
--- (and the pointer drawn into the picture meanwhile: no tearing, the lower input lag, with the cursor layer showing one)
-check("software pointer with a game open", cursor.no_hardware_cursors, 1)
+-- (and the pointer drawn into the picture while the game has the focus: no tearing, the lower input lag, with the
+-- cursor layer showing one; the cursor layer with anything else focused, as at the load: another screen's pointer, out
+-- of the game, ghosted at that screen's refresh rate)
 local game = WINDOWS[2]
-fire("window.close", game); WINDOWS = { WINDOWS[1] }
+check("the cursor layer with the game open, not focused", cursor.no_hardware_cursors, 2)
+ACTIVE = game; fire("window.active", game)
+check("software pointer with the game focused", cursor.no_hardware_cursors, 1)
+ACTIVE = WINDOWS[1]; fire("window.active", WINDOWS[1])
+check("the cursor layer back once something else is focused", cursor.no_hardware_cursors, 2)
+ACTIVE = game; fire("window.active", game)
+ACTIVE = nil; fire("window.close", game); WINDOWS = { WINDOWS[1] }
 check("edges once the game closed", general.resize_on_border, true)
 check("the cursor layer back once the game closed", cursor.no_hardware_cursors, 2)
 local other = { address = "0x7", class = "org.gnome.Calculator", title = "c", floating = true, fullscreen = 0, pid = 1,
