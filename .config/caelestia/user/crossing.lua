@@ -21,10 +21,12 @@ local SIDES = {
 }
 
 local boxes = {}
+-- The edge the pointer is held at (held, below): its screen, side and line; nil once it leaves it
+local pinned
 
 -- The screens as Hyprland lays them out: position, and size at their scale, turned for a rotated one; mw, mh its size
 -- in millimetres (0: unknown)
-function crossing.set_boxes(list) boxes = list end
+function crossing.set_boxes(list) boxes, pinned = list, nil end
 local function read_boxes()
     local list = {}
     for _, m in ipairs(hl.get_monitors() or {}) do
@@ -99,11 +101,13 @@ local function target(p, line, k, a)
 end
 
 -- Held at an edge: a pixel back from it (Hyprland stops a pushed pointer on the edge and it doesn't move there, so a push
--- on into it, further along where the other screen does line up, was never seen: it stayed held)
-local function held(p, line, k, q)
+-- on into it was never seen), and pinned there: slid along it (no push needed: it's against the edge already) to where
+-- the other screen lines up, it goes over
+local function held(p, line, k, q, was)
     local back = { x = p.x, y = p.y }
     back[k.p] = k.dir == 1 and line - 2 or line + 1
     back[k.q] = q
+    pinned = { box = was, k = k, line = line }
     return back
 end
 
@@ -111,6 +115,7 @@ end
 function crossing.step(p, last)
     local was, now = box_at(last), box_at(p)
     if not was or not now then return nil end
+    if pinned and (now ~= pinned.box or math.abs(p[pinned.k.p] - pinned.line) > 2) then pinned = nil end
     for _, k in ipairs(SIDES) do
         local line = leaving(was, k)
         if now ~= was then
@@ -122,9 +127,9 @@ function crossing.step(p, last)
                     return out
                 end
                 -- (that height not on it: back on this screen, at its edge, where it was along it)
-                return held(p, line, k, math.max(was[k.q], math.min(was[k.q] + was[k.t] - 1, last[k.q])))
+                return held(p, line, k, math.max(was[k.q], math.min(was[k.q] + was[k.t] - 1, last[k.q])), was)
             end
-        elseif (p[k.p] - last[k.p]) * k.dir > 0 and math.abs(p[k.p] - line) < 2 then
+        elseif math.abs(p[k.p] - line) <= 2 and ((p[k.p] - last[k.p]) * k.dir > 0 or pinned and pinned.k == k) then
             -- Pushed into its edge where nothing's right beyond, a screen further along: over to it (Hyprland stops it
             -- a hair short of the last pixel: 2558.999... on a 2560-wide screen)
             local out, to = target(p, line, k, was)
@@ -133,7 +138,8 @@ function crossing.step(p, last)
                 if near(entering(b, k), line) and p[k.q] >= b[k.q] and p[k.q] < b[k.q] + b[k.t] then return nil end
             end
             -- (a screen across, but not at this height: held)
-            if not out and to then return held(p, line, k, p[k.q]) end
+            if not out and to then return held(p, line, k, p[k.q], was) end
+            pinned = nil
             return out
         end
     end

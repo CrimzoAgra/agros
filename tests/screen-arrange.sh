@@ -55,9 +55,11 @@ say(c.step({ x = 2558.9999, y = 907 }, { x = 2550, y = 907 }))  -- right, 165 mm
 say(c.step({ x = 2624.5, y = 880 }, { x = 2630, y = 880 }))      -- and back
 say(c.step({ x = 2558.9999, y = 907 }, { x = 2558.9999, y = 900 })) -- sliding along the edge: stays
 say(c.step({ x = 2624.5, y = 1850 }, { x = 2630, y = 1850 }))     -- 501 mm down the tall one, below the short one: held
+say(c.step({ x = 2625, y = 1750 }, { x = 2625, y = 1850 }))       -- slid up along the edge, still below it: held
+say(c.step({ x = 2625, y = 1000 }, { x = 2625, y = 1100 }))       -- slid on, no push, up where the short one is: over
 say(c.step({ x = 2624, y = 1000 }, { x = 2625, y = 1050 }))       -- pushed on into the edge, up where the short one is: over
 ')
-    want=$'2625,883\n2559,904\n-\n2625,1850\n2559,1046'
+    want=$'2625,883\n2559,904\n-\n2625,1850\n2625,1750\n2559,1046\n2559,1046'
     [[ $out == "$want" ]] || fail "the pointer over the gap between screens: got"$'\n'"$out"$'\n'"want"$'\n'"$want"
     # The gap itself (monitors.lua): each screen placed in the Settings app moved on by it past every screen edge before
     # it; none while a screen has no position of its own there
