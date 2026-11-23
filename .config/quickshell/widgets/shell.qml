@@ -339,6 +339,14 @@ ShellRoot {
         repeat: true
         onTriggered: root.fetchWeather()
     }
+    // No forecast yet (a fetch that failed: the network not quite up at the start, a server that didn't answer): tried
+    // again every minute, not left loading until the next network change or half hour
+    Timer {
+        interval: 60000
+        running: !root.weather
+        repeat: true
+        onTriggered: root.fetchWeather()
+    }
 
     // ---- Media: the same player as Caelestia's dashboard (its default player, else the first one) ----
     // Not Capri's: her page's media make her a media player (WebKitGTK's org.mpris.MediaPlayer2.org.webkit.app-...,

@@ -20,7 +20,11 @@ Scope {
     function get(url: string, cb: var): void {
         const x = new XMLHttpRequest();
         x.onreadystatechange = () => {
-            if (x.readyState === XMLHttpRequest.DONE && x.status === 200)
+            if (x.readyState !== XMLHttpRequest.DONE)
+                return;
+            if (x.status !== 200)
+                console.warn(`weather: ${url.split("?")[0]} failed (${x.status || "no answer"})`);
+            else
                 try {
                     cb(JSON.parse(x.responseText));
                 } catch (e) {}
