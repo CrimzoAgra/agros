@@ -4,7 +4,8 @@
 // Colours are picked from the wallpaper (ink navy, sky purple, spire cyan, sign magenta, Miles' red),
 // not from Caelestia's scheme, so they stay fixed when the scheme changes.
 // Laid out around the falling figure: the two columns sit in the open sky left and right of it, on a 1920x1080
-// stage scaled and centred like the wallpaper, so they stay put around him on any size or shape of screen.
+// stage scaled and centred like the wallpaper, so they stay put around him on any size or shape of screen; on a
+// screen standing on its side, side by side under him.
 // Separate from Caelestia, so Caelestia updates don't touch it; started once Caelestia has loaded
 // (~/.local/bin/widgets-start, from user/desktop.lua).
 // Blur behind the panels comes from the "desktop-widgets" layer rule in ~/.config/caelestia/user/desktop.lua.
@@ -686,12 +687,21 @@ ShellRoot {
             Item {
                 id: stage
 
-                readonly property real fit: Math.max(win.width / width, win.height / height)
+                // A screen standing on its side (portrait): no room beside him, so a stage as wide as the screen, at
+                // the size the widgets have on a 1920x1080 screen (1080 across), the clock's and the weather's columns
+                // side by side under him, the caption above him. Where he is on it: the wallpaper cropped as above
+                readonly property bool portrait: win.height > win.width * 1.2
+                readonly property real wallFit: Math.max(win.width / 1920, win.height / 1080)
+                readonly property real across: win.width / 1080
+                // (his top and bottom, at 310 and 470 down the wallpaper, in this stage's pixels)
+                readonly property real figTop: ((win.height - 1080 * wallFit) / 2 + 310 * wallFit) / across
+                readonly property real figBottom: ((win.height - 1080 * wallFit) / 2 + 470 * wallFit) / across
+                readonly property real fit: portrait ? across : Math.max(win.width / width, win.height / height)
 
-                width: 1920
-                height: 1080
-                x: (win.width - width * fit) / 2
-                y: (win.height - height * fit) / 2
+                width: portrait ? 1080 : 1920
+                height: portrait ? win.height / across : 1080
+                x: portrait ? 0 : (win.width - width * fit) / 2
+                y: portrait ? 0 : (win.height - height * fit) / 2
                 scale: fit
                 transformOrigin: Item.TopLeft
                 // How far all three columns move down together (0 at 1920x1080 and larger): the left column's top kept below
@@ -705,8 +715,8 @@ ShellRoot {
                     // (the whole column over the caption and the clock beside it while the location is edited: the
                     // suggestions, wider than the panel, reach under them)
                     z: cityEdit.editing ? 1 : 0
-                    x: stage.width * 0.30
-                    y: 120 + stage.drop
+                    x: stage.portrait ? 100 : stage.width * 0.30
+                    y: stage.portrait ? stage.figBottom + 90 : 120 + stage.drop
                     width: 290
                     spacing: 34
 
@@ -1097,8 +1107,8 @@ ShellRoot {
 
                 // ---- Narration in the strip of sky above the falling figure's feet ----
                 Caption {
-                    x: stage.width * 0.463
-                    y: stage.height * 0.13 + stage.drop
+                    x: stage.portrait ? 630 : stage.width * 0.463
+                    y: stage.portrait ? stage.figTop - 170 : stage.height * 0.13 + stage.drop
                     rotation: -4
                     size: 22
                     wrapWidth: 140
@@ -1107,8 +1117,8 @@ ShellRoot {
 
                 // ---- Right column: clock, sixth sense, media ----
                 ColumnLayout {
-                    x: stage.width * 0.555
-                    y: stage.height * 0.05 + stage.drop
+                    x: stage.portrait ? stage.width - 40 - 430 : stage.width * 0.555
+                    y: stage.portrait ? stage.figBottom + 24 : stage.height * 0.05 + stage.drop
                     width: 430
                     spacing: 0
 

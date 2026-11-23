@@ -1806,6 +1806,25 @@ def edge_triggers():
 # The changes, in the order they're applied. Each can be turned off in the Settings app (Features page), which lists
 # them by this name (patch.py --list). A change that builds on another's version of a file still fits without it, or is
 # in NEEDS (tests/caelestia-overlay.sh turns each one off alone)
+def screens_followed():
+    # A screen's monitor looked up again when Hyprland's list of them changes (a screen rotated, its mode or scale
+    # changed): Caelestia's lookup is a function call, which QML only re-runs for the properties read inside it, so a
+    # screen rebuilt before Hyprland's list had its monitor kept none. Its bar then had no workspaces and the
+    # special-workspace look (no monitor read as one being open: undefined isn't "")
+    hypr = "services/Hypr.qml"
+    h = swap(read(hypr), """    function monitorFor(screen: ShellScreen): HyprlandMonitor {
+        return Hyprland.monitorFor(screen);
+""", """    function monitorFor(screen: ShellScreen): HyprlandMonitor {
+        Hyprland.monitors.values; // (read: a binding calling this runs again when the monitors change)
+        return Hyprland.monitorFor(screen);
+""", "Hypr.monitorFor")
+    rel = "modules/bar/components/workspaces/Workspaces.qml"
+    w = swap(read(rel), 'readonly property bool onSpecial: monitor?.lastIpcObject.specialWorkspace?.name !== ""',
+             'readonly property bool onSpecial: (monitor?.lastIpcObject.specialWorkspace?.name ?? "") !== ""',
+             "the bar's special workspace check")
+    return {hypr: h, rel: w}
+
+
 FEATURES = (
     ("launcher pin buttons", launcher),
     ("bar dock", dock),
@@ -1853,6 +1872,7 @@ FEATURES = (
     ("window snapping preview", snap_preview),
     ("panels open from the screen's very edge, not while dragging", edge_triggers),
     ("windows fitted again when the bar's space changes", bar_space_refit),
+    ("a rotated or changed screen keeps its bar's workspaces", screens_followed),
 )
 
 
