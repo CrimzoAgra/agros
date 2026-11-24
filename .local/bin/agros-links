@@ -114,6 +114,18 @@ if [[ ! -e $mark && -f $shell ]] && jq -e 'type == "object"' "$shell" >/dev/null
     "$(dirname "$(readlink -f "$0")")/json-edit" "$shell" --indent 4 \
         'if .lock.hideNotifs == null then .lock.hideNotifs = true else . end' && touch "$mark"
 fi
+# AgrOS's defaults for Caelestia from 2026-11: JetBrainsMono Nerd Font for its three fonts, seconds on the dashboard's
+# clock, forgiving search in the launcher (/etc/skel's shell.json for new homes). A shell.json from before gets each
+# once, only where it has none (yours kept, and changed later it stays changed). No shell.json, or one jq can't read:
+# looked at again at the next login
+mark=$state/caelestia-defaults-2026-11
+if [[ ! -e $mark && -f $shell ]] && jq -e 'type == "object"' "$shell" >/dev/null 2>&1; then
+    "$(dirname "$(readlink -f "$0")")/json-edit" "$shell" --indent 4 \
+        'reduce ("body", "title", "mono") as $f (.;
+             if .appearance.font[$f].family == null then .appearance.font[$f].family = "JetBrainsMono Nerd Font" else . end)
+         | if .dashboard.showClockSeconds == null then .dashboard.showClockSeconds = true else . end
+         | if .launcher.useFuzzy.apps == null then .launcher.useFuzzy.apps = true else . end' && touch "$mark"
+fi
 # VSCodium starts on a new empty window, not on the last one without a folder (window.restoreWindows): a Claude Code
 # tab left open there came back at every start and asked again whether to trust your home folder (Claude Code never
 # keeps that answer for home). Its settings.json is yours (copied in once, never updated), so one from before gets the

@@ -143,6 +143,16 @@ rm -f "$mark"; echo '{"lock": {"hideNotifs": false}}' >"$h/caelestia/shell.json"
 [[ $(jq -c .lock.hideNotifs "$h/caelestia/shell.json") == false ]] || fail "the user's own lock.hideNotifs replaced"
 rm -f "$mark" "$h/caelestia/shell.json"; run
 [[ ! -e $h/caelestia/shell.json ]] || fail "a missing shell.json made, for lock.hideNotifs: $(cat "$h/caelestia/shell.json")"
+# AgrOS's Caelestia defaults from 2026-11 (the three fonts, the dashboard clock's seconds, forgiving search): each added
+# once where there's none, the user's own kept; once only; no shell.json made for them
+mark=$t/home/.local/state/agros/caelestia-defaults-2026-11
+rm -f "$mark"; echo '{"appearance": {"font": {"mono": {"family": "Mine"}}}, "z": 3}' >"$h/caelestia/shell.json"; run
+[[ $(jq -c '[.appearance.font.body.family, .appearance.font.title.family, .appearance.font.mono.family, .dashboard.showClockSeconds, .launcher.useFuzzy.apps, .z]' "$h/caelestia/shell.json") == '["JetBrainsMono Nerd Font","JetBrainsMono Nerd Font","Mine",true,true,3]' ]] ||
+    fail "Caelestia's new defaults not added, or the user's own replaced: $(cat "$h/caelestia/shell.json")"
+echo '{"dashboard": {"showClockSeconds": false}}' >"$h/caelestia/shell.json"; run
+[[ $(jq -c . "$h/caelestia/shell.json") == '{"dashboard":{"showClockSeconds":false}}' ]] || fail "Caelestia's new defaults added again"
+rm -f "$mark" "$h/caelestia/shell.json"; run
+[[ ! -e $h/caelestia/shell.json ]] || fail "a missing shell.json made, for Caelestia's defaults: $(cat "$h/caelestia/shell.json")"
 # VSCodium's settings.json from before window.restoreWindows: gets it once, its other settings kept; a value of the
 # user's own kept; one with comments (jq can't read it) left byte for byte; none made where there's none
 code=$h/VSCodium/User/settings.json mark=$t/home/.local/state/agros/vscodium-restore-windows
