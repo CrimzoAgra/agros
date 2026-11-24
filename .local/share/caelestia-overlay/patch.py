@@ -701,6 +701,35 @@ def updates_button():
     return {rel: t}
 
 
+def settings_button():
+    # Super menu: a settings button left of the updates one (updates_button), opening the settings (Caelestia's Nexus,
+    # with AgrOS's pages); the menu closes as it opens
+    rel = "modules/launcher/Content.qml"
+    t = read(rel)
+    t = insert(t, "import QtQuick\n", "import qs.modules.nexus\n", before=False)
+    t = swap(t, "        anchors.right: updatesButton.left\n", "        anchors.right: settingsButton.left\n", "search bar anchors")
+    t = insert(t, "    // caelestia-overlay: check for updates; the icon spins until the check is done\n", """    // caelestia-overlay: the settings (Nexus)
+    IconButton {
+        id: settingsButton
+
+        anchors.right: updatesButton.left
+        anchors.verticalCenter: search.verticalCenter
+        implicitWidth: search.implicitHeight
+        implicitHeight: search.implicitHeight
+        // Just the icon, in the accent colour, as the updates button
+        type: IconButton.Text
+        inactiveOnColour: Colours.palette.m3primary
+        icon: "settings"
+        onClicked: {
+            root.screenState.launcher = false;
+            WindowFactory.create(null, {});
+        }
+    }
+
+""")
+    return {rel: t}
+
+
 def tray_click():
     # Collapsed tray: a click on its arrow opens it (not hovering). It closes on a click on the bar and its panels
     # outside the tray, or, as before, when the pointer leaves the bar for a window (not for a tray icon's menu). No
@@ -1982,6 +2011,7 @@ FEATURES = (
     ("tray A-Z", tray_az),
     ("tray: right-click opens Wine apps' own menu", tray_menu_fallback),
     ("check for updates button", updates_button),
+    ("settings button in the Super menu", settings_button),
     ("tray opens on click", tray_click),
     ("lock badges re-read at login", lock_refresh),
     ("notification sidebar without the utilities panel", sidebar_notifs_only),
@@ -2033,7 +2063,7 @@ def turned_off():
 # Features that build on another's version of a file (or, the utilities sidebar, on its trigger's geometry; the sidebar's
 # shape on the utilities panel's height, known while closed only with sidebar_notifs_only) and don't fit without it: off when that one is off or skipped. Several: it needs one of them (window peek: the dock's or the
 # workspace preview's popout, the previews it works on), off when all are
-NEEDS = {"sidebar_shape": ("sidebar_notifs_only",), "top_edge_one_panel": ("sidebar_from_top",), "sidebar_from_top": ("sidebar_shape",),
+NEEDS = {"sidebar_shape": ("sidebar_notifs_only",), "settings_button": ("updates_button",), "top_edge_one_panel": ("sidebar_from_top",), "sidebar_from_top": ("sidebar_shape",),
          "sidebar_with_utilities": ("sidebar_from_top",),
          "window_peek": ("dock", "workspace_preview")}
 

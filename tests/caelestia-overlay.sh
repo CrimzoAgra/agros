@@ -219,6 +219,10 @@ w=$dst/modules/drawers/Interactions.qml
 { grep -q '(screenState.dashboard || !screenState.sidebar && !withinPanelWidth(panels.sidebar, x, y))' "$w" &&
     [[ $(grep -c '&& !screenState.sidebar && !screenState.dashboard)' "$w") == 2 ]]; } ||
     fail "the top edge still opens the dashboard and the sidebar together: $(grep -n 'showDashboard =\|screenState.sidebar)' "$w")"
+# The Super menu's settings button, left of the updates one: opens Nexus, the menu closing
+w=$dst/modules/launcher/Content.qml
+{ grep -q 'id: settingsButton' "$w" && grep -q 'anchors.right: settingsButton.left' "$w" && grep -q 'anchors.right: updatesButton.left' "$w" &&
+    grep -q 'WindowFactory.create(null, {});' "$w"; } || fail "no settings button in the Super menu"
 # What the patched files add to qmllint's findings on Caelestia's own (each file against the same one unpatched, both
 # with Quickshell's qs.* modules laid out as it does): no member or type the patches use that isn't there (a rename
 # upstream that would only show as an error at run time, a feature quietly not working), no property shadowing
