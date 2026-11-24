@@ -261,15 +261,6 @@
               "apply": "hypr",
               "options_cmd": "printf '\\tAutomatic\\n'; hyprctl -j monitors all 2>/dev/null | jq -r '.[] | select(.name != \"FALLBACK\") | \"\\(if .description != \"\" then .description else .name end)\\t\\(.name)\\(if .model != \"\" then \": \" + .model else \"\" end)\"'",
               "open": true
-            },
-            {
-              "key": "screens.crossing",
-              "label": "Moving between screens",
-              "description": "Real size: the pointer comes out at the same height on your desk, in millimetres, whatever each screen's resolution, as LittleBigMouse does on Windows (line the screens up above as they stand: tops, bottoms or middles together). Matched: top corner to top corner, bottom to bottom. Either way a screen's whole edge leads to the next.",
-              "type": "choice",
-              "default": "",
-              "apply": "hypr",
-              "options": [{"value": "", "label": "Real size"}, {"value": "matched", "label": "Matched"}]
             }
           ]
         },

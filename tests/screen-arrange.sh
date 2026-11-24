@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Screens: the pointer between two screens of different heights (crossing.lua, LittleBigMouse's way): the edge matched
-# end to end both ways, the taller one's corner past the shorter one's edge leading over too, Hyprland's own crossing
+# end to end both ways where the screens' sizes aren't known, the taller one's corner past the shorter one's edge leading over too, Hyprland's own crossing
 # and a pointer sliding along an edge or warped across left alone; and the Settings app's drag (shell.qml's
 # arrangeSnap, arrangeNormal): a screen let go snaps to a side of the other, lined up, never over it, the top left at 0,0
 set -euo pipefail
@@ -26,7 +26,7 @@ say(c.step({ x = 0, y = 700 }, { x = 1, y = 700 }))           -- the left edge, 
     # By real size: a 27" 2560x1440 (600x330 mm) beside a 24" 1080p one standing on its side (290x520 mm): the pointer
     # at the same height in millimetres, tops lined up, then bottoms; past the shorter one's end it stays on its own
     # screen (pushed into the edge: left there; crossed where Hyprland crosses itself: put back at the edge); and the
-    # edges matched end to end when asked to
+    # edges matched end to end where a size isn't known
     out=$(cd "$here" && lua -e '
 hl, dots = {}, { setting = function() end }
 local c = dofile(".config/caelestia/user/crossing.lua")
@@ -39,8 +39,8 @@ say(c.step({ x = 2558, y = 1400 }, { x = 2561, y = 1400 }))       -- crossed by 
 c.set_boxes({ { x = 0, y = 480, w = 2560, h = 1440, mw = 600, mh = 330 }, { x = 2560, y = 0, w = 1080, h = 1920, mw = 290, mh = 520 } })
 say(c.step({ x = 2561, y = 1200 }, { x = 2559, y = 1200 }))       -- bottoms lined up: 355 mm down the tall one
 say(c.step({ x = 2558, y = 1311 }, { x = 2561, y = 1311 }))       -- and back
-c.mode = "matched"
-say(c.step({ x = 2561, y = 1200 }, { x = 2559, y = 1200 }))       -- matched: halfway down to halfway down
+c.set_boxes({ { x = 0, y = 480, w = 2560, h = 1440, mw = 0, mh = 0 }, { x = 2560, y = 0, w = 1080, h = 1920, mw = 290, mh = 520 } })
+say(c.step({ x = 2561, y = 1200 }, { x = 2559, y = 1200 }))       -- a size unknown: halfway down to halfway down
 ')
     want=$'2561,609\n2561,1500\n-\n2561,1400\n2561,1311\n2558,1200\n2561,960'
     [[ $out == "$want" ]] || fail "the pointer between screens by real size: got"$'\n'"$out"$'\n'"want"$'\n'"$want"

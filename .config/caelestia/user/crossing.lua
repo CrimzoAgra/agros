@@ -2,15 +2,14 @@
 -- on your desk, in millimetres (each screen's size from its EDID), whatever their resolutions, the screens standing as
 -- the Screens page lines them up (tops, bottoms or middles together, or in between). Where that height isn't on the
 -- other screen (past its end), the pointer stays on its own, held at the edge, not thrown onto the other's nearest
--- corner. Settings app:
--- Screens, "Moving between screens" (screens.crossing): "" that; "matched" the edges matched end to end instead (top
--- corner to top corner, bottom to bottom; also a screen with no size in its EDID: a VM's, a projector). Out of a
+-- corner. A screen with no size in its EDID (a VM's, a projector): the edges matched end to end instead (top corner to
+-- top corner, bottom to bottom). Out of a
 -- fullscreen game too, its pointer pushed into the edge, the focus taken to the other screen with it (the game keeps
 -- the pointer in its window while it has it); one it holds still for aiming doesn't move, and one it puts back in the
 -- middle after each move (older games) jumps a quarter of the screen and more at once: left alone. Nothing with one
 -- screen. Hyprland has no pointer-motion event: its position read every 8 ms here, in Hyprland itself (no IPC), nothing
 -- done while it doesn't move
-local crossing = { mode = "" }
+local crossing = {}
 
 -- Each side a pointer can leave a screen by: p the axis it crosses along, q the one along the edge
 local SIDES = {
@@ -87,7 +86,7 @@ local function target(p, line, k, a)
     -- (onto the screen there it falls on, a pixel's rounding either side)
     local best, onto
     for _, b in ipairs(to) do
-        local v = crossing.mode ~= "matched" and by_size(a, b, p[k.q], k) or matched
+        local v = by_size(a, b, p[k.q], k) or matched
         if v >= b[k.q] - 1 and v <= b[k.q] + b[k.t] then
             best, onto = math.max(b[k.q], math.min(b[k.q] + b[k.t] - 1, v)), b
             break
@@ -146,7 +145,6 @@ function crossing.step(p, last)
 end
 
 if not hl.timer or dots.verifying then return crossing end  -- (the config check, the tests: no timer)
-crossing.mode = dots.setting("screens.crossing") or ""
 
 local timer, last
 local function tick()
