@@ -708,8 +708,10 @@ ShellRoot {
                 Layout.fillWidth: true
             }
 
+            // (a line moon, as the power menu's and the lock screen's sleep)
             Pill {
                 icon: "bedtime"
+                iconFill: 0
                 onClicked: Quickshell.execDetached(["systemctl", "suspend"])
             }
 
@@ -887,6 +889,7 @@ ShellRoot {
         id: pillBtn
 
         property string icon
+        property real iconFill: 1 // (0: its outline)
         property string label
         property string trailing
 
@@ -911,6 +914,7 @@ ShellRoot {
 
             Icon {
                 text: pillBtn.icon
+                fill: pillBtn.iconFill
                 size: 24 * card.s
                 color: root.fg
             }
