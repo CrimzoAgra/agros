@@ -222,8 +222,12 @@ fi
 # Your password once for the whole run (the Updates app's, no terminal): each paru of it (the lists, the keyrings, the
 # update, the rebuilds) is a process of its own, and with no terminal sudo remembers it per calling process, so each
 # asked again (three dialogs). Asked here and checked, then kept for this run only in a file only you can read, in your
-# runtime folder (RAM), which askpass hands each sudo; gone when the run ends. Not asked when sudo needs none
-if [[ ! -t 0 ]] && ! sudo -n true 2>/dev/null; then
+# runtime folder (RAM), which askpass hands each sudo; gone when the run ends. Not asked when sudo needs none. (This run
+# started again with AgrOS's new update code, below: the first one's, its file this run's to remove)
+if [[ -n ${AGROS_SELF_UPDATED:-} && -s ${AGROS_ASKPASS_FILE:-} ]]; then
+    pass_file=$AGROS_ASKPASS_FILE
+    trap 'rm -f "$pass_file"' EXIT
+elif [[ ! -t 0 ]] && ! sudo -n true 2>/dev/null; then
     pass_file=$(mktemp "${XDG_RUNTIME_DIR:-/tmp}/update-apps-pass.XXXXXX") || { echo "!! Couldn't start: no room for the run's files"; exit 1; }
     trap 'rm -f "$pass_file"' EXIT
     ok=
@@ -238,7 +242,8 @@ if [[ ! -t 0 ]] && ! sudo -n true 2>/dev/null; then
     export AGROS_ASKPASS_FILE=$pass_file
 fi
 status=0 # 1 if any step failed (the Updates app says "Finished, with problems")
-echo "== System and AUR apps"
+# (once: started again with AgrOS's new update code, below, it's the same step going on)
+[[ -n ${AGROS_SELF_UPDATED:-} ]] || echo "== System and AUR apps"
 # The boot's own downloads first (both fetching the same package into the cache at once would corrupt it): while it
 # holds its lists' lock, or marks it's downloading (downloading: from the start of its run to the end of its download,
 # then again around its AUR builds' own; not through the Flatpaks, nor the builds, which can take long)
@@ -277,6 +282,22 @@ runtimes=$("$helpers/update-kinds" --runtimes-now)
 # versions AgrOS's CI has checked (held, said, else)
 gated=$(mktemp --tmpdir agros-pacman.XXXXXX.conf)
 if "${paru[@]}" -Sy --noconfirm; then
+    # AgrOS's own update code first, where these lists have a newer one (update-first: agros-scripts' update-apps,
+    # update-gate, soname-hold...): installed alone, then this run started again with it, at most once
+    # (AGROS_SELF_UPDATED), so the update is decided by the new code (run by the old one, it missed the holds that came
+    # in it). Not installed (it needs more than itself, paru failing): said, and the update goes on with the code it has
+    if [[ -z ${AGROS_SELF_UPDATED:-} ]]; then
+        mapfile -t first < <("$helpers/update-first")
+        if ((${#first[@]})); then
+            echo "AgrOS's update code first: ${first[*]#agros/}"
+            if "${paru[@]}" -S --needed --noconfirm "${first[@]}"; then
+                rm -f "$gated"
+                [[ -z $inhibitor ]] || kill "$inhibitor" 2>/dev/null
+                AGROS_SELF_UPDATED=1 exec "$helpers/update-apps" "$@"
+            fi
+            echo "!! AgrOS's update code couldn't be updated first: the update goes on with the code it has"
+        fi
+    fi
     waits=$("$helpers/update-gate" /etc/pacman.conf "$gated") || cp /etc/pacman.conf "$gated"
     [[ -z $waits ]] || printf "Waits for AgrOS's check (comes with a later update): %s\n" "$waits"
     # The keyrings first, on their own, where there's a newer one (as the boot's update does, auto-update): a package

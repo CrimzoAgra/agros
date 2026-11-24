@@ -317,6 +317,67 @@ for v in 3.14.0-1 3.13.8-1; do
     fi
 done
 
+# AgrOS's own update code first (update-first): the lists synced with a newer agros-scripts or agros-system, those
+# installed alone, then the run started again with the new code (its arguments, its password), which decides the
+# update, once. None newer: no such step. Its install failing, or needing more than itself (a newer library): said, and
+# the update goes on with the code it has. (update-apps a copy beside the helpers, which the install replaces)
+mkdir -p "$t/ua" "$t/tmp"
+for f in "$here"/.local/bin/*; do ln -s "$f" "$t/ua/"; done
+rm "$t/ua/update-apps"; cp "$here/.local/bin/update-apps" "$t/ua/update-apps.old"
+# (-Qu: $FIRST_QU waiting; -Sp: what installing the targets takes, them and $FIRST_NEEDS)
+# shellcheck disable=SC2016  # (expanded by the stand-in)
+stub pacman 'case "$1" in -Qu) echo "linux 6.1-1 -> 6.2-1"; [ -z "$FIRST_QU" ] || printf "%s\n" "$FIRST_QU" ;;
+    -Sp) while [ "$1" != -- ]; do shift; done; shift; for a; do echo "${a#agros/}"; done; [ -z "$FIRST_NEEDS" ] || echo "$FIRST_NEEDS" ;; esac; true'
+# (paru -S of them: the new update-apps in place, a new file as pacman's, saying it ran; $FIRST_RC: it fails)
+cat >"$t/bin/paru" <<EOF
+#!/bin/sh
+echo "paru \$*" >>"$t/paru"
+case "\$*" in *" -S --needed --noconfirm agros/"*)
+    [ -z "\$FIRST_RC" ] || exit 1
+    sed '2i echo "new update-apps \$*:\${AGROS_SELF_UPDATED:-}" >>"$t/paru"' "$t/ua/update-apps.old" >"$t/ua/new"
+    chmod +x "$t/ua/new"; mv "$t/ua/new" "$t/ua/update-apps" ;;
+esac
+EOF
+chmod +x "$t/bin/paru"
+first() {
+    rm -f "$t/paru"; cp "$t/ua/update-apps.old" "$t/ua/update-apps"
+    XDG_RUNTIME_DIR=$t/run TMPDIR=$t/tmp HOME=$t/home XDG_STATE_HOME=$t/state XDG_CACHE_HOME=$t/home/.cache PATH=$t/bin:$PATH \
+        /usr/bin/timeout 120 "$t/ua/update-apps" </dev/null 2>&1
+}
+# (its password asked once, by the first: no terminal, sudo wanting one)
+stub sudo 'case "$1" in -n) exit 1 ;; -S) read -r p; [ "$p" = right ] ;; esac'
+stub zenity 'n=$(cat '"$t"'/asked 2>/dev/null || echo 0); echo $((n + 1)) >'"$t"'/asked; echo right'
+mkdir -p "$t/run"; rm -f "$t/asked"
+out=$(FIRST_QU="agros-scripts r622.a-1 -> r702.b-1" first) || true
+steps=$(grep -oE -- '-Sy --noconfirm$|-S --needed --noconfirm agros/agros-scripts$|^new update-apps :1$|-Su --noconfirm$' "$t/paru" | paste -sd,)
+[[ $steps == "-Sy --noconfirm,-S --needed --noconfirm agros/agros-scripts,new update-apps :1,-Sy --noconfirm,-Su --noconfirm" ]] ||
+    fail "AgrOS's newer update code not installed first, then the update run by it once: $(cat "$t/paru")"
+[[ $(grep -c '^== System and AUR apps$' <<<"$out") == 1 && $out == *"AgrOS's update code first: agros-scripts"* ]] ||
+    fail "the update code first not said, or the system step's title twice: $out"
+[[ $(cat "$t/asked") == 1 && -z $(ls -A "$t/run") && -z $(ls -A "$t/tmp") ]] ||
+    fail "the password asked again by the new code, or a file of the first run's left: $(cat "$t/asked") $(ls -A "$t/run" "$t/tmp")"
+stub sudo 'exit 0'
+# (both newer: both first, in one install)
+FIRST_QU=$'agros-scripts r1-1 -> r2-1\nagros-system r1-1 -> r2-1 [ignored]' first >/dev/null || true
+grep -qx -- 'paru .* -S --needed --noconfirm agros/agros-scripts' "$t/paru" ||
+    fail "one pacman.conf holds back (IgnorePkg) installed first: $(cat "$t/paru")"
+FIRST_QU=$'agros-system r1-1 -> r2-1\nagros-scripts r1-1 -> r2-1' first >/dev/null || true
+grep -qx -- 'paru .* -S --needed --noconfirm agros/agros-system agros/agros-scripts' "$t/paru" ||
+    fail "agros-scripts and agros-system not installed first together: $(cat "$t/paru")"
+out=$(first) || true
+{ grep -q -- ' -Su --noconfirm$' "$t/paru" && ! grep -qE -- ' -S .*agros/|^new ' "$t/paru" && [[ $out != *"update code"* ]]; } ||
+    fail "a step for AgrOS's update code with none newer: $(cat "$t/paru") / $out"
+out=$(FIRST_RC=1 FIRST_QU="agros-scripts r1-1 -> r2-1" first) || true
+{ grep -q -- ' -S --needed --noconfirm agros/agros-scripts$' "$t/paru" && grep -q -- ' -Su --noconfirm$' "$t/paru" &&
+    ! grep -q '^new ' "$t/paru" && [[ $out == *"couldn't be updated first: the update goes on with the code it has"* ]]; } ||
+    fail "the update code's install failing stopped the update, or wasn't said: $(cat "$t/paru") / $out"
+out=$(FIRST_NEEDS=python FIRST_QU="agros-scripts r1-1 -> r2-1" first) || true
+{ grep -q -- ' -Su --noconfirm$' "$t/paru" && ! grep -qE -- ' -S .*agros/|^new ' "$t/paru" &&
+    [[ $out == *"not updated first (agros-scripts): it needs python too"* ]]; } ||
+    fail "the update code installed with a newer library (a partial upgrade), or not said: $(cat "$t/paru") / $out"
+rm -rf "$t/ua" "$t/tmp"
+stub paru 'echo "paru $*" >>"'"$t"'/paru"'
+
 # Run in a terminal: how it went said where it waits for a key, as the Updates app says it. A step that failed (its
 # error scrolled away above) isn't "Done.", which read as everything updated; all of it working is
 if scr=$(command -v script); then

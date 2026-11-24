@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# AgrOS's own update code, updated before the update it runs: where the lists an update installs from have a newer
+# agros-scripts (update-gate, soname-hold, update-apps, update-kinds...) or agros-system (auto-update), those are
+# installed first, alone, and the update started again with them. Run by the old code, an update missed what came in
+# it: r622's update-gate, without soname-hold, let sndio 1.11 through before [agros]'s libcava rebuild (2026-11-24,
+# Caelestia didn't start), and qView's removal didn't run in the update that brought it (2026-11-19). update-apps and
+# auto-update (the boot's and the shutdown's) run this before the upstream gate, install what it names (pacman -S
+# --needed) and start themselves again, once (AGROS_SELF_UPDATED)
+#   update-first [<pacman option>...]   (--dbpath <dir>: the lists the update installs from, the boot's download)
+# Prints "agros/<name>" for each one installed with a newer version there (one pacman.conf holds back, IgnorePkg, left
+# out). None when installing them alone would take anything else (a newer library, another package: a partial upgrade
+# of what the rest of the update brings), or pacman can't work it out: said on stderr, the update goes on as it is
+set -uo pipefail
+helpers=$(dirname "$(readlink -f "$0")")
+mapfile -t newer < <(LC_ALL=C pacman -Qu "$@" 2>/dev/null | "$helpers/updates-pending" |
+    awk '$1 == "agros-scripts" || $1 == "agros-system" { print $1 }')
+((${#newer[@]})) || exit 0
+# (what installing them alone takes: pacman's own dry run, its errors said as it runs)
+if ! takes=$(LC_ALL=C pacman -Sp --needed --noconfirm --print-format '%n' "$@" -- "${newer[@]/#/agros/}"); then
+    echo "AgrOS's update code not updated first (${newer[*]}): pacman couldn't work out its install" >&2
+    exit 0
+fi
+extra=$(grep -vxF -f <(printf '%s\n' "${newer[@]}") <<<"$takes" | paste -sd' ')
+if [[ -n $extra ]]; then
+    echo "AgrOS's update code not updated first (${newer[*]}): it needs $extra too, which come with the rest" >&2
+    exit 0
+fi
+printf 'agros/%s\n' "${newer[@]}"

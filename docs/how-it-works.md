@@ -825,6 +825,15 @@ helper a package update just brought works before `agros-links` has linked it), 
   then
 - **`.local/bin/updates-pending`**: the updates waiting from a `pacman -Qu`/`paru -Qua` list, those `pacman.conf` holds
   back left out (`update-apps`, `update-kinds`, `auto-update`, `auto-update-aur`)
+- **`.local/bin/update-first`**: AgrOS's own update code to install before an update decides anything: `agros-scripts`
+  (`update-apps`, `update-kinds`, `update-gate`, `soname-hold`) and `agros-system` (`auto-update`), each installed
+  with a newer version on the lists the update installs from (`--dbpath`: the boot's download; one `pacman.conf` holds
+  back left out), as `agros/<name>`. Run by the old code, an update missed what came in it: r622's `update-gate`,
+  without `soname-hold`, let sndio 1.11 through before `[agros]`'s `libcava` rebuild (Caelestia didn't start), and
+  qView's removal didn't run in the update that brought it. Both are `any` packages of scripts; none is named when
+  installing them alone would take anything else (pacman's own dry run, `-Sp`: a newer library or another package, a
+  partial upgrade of the rest of the update), said on stderr, and the update goes on with the code it has. Its callers
+  install them and start themselves again: `update-apps`
 - **`.local/bin/update-kinds`**: the kinds of update, how each is listed (`--list`, what the Updates app shows: system,
   aur, firmware, flatpak, appimage, capri, proton, dev) and run (`update-kinds <kind>...`), and the Qt installed
   (`--qt-now`): `update-apps` and the boot's `auto-update` (as each user, `--boot`) both run it, its updates never as
@@ -1091,7 +1100,11 @@ brings each change; nothing to run by hand).
   an account that can't sudo isn't offered it, nor `agros-welcome`'s system part, and `update-apps` itself refuses it;
   the boot's update covers it). Not on a snapshot booted from the menu, nor the live USB (said; the check offers
   nothing there). Not on a battery nearly empty (`battery-low`, the boot update's check too: below 15%,
-  discharging). The keyrings first, on their own, when a newer one waits (as the boot's: a package signed with a key
+  discharging). AgrOS's own update code first: once its `paru -Sy` has synced the lists, a newer `agros-scripts` or
+  `agros-system` there (`update-first`, above) is installed alone (`paru -S --needed`), and the run starts again with
+  the new `update-apps`, its password kept, so the new code (its gate, its holds) decides the rest; once only
+  (`AGROS_SELF_UPDATED`). That install failing, or needing more than itself: said, and the update goes on with the code
+  it has. The keyrings first, on their own, when a newer one waits (as the boot's: a package signed with a key
   the keyring lacks failed the whole update). Power off, sleep and the lid held off while it installs
   (`systemd-inhibit --what=sleep:shutdown:handle-lid-switch`: logind suspends on the lid whatever sleep lock is held,
   `LidSwitchIgnoreInhibited=yes`; where polkit refuses the lid's lock, power off and sleep alone). Run in a

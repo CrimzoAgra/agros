@@ -59,8 +59,11 @@ You don't have to think about updates.
 Open **Updates** from the app menu, or click the button next to the app menu's search bar. It lists what's waiting, app
 by app, with old and new versions: system and AUR apps, firmware, Flatpaks, AppImages, Proton builds and developer
 tools (point at a version cut short to see all of it). **Update all** installs everything now, firmware included, and keeps the laptop awake meanwhile, closing the
-lid included. It installs nothing on a laptop below 15% battery and unplugged: plug the charger in first. An account
-that isn't an administrator sees the list, with "An administrator has to install these updates", and no **Update all**
+lid included. When a newer version of AgrOS's own update code is out (what decides what's safe to install), it's
+installed first, on its own, and the update goes on with it: a fix that came out while the computer was off for a few
+days already covers that same update (if that step can't be done, the update goes on as before). It installs nothing
+on a laptop below 15% battery and unplugged: plug the charger in first. An account that isn't an administrator sees
+the list, with "An administrator has to install these updates", and no **Update all**
 (its updates are installed at boot and shutdown all the same).
 
 In a terminal, `update-apps` does the same and shows what each AUR package's build script changed before building it.
