@@ -9,7 +9,8 @@ pkgdesc='AgrOS desktop programs and their data (game focus, tray keeper, updater
 arch=('any')
 url='https://github.com/CrimzoAgra/agros'
 license=('GPL-3.0-or-later')
-depends=('bash' 'python' 'python-gobject' 'jq' 'libnotify' 'git' 'curl' 'util-linux')
+depends=('bash' 'python' 'python-gobject' 'jq' 'libnotify' 'git' 'curl' 'util-linux'
+    'xorg-xrandr')  # (xwayland-primary)
 _root=$(realpath "${startdir}/../..")
 # The data folders that are code (the rest of ~/.local/share is settings: agros-hyprland-settings)
 _share=(caelestia-overlay lutris-overlay dots-settings github-release hyprbars

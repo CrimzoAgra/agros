@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# The main screen as XWayland's primary one. Wine (Proton games, Battle.net, Lutris's) draws a full screen game for the
+# primary screen; with none, Hyprland's default, it took the screen at XWayland's 0x0, which can be another one: the
+# game drew on part of the screen it was on, and clicks landed elsewhere. The main screen as the login card has it
+# (make-theme.sh): the Settings app's (screens.main), else the one with workspace 1. Run at login and at every config
+# reload (screens plugged in, a main screen set in the Settings app)
+set -uo pipefail
+mons=$(hyprctl -j monitors 2>/dev/null) && [[ $mons == '['* ]] || exit 0
+main=$(jq -r '."screens.main" // "" | strings' "${XDG_CONFIG_HOME:-$HOME/.config}/dots/settings.json" 2>/dev/null) || main=
+ws1=$(hyprctl -j workspaces 2>/dev/null | jq -r '.[] | select(.id == 1) | .monitor' 2>/dev/null) || ws1=
+out=$(jq -r --arg d "$main" --arg w "$ws1" '[(.[] | select($d != "" and .description == $d)),
+    (.[] | select(.name == $w))] | first // empty | .name' <<<"$mons" 2>/dev/null)
+[[ -n $out ]] || exit 0
+# XWayland names its outputs by connector, as Hyprland does. Up to 10 s: at login it may not be up yet, and a screen
+# just plugged in reaches it a moment after Hyprland's reload
+for _ in $(seq 20); do
+    xrandr --output "$out" --primary 2>/dev/null && exit 0
+    sleep 0.5
+done
+exit 0

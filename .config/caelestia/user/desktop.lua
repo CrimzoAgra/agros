@@ -11,6 +11,11 @@ hl.on("hyprland.start", function() hl.exec_cmd("~/.local/bin/widgets-start") end
 hl.on("hyprland.start", function() hl.exec_cmd("~/.local/bin/greeter-theme-sync") end)
 hl.on("config.reloaded", function() hl.exec_cmd("~/.local/bin/greeter-theme-sync") end)
 
+-- The main screen as XWayland's primary one, the screen Wine's full screen games are drawn for (with none, another
+-- screen's size: the game on part of the screen, clicks elsewhere). Again at each config reload, as above
+hl.on("hyprland.start", function() hl.exec_cmd("~/.local/bin/xwayland-primary") end)
+hl.on("config.reloaded", function() hl.exec_cmd("~/.local/bin/xwayland-primary") end)
+
 -- Clear the text console under the desktop, so no old text shows when the desktop closes (shutdown)
 hl.on("hyprland.start", function() hl.exec_cmd("~/.local/bin/console-clear") end)
 -- The pointer on the graphics card's cursor layer (Hyprland's default: it follows the mouse with no lag; drawn into the
