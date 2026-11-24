@@ -37,4 +37,45 @@ exit 1
 PATH=$t/bin:$PATH "$here/.local/share/caelestia-greeter/make-theme.sh" "$t/a" nobody
 [[ $(jq -c .screen "$t/a/theme.json") == '{"name":"HDMI-A-1","model":"Small"}' ]] ||
     fail "outside Hyprland the main screen was lost: $(jq -c .screen "$t/a/theme.json")"
+# The screens' layout for the login screen's compositor: each one's turn, scale and place, the places the Settings app
+# saved when every screen has one (the desktop's have monitors.lua's gap), else Hyprland's
+cat >"$t/bin/hyprctl" <<'EOF'
+#!/bin/sh
+case $2 in
+monitors) echo '[{"name":"DP-1","model":"Big","description":"X Big 1","x":0,"y":280,"transform":0,"scale":1},
+{"name":"HDMI-A-1","model":"Small","description":"Y Small 2","x":2624,"y":0,"transform":3,"scale":1.25}]' ;;
+workspaces) echo '[{"id":1,"monitor":"HDMI-A-1"}]' ;;
+esac
+EOF
+echo '{"screens.X Big 1.position":"0x280","screens.Y Small 2.position":"2560x0","screens.main":"X Big 1"}' >"$t/settings.json"
+DOTS_SETTINGS_JSON=$t/settings.json PATH=$t/bin:$PATH "$here/.local/share/caelestia-greeter/make-theme.sh" "$t/a" nobody
+[[ $(jq -c '.screen, [.screens[] | [.name, .transform, .scale, .x, .y]]' "$t/a/theme.json") == $'{"name":"DP-1","model":"Big"}\n[["DP-1",0,1,0,280],["HDMI-A-1",3,1.25,2560,0]]' ]] ||
+    fail "the screens' layout (saved places, no gap): $(jq -c '.screen, .screens' "$t/a/theme.json")"
+echo '{"screens.X Big 1.position":"0x280"}' >"$t/settings.json"
+DOTS_SETTINGS_JSON=$t/settings.json PATH=$t/bin:$PATH "$here/.local/share/caelestia-greeter/make-theme.sh" "$t/a" nobody
+[[ $(jq -c '[.screens[] | [.x, .y]]' "$t/a/theme.json") == '[[0,280],[2624,0]]' ]] ||
+    fail "a screen with no saved place: not Hyprland's places: $(jq -c .screens "$t/a/theme.json")"
+# best-mode, in the login screen's compositor: those set with wlr-randr in one call, by connector and model (a
+# different monitor on a connector since: left alone)
+mkdir -p "$t/g/theme"
+cp "$here/.local/share/caelestia-greeter/best-mode" "$here/.local/share/caelestia-greeter/screenmode.py" "$t/g/"
+cp "$t/a/theme.json" "$t/g/theme/theme.json"
+cat >"$t/bin/wlr-randr" <<EOF
+#!/bin/sh
+if [ "\$1" = --json ]; then
+    echo '[{"name":"DP-1","model":"Big","modes":[{"width":2560,"height":1440,"refresh":60.0,"preferred":true,"current":true}]},
+{"name":"HDMI-A-1","model":"Other","modes":[{"width":1920,"height":1080,"refresh":60.0,"preferred":true,"current":true}]}]'
+else
+    echo "\$*" >>"$t/randr"
+fi
+EOF
+chmod +x "$t/bin/wlr-randr"
+PATH=$t/bin:$PATH python3 "$t/g/best-mode" >/dev/null
+[[ $(cat "$t/randr") == "--output DP-1 --transform normal --pos 0,280 --scale 1" ]] ||
+    fail "best-mode's layout: $(cat "$t/randr")"
+sed -i 's/"Other"/"Small"/' "$t/bin/wlr-randr"
+: >"$t/randr"
+PATH=$t/bin:$PATH python3 "$t/g/best-mode" >/dev/null
+[[ $(cat "$t/randr") == "--output DP-1 --transform normal --pos 0,280 --scale 1 --output HDMI-A-1 --transform 270 --pos 2624,0 --scale 1.25" ]] ||
+    fail "best-mode's layout, both screens: $(cat "$t/randr")"
 echo "ok greeter-theme"

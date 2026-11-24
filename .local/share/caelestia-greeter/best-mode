@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
 """Runs inside cage before the login screen: each screen to its own (preferred) resolution, the highest when it names
 none, then its best refresh rate there (the same as the desktop and the kernel console: screenmode.py). cage's default
-60 Hz makes some monitors (e.g. Samsung over HDMI) overscan and cut the edges."""
+60 Hz makes some monitors (e.g. Samsung over HDMI) overscan and cut the edges. Then the screens laid out as on the
+desktop (theme.json's screens, make-theme.sh's: each one turned, scaled and placed as there), not cage's own way (none
+turned, side by side in its order): the login card on a screen standing on its side the right way up, and the pointer
+going from one to the other where they meet on the desk."""
 import json
+import os
 import subprocess
+import sys
 import time
 
 from screenmode import best
@@ -35,3 +40,41 @@ for o in found:
         continue
     r = subprocess.run(["wlr-randr", "--output", o["name"], "--mode", mode], check=False, capture_output=True, text=True)
     print(f"best-mode: {o['name']} -> {mode}" + (f" failed: {r.stderr.strip()}" if r.returncode else ""))
+
+# Wayland's turns, as Hyprland numbers them (0-7), by wlr-randr's names
+TURNS = ["normal", "90", "180", "270", "flipped", "flipped-90", "flipped-180", "flipped-270"]
+
+
+def layout(found: list, screens) -> list:
+    """The wlr-randr arguments that lay out the screens found as the desktop has them (screens: theme.json's), all in
+    one call (one change, never two screens over each other on the way); [] when there's nothing to do. A screen is the
+    desktop's one by connector and model (another monitor on that connector since: left as cage has it)"""
+    args = []
+    for o in found:
+        s = next((s for s in screens or [] if isinstance(s, dict) and s.get("name") == o.get("name")
+                  and s.get("model") == o.get("model")), None)
+        if not s:
+            continue
+        try:
+            turn, x, y, scale = TURNS[int(s.get("transform", 0))], int(s["x"]), int(s["y"]), float(s.get("scale", 1))
+        except (KeyError, ValueError, TypeError, IndexError):
+            continue
+        args += ["--output", o["name"], "--transform", turn, "--pos", f"{x},{y}"]
+        if scale > 0:
+            args += ["--scale", f"{scale:g}"]
+    return args
+
+
+def screens_of(theme: str):
+    try:
+        with open(theme, encoding="utf-8") as f:
+            return json.load(f).get("screens")
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
+if found:
+    args = layout(outputs() or found, screens_of(os.path.join(os.path.dirname(os.path.realpath(sys.argv[0])), "theme", "theme.json")))
+    if args:
+        r = subprocess.run(["wlr-randr", *args], check=False, capture_output=True, text=True)
+        print("best-mode: laid out as the desktop: " + " ".join(args) + (f" failed: {r.stderr.strip()}" if r.returncode else ""))
