@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# [agros]'s installed packages that no longer load, to reinstall from [agros]: a library their own programs load (ELF
+# NEEDED) gone from the system, and [agros] with a build of them other than the one installed (newer, or the same
+# version built again: its Build Date). libcava 1.0.0-1, rebuilt by CI for sndio 1.11's libsndio.so.9 under the same
+# name (before ci/build-repo.sh relabelled such rebuilds, 2026-11-21), was never replaced where the build before it
+# (libsndio.so.7) was installed: sndio's update took .so.7 away (soname-hold had nothing to wait for: [agros]'s build
+# already needed .so.9) and Caelestia didn't start. Run after each system update (auto-update's install at shutdown,
+# update-apps), which reinstall what it names
+#   soname-broken [<pacman option>...]
+# Prints "agros/<name>" for each. A library counts as gone when it's neither in <libdir> nor in the loader's cache
+# (ldconfig -p) nor among the package's own files (a private one, by RPATH). Said on stderr: each one, why, and one left
+# as it is ([agros]'s build the same as installed, or older; reinstalling it would take anything else, pacman's dry run)
+set -uo pipefail
+libdir=${SONAME_HOLD_LIBDIR:-/usr/lib}
+known=$(ldconfig -p 2>/dev/null | awk 'NR > 1 { print $1 }')
+mapfile -t mine < <(LC_ALL=C pacman -Sl "$@" agros 2>/dev/null | awk '$4 ~ /^\[installed/ { print $2 }')
+# field <name> <pacman -Si/-Qi output>: that field's value
+field() { sed -n "/^$1 *: /{s///p;q;}" <<<"$2"; }
+fix=()
+for p in "${mine[@]}"; do
+    files=$(LC_ALL=C pacman -Qlq -- "$p" 2>/dev/null)
+    own=$(sed 's|.*/||' <<<"$files")
+    gone=$(grep -E '/usr/(lib|bin)/' <<<"$files" | while read -r f; do
+        [[ -f $f && ! -L $f ]] && readelf -d -- "$f" 2>/dev/null
+    done | sed -n 's/.*(NEEDED).*\[\(.*\)\]$/\1/p' | sort -u | while read -r lib; do
+        [[ -e $libdir/$lib ]] || grep -qxF -- "$lib" <<<"$known" || grep -qxF -- "$lib" <<<"$own" || echo "$lib"
+    done | paste -sd' ')
+    [[ -n $gone ]] || continue
+    repo=$(LC_ALL=C pacman -Si "$@" -- "agros/$p" 2>/dev/null) have=$(LC_ALL=C pacman -Qi "$@" -- "$p" 2>/dev/null)
+    new=$(field Version "$repo") old=$(field Version "$have")
+    if [[ -z $new ]] || (($(vercmp "$new" "$old") < 0)) ||
+        { [[ $new == "$old" ]] && [[ $(field 'Build Date' "$repo") == "$(field 'Build Date' "$have")" ]]; }; then
+        echo "$p needs $gone, gone from the system: [agros] has no other build of it yet, left as it is" >&2
+        continue
+    fi
+    echo "$p needs $gone, gone from the system: reinstalled from [agros] ($new)" >&2
+    fix+=("$p")
+done
+((${#fix[@]})) || exit 0
+# (only them: anything else (a newer library) would be a partial upgrade of what the next update brings)
+if ! takes=$(LC_ALL=C pacman -Sp --noconfirm --print-format '%n' "$@" -- "${fix[@]/#/agros/}"); then
+    echo "not reinstalled (${fix[*]}): pacman couldn't work out its install" >&2
+    exit 0
+fi
+extra=$(grep -vxF -f <(printf '%s\n' "${fix[@]}") <<<"$takes" | paste -sd' ')
+if [[ -n $extra ]]; then
+    echo "not reinstalled (${fix[*]}): it needs $extra too, which come with the next update" >&2
+    exit 0
+fi
+printf 'agros/%s\n' "${fix[@]}"

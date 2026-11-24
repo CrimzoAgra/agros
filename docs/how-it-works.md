@@ -834,6 +834,18 @@ helper a package update just brought works before `agros-links` has linked it), 
   installing them alone would take anything else (pacman's own dry run, `-Sp`: a newer library or another package, a
   partial upgrade of the rest of the update), said on stderr, and the update goes on with the code it has. Its callers
   install them and start themselves again: `update-apps` and `auto-update` (the boot's and the shutdown's)
+- **`.local/bin/soname-broken`**: `[agros]`'s installed packages that no longer load, to reinstall from `[agros]`: one
+  of the libraries their own programs load (ELF `NEEDED`, `readelf`, as `soname-hold` reads them) is gone from the
+  system (not in `/usr/lib`, not in the loader's cache, `ldconfig -p`, nor among the package's own files), and
+  `[agros]` has a build of it other than the one installed (newer, or the same version built again: its Build Date).
+  `[agros]`'s `libcava` 1.0.0-1, rebuilt by CI for sndio 1.11's `libsndio.so.9` under the same name (before
+  `ci/build-repo.sh` relabelled such rebuilds), was never taken where the build before it was installed: sndio's update
+  took `libsndio.so.7` away (`soname-hold` had nothing to hold it for: `[agros]`'s build already needed `.so.9`) and
+  Caelestia didn't start. Says each one and why on stderr (one `[agros]` has no other build of yet, left as it is); none
+  named when the reinstall would take anything else (pacman's dry run). After each system update, the shutdown's
+  (`auto-update`, after the install or one with nothing to install, as root: `pacman -S`) and Updates'
+  (`update-apps`, after its `paru -Su`, through paru's sudo) reinstall what it names; that failing never fails the
+  update (said, tried again after the next one)
 - **`.local/bin/update-kinds`**: the kinds of update, how each is listed (`--list`, what the Updates app shows: system,
   aur, firmware, flatpak, appimage, capri, proton, dev) and run (`update-kinds <kind>...`), and the Qt installed
   (`--qt-now`): `update-apps` and the boot's `auto-update` (as each user, `--boot`) both run it, its updates never as

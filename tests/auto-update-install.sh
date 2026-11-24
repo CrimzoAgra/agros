@@ -805,6 +805,43 @@ FIRST_RC=1 QU=$newer first || fail "the update code's install failing failed the
 cp "$t/auto-update.old" "$t/auto-update"
 rm -rf "$t/first-bin" "$t/auto-update.old"
 
+# [agros]'s packages that no longer load (soname-broken's: libcava, its libsndio.so.7 gone, rebuilt in [agros] at the
+# same version) reinstalled from [agros] after the install, and after one with nothing to install (the update that took
+# the library came through Updates), said; one with its libraries there not; the reinstall failing doesn't fail the
+# update (pacman's -Sl/-Qlq/-Si/-Qi: libcava installed, its files, [agros]'s build and the one installed; -S of it noted,
+# exit $FIX_RC; readelf: it loads libsndio.so.7; the loader's cache empty)
+mkdir -p "$t/fix-bin" "$t/fix/usr/lib"
+: >"$t/fix/usr/lib/libcava.so.1"
+cat >"$t/fix-bin/pacman" <<EOF
+#!/bin/sh
+case "\$1" in
+    -Sl) echo 'agros libcava 1.0.0-1 [installed]'; exit 0 ;;
+    -Qlq) echo "$t/fix/usr/lib/libcava.so.1"; exit 0 ;;
+    -Si) printf 'Version         : 1.0.0-1\nBuild Date      : Thu 20\n'; exit 0 ;;
+    -Qi) printf 'Version         : 1.0.0-1\nBuild Date      : Mon 17\n'; exit 0 ;;
+    -Sp) echo libcava; exit 0 ;;
+    -S) case "\$*" in *" agros/libcava"*) echo "reinstall \$* (SNAP_PAC_SKIP=\$SNAP_PAC_SKIP)" >>"$t/calls"; exit \${FIX_RC:-0} ;; esac ;;
+esac
+exec "$t/bin/pacman" "\$@"
+EOF
+printf '#!/bin/sh\necho " 0x1 (NEEDED) Shared library: [libsndio.so.7]"\n' >"$t/fix-bin/readelf"
+printf '#!/bin/sh\necho "0 libs found in cache"\n' >"$t/fix-bin/ldconfig"
+chmod +x "$t/fix-bin/"*
+fix() { : >"$t/calls"; : >"$t/log"; PATH=$t/fix-bin:$PATH SONAME_HOLD_LIBDIR=$t/fix/usr/lib "$t/auto-update" --install >/dev/null; }
+lists; fix || fail "the install with a package to reinstall failed: $(cat "$t/log")"
+[[ $(grep -oE '^pacman -Su|^reinstall .*' "$t/calls" | paste -sd,) == "pacman -Su,reinstall -S --noconfirm -- agros/libcava (SNAP_PAC_SKIP=y)" ]] &&
+    grep -q '^libcava needs libsndio.so.7, gone from the system: reinstalled from \[agros\] (1.0.0-1)$' "$t/log" ||
+    fail "[agros]'s package missing a library not reinstalled after the install, or not said: $(cat "$t/calls") / $(cat "$t/log")"
+lists; QU='' QU_RC=1 fix
+grep -q '^reinstall ' "$t/calls" || fail "not reinstalled with nothing to install: $(cat "$t/calls")"
+lists; FIX_RC=1 fix || fail "a reinstall that failed failed the update"
+[[ $(res) == "ok "* ]] && grep -q '^!! not reinstalled (libcava): tried again after the next install' "$t/log" ||
+    fail "a failed reinstall not said, or the update not ok: $(res) / $(cat "$t/log")"
+: >"$t/fix/usr/lib/libsndio.so.7"
+lists; fix
+grep -q '^reinstall ' "$t/calls" && fail "reinstalled with all its libraries there: $(cat "$t/calls")"
+rm -rf "$t/fix-bin" "$t/fix"
+
 # The log keeps the last 20 runs
 for _ in {1..25}; do "$t/auto-update" --install >/dev/null; done
 n=$(grep -c '^===== .* --install =====$' "$t/log")

@@ -321,6 +321,13 @@ if "${paru[@]}" -Sy --noconfirm; then
         echo "Removing what AgrOS no longer installs: ${gone[*]}"
         "${paru[@]}" -Rns --noconfirm "${gone[@]}" || echo "!! Not removed (${gone[*]}): tried again at the next update"
     fi
+    # [agros]'s packages that no longer load (a library they need gone, and [agros] with a build that loads:
+    # soname-broken, which says which and why) reinstalled from it, as the shutdown's install does (auto-update). Its
+    # failing never fails the update: said, and tried again at the next one
+    mapfile -t fix < <("$helpers/soname-broken")
+    if ((${#fix[@]})); then
+        "${paru[@]}" -S --noconfirm "${fix[@]}" || echo "!! Not reinstalled (${fix[*]#agros/}): tried again at the next update"
+    fi
 else
     status=1
 fi

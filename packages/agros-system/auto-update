@@ -70,6 +70,18 @@ retire() {
     SNAP_PAC_SKIP=y LC_ALL='' LC_MESSAGES=C pacman -Rns --noconfirm -- "${gone[@]}" ||
         echo "!! not removed (${gone[*]}): tried again after the next install"
 }
+# repair: [agros]'s installed packages that no longer load (a library they need gone from the system, and [agros] with
+# a build that loads: soname-broken, which says which and why) reinstalled from it, after an install (or one with
+# nothing to install: the update that took the library away may have come through Updates). An [agros] rebuild under
+# the same name (libcava 1.0.0-1, for sndio 1.11) was never taken where the old build was installed. Its failing never
+# fails the update: said, and tried again after the next install
+repair() {
+    local fix
+    mapfile -t fix < <(/usr/lib/agros/bin/soname-broken)
+    ((${#fix[@]})) || return 0
+    SNAP_PAC_SKIP=y LC_ALL='' LC_MESSAGES=C pacman -S --noconfirm -- "${fix[@]}" ||
+        echo "!! not reinstalled (${fix[*]#agros/}): tried again after the next install"
+}
 # recover: an install cut off (shutdown's limit, a power cut), or its recovery put off: pacman's lists put back (its
 # packages came from the older ones; those it got to install are taken up again by the next install), and the lock it
 # left. Run at boot and before an install, each time until it's done (only with nothing holding pacman's lock)
@@ -352,7 +364,7 @@ if [[ ${1:-} == --install ]]; then
     [[ ! -s $aur/failed ]] || echo "AUR apps wait, the rest installs without them (the boot's builds: $(paste -sd';' "$aur/failed" | sed 's/;/; /g'))"
     # (what AgrOS dropped removed then too: the update that took it out may have come through Updates, the old
     # update-apps, with no removal of its own)
-    [[ -n $pending || ${#targets[@]} -gt 0 ]] || { echo "nothing to install"; result ok; settled; retire; exit 0; }
+    [[ -n $pending || ${#targets[@]} -gt 0 ]] || { echo "nothing to install"; result ok; settled; retire; repair; exit 0; }
     # safety snapshot (pick it in the boot menu if an update breaks something). --no-dbus: this runs at shutdown, when
     # snapperd (started on demand over DBus) can't be started any more, and the snapshot was silently skipped
     # Then into the boot menu's snapshot list here: what does that otherwise (grub-btrfsd) is stopped by now, and isn't
@@ -414,6 +426,7 @@ if [[ ${1:-} == --install ]]; then
     [[ $target != *qt6-* ]] || /usr/lib/agros/bin/update-kinds --qt-now >"$au/qt-built"
     settled
     retire
+    repair
     echo "===== done $(date) ====="
     exit
 fi

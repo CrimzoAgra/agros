@@ -378,6 +378,33 @@ out=$(FIRST_NEEDS=python FIRST_QU="agros-scripts r1-1 -> r2-1" first) || true
 rm -rf "$t/ua" "$t/tmp"
 stub paru 'echo "paru $*" >>"'"$t"'/paru"'
 
+# [agros]'s packages that no longer load (soname-broken's: libcava, its libsndio.so.7 gone, rebuilt in [agros] at the
+# same version) reinstalled from [agros] after the update, through paru (its sudo), said; one with its libraries there
+# not; the reinstall failing said, the update going on
+mkdir -p "$t/fix/usr/lib"; : >"$t/fix/usr/lib/libcava.so.1"
+# shellcheck disable=SC2016  # (expanded by the stand-in)
+stub pacman 'case "$1" in -Sl) echo "agros libcava 1.0.0-1 [installed]" ;; -Qlq) echo "'"$t"'/fix/usr/lib/libcava.so.1" ;;
+    -Si) printf "Version : 1.0.0-1\nBuild Date : Thu 20\n" ;; -Qi) printf "Version : 1.0.0-1\nBuild Date : Mon 17\n" ;;
+    -Sp) echo libcava ;; esac; true'
+stub readelf 'echo " 0x1 (NEEDED) Shared library: [libsndio.so.7]"'
+stub ldconfig 'echo "0 libs found in cache"'
+# shellcheck disable=SC2016
+stub paru 'echo "paru $*" >>"'"$t"'/paru"; case "$*" in *" agros/libcava"*) [ -z "$FIX_RC" ] ;; esac'
+fix() { rm -f "$t/paru"; SONAME_HOLD_LIBDIR=$t/fix/usr/lib HOME=$t/home XDG_STATE_HOME=$t/state XDG_CACHE_HOME=$t/home/.cache \
+    PATH=$t/bin:$PATH "$here/.local/bin/update-apps" </dev/null 2>&1; }
+out=$(fix) || true
+[[ $(grep -oE -- ' -Su --noconfirm$| -S --noconfirm agros/libcava$' "$t/paru" | paste -sd,) == " -Su --noconfirm, -S --noconfirm agros/libcava" &&
+    $out == *"libcava needs libsndio.so.7, gone from the system: reinstalled from [agros] (1.0.0-1)"* ]] ||
+    fail "[agros]'s package missing a library not reinstalled after the update, or not said: $(cat "$t/paru") / $out"
+out=$(FIX_RC=1 fix) || true
+[[ $out == *"!! Not reinstalled (libcava): tried again at the next update"* && $out == *"== Developer tools"* ]] ||
+    fail "a failed reinstall not said, or the update stopped at it: $out"
+: >"$t/fix/usr/lib/libsndio.so.7"
+fix >/dev/null || true
+grep -q -- 'agros/libcava' "$t/paru" && fail "reinstalled with all its libraries there: $(cat "$t/paru")"
+rm -rf "$t/fix" "$t/bin/readelf" "$t/bin/ldconfig"
+stub paru 'echo "paru $*" >>"'"$t"'/paru"'
+
 # Run in a terminal: how it went said where it waits for a key, as the Updates app says it. A step that failed (its
 # error scrolled away above) isn't "Done.", which read as everything updated; all of it working is
 if scr=$(command -v script); then
