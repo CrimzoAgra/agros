@@ -729,6 +729,65 @@ grep -q fwupdtool "$t/calls" && ! grep -q '^pacman -Su' "$t/calls" && grep -q "f
 [[ ! -e $t/au/firmware && ! -e $t/au/firmware-told && ! -e $t/au/firmware-failed && ! -e $t/au/firmware-noroom ]] ||
     fail "firmware no longer waiting still noted"
 
+# AgrOS's own update code first (update-first), at shutdown: the boot's lists in pacman's place with a newer
+# agros-scripts or agros-system, those installed alone from them, then the install started again with the new code (the
+# same arguments, its time counted on), which decides and installs the rest, once; pacman's lists as the install leaves
+# them. Firmware not tried again by it. None newer: no such step. Its install failing, or needing more than itself (a
+# newer library): said, and the update goes on with the code it has. (pacman's -Sp: the targets and $FIRST_NEEDS; -S of
+# them noted, with the lists and lock it ran on, then the new auto-update in place, a new file as pacman's, saying it
+# ran; $FIRST_RC: it fails)
+cp "$t/auto-update" "$t/auto-update.old"
+mkdir -p "$t/first-bin"
+cat >"$t/first-bin/pacman" <<EOF
+#!/bin/sh
+case "\$1 \$*" in
+    "-Sp "*) echo "dry-run \$*" >>"$t/calls"; while [ "\$1" != -- ]; do shift; done; shift
+        for a; do echo "\${a#agros/}"; done; [ -z "\$FIRST_NEEDS" ] || echo "\$FIRST_NEEDS"; exit 0 ;;
+    "-S "*" agros/"*) echo "first \$* (lists \$(cat "$t/pac/sync/core.db"), \$([ -e "$t/pac/db.lck" ] || echo "not ")locked)" >>"$t/calls"
+        [ -z "\$FIRST_RC" ] || exit 1
+        sleep 1
+        sed '2i echo "new auto-update \$*:\${AGROS_SELF_UPDATED:-}:\$SECONDS" >>"$t/calls"' "$t/auto-update.old" >"$t/auto-update.new"
+        chmod +x "$t/auto-update.new"; mv "$t/auto-update.new" "$t/auto-update"; exit 0 ;;
+esac
+exec "$t/bin/pacman" "\$@"
+EOF
+chmod +x "$t/first-bin/pacman"
+first() { cp "$t/auto-update.old" "$t/auto-update"; : >"$t/calls"; : >"$t/log"; PATH=$t/first-bin:$PATH timeout 60 "$t/auto-update" "$@"; }
+newer=$'agros-scripts r622.a-1 -> r702.b-1\nfoo 1-1 -> 2-1'
+lists
+QU=$newer first --install >/dev/null || fail "the install with AgrOS's newer update code failed: $(cat "$t/log")"
+steps=$(grep -oE '^first .*|^new auto-update .*|^pacman -Su' "$t/calls" | sed 's/:[0-9]*$/:<time>/' | paste -sd,)
+[[ $steps == "first -S --needed --noconfirm -- agros/agros-scripts (lists new, not locked),new auto-update --install:1:<time>,pacman -Su" ]] ||
+    fail "AgrOS's newer update code not installed first from the boot's lists, then the install run by it once: $(cat "$t/calls")"
+(($(sed -n 's/^new auto-update .*:\([0-9]*\)$/\1/p' "$t/calls") >= 1)) || fail "the install's time not counted on by the new code: $(cat "$t/calls")"
+[[ $(res) == "ok "* && $(cat "$t/pac/sync/core.db") == new && ! -e $t/au/installing && ! -e $t/au/prev && ! -e $t/pac/db.lck ]] ||
+    fail "the install by the new code not as any: $(res) / $(cat "$t/pac/sync/core.db") / $(ls "$t/au")"
+grep -q "^AgrOS's update code first: agros-scripts$" "$t/log" && ! grep -q "cut off" "$t/log" ||
+    fail "the update code first not said, or the lists not put back before the new code: $(cat "$t/log")"
+# (both newer: in one install)
+lists; QU=$'agros-system r1-1 -> r2-1\nagros-scripts r1-1 -> r2-1' first --install >/dev/null
+grep -q '^first -S --needed --noconfirm -- agros/agros-system agros/agros-scripts ' "$t/calls" ||
+    fail "agros-scripts and agros-system not installed first together: $(cat "$t/calls")"
+# (firmware the first run tried (it failed): not flashed again by the new code)
+printf 'abc123\tSystem Firmware\t1\t2\n' >"$t/au/firmware"; cp "$t/au/firmware" "$t/au/firmware-told"
+lists; FWTOOL_RC=1 QU=$newer first --install >/dev/null
+[[ $(grep -c '^fwupdtool update' "$t/calls") == 1 ]] && grep -q '^new auto-update' "$t/calls" ||
+    fail "firmware flashed again by the new code: $(cat "$t/calls")"
+rm -f "$t/au/firmware"*
+lists; first --install >/dev/null
+{ grep -q '^pacman -Su' "$t/calls" && ! grep -qE '^(first|new|dry-run)' "$t/calls" && ! grep -q "update code" "$t/log"; } ||
+    fail "a step for AgrOS's update code with none newer: $(cat "$t/calls")"
+lists; FIRST_RC=1 QU=$newer first --install >/dev/null || fail "the update code's install failing failed the install"
+{ grep -q '^first ' "$t/calls" && grep -q '^pacman -Su' "$t/calls" && ! grep -q '^new ' "$t/calls" && [[ $(res) == "ok "* ]] &&
+    grep -q "couldn't be installed first: the update goes on with the code it has" "$t/log"; } ||
+    fail "the update code's install failing stopped the install, or wasn't said: $(cat "$t/calls") / $(cat "$t/log")"
+lists; FIRST_NEEDS=python QU=$newer first --install >/dev/null
+{ grep -q '^pacman -Su' "$t/calls" && ! grep -qE '^(first|new) ' "$t/calls" &&
+    grep -q "not updated first (agros-scripts): it needs python too" "$t/log"; } ||
+    fail "the update code installed with a newer library (a partial upgrade), or not said: $(cat "$t/calls") / $(cat "$t/log")"
+cp "$t/auto-update.old" "$t/auto-update"
+rm -rf "$t/first-bin" "$t/auto-update.old"
+
 # The log keeps the last 20 runs
 for _ in {1..25}; do "$t/auto-update" --install >/dev/null; done
 n=$(grep -c '^===== .* --install =====$' "$t/log")

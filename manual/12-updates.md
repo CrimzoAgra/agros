@@ -18,6 +18,9 @@ You don't have to think about updates.
   Any other AUR app that didn't build, or that can't be installed (it clashes with another package), just keeps its
   version until the next try, the rest of the update goes in without it, and a warning after you log in names it.
   On a laptop below 15% battery and unplugged, nothing is installed: it waits for the next shutdown.
+  Before the rest, a newer version of AgrOS's own update code (what decides what's safe to install) is installed on its
+  own, and the install goes on with it: a fix that came out while the computer was off for a few days already covers
+  that same update (if that step can't be done, the install goes on as before).
 - **Firmware** is installed at shutdown too, but only after a notification told you it's ready, and before the
   system's updates (which wait for the next shutdown if the firmware took long). A BIOS/UEFI update is applied as the
   computer next starts: don't turn it off then. On a laptop running low on battery, or unplugged when the device needs

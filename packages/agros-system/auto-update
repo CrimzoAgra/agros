@@ -158,8 +158,9 @@ if [[ ${1:-} == --install ]]; then
     # waited on. Never a time limit of its own: one sent it SIGTERM mid-flash. Started only with its time and the
     # packages' both left (55 min), it has up to 30 min before the packages are put off to the next shutdown (below),
     # and the unit's own limit alone after that (a flash still writing at 60 min has hung)
-    # (nor one the EFI partition had no room for: below)
-    if [[ -s $au/firmware-told ]] && cmp -s "$au/firmware" "$au/firmware-told" && ! cmp -s "$au/firmware" "$au/firmware-noroom" &&
+    # (nor one the EFI partition had no room for: below. Nor again once this started again with AgrOS's new update code,
+    # below: the first run tried it)
+    if [[ -z ${AGROS_SELF_UPDATED:-} && -s $au/firmware-told ]] && cmp -s "$au/firmware" "$au/firmware-told" && ! cmp -s "$au/firmware" "$au/firmware-noroom" &&
         command -v fwupdtool >/dev/null &&
         ((SECONDS <= stop - packages - 25 * 60)); then
         say "Installing firmware updates, don't turn the computer off..."
@@ -251,6 +252,22 @@ if [[ ${1:-} == --install ]]; then
         if [[ -e $f.sig ]]; then cp -p "$f.sig" "$dst.sig"; else rm -f "$dst.sig"; fi
         sha256sum <"$dst" >"$au/copied/$name.sum"
     done
+    # AgrOS's own update code first, where these lists have a newer one (agros-scripts' update-gate, soname-hold...,
+    # agros-system's this: update-first): installed alone from them, then this started again with it, the same way
+    # (pacman's lists put back first: it takes them up again), at most once (AGROS_SELF_UPDATED), its time counted on
+    # (SECONDS). Run by the old code, an update missed the holds that came in it. Only from a finished download (its
+    # packages all there). Not installed (it needs more than itself, pacman failing): said, this goes on as it is
+    if [[ -z ${AGROS_SELF_UPDATED:-} && -e $db/complete ]]; then
+        mapfile -t first < <(/usr/lib/agros/bin/update-first)
+        if ((${#first[@]})); then
+            echo "AgrOS's update code first: ${first[*]#agros/}"
+            if SNAP_PAC_SKIP=y LC_ALL='' LC_MESSAGES=C pacman -S --needed --noconfirm -- "${first[@]}"; then
+                restore
+                SECONDS=$SECONDS AGROS_SELF_UPDATED=1 exec "$0" "$@"
+            fi
+            echo "!! AgrOS's update code couldn't be installed first: the update goes on with the code it has"
+        fi
+    fi
     # (exit 1 with nothing listed is "none". Its stderr apart: a warning there isn't an update (read as one, every
     # shutdown failed); an "error:" there, or a list with a failure, is pacman's error, not "none")
     # Through the upstream gate, on the lists this installs from (the boot's, or newer ones the Updates app synced since):
