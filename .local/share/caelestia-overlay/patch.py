@@ -1454,9 +1454,11 @@ def battery_suspend():
              f'        command: String(Config.session.commands.hibernate) === "hibernate" ? {sleep} : Config.session.commands.hibernate\n',
              "the session menu's hibernate button")
     # Its icon a moon, as the login screen's sleep button (Caelestia's "downloading", an arrow into a circle, read as a
-    # download), unless set to something else in shell.json
+    # download), unless set to something else in shell.json; a line moon, as the lock and login screens' (the menu's
+    # buttons draw their icons filled)
     m = swap(m, "        icon: Config.session.icons.hibernate\n",
-             '        icon: String(Config.session.icons.hibernate) === "downloading" ? "bedtime" : Config.session.icons.hibernate\n',
+             '        icon: String(Config.session.icons.hibernate) === "downloading" ? "bedtime" : Config.session.icons.hibernate\n'
+             '        label.fill: icon === "bedtime" ? 0 : 1\n',
              "the session menu's hibernate icon")
     if "Quickshell.execDetached(command)" not in m:
         raise LookupError(f"{menu}: its buttons don't run a command of their own")
@@ -1611,6 +1613,7 @@ def lock_power():
                 MaterialIcon {
                     anchors.centerIn: parent
                     text: powerBtn.modelData[0]
+                    fill: 0 // (line icons: the sleep moon as the power menu's and the login screen's)
                     color: Colours.palette.m3onSurface
                     fontStyle: Tokens.font.icon.builders.large.build()
                 }
