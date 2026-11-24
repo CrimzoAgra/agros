@@ -1752,6 +1752,26 @@ def snap_preview():
     return {"modules/drawers/ContentWindow.qml": window} | components("services/WindowDrag.qml", "modules/drawers/SnapPreview.qml")
 
 
+def top_edge_one_panel():
+    # The top edge opens one panel at a time: the notification sidebar (sliding down from the top: sidebar_from_top)
+    # along its own span, the dashboard along the rest of its width, and neither while the other is open. On a narrow
+    # screen (one standing on its side) the dashboard is as wide as the screen and covered the sidebar's span: one touch
+    # of the top edge opened both, one over the other
+    rel = "modules/drawers/Interactions.qml"
+    inter = read(rel)
+    dash = re.findall(r"^ *const showDashboard = (.+);$", inter, re.M)
+    if len(dash) != 1:
+        raise LookupError("the dashboard's hover")
+    inter = inter.replace(f"const showDashboard = {dash[0]};", f"const showDashboard = {dash[0]}"
+                          " && (screenState.dashboard || !screenState.sidebar && !withinPanelWidth(panels.sidebar, x, y)); // caelestia-overlay: not over the sidebar's span")
+    opens = re.findall(r"if \((.*showSidebarHover\)?) && !screenState\.sidebar\)", inter)
+    if len(opens) != 2:
+        raise LookupError("the sidebar's hover")
+    for o in set(opens):
+        inter = inter.replace(f"if ({o} && !screenState.sidebar)", f"if ({o} && !screenState.sidebar && !screenState.dashboard)")
+    return {rel: inter}
+
+
 def edge_triggers():
     # The panels that open on hover (dashboard, Super menu, notification sidebar, volume, utilities) open only from the
     # screen's very edge (its last few pixels, edgePx), not the border's whole width (on an empty workspace, a band 80 px
@@ -1987,6 +2007,7 @@ FEATURES = (
     ("lock screen sleep, restart and power off", lock_power),
     ("window snapping preview", snap_preview),
     ("panels open from the screen's very edge, not while dragging", edge_triggers),
+    ("the top edge opens the dashboard or the notification sidebar, not both", top_edge_one_panel),
     ("windows fitted again when the bar's space changes", bar_space_refit),
     ("a rotated or changed screen keeps its bar's workspaces", screens_followed),
     ("a wallpaper of its own for each screen", screen_wallpapers),
@@ -2012,7 +2033,7 @@ def turned_off():
 # Features that build on another's version of a file (or, the utilities sidebar, on its trigger's geometry; the sidebar's
 # shape on the utilities panel's height, known while closed only with sidebar_notifs_only) and don't fit without it: off when that one is off or skipped. Several: it needs one of them (window peek: the dock's or the
 # workspace preview's popout, the previews it works on), off when all are
-NEEDS = {"sidebar_shape": ("sidebar_notifs_only",), "sidebar_from_top": ("sidebar_shape",),
+NEEDS = {"sidebar_shape": ("sidebar_notifs_only",), "top_edge_one_panel": ("sidebar_from_top",), "sidebar_from_top": ("sidebar_shape",),
          "sidebar_with_utilities": ("sidebar_from_top",),
          "window_peek": ("dock", "workspace_preview")}
 

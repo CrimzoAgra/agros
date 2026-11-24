@@ -213,6 +213,12 @@ grep -q '^            layer.enabled: true$' <<<"$(sed -n '/^        ScreencopyVi
 { grep -q 'name: "calendar"' "$dst/modules/bar/popouts/Content.qml" && grep -q 'sourceComponent: ClockCalendar {}' "$dst/modules/bar/popouts/Content.qml" &&
     grep -q '} else if (id === "clock") {' "$dst/modules/bar/Bar.qml" && grep -q 'Dash.Calendar {' "$dst/modules/bar/popouts/ClockCalendar.qml"; } ||
     fail "no calendar on hovering the bar's clock"
+# The top edge opens the dashboard or the notification sidebar, never both at once (a narrow screen's dashboard covers
+# the sidebar's span): the dashboard not over the sidebar's span nor with it open, the sidebar not with the dashboard open
+w=$dst/modules/drawers/Interactions.qml
+{ grep -q '(screenState.dashboard || !screenState.sidebar && !withinPanelWidth(panels.sidebar, x, y))' "$w" &&
+    [[ $(grep -c '&& !screenState.sidebar && !screenState.dashboard)' "$w") == 2 ]]; } ||
+    fail "the top edge still opens the dashboard and the sidebar together: $(grep -n 'showDashboard =\|screenState.sidebar)' "$w")"
 # What the patched files add to qmllint's findings on Caelestia's own (each file against the same one unpatched, both
 # with Quickshell's qs.* modules laid out as it does): no member or type the patches use that isn't there (a rename
 # upstream that would only show as an error at run time, a feature quietly not working), no property shadowing
