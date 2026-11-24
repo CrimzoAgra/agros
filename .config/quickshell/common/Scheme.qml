@@ -1,6 +1,8 @@
-// Caelestia's colours (its scheme.json, followed live) for the separate apps: settings, updates, switcher.
+// Caelestia's colours (its scheme.json, followed live) and fonts (its three in shell.json, the Settings app's Look page)
+// for the separate apps: settings, updates, switcher.
 // Loaded at run time by each (Loader with this file's path): Quickshell blocks imports from outside a config's folder.
 //   c("primary") -> the colour, or its default (Caelestia's dark scheme) until the scheme has loaded or if it lacks it
+//   body, title, mono -> the font families (AgrOS's default, JetBrainsMono Nerd Font, where shell.json names none)
 import QtQuick
 import Quickshell
 import Quickshell.Io
@@ -32,6 +34,23 @@ Scope {
             surfaceContainerLow: "131419",
             tertiary: "e2bbdb"
         })
+
+    readonly property string defaultFont: "JetBrainsMono Nerd Font"
+    property var fonts: ({})
+    readonly property string body: fonts.body?.family || defaultFont
+    readonly property string title: fonts.title?.family || defaultFont
+    readonly property string mono: fonts.mono?.family || defaultFont
+
+    FileView {
+        path: `${Quickshell.env("HOME")}/.config/caelestia/shell.json`
+        watchChanges: true
+        onFileChanged: reload()
+        onLoaded: {
+            try {
+                root.fonts = JSON.parse(text())?.appearance?.font ?? {};
+            } catch (e) {} // half-written while Caelestia saves: the next change reads it
+        }
+    }
 
     function c(name: string): color {
         return "#" + (colours[name] ?? fallback[name]);

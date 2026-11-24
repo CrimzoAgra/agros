@@ -52,7 +52,7 @@ for y in range(140, h - 56):
         gap = 0
     else:
         gap += 1
-bar = any(rgb(x, y) == (0x46, 0x47, 0x50) for x in range(226, 240) for y in range(140, h - 56))
+bar = any(rgb(x, y) == (0x46, 0x47, 0x50) for x in range(256, 270) for y in range(140, h - 56))
 print(h, icons, "bar" if bar else "nobar")
 P
 }

@@ -25,6 +25,9 @@ ShellRoot {
         id: scheme
         source: `file://${Quickshell.shellPath("../common/Scheme.qml")}`
     }
+    // Caelestia's fonts (../common/Scheme.qml too)
+    readonly property string bodyFont: scheme.item?.body ?? "JetBrainsMono Nerd Font"
+    readonly property string monoFont: scheme.item?.mono ?? "JetBrainsMono Nerd Font"
     function c(name: string): color {
         return scheme.item?.c(name) ?? "transparent";
     }
@@ -181,7 +184,7 @@ ShellRoot {
             }
             Text {
                 text: btn.label
-                font.family: "Rubik"
+                font.family: root.bodyFont
                 font.pixelSize: 14
                 font.weight: Font.Medium
                 color: btn.primary ? root.c("onPrimary") : root.c("onSurface")
@@ -255,7 +258,7 @@ ShellRoot {
                             : root.pending.length ? `${root.pending.length} update${root.pending.length > 1 ? "s" : ""} available`
                             : root.offline ? "Couldn't check for updates" // (no connection: not "up to date")
                             : "Everything is up to date"
-                        font.family: "Rubik"
+                        font.family: root.bodyFont
                         font.pixelSize: 22
                         font.weight: Font.Medium
                         color: root.c("onSurface")
@@ -267,7 +270,7 @@ ShellRoot {
                             : root.phase === "done" ? "All done"
                             : !root.admin && root.pending.length ? "An administrator has to install these updates"
                             : "System, AUR apps, firmware, Flatpaks, AppImages, Proton and developer tools"
-                        font.family: "Rubik"
+                        font.family: root.bodyFont
                         font.pixelSize: 13
                         color: root.c("onSurfaceVariant")
                         elide: Text.ElideRight
@@ -304,7 +307,7 @@ ShellRoot {
                             horizontalAlignment: Text.AlignHCenter
                             text: root.listFailed ? "Couldn't check: update-apps --list failed (run it in a terminal to see why)"
                                 : root.offline ? "Couldn't check: no connection to the package servers" : "Nothing to update"
-                            font.family: "Rubik"
+                            font.family: root.bodyFont
                             font.pixelSize: 15
                             color: root.c("onSurfaceVariant")
                         }
@@ -327,7 +330,7 @@ ShellRoot {
                                     Layout.topMargin: 10
                                     Layout.bottomMargin: 4
                                     text: group.modelData.title
-                                    font.family: "Rubik"
+                                    font.family: root.bodyFont
                                     font.pixelSize: 12
                                     font.weight: Font.Medium
                                     color: root.c("primary")
@@ -385,7 +388,7 @@ ShellRoot {
                                                 Text {
                                                     Layout.fillWidth: true
                                                     text: row.entry?.name ?? row.modelData.name
-                                                    font.family: "Rubik"
+                                                    font.family: root.bodyFont
                                                     font.pixelSize: 14
                                                     color: root.c("onSurface")
                                                     elide: Text.ElideRight
@@ -394,7 +397,7 @@ ShellRoot {
                                                     visible: !!row.entry
                                                     Layout.fillWidth: true
                                                     text: row.modelData.name
-                                                    font.family: "Rubik"
+                                                    font.family: root.bodyFont
                                                     font.pixelSize: 11
                                                     color: root.c("onSurfaceVariant")
                                                     elide: Text.ElideRight
@@ -406,7 +409,7 @@ ShellRoot {
                                                 // 2.44+r78+g…, had no way to be seen)
                                                 Layout.maximumWidth: hover.hovered ? row.width - 120 : 260
                                                 text: (row.modelData.old ? row.modelData.old + "  →  " : "") + row.modelData.new
-                                                font.family: "CaskaydiaCove NF"
+                                                font.family: root.monoFont
                                                 font.pixelSize: 11
                                                 color: root.c("onSurfaceVariant")
                                                 // (cut at the end: both versions stay, a long "asks for more access" goes)
@@ -437,7 +440,7 @@ ShellRoot {
                         width: logView.width
                         text: modelData
                         wrapMode: Text.WrapAnywhere
-                        font.family: "CaskaydiaCove NF"
+                        font.family: root.monoFont
                         font.pixelSize: 11
                         color: modelData.startsWith("== ") ? root.c("primary") : root.isError(modelData) ? root.c("error") : root.c("onSurfaceVariant")
                     }

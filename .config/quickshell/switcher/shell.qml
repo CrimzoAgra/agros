@@ -52,6 +52,9 @@ ShellRoot {
         id: scheme
         source: `file://${Quickshell.shellPath("../common/Scheme.qml")}`
     }
+    // Caelestia's fonts (../common/Scheme.qml too)
+    readonly property string bodyFont: scheme.item?.body ?? "JetBrainsMono Nerd Font"
+    readonly property string monoFont: scheme.item?.mono ?? "JetBrainsMono Nerd Font"
     function c(name: string): color {
         return scheme.item?.c(name) ?? "transparent";
     }
@@ -595,7 +598,7 @@ ShellRoot {
                                 Text {
                                     anchors.centerIn: parent
                                     text: card.modelData
-                                    font.family: "Rubik"
+                                    font.family: root.bodyFont
                                     font.pixelSize: 13
                                     font.weight: Font.Medium
                                     color: card.isSelected ? root.c("onPrimary") : root.c("onSurface")
@@ -716,7 +719,7 @@ ShellRoot {
                                 width: Math.min(implicitWidth, Math.max(wcard.frameW, Math.min(120, win.cardW)) - 28)
                                 text: wcard.ipc.title || wcard.ipc.class
                                 elide: Text.ElideRight
-                                font.family: "Rubik"
+                                font.family: root.bodyFont
                                 font.pixelSize: 13
                                 font.weight: Font.Medium
                                 color: wcard.isSelected ? root.c("primary") : root.c("onSurface")

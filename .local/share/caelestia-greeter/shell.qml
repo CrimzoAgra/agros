@@ -54,7 +54,8 @@ ShellRoot {
     readonly property color fgVariant: col("onSurfaceVariant", "c8c5d1")
     readonly property color error: col("error", "ffb4ab")
 
-    readonly property string font: "Rubik"
+    // Caelestia's text font, as the desktop has it (make-theme.sh copies its three into theme.json)
+    readonly property string font: theme.fonts?.body || "JetBrainsMono Nerd Font"
     readonly property string iconFont: "Material Symbols Rounded"
 
     // Sessions from /usr/share/wayland-sessions: [{ name, exec, desktop }]

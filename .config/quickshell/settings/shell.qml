@@ -24,6 +24,9 @@ ShellRoot {
         id: scheme
         source: `file://${Quickshell.shellPath("../common/Scheme.qml")}`
     }
+    // Caelestia's fonts (../common/Scheme.qml too)
+    readonly property string bodyFont: scheme.item?.body ?? "JetBrainsMono Nerd Font"
+    readonly property string monoFont: scheme.item?.mono ?? "JetBrainsMono Nerd Font"
     function c(name: string): color {
         return scheme.item?.c(name) ?? "transparent";
     }
@@ -402,7 +405,7 @@ ShellRoot {
     }
 
     component Label: Text {
-        font.family: "Rubik"
+        font.family: root.bodyFont
         font.pixelSize: 14
         color: root.c("onSurface")
     }
@@ -553,7 +556,7 @@ ShellRoot {
                     Label {
                         anchors.verticalCenter: parent.verticalCenter
                         text: root.pretty(chip.modelData)
-                        font.family: "CaskaydiaCove NF"
+                        font.family: root.monoFont
                         font.pixelSize: 12
                         color: chip.clash ? root.c("onErrorContainer") : root.c("onSurface")
                     }
@@ -641,7 +644,7 @@ ShellRoot {
             wrapMode: field.multiline ? TextEdit.WrapAnywhere : TextEdit.NoWrap
             clip: true
             selectByMouse: true
-            font.family: field.mono ? "CaskaydiaCove NF" : "Rubik"
+            font.family: field.mono ? root.monoFont : root.bodyFont
             font.pixelSize: field.mono ? 12 : 14
             color: root.c("onSurface")
             selectionColor: root.c("primary")
@@ -803,7 +806,7 @@ ShellRoot {
                 Layout.maximumWidth: 240
                 text: dd.shown || "None"
                 elide: Text.ElideRight
-                font.family: dd.setting?.preview === "font" && dd.value ? dd.value : "Rubik"
+                font.family: dd.setting?.preview === "font" && dd.value ? dd.value : root.bodyFont
             }
             Icon {
                 text: "expand_more"
@@ -992,7 +995,7 @@ ShellRoot {
 
                 // Pages
                 ColumnLayout {
-                    Layout.preferredWidth: 220
+                    Layout.preferredWidth: 250
                     Layout.fillWidth: false // its rows fill it, which would otherwise make it take the whole window
                     Layout.fillHeight: true
                     spacing: 4
@@ -1047,7 +1050,7 @@ ShellRoot {
                                 Layout.fillWidth: true
                                 text: root.search
                                 clip: true
-                                font.family: "Rubik"
+                                font.family: root.bodyFont
                                 font.pixelSize: 14
                                 color: root.c("onSurface")
                                 selectionColor: root.c("primary")
@@ -1652,7 +1655,7 @@ ShellRoot {
                                 verticalAlignment: TextInput.AlignVCenter
                                 text: root.menuFilter
                                 clip: true
-                                font.family: "Rubik"
+                                font.family: root.bodyFont
                                 font.pixelSize: 14
                                 color: root.c("onSurface")
                                 onTextEdited: root.menuFilter = text
@@ -1697,7 +1700,7 @@ ShellRoot {
                                     anchors.rightMargin: 16
                                     text: item.modelData.label || "None"
                                     elide: Text.ElideRight
-                                    font.family: root.menu?.preview === "font" && item.modelData.value ? item.modelData.value : "Rubik"
+                                    font.family: root.menu?.preview === "font" && item.modelData.value ? item.modelData.value : root.bodyFont
                                     color: item.selected ? root.c("onSecondaryContainer") : root.c("onSurface")
                                 }
                                 MouseArea {
