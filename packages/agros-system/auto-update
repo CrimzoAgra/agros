@@ -475,6 +475,25 @@ gated=$au/pacman.conf
 # In English: "error:" is what's looked for)
 err=$au/download-err
 if LC_ALL='' LC_MESSAGES=C pacman -Sy --noconfirm --dbpath "$db" --logfile /dev/null 2>"$err"; then
+    # AgrOS's own update code first, from these lists (as the shutdown's install: update-first), so this download's
+    # decisions (the upstream gate's, the AUR builds') are the new code's: installed alone, under pacman's own lock too
+    # (made as pacman makes it, the file created only where there's none: these lists' lock is their own, and the
+    # install writes what's installed), then this started again with it, at most once. That lock already there
+    # (pacman or Updates running), the install failing or needing more than itself: said, this goes on as it is
+    if [[ -z ${AGROS_SELF_UPDATED:-} ]]; then
+        mapfile -t first < <(/usr/lib/agros/bin/update-first --dbpath "$db")
+        if ((${#first[@]})) && ! (set -C; : >"$pacdb/db.lck") 2>/dev/null; then
+            echo "AgrOS's update code not updated first (${first[*]#agros/}): pacman's lock is taken, at shutdown with the rest"
+        elif ((${#first[@]})); then
+            echo "AgrOS's update code first: ${first[*]#agros/}"
+            if LC_ALL='' LC_MESSAGES=C pacman -S --needed --noconfirm --dbpath "$db" -- "${first[@]}"; then
+                rm -f "$pacdb/db.lck"
+                SECONDS=$SECONDS AGROS_SELF_UPDATED=1 exec "$0" "$@"
+            fi
+            rm -f "$pacdb/db.lck"
+            echo "!! AgrOS's update code couldn't be installed first: the update goes on with the code it has"
+        fi
+    fi
     # (it failing: pacman.conf as it is, the gate's Include in it, as the shutdown and Updates do; not the last boot's
     # copy, made for older lists, which let a newer Hyprland, not checked yet, through)
     waits=$(/usr/lib/agros/bin/update-gate /etc/pacman.conf "$gated" --dbpath "$db") || cp /etc/pacman.conf "$gated"

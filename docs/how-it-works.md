@@ -833,7 +833,7 @@ helper a package update just brought works before `agros-links` has linked it), 
   qView's removal didn't run in the update that brought it. Both are `any` packages of scripts; none is named when
   installing them alone would take anything else (pacman's own dry run, `-Sp`: a newer library or another package, a
   partial upgrade of the rest of the update), said on stderr, and the update goes on with the code it has. Its callers
-  install them and start themselves again: `update-apps` and the shutdown's `auto-update --install`
+  install them and start themselves again: `update-apps` and `auto-update` (the boot's and the shutdown's)
 - **`.local/bin/update-kinds`**: the kinds of update, how each is listed (`--list`, what the Updates app shows: system,
   aur, firmware, flatpak, appimage, capri, proton, dev) and run (`update-kinds <kind>...`), and the Qt installed
   (`--qt-now`): `update-apps` and the boot's `auto-update` (as each user, `--boot`) both run it, its updates never as
@@ -1138,7 +1138,11 @@ brings each change; nothing to run by hand).
     counted on: `SECONDS`), which takes the lists up again and decides and installs the rest; once only
     (`AGROS_SELF_UPDATED`), and the firmware the first run tried isn't flashed again. That install failing, or needing
     more than itself (pacman's dry run: a newer library would be a partial upgrade): said, and the install goes on with
-    the code it has, as before
+    the code it has, as before. At boot too, once the download's lists are synced (`--dbpath`) and before its gate and
+    download, so the new code decides what's downloaded and built for: installed from those lists, under pacman's own
+    lock as well (these lists' lock is their own, and the install writes what's installed: `db.lck` made as pacman
+    makes it, only where there's none, and removed after; there already, pacman or Updates running, it's left for the
+    shutdown's, said), then the boot's run starts again with it
   - **AUR apps** (`packages/agros-system/auto-update-aur`, after the download; an app whose AUR maintainer
     or co-maintainers changed since its last build (a co-maintainer can push its build files too), or one its repo
     dropped (signed, now foreign), isn't built: left for `update-apps` in a terminal, where paru shows its build files

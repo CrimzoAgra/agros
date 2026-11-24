@@ -8,7 +8,8 @@ You don't have to think about updates.
   their own (`agros-aur`) in a sandbox that sees none of your files, your desktop or the programs listening on your
   computer: only the internet and your LAN. Their build scripts aren't reviewed first (in a terminal, `update-apps`
   shows them), so this trusts the AUR as any AUR helper does: an AUR app runs its own install steps with full rights
-  when it's installed. It also looks for firmware updates for your computer and devices.
+  when it's installed. It also looks for firmware updates for your computer and devices. A newer version of AgrOS's own
+  update code is installed first, so it's the one that decides what's downloaded.
 - **At shutdown**, it installs the system's updates and the AUR apps together, after taking a snapshot of the system
   first. These are never installed under a running desktop, where a new graphics driver or kernel can break things
   until you restart (only **Update now** installs right away, when you ask). When an update brings a new version of

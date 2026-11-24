@@ -785,6 +785,23 @@ lists; FIRST_NEEDS=python QU=$newer first --install >/dev/null
 { grep -q '^pacman -Su' "$t/calls" && ! grep -qE '^(first|new) ' "$t/calls" &&
     grep -q "not updated first (agros-scripts): it needs python too" "$t/log"; } ||
     fail "the update code installed with a newer library (a partial upgrade), or not said: $(cat "$t/calls") / $(cat "$t/log")"
+# ...and at boot, from the download's lists (--dbpath), under pacman's own lock too, before the gate and the download
+have=$(cat "$t/pac/sync/core.db")
+QU=$newer first || fail "the boot with AgrOS's newer update code failed: $(cat "$t/log")"
+steps=$(grep -oE '^first .*|^new auto-update .*|^download -Suw' "$t/calls" | sed 's/:[0-9]*$/:<time>/' | paste -sd,)
+[[ $steps == "first -S --needed --noconfirm --dbpath $t/au/db -- agros/agros-scripts (lists $have, locked),new auto-update :1:<time>,download -Suw" ]] ||
+    fail "the boot's download not run by AgrOS's newer update code, installed first from its lists: $(cat "$t/calls")"
+[[ ! -e $t/pac/db.lck && -e $t/au/db/complete ]] || fail "the boot's install left pacman's lock, or its download not done"
+# (pacman's lock taken: not installed then, said; the lock left as it was)
+touch "$t/pac/db.lck"
+QU=$newer first
+{ ! grep -qE '^(first|new) ' "$t/calls" && grep -q '^download' "$t/calls" && [[ -e $t/pac/db.lck ]] &&
+    grep -q "not updated first (agros-scripts): pacman's lock is taken" "$t/log"; } ||
+    fail "the update code installed under another's lock at boot, or not said: $(cat "$t/calls") / $(cat "$t/log")"
+rm "$t/pac/db.lck"
+FIRST_RC=1 QU=$newer first || fail "the update code's install failing failed the boot"
+{ grep -q '^first ' "$t/calls" && ! grep -q '^new ' "$t/calls" && grep -q '^download' "$t/calls" && [[ ! -e $t/pac/db.lck ]]; } ||
+    fail "the update code's install failing at boot stopped the download, or left pacman's lock: $(cat "$t/calls")"
 cp "$t/auto-update.old" "$t/auto-update"
 rm -rf "$t/first-bin" "$t/auto-update.old"
 
