@@ -223,6 +223,20 @@ w=$dst/modules/drawers/Interactions.qml
 w=$dst/modules/launcher/Content.qml
 { grep -q 'id: settingsButton' "$w" && grep -q 'anchors.right: settingsButton.left' "$w" && grep -q 'anchors.right: updatesButton.left' "$w" &&
     grep -q 'WindowFactory.create(null, {});' "$w"; } || fail "no settings button in the Super menu"
+# AgrOS's settings pages in Nexus: in its page list and its component list alike (they go by position: as many of
+# each), each a page of dots-settings's schema; the files they use import what they use (Variants: Quickshell; a type
+# that doesn't resolve stops the whole shell from loading, which qmllint here doesn't catch)
+n=$dst/modules/nexus
+pages=$(awk '/readonly property list<var> pages/,/^    \]/' "$n/PageRegistry.qml" | grep -cE '^ {8}\{$')
+comps=$(awk '/readonly property list<Component> pageComps/,/^    \]/' "$n/PageCompRegistry.qml" | grep -cE '^ {8}Component \{$')
+{ [[ $pages == "$comps" ]] && grep -q 'pageId: "windows"' "$n/PageCompRegistry.qml" && grep -q 'label: "Windows", // caelestia-overlay' "$n/PageRegistry.qml" &&
+    [[ -f $dst/services/AgrosSettings.qml && -f $n/common/AgrosRow.qml && -f $n/pages/AgrosPage.qml ]]; } ||
+    fail "AgrOS's pages not in Nexus, or its lists out of step ($pages pages, $comps components)"
+for f in "$n/common/AgrosRow.qml" "$n/pages/AgrosPage.qml" "$dst/services/AgrosSettings.qml"; do
+    for ty in Variants ScriptModel Process StdioCollector Singleton; do
+        ! grep -qE "^\s*$ty \{|: $ty \{" "$f" || grep -qE '^import Quickshell(\.Io)?$' "$f" || fail "$f uses $ty without importing Quickshell"
+    done
+done
 # What the patched files add to qmllint's findings on Caelestia's own (each file against the same one unpatched, both
 # with Quickshell's qs.* modules laid out as it does): no member or type the patches use that isn't there (a rename
 # upstream that would only show as an error at run time, a feature quietly not working), no property shadowing

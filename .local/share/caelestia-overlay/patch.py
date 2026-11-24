@@ -730,6 +730,43 @@ def settings_button():
     return {rel: t}
 
 
+def nexus_pages():
+    # AgrOS's settings in Caelestia's own settings (Nexus): its pages there (AgrosPage.qml: dots-settings's, drawn with
+    # Nexus's look, AgrosRow.qml), among Nexus's own in their categories. Nexus's two lists (the pages, and the component
+    # for each) go by position: each one goes into both at the same place
+    def entry(label, icon, desc, cat):
+        return f"""        {{
+            label: "{label}", // caelestia-overlay: AgrOS's
+            icon: "{icon}",
+            description: "{desc}",
+            category: "{cat}"
+        }},
+"""
+
+    def comp(label, page):
+        return f"""        Component {{
+            // {label} (caelestia-overlay: AgrOS's)
+            AgrosPage {{
+                title: "{label}"
+                pageId: "{page}"
+            }}
+        }},
+"""
+
+    # (end of Connectivity; end of System; start of Shell)
+    places = [("        // System\n", True, [("Mouse & keyboard", "mouse", "Pointer, touchpad, keyboard layout", "connectivity", "input")]),
+              ("        // Shell\n", True, [("Features", "extension", "Games, Lutris, the shell's extras", "system", "features"),
+                                          ("Startup", "rocket_launch", "Apps started at login", "system", "startup")]),
+              ("        // Shell\n", False, [("Windows", "select_window", "Floating or tiling, focus, title bars", "shell", "windows")])]
+    reg, comps = read("modules/nexus/PageRegistry.qml"), read("modules/nexus/PageCompRegistry.qml")
+    for anchor, before, pages in places:
+        reg = insert(reg, anchor, "".join(entry(l, i, d, c) for l, i, d, c, _ in pages), before=before)
+        comps = insert(comps, anchor, "".join(comp(l, page) for l, _, _, _, page in pages), before=before)
+    return {"modules/nexus/PageRegistry.qml": reg, "modules/nexus/PageCompRegistry.qml": comps,
+            **components("services/AgrosSettings.qml", "modules/nexus/common/AgrosRow.qml",
+                         "modules/nexus/pages/AgrosPage.qml")}
+
+
 def tray_click():
     # Collapsed tray: a click on its arrow opens it (not hovering). It closes on a click on the bar and its panels
     # outside the tray, or, as before, when the pointer leaves the bar for a window (not for a tray icon's menu). No
@@ -2012,6 +2049,7 @@ FEATURES = (
     ("tray: right-click opens Wine apps' own menu", tray_menu_fallback),
     ("check for updates button", updates_button),
     ("settings button in the Super menu", settings_button),
+    ("AgrOS's settings in Caelestia's (Nexus)", nexus_pages),
     ("tray opens on click", tray_click),
     ("lock badges re-read at login", lock_refresh),
     ("notification sidebar without the utilities panel", sidebar_notifs_only),
