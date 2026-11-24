@@ -1684,6 +1684,25 @@ def clock_digits():
     return {rel: s}
 
 
+def clock_calendar():
+    # Hovering the bar's clock shows the month's calendar in a popout (ClockCalendar.qml: the dashboard's calendar), as
+    # on Windows; the workspace previews' popout pattern (Bar.qml picks, Content.qml shows it)
+    content = insert(read("modules/bar/popouts/Content.qml"), '        Popout {\n            name: "bluetooth"', '''        Popout {
+            name: "calendar"
+            sourceComponent: ClockCalendar {}
+        }
+
+''')
+    bar = insert(read("modules/bar/Bar.qml"), '        } else if (id === "activeWindow"', """        } else if (id === "clock") {
+            // caelestia-overlay: the month's calendar (ClockCalendar.qml)
+            popouts.currentName = "calendar";
+            popouts.currentCenter = (ch.item as Item).mapToItem(root, 0, (ch.item as Item).implicitHeight / 2).y ?? 0;
+            popouts.hasCurrent = true;
+""")
+    return {"modules/bar/popouts/Content.qml": content, "modules/bar/Bar.qml": bar,
+            **components("modules/bar/popouts/ClockCalendar.qml")}
+
+
 def workspace_preview():
     # Hovering a workspace on the bar shows a preview of it in a popout (WorkspacePreview.qml): its windows, live, where
     # they are on its screen. Only workspaces with windows; the dock's popout pattern (Bar.qml picks, PopoutState
@@ -1963,6 +1982,7 @@ FEATURES = (
     ("no warnings about a missing account picture", face_quiet),
     ("bar clock digits lined up", clock_digits),
     ("workspace previews on hover", workspace_preview),
+    ("a calendar on hovering the bar's clock", clock_calendar),
     ("window peek: resting on a preview shows its windows alone", window_peek),
     ("lock screen sleep, restart and power off", lock_power),
     ("window snapping preview", snap_preview),

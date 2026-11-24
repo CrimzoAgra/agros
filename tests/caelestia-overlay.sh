@@ -209,6 +209,10 @@ grep -q 'retry.interval = Math.min(retry.interval \* 2, 60000);' "$dst/services/
 grep -q '^            layer.enabled: true$' <<<"$(sed -n '/^        ScreencopyView {$/,/^        }$/p' "$dst/modules/drawers/PeekLayer.qml")" ||
     fail "window peek's picture of a see-through window shows the windows under the shell"
 
+# Hovering the bar's clock: the month's calendar (the dashboard's) in a popout
+{ grep -q 'name: "calendar"' "$dst/modules/bar/popouts/Content.qml" && grep -q 'sourceComponent: ClockCalendar {}' "$dst/modules/bar/popouts/Content.qml" &&
+    grep -q '} else if (id === "clock") {' "$dst/modules/bar/Bar.qml" && grep -q 'Dash.Calendar {' "$dst/modules/bar/popouts/ClockCalendar.qml"; } ||
+    fail "no calendar on hovering the bar's clock"
 # What the patched files add to qmllint's findings on Caelestia's own (each file against the same one unpatched, both
 # with Quickshell's qs.* modules laid out as it does): no member or type the patches use that isn't there (a rename
 # upstream that would only show as an error at run time, a feature quietly not working), no property shadowing
