@@ -79,7 +79,8 @@ if [[ -r $versions ]]; then
         f=$root/$n to=$HOME/$n
         # (a link, of AgrOS's or yours, left as it is)
         [[ -f $f && ! -L $f && -f $to && ! -L $to ]] || continue
-        cmp -s "$f" "$to" && continue
+        # (yours AgrOS's current one, by an update or your own merge: an .agros-new left beside it has nothing to offer)
+        cmp -s "$f" "$to" && { rm -f "$to.agros-new"; continue; }
         s=$(sum "$f")
         if [[ ${known[$(sum "$to") $n]-} ]]; then
             # (written beside it, then moved over it: never half-written; its mode as yours was)

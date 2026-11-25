@@ -115,6 +115,9 @@ echo mine-really >"$h/caelestia/mine.lua"; run
 [[ $(cat "$h/caelestia/mine.lua.agros-new") == from-the-package && $(grep -c . "$t/warned") == $((was + 1)) ]] ||
     fail "an edit of yours not in AgrOS's repo no longer offered"
 rm -rf "$d"
+# Yours merged by hand (AgrOS's new version copied over it): the .agros-new beside it gone, nothing left to offer
+cp "$h/caelestia/mine.lua.agros-new" "$h/caelestia/mine.lua"; run
+[[ ! -e $h/caelestia/mine.lua.agros-new ]] || fail "an .agros-new left beside a setting that is AgrOS's current one"
 # The bar's status icons (the sound one): an install from before AgrOS listed them gets /etc/skel's list in its own
 # shell.json, once, its other settings kept; a list of its own left alone; no shell.json left with none (json-edit, beside
 # it, starts a missing one as {})
