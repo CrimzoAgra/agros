@@ -568,7 +568,8 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
 ## Windows and keys
 
 - **Workspaces** (`user/workspaces.lua`): synced across screens. Each screen has its own 10 workspaces, in screen
-  order (the 1st screen 1-10, the 2nd 11-20...), and every screen always shows the same one of its 10 (a column):
+  order (the main screen set in Settings 1-10, then top to bottom and left to right 11-20...; another main screen
+  chosen, each screen's windows renumbered with it), and every screen always shows the same one of its 10 (a column):
   - Super+N shows N on all of them at once; anything else that changes a screen's workspace (the touchpad's swipe, a
     window moved and followed, the bar, a script) brings the others to the same column a moment later
   - Next/previous (Super+scroll, Ctrl+Super+Left/Right, Super+PageUp/PageDown) stay within the focused screen's 10 and

@@ -50,6 +50,13 @@ moves, screens = {}, { screens[1] }
 windows = { { address = "a", workspace = { id = 11 } }, { address = "c", workspace = { id = 2 } }, { address = "f", workspace = { id = 13 } } }
 dots.clean_workspace(11)
 assert(#moves == 1 and moves[1].workspace == 13, "one screen: not the nearest by number")
+-- The main screen set in the Settings app numbered first (1-10), whatever its place: B, right of A, gets 1
+local rules = {}
+hl.workspace_rule = function(r) rules[r.workspace] = r.monitor end
+screens = { { name = "A", x = 0, y = 0 }, { name = "B", x = 1920, y = -500, description = "Sam B" } }
+dots = { setting = function(k) return k == "screens.main" and "Sam B" or nil end }
+dofile(arg[1])
+assert(rules["1"] == "B" and rules["11"] == "A", "the main screen not 1-10: 1 on " .. tostring(rules["1"]))
 L
-out=$(HOME=$t lua "$t/test.lua" "$here/.config/caelestia/user/workspaces.lua" 2>&1) || fail "$out"
+out=$(HOME=$t XDG_RUNTIME_DIR=$t lua "$t/test.lua" "$here/.config/caelestia/user/workspaces.lua" 2>&1) || fail "$out"
 echo "ok workspace-merge"

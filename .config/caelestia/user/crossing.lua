@@ -95,7 +95,10 @@ local function target(p, line, k, a)
     if not onto then return nil, to end
     local out = { x = p.x, y = p.y }
     out[k.q] = best
-    out[k.p] = entering(onto, k) + (k.dir == 1 and 1 or -1)
+    -- (going left or up, 2 px back from its far edge, as held: Hyprland never takes the pointer past 2558.999... on a
+    -- 2560-wide screen, so put on 2559 a push back into the edge never moved it on, and it couldn't cross back until it
+    -- left the edge)
+    out[k.p] = entering(onto, k) + (k.dir == 1 and 1 or -2)
     return out, to
 end
 

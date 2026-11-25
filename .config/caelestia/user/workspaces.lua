@@ -1,13 +1,18 @@
--- Synced workspaces, for any number of screens: each screen gets its own 10 workspaces, in screen order
--- (top to bottom, then left to right): the 1st screen 1-10, the 2nd 11-20, ... Every screen always shows the same
--- column (N on all of them at once), whatever changed it. With one screen it's Caelestia's normal workspaces.
+-- Synced workspaces, for any number of screens: each screen gets its own 10 workspaces, in screen order (the main
+-- screen set in the Settings app first, then top to bottom, then left to right): the 1st screen 1-10, the 2nd 11-20, ...
+-- Every screen always shows the same column (N on all of them at once), whatever changed it. With one screen it's
+-- Caelestia's normal workspaces.
 local ok, vars = pcall(require, "variables")  -- Caelestia's settings module; nothing to take over if it's gone
 if not ok or type(vars) ~= "table" then vars = {} end
 
+-- (the main screen: by description, as the Settings app and monitors.lua name it, else by connector)
+local main = dots.setting and dots.setting("screens.main") or ""
+local function is_main(m) return main ~= "" and (m.description == main or m.name == main) end
 local function screens()
     local list = {}
     for _, m in ipairs(hl.get_monitors() or {}) do list[#list + 1] = m end
     table.sort(list, function(a, b)
+        if is_main(a) ~= is_main(b) then return is_main(a) end
         if a.y ~= b.y then return a.y < b.y end
         return a.x < b.x
     end)
@@ -382,3 +387,36 @@ end
 hl.on("monitor.added", recheck)
 hl.on("monitor.removed", recheck)
 hl.on("monitor.layout_changed", recheck)
+
+-- The same screens numbered in another order than at the last load this session (another main screen set in the
+-- Settings app; before main-first numbering, top to bottom): each screen's windows along to its new numbers, as for a
+-- screen plugged in, then every workspace onto its screen. (The order kept for the session only: a new session's
+-- windows are numbered afresh)
+local order_file = (os.getenv("XDG_RUNTIME_DIR") or "/tmp") .. "/hypr-workspace-order"
+if hl.timer and not dots.verifying then
+    local f = io.open(order_file)
+    local was = f and f:read("a") or ""
+    if f then f:close() end
+    if was == "" then
+        -- (none yet: as this file numbered them before the main screen went first)
+        local geo = screens()
+        table.sort(geo, function(a, b) if a.y ~= b.y then return a.y < b.y end return a.x < b.x end)
+        was = layout(geo)
+    end
+    if was ~= loaded and #list >= 2 then
+        local by, prev = {}, {}
+        for _, m in ipairs(list) do by[m.name] = m end
+        for n in was:gmatch("[^,]+") do prev[#prev + 1] = by[n] end
+        if #prev == #list then
+            -- (once the config's loaded: the workspace rules above in place)
+            hl.timer(function()
+                before = prev
+                renumber(list)
+                before = list
+                dots.screens_changed()
+            end, { timeout = 1, type = "oneshot" })
+        end
+    end
+    f = io.open(order_file, "w")
+    if f then f:write(loaded); f:close() end
+end
