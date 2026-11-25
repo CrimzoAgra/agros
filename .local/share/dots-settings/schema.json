@@ -338,7 +338,7 @@
               "label": "AMOLED black",
               "description": "In dark mode, the shell pure black: the bar, its border and the panels' backgrounds.",
               "type": "bool",
-              "default": false
+              "default": true
             },
             {
               "key": "look.variant",

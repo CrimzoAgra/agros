@@ -1609,12 +1609,12 @@ def amoled():
         onFileChanged: reload()
         onLoaded: {
             try {
-                root.amoled = JSON.parse(text())?.["look.amoled"] === true;
+                root.amoled = JSON.parse(text())?.["look.amoled"] !== false;
             } catch (e) {
-                root.amoled = false;
+                root.amoled = true;
             }
         }
-        onLoadFailed: root.amoled = false
+        onLoadFailed: root.amoled = true
     }
 
     function load(data: string, isPreview: bool): void {
@@ -2987,7 +2987,7 @@ def tray_over_dock():
 """)
     tray = read("modules/bar/components/Tray.qml")
     tray = insert(tray, "    clip: true\n", """    // caelestia-overlay (tray_over_dock): its height closed, its room in the bar open or not
-    readonly property real closedHeight: Config.bar.tray.compact ? Math.max(Config.bar.tray.background ? width : 0, expandIcon.implicitHeight + (Config.bar.tray.background ? Tokens.padding.extraSmall : 0) + padding) : nonAnimHeight
+    readonly property real closedHeight: Config.bar.tray.compact ? Math.max(Config.bar.tray.background ? width : 0, expandIcon.implicitHeight + (Config.bar.tray.background ? Tokens.padding.extraSmall + Tokens.padding.medium : Tokens.padding.small)) : nonAnimHeight
 
 """)
     # Open, the bar's own colour behind it (what it covers hidden, the tray itself not set apart: grey, AMOLED's black),
@@ -2997,8 +2997,15 @@ def tray_over_dock():
     color: expanded && Config.bar.tray.compact ? Colours.tPalette.m3surface : Qt.alpha(Colours.tPalette.m3surfaceContainer, (Config.bar.tray.background && items.count > 0) ? Colours.tPalette.m3surfaceContainer.a : 0)
 """, "the tray's colour")
     tray = swap(tray, "    readonly property int padding: Config.bar.tray.background ? Tokens.padding.medium : Tokens.padding.extraSmall\n",
-                "    readonly property int padding: Config.bar.tray.background ? Tokens.padding.medium : Tokens.padding.small // caelestia-overlay: the dock's\n",
+                "    readonly property int padding: Config.bar.tray.background ? Tokens.padding.medium : expanded ? Tokens.padding.large : Tokens.padding.small // caelestia-overlay: the dock's, more at its ends open\n",
                 "the tray's padding")
+    # Open, as much below the arrow as above the first icon (closed, the arrow sat low, past the tray's end)
+    tray = swap(tray, "            return expandIcon.implicitHeight + layout.implicitHeight + spacing + pad;\n",
+                "            return expandIcon.implicitHeight + layout.implicitHeight + spacing + pad + (Config.bar.tray.background ? 0 : Tokens.padding.small + Tokens.padding.large); // caelestia-overlay: the arrow raised\n",
+                "the open tray's height")
+    tray = swap(tray, "                anchors.bottomMargin: Config.bar.tray.background ? Tokens.padding.extraSmall : -Tokens.padding.small\n",
+                "                anchors.bottomMargin: Config.bar.tray.background ? Tokens.padding.extraSmall : root.expanded ? Tokens.padding.large : -Tokens.padding.small // caelestia-overlay: open, off the end\n",
+                "the tray arrow's margin")
     return {"modules/bar/Bar.qml": bar, "modules/bar/components/Tray.qml": tray}
 
 
