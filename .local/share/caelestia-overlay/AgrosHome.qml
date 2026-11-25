@@ -1,7 +1,7 @@
 pragma ComponentBehavior: Bound
 
 // caelestia-overlay: the page Nexus opens on, AgrOS's: the settings most often looked for, on four cards (Look,
-// Screens, Windows, Sound & network), each with a button to its whole page. Look: the wallpaper, light or dark, the
+// Screens, Windows, Sound & network), each with a button to its whole page. Look: the screens with their wallpapers (the wallpaper alone with one), light or dark, the
 // colour scheme. Screens: where they stand and the main one, night light. Windows: floating or tiling, title bars,
 // focus. Sound & network: the volume, the output, Wi-Fi and Bluetooth
 
@@ -87,9 +87,18 @@ PageBase {
                 more: "Wallpaper & style"
                 onOpen: root.open("palette")
 
+                // The screens, each with its wallpaper, with more than one (AgrosScreenWalls.qml); the wallpaper with one
+                AgrosScreenWalls {
+                    id: screenWalls
+
+                    Layout.fillWidth: true
+                    plain: true
+                }
+
                 StyledClippingRect {
                     id: wall
 
+                    visible: !screenWalls.visible
                     Layout.fillWidth: true
                     implicitHeight: width * 9 / 16
                     radius: Tokens.rounding.large
@@ -137,12 +146,13 @@ PageBase {
                     readonly property real minY: Math.min(...root.screens.map(s => s.y))
                     readonly property real spanW: Math.max(...root.screens.map(s => s.x + s.w)) - minX
                     readonly property real spanH: Math.max(...root.screens.map(s => s.y + s.h)) - minY
-                    readonly property real k: root.screens.length ? Math.min((width - 32) / spanW, (height - 32) / spanH) : 1
+                    readonly property real k: root.screens.length ? Math.min(width / spanW, height / spanH) : 1
 
+                    // (on the card itself, the screens edge to edge, as tall as they are)
                     Layout.fillWidth: true
-                    implicitHeight: width * 9 / 16
+                    implicitHeight: Math.round(width * Math.min(0.75, spanH / spanW || 0.5625))
                     radius: Tokens.rounding.large
-                    color: Colours.layer(Colours.palette.m3surfaceContainerHigh, 2)
+                    color: "transparent"
 
                     Repeater {
                         model: root.screens

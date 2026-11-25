@@ -2,7 +2,7 @@ pragma ComponentBehavior: Bound
 
 // caelestia-overlay: the screens on Nexus's Wallpapers page, where they stand (as arranged on Display), each showing its
 // wallpaper (its own, or the one for every screen). One clicked: its own wallpaper to pick under them (or the same as
-// the others). Shown with more than one screen
+// the others). Shown with more than one screen. plain: on a card (Home's), with no background of its own
 
 import QtQuick
 import QtQuick.Layouts
@@ -16,6 +16,8 @@ ColumnLayout {
 
     readonly property var screens: AgrosSettings.byKey["screens.layout"]?.screens ?? []
     property string selected // (a screen's id)
+    // (no background of its own, the screens edge to edge: on a card, Home's)
+    property bool plain
 
     function wallOf(s: var): string {
         const own = AgrosSettings.byKey[`screens.${s.id}.wallpaper`]?.value || "";
@@ -33,15 +35,17 @@ ColumnLayout {
         readonly property real minY: Math.min(...root.screens.map(s => s.y))
         readonly property real spanW: Math.max(...root.screens.map(s => s.x + s.w)) - minX
         readonly property real spanH: Math.max(...root.screens.map(s => s.y + s.h)) - minY
-        readonly property real k: root.screens.length ? Math.min((width - 48) / spanW, (height - 48) / spanH) : 1
+        readonly property real pad: root.plain ? 0 : 48
+        readonly property real k: root.screens.length ? Math.min((width - pad) / spanW, (height - pad) / spanH) : 1
 
         Layout.fillWidth: true
-        implicitHeight: Math.min(340, Math.round(width * 0.4))
+        // (plain: as tall as the screens, no taller than 3/4 of its width)
+        implicitHeight: root.plain ? Math.round(width * Math.min(0.75, spanH / spanW || 0.5625)) : Math.min(340, Math.round(width * 0.4))
         topLeftRadius: Tokens.rounding.large
         topRightRadius: Tokens.rounding.large
         bottomLeftRadius: root.selected ? Tokens.rounding.extraSmall : Tokens.rounding.large
         bottomRightRadius: bottomLeftRadius
-        color: Colours.layer(Colours.palette.m3surfaceContainer, 2)
+        color: root.plain ? "transparent" : Colours.layer(Colours.palette.m3surfaceContainer, 2)
 
         Repeater {
             model: root.screens
@@ -118,6 +122,7 @@ ColumnLayout {
         visible: !!root.selected
         Layout.fillWidth: true
         key: root.selected ? `screens.${root.selected}.wallpaper` : ""
+        first: root.plain
         last: true
     }
 }
