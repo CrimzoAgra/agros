@@ -271,6 +271,20 @@ grep -q '360); // caelestia-overlay: no taller than 360' "$n/pages/WallpaperAndS
     grep -q 'AgrosSkeleton {' "$n/Pages.qml" && grep -q 'onTriggered: root.buildPage(root.pendingIdx)' "$n/Pages.qml" && grep -q 'if (idx === pendingIdx)' "$n/Pages.qml" && grep -q 'if (idx !== pendingIdx)' "$n/Pages.qml" &&
     grep -q 'stateLayer.onClicked: root.listOpen = !root.listOpen' "$n/common/AgrosRow.qml"; } ||
     fail "screens' wallpapers not with the wallpapers, no page skeleton, or the lists' button not the split one"
+# AgrOS's pages (on Nexus's PageBase, whose one child is its content, an Item): a Timer or a Process there failed to
+# load, and with it the whole shell (no bar, no wallpaper); lint passed it
+for f in "$n"/common/Agros*.qml "$n"/pages/Agros*.qml; do
+    grep -q '^PageBase {$' "$f" || continue
+    kids=$(grep -E '^    [A-Z][A-Za-z.]* \{$' "$f" | tr -d ' {' | tr '\n' ' ')
+    [[ $kids =~ ^[A-Za-z.]+\ $ && ! $kids =~ ^(Timer|Process|Connections|QtObject|FileView|Binding|Variants)\  ]] ||
+        fail "${f##*/}: a page's one child must be an Item (its content), not: $kids"
+done
+# The search: AgrOS's settings it finds in the page's place (cleared when one's page is opened); AgrOS's settings read
+# again every few seconds while Nexus is open (one changed elsewhere shows)
+{ grep -q 'AgrosSearch {' "$n/Nexus.qml" && grep -q 'visible: !agrosSearch.visible' "$n/Nexus.qml" &&
+    grep -q 'onTriggered: AgrosSettings.refresh()' "$n/Nexus.qml" && grep -q 'signal clearSearch' "$n/NexusState.qml" &&
+    grep -q 'searchField.text = "";' "$n/NavPane.qml" && [[ -f $n/common/AgrosSearch.qml ]]; } ||
+    fail "the search doesn't list the settings it finds, or settings changed elsewhere don't show"
 # The wallpaper in Caelestia's frame, pushed in by the bar as it grows when the shell starts (its window the whole
 # screen: kept clear of the frame's zones, a black band showed where the bar would be until it was there)
 bgq=$dst/modules/background/Background.qml

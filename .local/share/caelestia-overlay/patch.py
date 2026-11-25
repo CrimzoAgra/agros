@@ -848,15 +848,26 @@ def nexus_pages():
 
     # The nav list: a title over each group; the search over it (Nexus's did nothing) keeps the pages whose name, what
     # they're about, or one of AgrOS's settings on them has what's typed
-    state = insert(read("modules/nexus/NexusState.qml"), "    property bool searchOpen\n", "    property string searchText // caelestia-overlay: the nav search's\n", before=False)
+    state = insert(read("modules/nexus/NexusState.qml"), "    property bool searchOpen\n", """    property string searchText // caelestia-overlay: the nav search's
+    signal clearSearch // caelestia-overlay: a search result's page opened (AgrosSearch.qml)
+""", before=False)
     pane = insert(read("modules/nexus/NavPane.qml"), """            value: searchField.text.length > 0
         }
 """, """
-        // caelestia-overlay: what's searched (the nav list keeps the pages it finds)
+        // caelestia-overlay: what's searched (the nav list keeps the pages it finds; AgrOS's settings found, in the page's
+        // place: AgrosSearch.qml), and cleared when one's page is opened from there
         Binding {
             target: root.nState
             property: "searchText"
             value: searchField.text
+        }
+
+        Connections {
+            function onClearSearch(): void {
+                searchField.text = "";
+            }
+
+            target: root.nState
         }
 """, before=False)
     nav = read("modules/nexus/navpane/NavLocations.qml")
@@ -905,6 +916,30 @@ def nexus_pages():
     nexus = insert(nexus, "    signal close\n", """    // caelestia-overlay: AgrOS's changes waiting for Nexus to close (the shell's restart), applied now
     Component.onDestruction: AgrosSettings.flush()
 
+""", before=False)
+    # (what the search finds of AgrOS's settings, in the page's place while something's typed; and AgrOS's settings read
+    # again every few seconds while Nexus is open, so one changed elsewhere shows as it is)
+    nexus = insert(nexus, "    Pages {\n", """    // caelestia-overlay: AgrOS's settings the search finds, in the page's place (AgrosSearch.qml)
+    AgrosSearch {
+        id: agrosSearch
+
+        anchors.fill: agrosPages
+        visible: nState.searchText.trim().length >= 2
+        nState: nState
+    }
+
+    // caelestia-overlay: AgrOS's settings read again while open: one changed elsewhere shows as it is
+    Timer {
+        running: true
+        repeat: true
+        interval: 4000
+        onTriggered: AgrosSettings.refresh()
+    }
+
+""")
+    nexus = insert(nexus, "    Pages {\n", """        id: agrosPages // caelestia-overlay
+
+        visible: !agrosSearch.visible
 """, before=False)
     nexus = insert(nexus, "    NavPane {\n", """    // caelestia-overlay: recording a shortcut (AgrOS's Shortcuts)
     AgrosKeyCapture {
@@ -1007,6 +1042,7 @@ PageBase {
     files = components("services/AgrosSettings.qml", "modules/nexus/common/AgrosRow.qml",
                        "modules/nexus/common/AgrosSections.qml", "modules/nexus/common/AgrosKeyCapture.qml",
                        "modules/nexus/common/AgrosSkeleton.qml", "modules/nexus/common/AgrosScreenWalls.qml",
+                       "modules/nexus/common/AgrosSearch.qml",
                        "modules/nexus/pages/AgrosPage.qml", "modules/nexus/pages/AgrosHome.qml",
                        "modules/nexus/pages/AgrosDisplay.qml", "modules/nexus/pages/AgrosUpdates.qml")
     # Caelestia's options Nexus's own pages set (GlobalConfig.bar.persistent...), by their path: not shown again

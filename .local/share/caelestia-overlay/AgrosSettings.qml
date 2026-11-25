@@ -130,6 +130,16 @@ Singleton {
             schema.running = true;
     }
 
+    // The values read again (Nexus, every few seconds while it's open: dots-settings now, a fraction of the schema's
+    // work): one changed elsewhere (a shortcut key, the bar's menu, another Settings window) shows as it is; a setting
+    // come or gone (a screen plugged in, an app's autostart entry) reads the whole schema again. Not while a change made
+    // here is on its way (its old value would show again for a moment), nor while a shortcut is being recorded
+    function refresh(): void {
+        if (!loaded || schema.running || now.running || setter.running || applier.running || applyTimer.running || queue.length || capture)
+            return;
+        now.running = true;
+    }
+
     function set(key: string, value: var): void {
         const s = byKey[key];
         if (s) {
@@ -193,6 +203,38 @@ Singleton {
             if (root.again) {
                 root.again = false;
                 running = true;
+            }
+        }
+    }
+
+    Process {
+        id: now
+
+        command: [root.cli, "now"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                let values;
+                try {
+                    values = JSON.parse(text);
+                } catch (e) {
+                    return;
+                }
+                // (a change made here meanwhile: this reading is older than it)
+                if (setter.running || root.queue.length || applyTimer.running)
+                    return;
+                // (the shortcuts no one can change, binds.*, aren't in it)
+                const known = Object.keys(root.byKey).filter(k => !root.byKey[k].readonly);
+                if (known.some(k => !(k in values)) || Object.keys(values).some(k => !(k in root.byKey)))
+                    return root.reload();
+                // (a new object for each one changed: a row follows its setting, not what's inside it)
+                let changed = false;
+                for (const k of known)
+                    if (JSON.stringify(root.byKey[k].value) !== JSON.stringify(values[k])) {
+                        root.byKey[k] = Object.assign({}, root.byKey[k], { value: values[k] });
+                        changed = true;
+                    }
+                if (changed)
+                    root.byKeyChanged();
             }
         }
     }
