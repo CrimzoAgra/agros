@@ -768,7 +768,11 @@ Variants {
                 const conf = scope.config;
                 if (!conf || !shared.popouts)
                     return false;
-                if ((s.launcher && conf.launcher.enabled) || (s.session && conf.session.enabled) || (s.sidebar && conf.sidebar.enabled))
+                if ((s.launcher && conf.launcher.enabled) || (s.session && conf.session.enabled))
+                    return true;
+                // (the sidebar on hover closes as the pointer leaves, as the dashboard does: grabbing, it took the
+                // keyboard from the window under it, which didn't get it back)
+                if (!conf.sidebar.showOnHover && s.sidebar && conf.sidebar.enabled)
                     return true;
                 if (!conf.dashboard.showOnHover && s.dashboard && conf.dashboard.enabled)
                     return true;

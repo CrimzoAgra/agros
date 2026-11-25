@@ -319,6 +319,7 @@
             {
               "key": "look.mode",
               "label": "Light or dark",
+              "description": "AMOLED: dark, with the shell pure black (the bar, its border, the panels) and the surfaces on it darker.",
               "type": "choice",
               "options": [
                 {
@@ -328,16 +329,21 @@
                 {
                   "value": "dark",
                   "label": "Dark"
+                },
+                {
+                  "value": "amoled",
+                  "label": "AMOLED"
                 }
               ],
-              "get": "jq -r .mode ~/.local/state/caelestia/scheme.json 2>/dev/null",
-              "set": "caelestia scheme set -m \"$VALUE\""
+              "get": "m=$(jq -r .mode ~/.local/state/caelestia/scheme.json 2>/dev/null); [ \"$m\" = dark ] && [ \"$(jq '.\"look.amoled\"' ~/.config/dots/settings.json 2>/dev/null)\" != false ] && m=amoled; echo \"$m\"",
+              "set": "m=$VALUE; [ \"$m\" = light ] || { dots-settings set look.amoled \"$([ \"$m\" = amoled ] && echo true || echo false)\" && m=dark; }; caelestia scheme set -m \"$m\""
             },
             {
               "key": "look.amoled",
               "label": "AMOLED black",
-              "description": "In dark mode, the shell pure black: the bar, its border and the panels' backgrounds.",
+              "description": "Light or dark's AMOLED: in dark mode, the shell pure black.",
               "type": "bool",
+              "hidden": true,
               "default": true
             },
             {

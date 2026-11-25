@@ -17,6 +17,7 @@ The list of settings, their defaults and how each one applies: ~/.local/share/do
                                      for a game to close
   dots-settings lua                  write settings.lua again (Hyprland's config does when the schema changed)
   dots-settings migrate [--old-account]  settings an update moved, put where they are now (agros-links, at login)
+A "hidden" setting isn't shown (another sets it).
 A setting with "get"/"set" shell commands in the schema lives elsewhere (the window mode: ~/.local/state/window-mode);
 "set" gets the value in $VALUE. A group with "from" lists the changes of a patch that can be turned off, from the
 patch itself (patch.py --list), so a new one shows without editing the schema; "from": "autostart" lists your apps
@@ -1006,6 +1007,9 @@ def main(args):
         now = values(settings)
         for s in (s for page in pages["pages"] for group in page["groups"] for s in group["settings"]):
             s["value"] = now[s["key"]]  # (every copy of one listed twice)
+        # (a hidden one is set by another, not shown: AMOLED black, Light or dark's third choice)
+        for group in (g for page in pages["pages"] for g in page["groups"]):
+            group["settings"] = [s for s in group["settings"] if not s.get("hidden")]
         print(json.dumps(pages))
     elif cmd in ("values", "now"):
         print(json.dumps(values(settings)))

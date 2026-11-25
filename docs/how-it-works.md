@@ -394,8 +394,8 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
       switches are on Settings › Panels › Taskbar › Dock (`AgrosBarDock.qml`)
     - The tray, opened, grows from its end over the dock on the bar's own colour, with the dock's padding and more before
       its first icon, its place in the bar the closed tray's: nothing beside it squeezed (`tray_over_dock`)
-    - AMOLED black (Settings › Wallpaper & style under Dark theme, and Home's Look card; `look.amoled`, `amoled`; on by
-      default): in dark mode the scheme's backgrounds pure black, the bar, its border and the panels, the surfaces on them darkened
+    - AMOLED black (Light or dark's third choice, on Home's Look card and Settings › Wallpaper & style in place of the
+      Dark theme switch; `look.mode` sets the hidden `look.amoled`, `amoled`; on by default): in dark mode the scheme's backgrounds pure black, the bar, its border and the panels, the surfaces on them darkened
       to match; read live from `settings.json`
     - A window's icon found by one lookup for the bar, the dock and Alt+Tab (`.config/quickshell/common/WindowApps.qml`:
       Quickshell's, else `.local/bin/app-for-window`: the class's last part, a Flatpak's id, the window's program)

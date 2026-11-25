@@ -1102,20 +1102,23 @@ def nexus_pages():
 
             visible: !screenWalls.visible
 """, 1)
-    # AMOLED black (AgrOS's, amoled) under the dark theme switch; at the end of the page's AgrOS sections if that's moved
-    dark = """            last: true
+    # The dark theme switch as Settings' light, dark or AMOLED black (AgrOS's, amoled); at the end of the page's AgrOS
+    # sections if that's moved
+    dark = """        ToggleRow {
+            Layout.topMargin: Tokens.spacing.extraSmall / 2 - parent.spacing
+
+            last: true
             text: Tr.tr("Dark theme")
             checked: !Colours.light
             onToggled: Colours.setMode(checked ? "dark" : "light")
         }
 """
     if style.count(dark) == 1:
-        style = style.replace(dark, dark.replace("            last: true\n", "") + """
-        // caelestia-overlay: AgrOS's pure black for dark mode
+        style = style.replace(dark, """        // caelestia-overlay: light, dark or AgrOS's AMOLED black, Settings' (look.mode)
         AgrosRow {
             Layout.topMargin: Tokens.spacing.extraSmall / 2 - parent.spacing
             last: true
-            key: "look.amoled"
+            key: "look.mode"
         }
 """)
     folded["modules/nexus/pages/WallpaperAndStyle.qml"] = style
