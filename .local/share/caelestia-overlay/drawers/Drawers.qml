@@ -160,8 +160,21 @@ Variants {
         // has the bar's window, above it, draw that corner over its part, not take it: given back, a part Qt didn't
         // draw again, the border black there on a narrow screen till something else in the window changed)
         readonly property rect rightOwn: Qt.rect(screenW - ownRight, 0, ownRight, screenH)
-        readonly property rect topOwn: barTop ? columnOwn : barBottom && detached ? Qt.rect(screenW - ownRight, 0, 0, topArea.height) : Qt.rect(ownLeft, 0, Math.max(0, screenW - ownLeft - ownRight), topArea.height)
-        readonly property rect bottomOwn: barBottom ? columnOwn : barTop && detached ? Qt.rect(screenW - ownRight, screenH - bottomArea.height, 0, bottomArea.height) : Qt.rect(ownLeft, screenH - bottomArea.height, Math.max(0, screenW - ownLeft - ownRight), bottomArea.height)
+        readonly property rect topOwn: barTop ? columnOwn : barBottom && detached ? Qt.rect(screenW - ownRight, 0, 0, topArea.height) : middleOwn(shared.dashboard, 0, topArea.height)
+        readonly property rect bottomOwn: barBottom ? columnOwn : barTop && detached ? Qt.rect(screenW - ownRight, screenH - bottomArea.height, 0, bottomArea.height) : middleOwn(shared.launcher, screenH - bottomArea.height, bottomArea.height)
+
+        // A middle window's part: between the columns, and as wide as its panel (and its corners' room) whatever the
+        // columns still hold: drawn over them there. A panel opening where one in a column is still closing (a narrow
+        // screen: the dashboard as the utilities panel goes) had no background over that column till it had closed
+        function middleOwn(p: Item, y: real, h: real): rect {
+            let l = ownLeft, r = screenW - ownRight;
+            if (p?.visible) {
+                l = Math.min(l, innerX + vx(p) - 64);
+                r = Math.max(r, innerX + vx(p) + p.width + 64);
+            }
+            l = Math.max(0, l);
+            return Qt.rect(l, y, Math.max(0, Math.min(screenW, r) - l), h);
+        }
 
         // The bar across: its window's part the strip along its edge, as deep as its window, between the left border's
         // column and the right window's (both the screen's height, the bar's ends included: its window, over theirs, has
