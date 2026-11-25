@@ -97,6 +97,38 @@ ClippingRectangle {
         return pinsFirst ? pinned.concat(sep, out) : out.concat(sep, pinned);
     }
 
+    // What the dock shows: items, and for a moment the icons just gone (an app's windows closed or moved away, an app
+    // unpinned: leaving), shrinking away where they were. Gone with a workspace switch: at once, as before
+    property var shown: []
+    property int shownWorkspace: -1
+
+    function show(): void {
+        const ws = monitor?.activeWorkspace?.id ?? -1;
+        const switched = ws !== shownWorkspace;
+        shownWorkspace = ws;
+        const now = new Set(items.map(i => i.uid));
+        const out = [...items];
+        shown.forEach((s, i) => {
+            if (now.has(s.uid) || (switched && !s.leaving))
+                return;
+            const after = i > 0 ? out.findIndex(o => o.uid === shown[i - 1].uid) : -1;
+            out.splice(after + 1, 0, s.leaving ? s : Object.assign({}, s, { leaving: true }));
+        });
+        shown = out;
+        if (out.length !== items.length)
+            dropLeaving.restart();
+    }
+
+    onItemsChanged: show()
+    Component.onCompleted: show()
+
+    Timer {
+        id: dropLeaving
+
+        interval: 600
+        onTriggered: root.shown = root.shown.filter(s => !s.leaving)
+    }
+
     // A window's (or pinned app's) app file: the one lookup the bar and switcher use too (WindowApps.qml, as
     // Icons.windowApps); Quickshell's own if that patch didn't fit
     function entryFor(id: string): DesktopEntry {
@@ -115,7 +147,7 @@ ClippingRectangle {
     // The app cell under a y position (in this item's coordinates), or null
     function cellAt(y: real): Item {
         const c = column.childAt(column.width / 2, mapToItem(column, 0, y).y);
-        return c && !c.modelData?.sep ? c : null;
+        return c && !c.modelData?.sep && !c.modelData?.leaving ? c : null;
     }
 
     // Lowest index a dragged item can land on (only the pinned group can be reordered)
@@ -347,7 +379,7 @@ ClippingRectangle {
                 // Icons that stay (a pinned app, a window still there) keep their cell when the list changes, e.g. on a
                 // workspace switch: rebuilding them all made the dock flicker. uid: one per pinned app / window
                 model: ScriptModel {
-                    values: root.items
+                    values: root.shown
                     objectProp: "uid"
                 }
 
@@ -360,10 +392,13 @@ ClippingRectangle {
                     // which window has focus
                     readonly property bool focused: (modelData.wins ?? []).some(t => root.focusKnown ? t.activated : t.lastIpcObject?.focusHistoryID === 0)
                     readonly property bool dragged: root.dragFrom === index
-                    // New here (a window opened, an app pinned): its place opens, the dock growing to it, as it comes in
-                    property real grown: 0
+                    // New here (a window opened, an app pinned): its place opens, the dock growing to it, as it comes in;
+                    // leaving (closed, unpinned): the other way, its place closing
+                    property bool entered
+                    property real grown: entered && !modelData.leaving ? 1 : 0
 
-                    Component.onCompleted: grown = 1
+                    Component.onCompleted: entered = true
+                    enabled: !modelData.leaving
 
                     width: column.width
                     opacity: (modelData.wins?.length && modelData.wins.every(t => t.workspace?.name?.startsWith("special:minimised")) ? 0.5 : 1) * grown  // all minimised: dimmed
@@ -420,7 +455,7 @@ ClippingRectangle {
                                 if (!(pressedButtons & Qt.LeftButton))
                                     return;
                                 const y = mapToItem(column, 0, event.y).y;
-                                if (!root.dragging && Math.abs(event.y - dragPressY) > 8) {
+                                if (!root.dragging && root.shown.length === root.items.length && Math.abs(event.y - dragPressY) > 8) {
                                     wasDragged = true;
                                     root.dragFrom = cell.index;
                                     root.dragTo = cell.index;
