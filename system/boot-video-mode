@@ -269,7 +269,11 @@ def main():
     write(conf, lines)
     print(f"Kernel console mode: {' '.join(video)}")
     try:
-        return subprocess.run(update, check=False).returncode
+        rc = subprocess.run(update, check=False).returncode
+        # (the menu not made, /boot full: the old options back, so the next boot tries again rather than finding them set)
+        if rc:
+            write(conf, old)
+        return rc
     except FileNotFoundError:
         print(f"No {update[0]}: the boot entries are made again at the next kernel update", file=sys.stderr)
         return 1

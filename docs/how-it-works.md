@@ -1387,7 +1387,8 @@ brings each change; nothing to run by hand).
   shutdown splash is Plymouth's own (`plymouth-poweroff`/`-reboot`)
 - **`agros-boot`** also: no "no video" between the login screen and the desktop. `system/boot-video-mode` at every boot
   gives the kernel console each connected screen's best mode as a `video=` boot option, and only
-  rebuilds the boot entries when the screens changed
+  rebuilds the boot entries when the screens changed (a rebuild that fails, `/boot` full: the options put back, tried
+  again at the next boot)
 - **`agros-nvidia`**: loads the NVIDIA driver from the start of the boot (in the initramfs, which CachyOS's
   `chwd` leaves it out of): about 2 s sooner, with the boot splash on it. Installed by `agros-welcome --system` when
   there's an NVIDIA card (PCI vendor 10de, a display controller)

@@ -98,4 +98,11 @@ rm -f "$t/edid/calls"; bvm >/dev/null
 echo 'GRUB_CMDLINE_LINUX_DEFAULT="quiet"' >"$grub"
 bvm >/dev/null || fail "boot-video-mode on GRUB failed"
 grep -qx "grub-mkconfig -o $gr/boot/grub/grub.cfg" "$t/edid/calls" || fail "GRUB's menu not made in AGROS_ROOT: $(cat "$t/edid/calls")"
+# The menu couldn't be made (grub-mkconfig failed: /boot full): the file as it was, so the next boot tries again (it found
+# the screens' modes there and did nothing, the menu left without them)
+echo 'GRUB_CMDLINE_LINUX_DEFAULT="quiet"' >"$grub"
+printf '#!/bin/sh\nexit 1\n' >"$t/edid/grub-mkconfig"
+rc=0; bvm >/dev/null || rc=$?
+((rc == 1)) || fail "grub-mkconfig failed: not said (exit $rc)"
+[[ $(cat "$grub") == 'GRUB_CMDLINE_LINUX_DEFAULT="quiet"' ]] || fail "grub-mkconfig failed: the options kept: $(cat "$grub")"
 echo "ok boot-video-mode-options"
