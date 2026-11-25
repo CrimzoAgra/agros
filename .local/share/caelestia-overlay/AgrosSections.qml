@@ -5,8 +5,9 @@ pragma ComponentBehavior: Bound
 // into one of Nexus's own pages, only what Nexus doesn't show itself: only the groups in onlyGroups (when given), not
 // the ones in skipGroups, nor the settings in skipKeys, nor Caelestia's
 // options Nexus's pages set (covered: written in by patch.py's nexus_pages, from Nexus's pages as they are). Over them,
-// why the last change failed, and when the shell will restart for one. Kept row by row as the schema is read again
-// (each change does), so a switch isn't redrawn in the middle of moving
+// why the last change failed, and when the shell will restart for one. On a wide page (Nexus maximised) the groups go
+// in two columns, each group to the shorter one so far. Kept row by row as the schema is read again (each change
+// does), so a switch isn't redrawn in the middle of moving
 
 import QtQuick
 import QtQuick.Layouts
@@ -37,9 +38,25 @@ ColumnLayout {
                     continue;
                 const keys = (g.settings ?? []).filter(s => kinds.includes(s.type) && !skipKeys.includes(s.key) && !(s.key.startsWith("caelestia-shell.") && covered.includes(s.key.slice(16)))).map(s => s.key);
                 if (keys.length)
-                    out.push({ title: g.title ?? "", keys });
+                    out.push({
+                        title: g.title ?? "",
+                        keys
+                    });
             }
         return out;
+    }
+    readonly property int columns: width >= 1300 ? 2 : 1
+    // The groups' titles in each column
+    readonly property var split: {
+        const cols = Array.from({
+            length: columns
+        }, () => []), size = Array(columns).fill(0);
+        for (const g of groups) {
+            const i = size.indexOf(Math.min(...size));
+            cols[i].push(g.title);
+            size[i] += g.keys.length + 1;
+        }
+        return cols;
     }
 
     spacing: Tokens.spacing.extraSmall / 2
@@ -76,38 +93,58 @@ ColumnLayout {
         }
     }
 
-    Repeater {
-        model: ScriptModel {
-            values: root.groups.map(g => g.title)
-        }
+    RowLayout {
+        Layout.fillWidth: true
+        spacing: Tokens.spacing.extraLarge
 
-        ColumnLayout {
-            id: group
+        Repeater {
+            model: root.columns
 
-            required property string modelData
-            required property int index
-            readonly property var keys: root.groups.find(g => g.title === modelData)?.keys ?? []
+            ColumnLayout {
+                id: column
 
-            Layout.fillWidth: true
-            spacing: Tokens.spacing.extraSmall / 2
+                required property int index
 
-            SectionHeader {
-                first: root.firstHeader && group.index === 0
-                text: group.modelData
-            }
+                Layout.fillWidth: true
+                Layout.preferredWidth: 1 // (columns as wide as each other)
+                Layout.alignment: Qt.AlignTop
+                spacing: Tokens.spacing.extraSmall / 2
 
-            Repeater {
-                model: ScriptModel {
-                    values: group.keys
-                }
+                Repeater {
+                    model: ScriptModel {
+                        values: root.split[column.index] ?? []
+                    }
 
-                AgrosRow {
-                    required property string modelData
-                    required property int index
+                    ColumnLayout {
+                        id: group
 
-                    key: modelData
-                    first: index === 0
-                    last: index === group.keys.length - 1
+                        required property string modelData
+                        required property int index
+                        readonly property var keys: root.groups.find(g => g.title === modelData)?.keys ?? []
+
+                        Layout.fillWidth: true
+                        spacing: Tokens.spacing.extraSmall / 2
+
+                        SectionHeader {
+                            first: root.firstHeader && group.index === 0
+                            text: group.modelData
+                        }
+
+                        Repeater {
+                            model: ScriptModel {
+                                values: group.keys
+                            }
+
+                            AgrosRow {
+                                required property string modelData
+                                required property int index
+
+                                key: modelData
+                                first: index === 0
+                                last: index === group.keys.length - 1
+                            }
+                        }
+                    }
                 }
             }
         }

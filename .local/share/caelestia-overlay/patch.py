@@ -781,10 +781,105 @@ def nexus_pages():
         },
 """, "updates placeholder")
 
-    # The bar's popout opens Nexus at these pages (by position): Home and Display come before them now
+    # The pages in AgrOS's order, under its titles (the nav list's groups), each with the dots-settings pages whose
+    # settings its search finds it by (agros). Reordered in both lists alike; Nexus's own pages not named here (a new
+    # one in an update) go at the end of System
+    order = [("home", "", ["home"]),
+             ("look", "Look & feel", ["palette", "select_window", "dock_to_bottom"]),
+             ("devices", "Devices", ["monitor", "volume_up", "mouse", "devices_other", "wifi"]),
+             ("apps", "Apps & shortcuts", ["apps", "rocket_launch", "keyboard"]),
+             ("system", "System", ["update", "auto_awesome", "build", "globe", "info"])]
+    # (Nexus's Plugins page: a placeholder, nothing on it yet: left out until Caelestia fills it)
+    drop = {"extension"}
+    agros = {"palette": ["look", "panels"], "dock_to_bottom": ["panels", "bar", "launcher", "session"], "build": ["notifs", "region"],
+             "monitor": ["screens"], "mouse": ["input"], "auto_awesome": ["features"], "rocket_launch": ["startup"],
+             "select_window": ["windows"], "keyboard": ["keys"]}
+
+    def items(text, head):
+        """The list at head ("readonly property list<var> pages: ["): where its items start and end, and each item
+        (its lines, from its opening line to its "}," at the list's indent), comments between them dropped"""
+        start = text.index(head) + len(head)
+        end = text.index("\n    ]\n", start) + 1
+        out, cur = [], []
+        for line in text[start:end].splitlines(keepends=True):
+            if not cur and line.startswith("        ") and line.rstrip().endswith("{") and not line.startswith("         "):
+                cur = [line]
+            elif cur:
+                # (the last one may have no comma)
+                if line in ("        },\n", "        }\n"):
+                    cur.append("        },\n")
+                    out.append("".join(cur))
+                    cur = []
+                else:
+                    cur.append(line)
+        if cur or not out:
+            raise LookupError(f"the list {head.strip()}")
+        return start, end, out
+
+    rs, re_, pages = items(reg, "    readonly property list<var> pages: [\n")
+    cs, ce, pcomps = items(comps, "    readonly property list<Component> pageComps: [\n")
+    if len(pages) != len(pcomps):
+        raise LookupError("Nexus's page lists out of step")
+    icons = [re.search(r'^ {12}icon: "([^"]+)"', p, re.M).group(1) for p in pages]
+    rank = {icon: (i, j, cat) for i, (cat, _, ics) in enumerate(order) for j, icon in enumerate(ics)}
+    placed = sorted((k for k in range(len(pages)) if icons[k] not in drop), key=lambda k: rank.get(icons[k], (len(order) - 1, 99, "system"))[:2])
+    new_pages = []
+    for k in placed:
+        page = re.sub(r'^( {12}category: )"[^"]*"', f'\\1"{rank.get(icons[k], (0, 0, "system"))[2]}"', pages[k], flags=re.M)
+        page = re.sub(r'^( {12}icon: "[^"]+",\n)', lambda m: m.group(1) + f"            agros: {json.dumps(agros.get(icons[k], []))},\n", page, flags=re.M)
+        new_pages.append(page)
+    reg = reg[:rs] + "".join(new_pages) + reg[re_:]
+    comps = comps[:cs] + "".join(pcomps[k] for k in placed) + comps[ce:]
+    reg = insert(reg, "    readonly property list<var> pages: [\n", f"""    // caelestia-overlay: the titles over the nav list's groups (AgrOS's, by category)
+    readonly property var titles: {json.dumps({cat: title for cat, title, _ in order if title})}
+""")
+
+    # The bar's popout opens Nexus at these pages: by their icon, as they've moved
     wrapper = swap(read("modules/bar/popouts/Wrapper.qml"), """["appearance", "network", "bluetooth", "audio"].indexOf(root.queuedMode)""",
-                   """["home", "appearance", "display", "network", "bluetooth", "audio"].indexOf(root.queuedMode) // caelestia-overlay: AgrOS's Home and Display before them""",
+                   """PageRegistry.pages.findIndex(p => p.icon === ({ appearance: "palette", network: "wifi", bluetooth: "devices_other", audio: "volume_up" })[root.queuedMode]) // caelestia-overlay: by icon (AgrOS moved them)""",
                    "popout's nexus pages")
+
+    # The nav list: a title over each group; the search over it (Nexus's did nothing) keeps the pages whose name, what
+    # they're about, or one of AgrOS's settings on them has what's typed
+    state = insert(read("modules/nexus/NexusState.qml"), "    property bool searchOpen\n", "    property string searchText // caelestia-overlay: the nav search's\n", before=False)
+    pane = insert(read("modules/nexus/NavPane.qml"), """            value: searchField.text.length > 0
+        }
+""", """
+        // caelestia-overlay: what's searched (the nav list keeps the pages it finds)
+        Binding {
+            target: root.nState
+            property: "searchText"
+            value: searchField.text
+        }
+""", before=False)
+    nav = read("modules/nexus/navpane/NavLocations.qml")
+    nav = swap(nav, """                readonly property bool isCurrentPage: index === root.nState.currentPageIdx
+""", """                readonly property bool isCurrentPage: index === root.nState.currentPageIdx
+                // caelestia-overlay: found by the search; the title over its group (none while searching)
+                readonly property bool found: AgrosSettings.matches(modelData, root.nState.searchText)
+                readonly property string groupTitle: isCategoryStart && !root.nState.searchOpen ? PageRegistry.titles[modelData.category] ?? "" : ""
+""", "nav item state")
+    nav = swap(nav, """                Layout.topMargin: index !== 0 && isCategoryStart ? Tokens.spacing.medium : 0
+""", """                Layout.topMargin: (index !== 0 && isCategoryStart ? Tokens.spacing.medium : 0) + (groupTitle ? groupLabel.implicitHeight + Tokens.spacing.small : 0)
+                visible: found
+""", "nav item margin")
+    nav = swap(nav, """                StateLayer {
+                    id: stateLayer
+""", """                // caelestia-overlay: its group's title, over it
+                StyledText {
+                    id: groupLabel
+
+                    visible: item.groupTitle !== ""
+                    x: Tokens.padding.large
+                    y: -implicitHeight - Tokens.spacing.small
+                    text: item.groupTitle
+                    color: Colours.palette.m3primary
+                    font: Tokens.font.label.large
+                }
+
+                StateLayer {
+                    id: stateLayer
+""", "nav item title")
 
     # Nexus: the shortcut recorder over it; closed, the changes that wait for it applied (the shell's restart)
     nexus = read("modules/nexus/Nexus.qml")
@@ -827,6 +922,32 @@ def nexus_pages():
 """),
     }
 
+    # Wallpaper & style's Colours: Nexus's is a "page under construction"; AgrOS's colour settings there (the scheme,
+    # light or dark, its variant, colours from the wallpaper). One Caelestia has made itself is left as it is
+    colours = read("modules/nexus/pages/wallandstyle/ColourSelect.qml")
+    if "Page under construction" in colours:
+        folded["modules/nexus/pages/wallandstyle/ColourSelect.qml"] = """// caelestia-overlay: AgrOS's colour settings (dots-settings's look page's Colours), Nexus's page being a placeholder
+import QtQuick
+import QtQuick.Layouts
+import Caelestia.I18n
+import qs.modules.nexus.common
+
+PageBase {
+    id: root
+
+    title: Tr.tr("Colours")
+    isSubPage: true
+
+    AgrosSections {
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.top: parent.top
+        width: root.cappedWidth
+        pageIds: ["look"]
+        onlyGroups: ["Colours"]
+    }
+}
+"""
+
     files = components("services/AgrosSettings.qml", "modules/nexus/common/AgrosRow.qml",
                        "modules/nexus/common/AgrosSections.qml", "modules/nexus/common/AgrosKeyCapture.qml",
                        "modules/nexus/pages/AgrosPage.qml", "modules/nexus/pages/AgrosHome.qml",
@@ -842,7 +963,61 @@ def nexus_pages():
     files[sections] = swap(files[sections], "    readonly property var covered: []\n",
                            f"    readonly property var covered: {json.dumps(sorted(covered))}\n", "covered options")
     return {"modules/nexus/PageRegistry.qml": reg, "modules/nexus/PageCompRegistry.qml": comps,
-            "modules/bar/popouts/Wrapper.qml": wrapper, "modules/nexus/Nexus.qml": nexus, **folded, **files}
+            "modules/bar/popouts/Wrapper.qml": wrapper, "modules/nexus/Nexus.qml": nexus,
+            "modules/nexus/NexusState.qml": state, "modules/nexus/NavPane.qml": pane,
+            "modules/nexus/navpane/NavLocations.qml": nav, **folded, **files}
+
+
+def nexus_snappy():
+    # Settings (Nexus) quicker and wider: a page's change and a sub-page's in a step quicker each (Caelestia's slowest
+    # fades, waited for one after the other, made each click feel late); the pages as wide as the window allows, less
+    # a margin, where Nexus kept them a column with the rest empty (maximised, most of the window); its wallpapers'
+    # pictures read once at about their size (a new size on every change of width read each one again)
+    def quicker(t):
+        return (t.replace("Anim.DefaultEffects", "Anim.FastEffects").replace("Anim.SlowEffects", "Anim.DefaultEffects")
+                .replace("durations.expressiveDefaultEffects", "durations.expressiveFastEffects"))
+
+    pages, stack = read("modules/nexus/Pages.qml"), read("modules/nexus/common/StackPage.qml")
+    if "Anim.SlowEffects" not in pages or "Anim.SlowEffects" not in stack:
+        raise LookupError("page transitions")
+    base = swap(read("modules/nexus/common/PageBase.qml"),
+                "    readonly property int cappedWidth: Math.min(Tokens.sizes.nexus.maxContentWidth, width)\n",
+                "    readonly property int cappedWidth: Math.min(width, Math.max(Tokens.sizes.nexus.maxContentWidth, Math.round(width * 0.92))) // caelestia-overlay: wider in a wide window\n",
+                "page width")
+    # (Caelestia's main sizes them otherwise already: left as it is there)
+    wall = read("modules/nexus/common/WallItem.qml")
+    old_size = """                sourceSize: {
+                    const dpr = (QsWindow.window as QsWindow)?.devicePixelRatio ?? 1;
+                    return Qt.size(width * dpr, height * dpr);
+                }
+                retainWhileLoading: true
+"""
+    wall = wall if old_size not in wall else swap(wall, """                sourceSize: {
+                    const dpr = (QsWindow.window as QsWindow)?.devicePixelRatio ?? 1;
+                    return Qt.size(width * dpr, height * dpr);
+                }
+                retainWhileLoading: true
+""", """                // caelestia-overlay: in steps of 256 px (each new size read the picture again)
+                sourceSize: {
+                    const dpr = (QsWindow.window as QsWindow)?.devicePixelRatio ?? 1;
+                    return Qt.size(Math.ceil(width * dpr / 256) * 256, Math.ceil(height * dpr / 256) * 256);
+                }
+                retainWhileLoading: true
+""", "wallpaper picture size")
+    # The wallpaper's preview no taller than 360 (with the page as wide as the window, it took half of it); as many
+    # wallpapers in a row as fit at about 260 each (Nexus's own count at the least)
+    style = swap(read("modules/nexus/pages/WallpaperAndStyle.qml"),
+                 "                return Math.min(Math.round(cWidth * 0.4), cWidth / screen.width * screen.height);\n",
+                 "                return Math.min(Math.round(cWidth * 0.4), cWidth / screen.width * screen.height, 360); // caelestia-overlay: no taller than 360\n",
+                 "wallpaper preview size")
+    grids = {}
+    for rel in ("modules/nexus/pages/wallandstyle/WallpaperSelect.qml", "modules/nexus/pages/wallandstyle/WallpaperCategory.qml"):
+        grids[rel] = swap(read(rel), "columns: Config.nexus.wallpapersPerRow\n",
+                          "columns: Math.max(Config.nexus.wallpapersPerRow, Math.floor(width / 260)) // caelestia-overlay: as many as fit\n",
+                          "wallpapers per row")
+    return {"modules/nexus/Pages.qml": quicker(pages), "modules/nexus/common/StackPage.qml": quicker(stack),
+            "modules/nexus/common/PageBase.qml": base, "modules/nexus/common/WallItem.qml": wall,
+            "modules/nexus/pages/WallpaperAndStyle.qml": style, **grids}
 
 
 def tray_click():
@@ -2128,6 +2303,7 @@ FEATURES = (
     ("check for updates button", updates_button),
     ("settings button in the Super menu", settings_button),
     ("AgrOS's settings in Caelestia's (Nexus)", nexus_pages),
+    ("settings: quicker page changes, pages as wide as the window", nexus_snappy),
     ("tray opens on click", tray_click),
     ("lock badges re-read at login", lock_refresh),
     ("notification sidebar without the utilities panel", sidebar_notifs_only),

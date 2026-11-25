@@ -239,7 +239,7 @@ comps=$(awk '/readonly property list<Component> pageComps/,/^    \]/' "$n/PageCo
     [[ $(awk '/readonly property list<var> pages/,/^    \]/' "$n/PageRegistry.qml" | grep -m1 -oE 'label: [^,]+') == 'label: "Home"' ]] &&
     grep -q 'AgrosDisplay {}' "$n/PageCompRegistry.qml" && grep -q 'AgrosUpdates {}' "$n/PageCompRegistry.qml" &&
     grep -q 'pageId: "keys"' "$n/PageCompRegistry.qml" &&
-    grep -qF '["home", "appearance", "display", "network", "bluetooth", "audio"].indexOf(root.queuedMode)' "$dst/modules/bar/popouts/Wrapper.qml" &&
+    grep -qF 'PageRegistry.pages.findIndex(p => p.icon === ({ appearance: "palette", network: "wifi", bluetooth: "devices_other", audio: "volume_up" })[root.queuedMode])' "$dst/modules/bar/popouts/Wrapper.qml" &&
     grep -q 'AgrosKeyCapture {' "$n/Nexus.qml" && grep -q 'Component.onDestruction: AgrosSettings.flush()' "$n/Nexus.qml" &&
     grep -q '^import qs.modules.nexus.common$' "$n/Nexus.qml"; } || fail "Nexus's AgrOS pages (Home, Display, Updates, Shortcuts) not where they go"
 for page in WallpaperAndStyle PanelsPage ServicesPage; do
@@ -247,9 +247,24 @@ for page in WallpaperAndStyle PanelsPage ServicesPage; do
 done
 grep -qE 'readonly property var covered: \[.*"bar\.persistent".*\]' "$n/common/AgrosSections.qml" ||
     fail "Caelestia's options Nexus sets itself not listed (they'd show twice): $(grep 'property var covered' "$n/common/AgrosSections.qml")"
-# The pages in order as the popout names them: Home, Wallpaper & style, Display, Network, Connected devices, Audio
-[[ $(awk '/readonly property list<var> pages/,/^    \]/' "$n/PageRegistry.qml" | grep -oE '^ {12}icon: "[a-z_]+"' | head -6 | tr -d ' ' | tr '\n' ' ') == 'icon:"home" icon:"palette" icon:"monitor" icon:"wifi" icon:"devices_other" icon:"volume_up" ' ]] ||
-    fail "Nexus's first pages not Home, Wallpaper & style, Display, Network, Connected devices, Audio"
+# The pages in AgrOS's groups (Home; Look & feel; Devices; Apps & shortcuts; System), the components moved with them
+# (each page's component still the one after it was), a title over each group, the search keeping what it finds
+icons=$(awk '/readonly property list<var> pages/,/^    \]/' "$n/PageRegistry.qml" | grep -oE '^ {12}icon: "[a-z_]+"' | sed -E 's/.*"(.*)"/\1/' | tr '\n' ' ')
+[[ $icons == "home palette select_window dock_to_bottom monitor volume_up mouse devices_other wifi apps rocket_launch keyboard update auto_awesome build globe info " ]] ||
+    fail "Nexus's pages not in AgrOS's groups: $icons"
+{ awk '/readonly property list<Component> pageComps/,/^    \]/' "$n/PageCompRegistry.qml" | grep -E 'AgrosHome \{\}|WallpaperAndStyle \{\}|pageId: "windows"|PanelsPage \{\}|AgrosDisplay \{\}' | tr -d ' ' | tr '\n' ' ' |
+    grep -qx 'AgrosHome{} WallpaperAndStyle{} pageId:"windows" PanelsPage{} AgrosDisplay{} '; } || fail "Nexus's page components not moved with their pages"
+{ grep -qF 'readonly property var titles: {"look": "Look & feel", "devices": "Devices", "apps": "Apps & shortcuts", "system": "System"}' "$n/PageRegistry.qml" &&
+    grep -q 'text: item.groupTitle' "$n/navpane/NavLocations.qml" && grep -q 'AgrosSettings.matches(modelData, root.nState.searchText)' "$n/navpane/NavLocations.qml" &&
+    grep -q 'property: "searchText"' "$n/NavPane.qml"; } || fail "the nav list's group titles or search missing"
+# Quicker page changes (no slow fades left), pages as wide as the window less a margin
+! grep -q 'Anim.SlowEffects' "$n/Pages.qml" "$n/common/StackPage.qml" && grep -q 'Math.round(width \* 0.92)' "$n/common/PageBase.qml" ||
+    fail "Nexus's page changes not quicker, or its pages not wider"
+grep -q '360); // caelestia-overlay: no taller than 360' "$n/pages/WallpaperAndStyle.qml" && grep -q 'AgrosSections {' "$n/pages/WallpaperAndStyle.qml" &&
+    grep -q 'Math.floor(width / 260)' "$n/pages/wallandstyle/WallpaperSelect.qml" || fail "the wallpaper's preview or the wallpapers' rows not sized to the window"
+# (Wallpaper & style's Colours: AgrOS's colour settings, while Caelestia's is a placeholder)
+grep -q 'Page under construction' /etc/xdg/quickshell/caelestia/modules/nexus/pages/wallandstyle/ColourSelect.qml &&
+    ! grep -q 'onlyGroups: \["Colours"\]' "$n/pages/wallandstyle/ColourSelect.qml" && fail "Colours still a page under construction"
 for f in "$n"/common/Agros*.qml "$n"/pages/Agros*.qml "$dst/services/AgrosSettings.qml"; do
     for ty in Variants ScriptModel Process StdioCollector Singleton FileView; do
         ! grep -qE "^\s*$ty \{|: $ty \{" "$f" || grep -qE '^import Quickshell(\.Io)?$' "$f" || fail "$f uses $ty without importing Quickshell"

@@ -4,8 +4,10 @@ pragma ComponentBehavior: Bound
 // not cut off as Nexus's own rows cut theirs), and its control: a switch, a row of buttons for a few short choices (a
 // menu for more), a spin box for whole numbers (a slider for the rest), a text field, shortcuts as chips with + to
 // record one; an app started at login with its icon, how it starts and a button removing it; pictures to pick one from
-// (a wallpaper) under it. Only its own control is made (a page of 100 rows, each with every kind of control hidden,
-// took seconds to show). Changes go through AgrosSettings.set
+// (a wallpaper) under it. Many choices (310 fonts): a list to search under the row, made when opened, only the lines in
+// sight drawn (a menu of every font, for each of three rows, froze Nexus for seconds; Caelestia's menus don't scroll).
+// Only its own control is made (a page of 100 rows, each with every kind of control hidden, took seconds to show).
+// Changes go through AgrosSettings.set
 
 import QtQuick
 import QtQuick.Layouts
@@ -25,8 +27,11 @@ ConnectedRect {
     readonly property string type: setting?.type ?? ""
     readonly property var value: setting?.value
     readonly property var options: setting?.options ?? []
-    // (a few short choices: buttons side by side)
+    // (a few short choices: buttons side by side; many (fonts, apps): a list to search, opened under the row)
     readonly property bool buttons: options.length > 0 && options.length <= 3 && options.reduce((n, o) => n + String(o.label ?? o.value).length, 0) <= 24
+    readonly property bool long: options.length > 8
+    readonly property string current: options.find(o => o.value === value)?.label || String(value ?? "")
+    property bool listOpen
     // (Caelestia's options with no description of their own have their path as one: not shown)
     readonly property string description: /\s/.test(setting?.description ?? "") ? setting.description : ""
 
@@ -116,13 +121,21 @@ ConnectedRect {
                 visible: !!sourceComponent
                 sourceComponent: ({
                         bool: switchC,
-                        choice: root.buttons ? buttonsC : menuC,
+                        choice: root.buttons ? buttonsC : root.long ? pickC : menuC,
                         startup: startupC,
                         keys: keysC,
                         number: root.setting?.integer === true ? spinC : sliderC,
                         text: fieldC
                     })[root.type] ?? null
             }
+        }
+
+        // Many choices: the list, open
+        Loader {
+            Layout.fillWidth: true
+            active: root.listOpen
+            visible: active
+            sourceComponent: listC
         }
 
         // Pictures: the one set outlined
@@ -187,13 +200,100 @@ ConnectedRect {
             Variants {
                 id: items
 
-                model: root.options
+                // (made when opened: each one is a row of the menu)
+                model: split.expanded ? root.options : []
 
                 MenuItem {
                     required property var modelData
 
                     text: modelData.label || String(modelData.value) || "None"
                     value: modelData.value
+                }
+            }
+        }
+    }
+
+    // Many choices: the one set, and the list under the row (opened, closed)
+    Component {
+        id: pickC
+
+        TextButton {
+            type: ButtonBase.Tonal
+            text: `${root.current || "None"}  ${root.listOpen ? "▴" : "▾"}`
+            horizontalPadding: Tokens.padding.large
+            verticalPadding: Tokens.padding.small
+            onClicked: root.listOpen = !root.listOpen
+        }
+    }
+
+    Component {
+        id: listC
+
+        ColumnLayout {
+            spacing: Tokens.spacing.small
+
+            StyledTextField {
+                id: search
+
+                Layout.fillWidth: true
+                placeholderText: "Search"
+                Component.onCompleted: forceActiveFocus()
+                Keys.onEscapePressed: root.listOpen = false
+                onAccepted: if (list.count) list.itemAtIndex(0)?.pick() // qmllint disable missing-property
+            }
+
+            ListView {
+                id: list
+
+                // (a font's name in that font: its row says how it looks)
+                readonly property bool fonts: /\.family$/.test(root.key)
+
+                Layout.fillWidth: true
+                implicitHeight: Math.min(contentHeight, 300)
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+                model: {
+                    const q = search.text.trim().toLowerCase();
+                    return q ? root.options.filter(o => String(o.label || o.value).toLowerCase().includes(q)) : root.options;
+                }
+                Component.onCompleted: positionViewAtIndex(Math.max(0, root.options.findIndex(o => o.value === root.value)), ListView.Center)
+
+                delegate: StyledRect {
+                    id: line
+
+                    required property var modelData
+                    readonly property bool selected: modelData.value === root.value
+
+                    function pick(): void {
+                        root.set(modelData.value);
+                        root.listOpen = false;
+                    }
+
+                    width: ListView.view.width
+                    implicitHeight: lineText.implicitHeight + Tokens.padding.small * 2
+                    radius: Tokens.rounding.small
+                    color: Qt.alpha(Colours.palette.m3tertiaryContainer, selected ? 1 : 0)
+
+                    StyledText {
+                        id: lineText
+
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.leftMargin: Tokens.padding.medium
+                        anchors.rightMargin: Tokens.padding.medium
+                        text: line.modelData.label || String(line.modelData.value) || "None"
+                        font.family: list.fonts && line.modelData.value ? line.modelData.value : Tokens.font.body.small.family
+                        font.pointSize: Tokens.font.body.small.pointSize
+                        color: line.selected ? Colours.palette.m3onTertiaryContainer : Colours.palette.m3onSurface
+                        elide: Text.ElideRight
+                    }
+
+                    StateLayer {
+                        anchors.fill: parent
+                        radius: line.radius
+                        onClicked: line.pick()
+                    }
                 }
             }
         }

@@ -37,7 +37,8 @@ PageBase {
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
         width: root.cappedWidth
-        columns: width > 760 ? 2 : 1
+        // (a card at least 400 wide: one column in a narrow window, all four in a row maximised)
+        columns: Math.max(1, Math.min(4, Math.floor((width + columnSpacing) / (400 + columnSpacing))))
         columnSpacing: Tokens.spacing.large
         rowSpacing: Tokens.spacing.large
 

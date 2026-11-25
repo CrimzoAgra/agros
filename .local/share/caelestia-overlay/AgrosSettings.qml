@@ -108,6 +108,14 @@ Singleton {
         return pages.find(p => p.id === id) ?? null;
     }
 
+    // Whether Nexus's nav search finds a page (PageRegistry's): what's typed in its name, what it's about, or one of
+    // AgrOS's settings on it (its agros: dots-settings's pages shown there)
+    function matches(nav: var, text: string): bool {
+        const q = text.trim().toLowerCase();
+        const has = t => String(t ?? "").toLowerCase().includes(q);
+        return !q || has(nav.label) || has(nav.description) || (nav.agros ?? []).some(id => (page(id)?.groups ?? []).some(g => (g.settings ?? []).some(s => has(s.label) || has(s.description))));
+    }
+
     function reload(): void {
         if (schema.running)
             again = true;
