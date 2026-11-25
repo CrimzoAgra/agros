@@ -41,7 +41,8 @@ post)
     # sleep service's leftover processes when this returns. The desktop is already awake meanwhile
     # (and given up on after those 15 s even when bluetoothctl's answers take their whole time limit)
     for try in $(seq 30); do
-        ((SECONDS < budget)) || break
+        # (tried once at least: SECONDS counts whole seconds of the clock, so after the second above it can say 2 already)
+        ((try == 1 || SECONDS < budget)) || break
         rfkill unblock bluetooth
         bt power on >/dev/null 2>&1
         if bt show 2>/dev/null | grep -q "Powered: yes"; then

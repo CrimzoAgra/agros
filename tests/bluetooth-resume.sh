@@ -64,6 +64,12 @@ BT_ACTIVE=1 BT_POWERED=yes BT_CONNECTED=1 hook post || fail "post failed after a
 BT_ACTIVE=1 BT_POWERED=yes hook pre
 BT_ACTIVE=1 BT_POWERED=yes hook post || fail "post failed with nothing connected"
 [[ $(grep -c "^bluetoothctl power off" "$t/calls") == 1 ]] || fail "an adapter on with nothing connected not switched off and on: $(cat "$t/calls")"
+# Its time already up when it first looks (SECONDS counts the clock's whole seconds: after its first second it can say 2,
+# and the 2 s the tests give it ran out with nothing tried): tried once all the same
+BT_ACTIVE=1 BT_POWERED=yes hook pre
+rm -f "$t/calls"
+BT_ACTIVE=1 BT_POWERED=yes BT_SYSFS=$t/sys BT_TIMEOUT=0.3 BT_BUDGET=0 PATH=$t/bin:$PATH timeout 30 "$t/hook" post >/dev/null 2>&1
+grep -q "^bluetoothctl power on" "$t/calls" || fail "its time up at the first look: not tried once: $(cat "$t/calls")"
 # Not answering after waking (bluetoothd stuck): still given up on within the time limit
 BT_ACTIVE=1 BT_POWERED=yes hook pre
 start=$SECONDS
