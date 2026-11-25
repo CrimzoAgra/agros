@@ -53,7 +53,7 @@ Item {
                 Layout.preferredHeight: 60
                 topLeftRadius: index === 0 ? Tokens.rounding.large : Tokens.rounding.extraSmall
                 topRightRadius: topLeftRadius
-                bottomLeftRadius: index === root.rows - 1 ? Tokens.rounding.large : Tokens.rounding.extraSmall
+                bottomLeftRadius: index === (root?.rows ?? 0) - 1 ? Tokens.rounding.large : Tokens.rounding.extraSmall // (root: null as it closes)
                 bottomRightRadius: bottomLeftRadius
             }
         }
