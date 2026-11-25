@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Works around NVIDIA shader compiler crashes in specific games, only on the GPUs and drivers that have them.
 
-Cyberpunk 2077 2.5 crashes at startup on Turing cards (RTX 20xx, GTX 16xx) with drivers 610/615:
+Cyberpunk 2077 2.5 crashes at startup on Turing cards (RTX 20xx, GTX 16xx) with drivers 610 and later (still in 620):
 NVIDIA's compiler aborts ("Unsupported: extractelement <8 x i4>", SIGILL in libnvidia-gpucomp) on one
 compute shader. The fix (https://github.com/HansKristian-Work/vkd3d-proton/issues/3405) runs that shader
 through spirv-opt, which gives an equivalent shader the driver compiles, and has VKD3D-Proton load it.
@@ -31,7 +31,10 @@ FIXES = {
     "1091500": {  # Cyberpunk 2077 2.5
         "name": "Cyberpunk 2077",
         "compute_cap": {"7.5"},  # Turing
-        "drivers": ("610.", "615."),
+        # (from this driver series on, until one NVIDIA fixed it in, "fixed_in": a series not on the list stayed broken,
+        # 620 too, and the fix was taken out of the launch options: the game crashed again)
+        "since": 610,
+        "fixed_in": None,
         "shaders": ["2169eb1a6850d504"],
     },
 }
@@ -51,7 +54,13 @@ def gpus() -> list[tuple[str, str]]:
 
 def affected(appid: str) -> bool:
     fix = FIXES.get(appid)
-    return bool(fix) and any(cap in fix["compute_cap"] and driver.startswith(fix["drivers"]) for cap, driver in gpus())
+    def broken(driver: str) -> bool:
+        try:
+            series = int(driver.split(".")[0])
+        except ValueError:
+            return False
+        return series >= fix["since"] and (fix["fixed_in"] is None or series < fix["fixed_in"])
+    return bool(fix) and any(cap in fix["compute_cap"] and broken(driver) for cap, driver in gpus())
 
 
 def notify(text: str, helper: str = "notify-when-up") -> None:

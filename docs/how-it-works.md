@@ -737,7 +737,7 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
   Lutris starts Steam games through it, so one launched while Steam is closed doesn't open Steam's window. No store
   launcher starts at login: Lutris does, in its tray
 - **`.local/bin/nvidia-shader-fix`**: fixes Cyberpunk 2077 crashing at startup on Turing GPUs (RTX 20xx, GTX 16xx) with
-  NVIDIA 610/615 drivers. Only applied where that's the case: adds itself to the game's Steam launch options when Steam
+  NVIDIA drivers from 610 on (620 too; until a series NVIDIA fixed it in, `fixed_in`). Only applied where that's the case: adds itself to the game's Steam launch options when Steam
   starts (`steam-start`),
   and builds the fixed shader from the game's own files
 - **`.local/bin/steam-installed-games`**: installed games, for the bar's Steam menu

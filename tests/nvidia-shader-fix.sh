@@ -55,6 +55,15 @@ assert not fix.affected("1091500"), "affected on another architecture"
 gpus("8.9, 610.43\\n7.5, 610.43\\n")
 assert fix.affected("1091500"), "a Turing second card not seen"
 assert not fix.affected("100"), "affected for a game it has no fix for"
+# Every driver series from the first broken one on (620 still crashed), none before it, none from a fixed one
+gpus("7.5, 620.73.04\n")
+assert fix.affected("1091500"), "a later driver series than the first broken ones not counted"
+gpus("7.5, 580.95.05\n")
+assert not fix.affected("1091500"), "affected on a driver before the bug"
+fix.FIXES["1091500"]["fixed_in"] = 625
+gpus("7.5, 625.10\n")
+assert not fix.affected("1091500"), "affected on the driver NVIDIA fixed it in"
+fix.FIXES["1091500"]["fixed_in"] = None
 # Affected but no spirv-tools to make the fix with: the game just runs, and you're told
 ran, told = [], []
 fix.os.execvp = lambda prog, cmd: ran.append(cmd) or sys.exit(0)
