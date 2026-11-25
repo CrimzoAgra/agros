@@ -1102,6 +1102,22 @@ def nexus_pages():
 
             visible: !screenWalls.visible
 """, 1)
+    # AMOLED black (AgrOS's, amoled) under the dark theme switch; at the end of the page's AgrOS sections if that's moved
+    dark = """            last: true
+            text: Tr.tr("Dark theme")
+            checked: !Colours.light
+            onToggled: Colours.setMode(checked ? "dark" : "light")
+        }
+"""
+    if style.count(dark) == 1:
+        style = style.replace(dark, dark.replace("            last: true\n", "") + """
+        // caelestia-overlay: AgrOS's pure black for dark mode
+        AgrosRow {
+            Layout.topMargin: Tokens.spacing.extraSmall / 2 - parent.spacing
+            last: true
+            key: "look.amoled"
+        }
+""")
     folded["modules/nexus/pages/WallpaperAndStyle.qml"] = style
     # Wallpapers: the screens first, as arranged, each with its wallpaper, one clicked to give it its own
     # (AgrosScreenWalls.qml); at the page's end if its buttons have moved
@@ -1570,6 +1586,59 @@ def sidebar_notifs_only():
     old = "    visible: offsetScale < 1\n"
     s = swap(s, old, "    visible: true\n", "utilities visible")
     return {rel: s}
+
+
+def amoled():
+    # Settings' AMOLED black (look.amoled in ~/.config/dots/settings.json, read as it changes): in dark mode the scheme's
+    # backgrounds pure black, the bar, its border and the panels (background, surface and the lowest containers; the
+    # cards on them keep theirs); the scheme read again as it's turned on or off
+    rel = "services/Colours.qml"
+    c = swap(read(rel), """    function load(data: string, isPreview: bool): void {
+        const colours = isPreview ? preview : current;
+        const scheme = JSON.parse(data);
+""", """    // caelestia-overlay (amoled): Settings' AMOLED black, and the scheme last read, to read again as it changes
+    property bool amoled
+    property string lastScheme
+
+    onAmoledChanged: if (lastScheme)
+        load(lastScheme, false)
+
+    FileView {
+        path: `${Quickshell.env("HOME")}/.config/dots/settings.json`
+        watchChanges: true
+        onFileChanged: reload()
+        onLoaded: {
+            try {
+                root.amoled = JSON.parse(text())?.["look.amoled"] === true;
+            } catch (e) {
+                root.amoled = false;
+            }
+        }
+        onLoadFailed: root.amoled = false
+    }
+
+    function load(data: string, isPreview: bool): void {
+        const colours = isPreview ? preview : current;
+        const scheme = JSON.parse(data);
+        if (!isPreview)
+            lastScheme = data;
+""", "the scheme's loading")
+    c = swap(c, """            if (colours.hasOwnProperty(propName))
+                colours[propName] = `#${colour}`;
+        }
+    }
+""", """            if (colours.hasOwnProperty(propName))
+                colours[propName] = `#${colour}`;
+        }
+
+        // caelestia-overlay (amoled): dark, its backgrounds black
+        if (amoled && scheme.mode !== "light")
+            for (const name of ["m3background", "m3surface", "m3surfaceDim", "m3surfaceContainerLowest", "m3surfaceContainerLow"])
+                if (colours.hasOwnProperty(name))
+                    colours[name] = "#000000";
+    }
+""", "the scheme's colours")
+    return {rel: c}
 
 
 def notifs_neutral():
@@ -3342,6 +3411,7 @@ FEATURES = (
     ("lock badges re-read at login", lock_refresh),
     ("notification sidebar without the utilities panel", sidebar_notifs_only),
     ("notifications in neutral colours", notifs_neutral),
+    ("AMOLED black: the shell's backgrounds pure black in dark mode, when Settings says so", amoled),
     ("clicking a notification runs its action and brings its app forward", notif_click),
     ("notification sidebar: no divider, ends above the utilities panel", sidebar_shape),
     ("notification sidebar: not with the power menu, closes the volume slider", sidebar_alone),
