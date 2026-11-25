@@ -1760,7 +1760,7 @@ def sidebar_from_top():
 
 def sidebar_fit():
     # The notification sidebar as tall as what's in it (its notifications, or the "all up to date" picture), at most
-    # half the screen (then it scrolls), not the whole height down to the utilities panel: its height to fit
+    # half the screen (then it scrolls, a shadow at its bottom while there's more below), not the whole height down to the utilities panel: its height to fit
     # (fitHeight), which the split windows' panels (drawers/PanelsRight.qml, PanelsLeft.qml) give it, capped
     dock = read("modules/sidebar/NotifDock.qml")
     dock = swap(dock, "    anchors.fill: parent\n    anchors.margins: Tokens.padding.medium\n", """    anchors.fill: parent
@@ -1792,6 +1792,39 @@ def sidebar_fit():
         anchors.right: parent.right
         anchors.bottom: parent.bottom
 """, "notif dock clear button")
+    # More below than shows (it scrolls): a shadow rising from its bottom edge, gone once scrolled to the end
+    dock = swap(dock, """                container: view
+            }
+        }
+""", """                container: view
+            }
+        }
+
+        // caelestia-overlay (sidebar_fit): more below, a shadow at the bottom
+        Rectangle {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            implicitHeight: Tokens.padding.large * 4
+            opacity: view.contentHeight > view.height + 1 && !view.atYEnd ? 1 : 0
+            gradient: Gradient {
+                GradientStop {
+                    position: 0
+                    color: Qt.alpha(Colours.palette.m3shadow, 0)
+                }
+                GradientStop {
+                    position: 1
+                    color: Qt.alpha(Colours.palette.m3shadow, 0.6)
+                }
+            }
+
+            Behavior on opacity {
+                Anim {
+                    type: Anim.DefaultEffects
+                }
+            }
+        }
+""", "notif dock list end")
     content = swap(read("modules/sidebar/Content.qml"), """            NotifDock {
 """, """            NotifDock {
                 id: dock
@@ -3207,7 +3240,7 @@ FEATURES = (
     ("notification sidebar: not with the power menu, closes the volume slider", sidebar_alone),
     ("notification sidebar slides down from the top", sidebar_from_top),
     ("notification sidebar closes without bouncing back", sidebar_close_settled),
-    ("notification sidebar as tall as its notifications, at most half the screen", sidebar_fit),
+    ("notification sidebar as tall as its notifications, at most half the screen, a shadow where it scrolls", sidebar_fit),
     ("notification sidebar: not opened by hovering while a pop-up shows", sidebar_not_over_popups),
     ("Super menu over fullscreen windows", launcher_fullscreen),
     ("workspaces highlighted on hover", workspace_hover),
