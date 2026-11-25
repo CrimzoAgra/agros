@@ -444,7 +444,7 @@ Scope {
         }
 
         // Show dashboard on hover
-        const showDashboard = config.dashboard.showOnHover && inTopPanel(panels.dashboard, x, y) && root.edgeHover(screenState.dashboard, !barTop && (y < root.edgePx || root.sideShared("top"))) && (screenState.dashboard || !screenState.sidebar && !withinPanelWidth(panels.sidebar, x, y)); // caelestia-overlay: not over the sidebar's span
+        const showDashboard = config.dashboard.showOnHover && inTopPanel(panels.dashboard, x, y) && root.edgeHover(screenState.dashboard, !barTop && (y < root.edgePx || root.sideShared("top"))) && (screenState.dashboard || !screenState.sidebar && !withinPanelWidth(panels.sidebar, x, y) && !(utilitiesTop && withinPanelWidth(panels.utilities, x, y))); // caelestia-overlay: not over the sidebar's span, nor a top utilities panel's (a narrow screen: the two edges' triggers overlapping, each opening closed the other, back and forth as the pointer moved along the top)
 
         // Always update visibility based on hover if not in shortcut mode
         if (!dashboardShortcutActive) {

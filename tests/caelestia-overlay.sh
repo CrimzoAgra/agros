@@ -243,7 +243,8 @@ grep -q '^        if (!ch)$' <<<"$(sed -n '/^    function checkPopout(y: real): 
 # The top edge opens the dashboard or the notification sidebar, never both at once (a narrow screen's dashboard covers
 # the sidebar's span): the dashboard not over the sidebar's span nor with it open, the sidebar not with the dashboard open
 w=$i
-{ grep -q '(screenState.dashboard || !screenState.sidebar && !withinPanelWidth(panels.sidebar, x, y))' "$w" &&
+# (nor over a top utilities panel's span: a bottom bar's, on a narrow screen under the dashboard's ends too)
+{ grep -q '(screenState.dashboard || !screenState.sidebar && !withinPanelWidth(panels.sidebar, x, y) && !(utilitiesTop && withinPanelWidth(panels.utilities, x, y)))' "$w" &&
     [[ $(grep -c '&& !screenState.sidebar && !screenState.dashboard)' "$w") == 2 ]]; } ||
     fail "the top edge still opens the dashboard and the sidebar together: $(grep -n 'showDashboard =\|screenState.sidebar)' "$w")"
 # The Super menu's settings button, left of the updates one: opens Nexus, the menu closing
