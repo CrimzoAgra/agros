@@ -275,7 +275,9 @@ grep -q '360); // caelestia-overlay: no taller than 360' "$n/pages/WallpaperAndS
 # screen: kept clear of the frame's zones, a black band showed where the bar would be until it was there)
 bgq=$dst/modules/background/Background.qml
 { grep -q 'readonly property real edge: bar?.width ?? 0' "$bgq" && grep -q 'anchors.leftMargin: bar?.exclusiveZone ?? 0' "$bgq" &&
-    ! grep -q 'ExclusionMode.Normal' "$bgq"; } || fail "the wallpaper not in the frame, or not pushed in by the bar as the shell starts"
+    ! grep -q 'exclusionMode: ExclusionMode.Normal' "$bgq" &&
+    # (the desktop widgets line up with it by these words in the file: .config/quickshell/widgets)
+    grep -q 'ExclusionMode.Normal' "$bgq"; } || fail "the wallpaper not in the frame, or not pushed in by the bar as the shell starts"
 # Settings opened at a page (nexus openPage update: the Updates launcher), and at Updates from a check's notification
 { grep -qR 'function openPage(icon: string): void' "$dst/modules/Shortcuts.qml" "$dst/daemons/Shortcuts.qml" 2>/dev/null &&
     grep -q 'p.icon === AgrosSettings.openAt' "$n/Nexus.qml" && grep -q 'listFile = AgrosSettings.updatesList;' "$n/pages/AgrosUpdates.qml"; } ||

@@ -2542,6 +2542,8 @@ def wallpaper_in_borders():
                 id: wallpaper
 
                 // caelestia-overlay: in the frame (the bar's exclusive zone, the border's), to the bar's edge as it moves
+                // (where ExclusionMode.Normal put it before: the desktop widgets, ~/.config/quickshell/widgets, look for
+                // those words in this file to line up with the wallpaper in the frame, not with the whole screen)
                 readonly property var bar: ShellState.componentsFor(win.modelData)?.bar ?? null
                 readonly property real frame: bar ? Config.border.thickness : 0
                 readonly property real edge: bar?.width ?? 0
