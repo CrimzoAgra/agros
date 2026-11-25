@@ -95,10 +95,10 @@ local function target(p, line, k, a)
     if not onto then return nil, to end
     local out = { x = p.x, y = p.y }
     out[k.q] = best
-    -- (going left or up, 2 px back from its far edge, as held: Hyprland never takes the pointer past 2558.999... on a
-    -- 2560-wide screen, so put on 2559 a push back into the edge never moved it on, and it couldn't cross back until it
-    -- left the edge)
-    out[k.p] = entering(onto, k) + (k.dir == 1 and 1 or -2)
+    -- (2 px in from its edge, as held: Caelestia's cursor:hotspot_padding 1 keeps the pointer a pixel short of every
+    -- edge (2558.999... on a 2560-wide screen, 2625 on one starting at 2624), so put on that last pixel a push back
+    -- into the edge never moved it, and it couldn't cross back until it left the edge and came back)
+    out[k.p] = entering(onto, k) + (k.dir == 1 and 2 or -2)
     return out, to
 end
 
@@ -107,7 +107,7 @@ end
 -- the other screen lines up, it goes over
 local function held(p, line, k, q, was)
     local back = { x = p.x, y = p.y }
-    back[k.p] = k.dir == 1 and line - 2 or line + 1
+    back[k.p] = k.dir == 1 and line - 2 or line + 2
     back[k.q] = q
     pinned = { box = was, k = k, line = line }
     return back

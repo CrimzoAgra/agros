@@ -21,7 +21,7 @@ say(c.step({ x = 2559, y = 1300 }, { x = 2559, y = 1250 }))   -- sliding down th
 say(c.step({ x = 3520, y = 540 }, { x = 1280, y = 720 }))     -- warped to the other screen (a key)
 say(c.step({ x = 0, y = 700 }, { x = 1, y = 700 }))           -- the left edge, nothing beyond
 ')
-    want=$'2561,405\n2561,975\n2558,1333\n-\n-\n-\n-'
+    want=$'2561,405\n2562,975\n2558,1333\n-\n-\n-\n-'
     [[ $out == "$want" ]] || fail "the pointer between screens: got"$'\n'"$out"$'\n'"want"$'\n'"$want"
     # By real size: a 27" 2560x1440 (600x330 mm) beside a 24" 1080p one standing on its side (290x520 mm): the pointer
     # at the same height in millimetres, tops lined up, then bottoms; past the shorter one's end it stays on its own
@@ -42,7 +42,7 @@ say(c.step({ x = 2558, y = 1311 }, { x = 2561, y = 1311 }))       -- and back
 c.set_boxes({ { x = 0, y = 480, w = 2560, h = 1440, mw = 0, mh = 0 }, { x = 2560, y = 0, w = 1080, h = 1920, mw = 290, mh = 520 } })
 say(c.step({ x = 2561, y = 1200 }, { x = 2559, y = 1200 }))       -- a size unknown: halfway down to halfway down
 ')
-    want=$'2561,609\n2561,1500\n-\n2561,1400\n2561,1311\n2558,1200\n2561,960'
+    want=$'2561,609\n2562,1500\n-\n2562,1400\n2561,1311\n2558,1200\n2561,960'
     [[ $out == "$want" ]] || fail "the pointer between screens by real size: got"$'\n'"$out"$'\n'"want"$'\n'"$want"
     # With monitors.lua's gap between them (Hyprland can't cross it, so never shows the pointer at the old pixel row
     # first): the pointer pushed into the edge goes over it, onto the other screen at its height
@@ -59,8 +59,9 @@ say(c.step({ x = 2625, y = 1750 }, { x = 2625, y = 1850 }))       -- slid up alo
 say(c.step({ x = 2625, y = 1000 }, { x = 2625, y = 1100 }))       -- slid on, no push, up where the short one is: over
 say(c.step({ x = 2624, y = 1000 }, { x = 2625, y = 1050 }))       -- pushed on into the edge, up where the short one is: over
 say(c.step({ x = 2558.9999, y = 1046 }, { x = 2558, y = 1046 }))  -- and straight back from where it landed: a push, over again
+say(c.step({ x = 2625, y = 1000 }, { x = 2626, y = 1000 }))       -- ...and back again from there, as far as the pointer goes (2625)
 ')
-    want=$'2625,883\n2558,904\n-\n2625,1850\n2625,1750\n2558,1046\n2558,1046\n2625,1000'
+    want=$'2626,883\n2558,904\n-\n2626,1850\n2626,1750\n2558,1046\n2558,1046\n2626,1000\n2558,1046'
     [[ $out == "$want" ]] || fail "the pointer over the gap between screens: got"$'\n'"$out"$'\n'"want"$'\n'"$want"
     # The gap itself (monitors.lua): each screen placed in the Settings app moved on by it past every screen edge before
     # it; none while a screen has no position of its own there
