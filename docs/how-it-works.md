@@ -1478,7 +1478,8 @@ are left out, set aside for the pull and put back after (one that clashes with w
 the sync says it failed).
 
 After pulling changes made elsewhere, copy the ones you want into your home first, or the next `dotfiles-sync` skips
-the files the repo has newer (and says so) until you do. Changes to `packages/`, `system/` or the login screen reach
+the files the repo has newer (and says so) until you do. A file with AgrOS's newer version beside it (`.agros-new`: an
+update brought a change yours lacks) is skipped too, said, until you merge it and delete the `.agros-new`. Changes to `packages/`, `system/` or the login screen reach
 the system as package updates: push them, CI publishes the new packages, and the next update installs them (raise
 the `pkgver` of a package that has a fixed one: see [How it's packaged](#how-its-packaged)).
 

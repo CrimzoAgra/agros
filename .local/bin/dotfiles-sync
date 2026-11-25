@@ -113,6 +113,12 @@ sync() {
         # refuses; an installed version over your edit)
         linked "$live" "$f" && continue
         if ! shared "$live/$f" "$f" | cmp -s - "$dir/$f"; then
+            # AgrOS's newer version beside yours, not merged yet (agros-links' .agros-new: the package brought a change
+            # yours lacks): copied as it is, yours would undo that change in the repo
+            if [[ -e $live/$f.agros-new ]]; then
+                echo "  skipped: $f (AgrOS's newer version is beside it as $f.agros-new: merge it into yours, then delete it)"
+                continue
+            fi
             # The repo's copy changed after yours (pulled from the other machine, not yet copied home: a pull sets the
             # file's time to then; this script's own copies leave it older than your edit): yours would undo that
             if [[ $dir/$f -nt $live/$f ]]; then

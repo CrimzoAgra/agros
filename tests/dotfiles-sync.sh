@@ -15,6 +15,9 @@ echo wrapper >"$repo/.local/bin/claude"; echo program >"$t/claude-program"; ln -
 echo some.extension >"$repo/.config/VSCodium/extensions.txt"
 git -C "$repo" init -q && git -C "$repo" add -A && git -C "$repo" -c user.name=t -c user.email=t@t commit -qm one --date=@1000000000
 echo edited >"$home/.config/app/mine"                                 # changed at home now
+# Changed at home, but AgrOS's newer version waits beside it (agros-links' .agros-new): not synced over the repo's
+echo old >"$repo/.config/app/offered" && git -C "$repo" add -A && git -C "$repo" -c user.name=t -c user.email=t@t commit -qm offered --date=@1000000000
+echo edited >"$home/.config/app/offered"; echo agros >"$home/.config/app/offered.agros-new"
 echo stale >"$home/.config/app/pulled"; touch -d @1000000000 "$home/.config/app/pulled"
 # Pulled later, though committed (elsewhere) before your file last changed: what counts is when it arrived here
 echo new >"$repo/.config/app/pulled"; touch -d @1000000000 "$home/.config/app/pulled"
@@ -22,6 +25,7 @@ GIT_COMMITTER_DATE=@999999999 git -C "$repo" -c user.name=t -c user.email=t@t co
 out=$(HOME=$home DOTFILES_DIR=$repo LEGION_CONTROL_DIR=$t/none PATH=$t/bin:$PATH "$here/.local/bin/dotfiles-sync" -n 2>&1)
 grep -q "changed: .config/app/mine" <<<"$out" || fail "your change not synced: $out"
 grep -q "skipped: .config/app/pulled" <<<"$out" || fail "a newer repo file would be overwritten: $out"
+grep -q "skipped: .config/app/offered (AgrOS's newer" <<<"$out" || fail "a file with AgrOS's newer version beside it would be synced: $out"
 [[ $(cat "$repo/.config/app/pulled") == new && $(cat "$repo/.config/app/mine") == old ]] || fail "-n changed the repo"
 grep -q "\.local/bin/claude" <<<"$out" && fail "a link at home synced over the repo's file: $out"
 grep -q "VSCodium extensions" <<<"$out" && fail "an empty extension list would replace the repo's: $out"
