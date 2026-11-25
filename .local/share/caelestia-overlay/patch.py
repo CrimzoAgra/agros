@@ -920,6 +920,12 @@ def nexus_pages():
 """),
         "modules/nexus/pages/ServicesPage.qml": fold("modules/nexus/pages/ServicesPage.qml", """            pageIds: ["notifs", "region"]
 """),
+        # (each screen's own wallpaper, with the wallpapers)
+        "modules/nexus/pages/wallandstyle/WallpaperSelect.qml": fold("modules/nexus/pages/wallandstyle/WallpaperSelect.qml", """            pageIds: ["look"]
+            onlyGroups: ["Wallpaper"]
+            skipKeys: ["look.wallpaper"]
+            retitle: ({ Wallpaper: "Each screen's own" })
+"""),
     }
 
     # Wallpaper & style's Colours: Nexus's is a "page under construction"; AgrOS's colour settings there (the scheme,
@@ -950,6 +956,7 @@ PageBase {
 
     files = components("services/AgrosSettings.qml", "modules/nexus/common/AgrosRow.qml",
                        "modules/nexus/common/AgrosSections.qml", "modules/nexus/common/AgrosKeyCapture.qml",
+                       "modules/nexus/common/AgrosSkeleton.qml",
                        "modules/nexus/pages/AgrosPage.qml", "modules/nexus/pages/AgrosHome.qml",
                        "modules/nexus/pages/AgrosDisplay.qml", "modules/nexus/pages/AgrosUpdates.qml")
     # Caelestia's options Nexus's own pages set (GlobalConfig.bar.persistent...), by their path: not shown again
@@ -980,6 +987,57 @@ def nexus_snappy():
     pages, stack = read("modules/nexus/Pages.qml"), read("modules/nexus/common/StackPage.qml")
     if "Anim.SlowEffects" not in pages or "Anim.SlowEffects" not in stack:
         raise LookupError("page transitions")
+    # A page's skeleton (AgrosSkeleton.qml) the moment it's chosen, the page made a frame later (made at once, the
+    # window showed nothing, and took no clicks, until it was done)
+    pages = insert(pages, "import qs.modules.nexus\n", "import qs.modules.nexus.common\n", before=False)
+    pages = swap(pages, """    function loadPage(idx: int): void {
+        if (currentItem)
+            currentItem.destroy();
+
+""", """    // caelestia-overlay: the skeleton first, drawn, then the page made
+    property int pendingIdx
+
+    function loadPage(idx: int): void {
+        if (currentItem)
+            currentItem.destroy();
+        currentItem = null;
+        pendingIdx = idx;
+        buildTimer.restart();
+    }
+
+    function buildPage(idx: int): void {
+""", "page loading")
+    # (the page out of sight until it's whole, made bit by bit, the skeleton showing meanwhile)
+    pages = swap(pages, """        const incubator = comp.incubateObject(container, {
+            nState
+        });
+
+        const attach = () => {
+            incubator.object.anchors.fill = container;
+""", """        const incubator = comp.incubateObject(container, {
+            nState,
+            visible: false
+        });
+
+        const attach = () => {
+            incubator.object.anchors.fill = container;
+            incubator.object.visible = true;
+""", "page made out of sight")
+    pages = insert(pages, "        Component.onCompleted: root.loadPage(root.nState.currentPageIdx)\n", """
+        // caelestia-overlay: the page's skeleton until it's made
+        AgrosSkeleton {
+            anchors.fill: parent
+            visible: !root.currentItem
+        }
+""", before=False)
+    pages = insert(pages, "    SequentialAnimation {\n        id: switchAnim\n", """    Timer {
+        id: buildTimer
+
+        interval: 16 // (a frame: the skeleton drawn first)
+        onTriggered: root.buildPage(root.pendingIdx)
+    }
+
+""")
     base = swap(read("modules/nexus/common/PageBase.qml"),
                 "    readonly property int cappedWidth: Math.min(Tokens.sizes.nexus.maxContentWidth, width)\n",
                 "    readonly property int cappedWidth: Math.min(width, Math.max(Tokens.sizes.nexus.maxContentWidth, Math.round(width * 0.92))) // caelestia-overlay: wider in a wide window\n",
@@ -2355,7 +2413,7 @@ def turned_off():
 # Features that build on another's version of a file (or, the utilities sidebar, on its trigger's geometry; the sidebar's
 # shape on the utilities panel's height, known while closed only with sidebar_notifs_only) and don't fit without it: off when that one is off or skipped. Several: it needs one of them (window peek: the dock's or the
 # workspace preview's popout, the previews it works on), off when all are
-NEEDS = {"sidebar_shape": ("sidebar_notifs_only",), "settings_button": ("updates_button",), "top_edge_one_panel": ("sidebar_from_top",), "sidebar_from_top": ("sidebar_shape",),
+NEEDS = {"nexus_snappy": ("nexus_pages",), "sidebar_shape": ("sidebar_notifs_only",), "settings_button": ("updates_button",), "top_edge_one_panel": ("sidebar_from_top",), "sidebar_from_top": ("sidebar_shape",),
          "sidebar_with_utilities": ("sidebar_from_top",),
          "window_peek": ("dock", "workspace_preview")}
 

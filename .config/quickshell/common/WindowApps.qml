@@ -11,7 +11,9 @@ import Quickshell.Io
 // folder). So they never disagree.
 //   windowId(ipc): what to look a window up by (a Hyprland client: lastIpcObject): its class, or for a class many
 //   apps share (steam_app_default: every Lutris game under Proton) its class and process, "steam_app_default@<pid>"
-//   appEntry(id): the app file of a window (windowId, or a plain class), or a pinned app's id; null when none fits
+//   appEntry(id): the app file of a window (windowId, or a plain class), or a pinned app's id; null when none fits.
+//   The settings window (Caelestia's Nexus: Quickshell's own class, org.quickshell, the only window with it; the other
+//   Quickshell apps are started with a class of their own) is the Settings launcher entry's (desktop-settings)
 //   iconName(id): its icon name, for Quickshell.iconPath; a Steam game with no shortcut its icon from Steam's cache
 //   (steam_icon_<id>, game-focus makes it), else Steam's; "" when nothing fits
 // By Quickshell's own lookup, else ~/.local/bin/app-for-window (the class's last part, a Flatpak's id, the window's
@@ -25,14 +27,14 @@ Scope {
     readonly property var shared: ["steam_app_default"]
 
     function windowId(ipc: var): string {
-        const cls = ipc?.class ?? "";
+        const cls = ipc?.class === "org.quickshell" ? "desktop-settings" : ipc?.class ?? "";
         return shared.includes(cls) && ipc?.pid > 0 ? `${cls}@${ipc.pid}` : cls;
     }
 
     function appEntry(id: string): var {
         if (!id)
             return null;
-        const [cls, ownPid] = id.split("@");
+        const [cls, ownPid] = (id === "org.quickshell" ? "desktop-settings" : id).split("@");
         // A Steam game (steam_app_<id>): the shortcut Steam made for it (its name, icon steam_icon_<id>); the lookup
         // by name found Steam itself
         const game = cls.match(/^steam_app_(\d+)$/);

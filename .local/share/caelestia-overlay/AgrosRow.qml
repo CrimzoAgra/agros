@@ -217,12 +217,19 @@ ConnectedRect {
     Component {
         id: pickC
 
-        TextButton {
-            type: ButtonBase.Tonal
-            text: `${root.current || "None"}  ${root.listOpen ? "▴" : "▾"}`
-            horizontalPadding: Tokens.padding.large
-            verticalPadding: Tokens.padding.small
-            onClicked: root.listOpen = !root.listOpen
+        // (the menus' button, its arrow too opening the list, not a menu: Caelestia's don't scroll)
+        SplitButton {
+            id: pick
+
+            type: SplitButton.Tonal
+            fallbackText: root.current || "None"
+            stateLayer.onClicked: root.listOpen = !root.listOpen
+            onExpandedChanged: {
+                if (!expanded)
+                    return;
+                expanded = false;
+                root.listOpen = !root.listOpen;
+            }
         }
     }
 

@@ -33,198 +33,240 @@ PageBase {
     title: "Settings"
     Component.onCompleted: AgrosSettings.reload()
 
-    GridLayout {
+    // The cards in columns, each card under the one before in its column (as rows of a grid, a short card left a gap
+    // under it as tall as the card beside it): card n in column n % columns, in order
+    RowLayout {
+        id: board
+
+        // (a card at least 400 wide: one column in a narrow window, all four in a row maximised)
+        readonly property int columns: Math.max(1, Math.min(4, Math.floor((width + spacing) / (400 + spacing))))
+
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
         width: root.cappedWidth
-        // (a card at least 400 wide: one column in a narrow window, all four in a row maximised)
-        columns: Math.max(1, Math.min(4, Math.floor((width + columnSpacing) / (400 + columnSpacing))))
-        columnSpacing: Tokens.spacing.large
-        rowSpacing: Tokens.spacing.large
+        spacing: Tokens.spacing.large
 
-        // Look
-        Card {
-            icon: "palette"
-            title: "Look"
-            more: "Wallpaper & style"
-            onOpen: root.open("palette")
+        Repeater {
+            id: boardColumns
 
-            StyledClippingRect {
-                id: wall
+            model: board.columns
+
+            ColumnLayout {
+                id: boardColumn
+
+                required property int index
 
                 Layout.fillWidth: true
-                implicitHeight: width * 9 / 16
-                radius: Tokens.rounding.large
-                color: Colours.tPalette.m3surfaceContainerHigh
-
-                Image {
-                    anchors.fill: parent
-                    asynchronous: true
-                    fillMode: Image.PreserveAspectCrop
-                    sourceSize.width: 600
-                    source: Wallpapers.current ? `file://${Wallpapers.current}` : ""
-                }
-
-                StateLayer {
-                    anchors.fill: parent
-                    radius: wall.radius
-                    onClicked: root.open("palette")
-                }
-            }
-
-            AgrosRow {
-                key: "look.mode"
-                first: true
-            }
-
-            AgrosRow {
-                key: "look.scheme"
-                last: true
-            }
-        }
-
-        // Screens
-        Card {
-            icon: "monitor"
-            title: "Screens"
-            more: "Display"
-            onOpen: root.open("monitor")
-
-            // Where they stand (dragged into place on Display)
-            StyledRect {
-                id: mini
-
-                readonly property real minX: Math.min(...root.screens.map(s => s.x))
-                readonly property real minY: Math.min(...root.screens.map(s => s.y))
-                readonly property real spanW: Math.max(...root.screens.map(s => s.x + s.w)) - minX
-                readonly property real spanH: Math.max(...root.screens.map(s => s.y + s.h)) - minY
-                readonly property real k: root.screens.length ? Math.min((width - 32) / spanW, (height - 32) / spanH) : 1
-
-                Layout.fillWidth: true
-                implicitHeight: width * 9 / 16
-                radius: Tokens.rounding.large
-                color: Colours.layer(Colours.palette.m3surfaceContainerHigh, 2)
+                Layout.preferredWidth: 1 // (columns as wide as each other)
+                Layout.alignment: Qt.AlignTop
+                spacing: Tokens.spacing.large
 
                 Repeater {
-                    model: root.screens
+                    model: root.cards.length
 
-                    StyledRect {
-                        id: scr
+                    Loader {
+                        required property int index
 
-                        required property var modelData
-                        readonly property bool main: modelData.id === (AgrosSettings.byKey["screens.main"]?.value ?? "")
-
-                        x: (mini.width - mini.spanW * mini.k) / 2 + (modelData.x - mini.minX) * mini.k
-                        y: (mini.height - mini.spanH * mini.k) / 2 + (modelData.y - mini.minY) * mini.k
-                        width: modelData.w * mini.k - 4
-                        height: modelData.h * mini.k - 4
-                        radius: Tokens.rounding.small
-                        color: main ? Colours.palette.m3primaryContainer : Colours.palette.m3surfaceContainerHighest
-                        border.width: 1
-                        border.color: Colours.palette.m3outlineVariant
-
-                        StyledText {
-                            anchors.centerIn: parent
-                            width: parent.width - 8
-                            horizontalAlignment: Text.AlignHCenter
-                            text: scr.modelData.name
-                            color: scr.main ? Colours.palette.m3onPrimaryContainer : Colours.palette.m3onSurfaceVariant
-                            font: Tokens.font.label.small
-                            elide: Text.ElideRight
-                        }
+                        Layout.fillWidth: true
+                        active: index % board.columns === boardColumn.index
+                        visible: active
+                        sourceComponent: root.cards[index]
                     }
-                }
-
-                StateLayer {
-                    anchors.fill: parent
-                    radius: parent.radius
-                    onClicked: root.open("monitor")
-                }
-            }
-
-            AgrosRow {
-                key: "screens.main"
-                first: true
-            }
-
-            AgrosRow {
-                key: "nightlight"
-                last: true
-            }
-        }
-
-        // Windows
-        Card {
-            icon: "select_window"
-            title: "Windows"
-            more: "Windows"
-            onOpen: root.open("select_window")
-
-            AgrosRow {
-                key: "windows.mode"
-                first: true
-            }
-
-            AgrosRow {
-                key: "windows.titlebars"
-            }
-
-            AgrosRow {
-                key: "windows.focus"
-                last: true
-            }
-        }
-
-        // Sound & network
-        Card {
-            icon: "volume_up"
-            title: "Sound & network"
-            more: "Audio"
-            onOpen: root.open("volume_up")
-
-            SliderRow {
-                first: true
-                icon: Icons.getVolumeIcon(Audio.volume, Audio.muted)
-                label: Audio.sink?.description || Audio.sink?.nickname || "Output"
-                valueLabel: Strings.percentOne(value)
-                value: Audio.volume
-                enabled: !Audio.muted
-                onMoved: v => Audio.setVolume(v)
-            }
-
-            ToggleRow {
-                text: "Wi-Fi"
-                subtext: !Nmcli.wifiEnabled ? "Off" : Nmcli.active?.ssid ?? (Nmcli.activeEthernet ? "Ethernet connected" : "Not connected")
-                checked: Nmcli.wifiEnabled
-                onToggled: Nmcli.enableWifi(checked, () => {})
-            }
-
-            ToggleRow {
-                last: true
-                text: "Bluetooth"
-                subtext: !root.adapter ? "No adapter" : !root.adapter.enabled ? "Off" : `${root.adapter.devices.values.filter(d => d.connected).length} connected`
-                checked: root.adapter?.enabled ?? false
-                onToggled: if (root.adapter) root.adapter.enabled = checked
-            }
-
-            RowLayout {
-                Layout.alignment: Qt.AlignRight
-                spacing: Tokens.spacing.small
-
-                TextButton {
-                    type: ButtonBase.Text
-                    text: "Network"
-                    onClicked: root.open("wifi")
-                }
-
-                TextButton {
-                    type: ButtonBase.Text
-                    text: "Bluetooth"
-                    onClicked: root.open("devices_other")
                 }
             }
         }
     }
+
+    // The cards, in order: Look, Screens, Windows, Sound & network
+    readonly property list<Component> cards: [
+        Component {
+            // Look
+            Card {
+                icon: "palette"
+                title: "Look"
+                more: "Wallpaper & style"
+                onOpen: root.open("palette")
+
+                StyledClippingRect {
+                    id: wall
+
+                    Layout.fillWidth: true
+                    implicitHeight: width * 9 / 16
+                    radius: Tokens.rounding.large
+                    color: Colours.tPalette.m3surfaceContainerHigh
+
+                    Image {
+                        anchors.fill: parent
+                        asynchronous: true
+                        fillMode: Image.PreserveAspectCrop
+                        sourceSize.width: 600
+                        source: Wallpapers.current ? `file://${Wallpapers.current}` : ""
+                    }
+
+                    StateLayer {
+                        anchors.fill: parent
+                        radius: wall.radius
+                        onClicked: root.open("palette")
+                    }
+                }
+
+                AgrosRow {
+                    key: "look.mode"
+                    first: true
+                }
+
+                AgrosRow {
+                    key: "look.scheme"
+                    last: true
+                }
+            }
+        },
+        Component {
+            // Screens
+            Card {
+                icon: "monitor"
+                title: "Screens"
+                more: "Display"
+                onOpen: root.open("monitor")
+
+                // Where they stand (dragged into place on Display)
+                StyledRect {
+                    id: mini
+
+                    readonly property real minX: Math.min(...root.screens.map(s => s.x))
+                    readonly property real minY: Math.min(...root.screens.map(s => s.y))
+                    readonly property real spanW: Math.max(...root.screens.map(s => s.x + s.w)) - minX
+                    readonly property real spanH: Math.max(...root.screens.map(s => s.y + s.h)) - minY
+                    readonly property real k: root.screens.length ? Math.min((width - 32) / spanW, (height - 32) / spanH) : 1
+
+                    Layout.fillWidth: true
+                    implicitHeight: width * 9 / 16
+                    radius: Tokens.rounding.large
+                    color: Colours.layer(Colours.palette.m3surfaceContainerHigh, 2)
+
+                    Repeater {
+                        model: root.screens
+
+                        StyledRect {
+                            id: scr
+
+                            required property var modelData
+                            readonly property bool main: modelData.id === (AgrosSettings.byKey["screens.main"]?.value ?? "")
+
+                            x: (mini.width - mini.spanW * mini.k) / 2 + (modelData.x - mini.minX) * mini.k
+                            y: (mini.height - mini.spanH * mini.k) / 2 + (modelData.y - mini.minY) * mini.k
+                            width: modelData.w * mini.k - 4
+                            height: modelData.h * mini.k - 4
+                            radius: Tokens.rounding.small
+                            color: main ? Colours.palette.m3primaryContainer : Colours.palette.m3surfaceContainerHighest
+                            border.width: 1
+                            border.color: Colours.palette.m3outlineVariant
+
+                            StyledText {
+                                anchors.centerIn: parent
+                                width: parent.width - 8
+                                horizontalAlignment: Text.AlignHCenter
+                                text: scr.modelData.name
+                                color: scr.main ? Colours.palette.m3onPrimaryContainer : Colours.palette.m3onSurfaceVariant
+                                font: Tokens.font.label.small
+                                elide: Text.ElideRight
+                            }
+                        }
+                    }
+
+                    StateLayer {
+                        anchors.fill: parent
+                        radius: parent.radius
+                        onClicked: root.open("monitor")
+                    }
+                }
+
+                AgrosRow {
+                    key: "screens.main"
+                    first: true
+                }
+
+                AgrosRow {
+                    key: "nightlight"
+                    last: true
+                }
+            }
+        },
+        Component {
+            // Windows
+            Card {
+                icon: "select_window"
+                title: "Windows"
+                more: "Windows"
+                onOpen: root.open("select_window")
+
+                AgrosRow {
+                    key: "windows.mode"
+                    first: true
+                }
+
+                AgrosRow {
+                    key: "windows.titlebars"
+                }
+
+                AgrosRow {
+                    key: "windows.focus"
+                    last: true
+                }
+            }
+        },
+        Component {
+            // Sound & network
+            Card {
+                icon: "volume_up"
+                title: "Sound & network"
+                more: "Audio"
+                onOpen: root.open("volume_up")
+
+                SliderRow {
+                    first: true
+                    icon: Icons.getVolumeIcon(Audio.volume, Audio.muted)
+                    label: Audio.sink?.description || Audio.sink?.nickname || "Output"
+                    valueLabel: Strings.percentOne(value)
+                    value: Audio.volume
+                    enabled: !Audio.muted
+                    onMoved: v => Audio.setVolume(v)
+                }
+
+                ToggleRow {
+                    text: "Wi-Fi"
+                    subtext: !Nmcli.wifiEnabled ? "Off" : Nmcli.active?.ssid ?? (Nmcli.activeEthernet ? "Ethernet connected" : "Not connected")
+                    checked: Nmcli.wifiEnabled
+                    onToggled: Nmcli.enableWifi(checked, () => {})
+                }
+
+                ToggleRow {
+                    last: true
+                    text: "Bluetooth"
+                    subtext: !root.adapter ? "No adapter" : !root.adapter.enabled ? "Off" : `${root.adapter.devices.values.filter(d => d.connected).length} connected`
+                    checked: root.adapter?.enabled ?? false
+                    onToggled: if (root.adapter) root.adapter.enabled = checked
+                }
+
+                RowLayout {
+                    Layout.alignment: Qt.AlignRight
+                    spacing: Tokens.spacing.small
+
+                    TextButton {
+                        type: ButtonBase.Text
+                        text: "Network"
+                        onClicked: root.open("wifi")
+                    }
+
+                    TextButton {
+                        type: ButtonBase.Text
+                        text: "Bluetooth"
+                        onClicked: root.open("devices_other")
+                    }
+                }
+            }
+        }
+    ]
 
     // A card: its icon and title, the button to its whole page, then its rows
     component Card: StyledRect {
@@ -238,7 +280,6 @@ PageBase {
         signal open
 
         Layout.fillWidth: true
-        Layout.alignment: Qt.AlignTop
         implicitHeight: body.implicitHeight + Tokens.padding.large * 2
         radius: Tokens.rounding.extraLarge
         color: Colours.tPalette.m3surfaceContainer

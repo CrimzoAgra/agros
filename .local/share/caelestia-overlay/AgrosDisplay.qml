@@ -3,7 +3,8 @@ pragma ComponentBehavior: Bound
 // caelestia-overlay: Nexus's Display page (its own is still to come), AgrOS's: the screens to drag into place as on
 // Windows (drawn where Hyprland has them; one let go snaps to a side of another, and every screen's position is saved,
 // moved so the top left one is at 0,0) and the main screen, then dots-settings's other screen settings (night light,
-// each screen's mode, scale, rotation) and each screen's own wallpaper, as AgrOS sections (AgrosSections.qml)
+// each screen's mode, scale, rotation), as AgrOS sections (AgrosSections.qml). Each screen's own wallpaper is with the
+// wallpapers (Wallpaper & style > Wallpapers)
 
 import QtQuick
 import QtQuick.Layouts
@@ -189,15 +190,6 @@ PageBase {
             firstHeader: false
             pageIds: ["screens"]
             skipGroups: ["Arrangement"]
-        }
-
-        AgrosSections {
-            Layout.fillWidth: true
-            firstHeader: false
-            notice: false
-            pageIds: ["look"]
-            onlyGroups: ["Wallpaper"]
-            skipKeys: ["look.wallpaper"]
         }
     }
 }

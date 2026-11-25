@@ -24,6 +24,8 @@ ColumnLayout {
     property list<string> onlyGroups
     property list<string> skipGroups
     property list<string> skipKeys
+    // (a group's title as shown, by its title in the schema: "Each screen's own" for the wallpapers')
+    property var retitle: ({})
     property bool notice: true
     property bool firstHeader: true
     // (Caelestia's options, by their path in its shell.json, that Nexus's own pages set)
@@ -60,6 +62,14 @@ ColumnLayout {
     }
 
     spacing: Tokens.spacing.extraSmall / 2
+
+    // Rows waiting for the settings to be read (the first time Nexus opens)
+    AgrosSkeleton {
+        Layout.fillWidth: true
+        visible: !AgrosSettings.loaded
+        header: false
+        rows: 4
+    }
 
     // Why the last change failed; the shell's restart waiting for Settings to close
     StyledRect {
@@ -127,7 +137,7 @@ ColumnLayout {
 
                         SectionHeader {
                             first: root.firstHeader && group.index === 0
-                            text: group.modelData
+                            text: root.retitle[group.modelData] ?? group.modelData
                         }
 
                         Repeater {

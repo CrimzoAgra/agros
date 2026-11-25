@@ -262,6 +262,13 @@ icons=$(awk '/readonly property list<var> pages/,/^    \]/' "$n/PageRegistry.qml
     fail "Nexus's page changes not quicker, or its pages not wider"
 grep -q '360); // caelestia-overlay: no taller than 360' "$n/pages/WallpaperAndStyle.qml" && grep -q 'AgrosSections {' "$n/pages/WallpaperAndStyle.qml" &&
     grep -q 'Math.floor(width / 260)' "$n/pages/wallandstyle/WallpaperSelect.qml" || fail "the wallpaper's preview or the wallpapers' rows not sized to the window"
+# Each screen's own wallpaper with the wallpapers (not on Display); a page's skeleton drawn while it's made, the page a
+# frame later; the long lists' button the menus' split button
+{ grep -q "retitle: ({ Wallpaper: \"Each screen's own\" })" "$n/pages/wallandstyle/WallpaperSelect.qml" &&
+    ! grep -q 'onlyGroups: \["Wallpaper"\]' "$n/pages/AgrosDisplay.qml" &&
+    grep -q 'AgrosSkeleton {' "$n/Pages.qml" && grep -q 'onTriggered: root.buildPage(root.pendingIdx)' "$n/Pages.qml" &&
+    grep -q 'stateLayer.onClicked: root.listOpen = !root.listOpen' "$n/common/AgrosRow.qml"; } ||
+    fail "screens' wallpapers not with the wallpapers, no page skeleton, or the lists' button not the split one"
 # (Wallpaper & style's Colours: AgrOS's colour settings, while Caelestia's is a placeholder)
 grep -q 'Page under construction' /etc/xdg/quickshell/caelestia/modules/nexus/pages/wallandstyle/ColourSelect.qml &&
     ! grep -q 'onlyGroups: \["Colours"\]' "$n/pages/wallandstyle/ColourSelect.qml" && fail "Colours still a page under construction"
