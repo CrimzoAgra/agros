@@ -655,43 +655,14 @@ ShellRoot {
         }
     }
 
+    // Each screen's stage in three windows, one per piece (StageWindow.qml)
     Variants {
         model: Quickshell.screens.filter(s => s.width >= s.height)
 
-        PanelWindow {
+        Scope {
             id: win
 
             required property ShellScreen modelData
-
-            screen: modelData
-            anchors { top: true; bottom: true; left: true; right: true }
-            // (full screen, the stage fitted inside: the window resized when the wallpaper moved in kept its old size)
-            exclusionMode: ExclusionMode.Ignore
-            // Over the windows while the location is being edited: what's typed is seen, and a click on a window reaches
-            // clickAway (below them, it went to the window)
-            WlrLayershell.layer: cityEdit.editing ? WlrLayer.Top : WlrLayer.Bottom
-            WlrLayershell.namespace: "desktop-widgets"
-            color: "transparent"
-            // Clicks pass through to the desktop except on the media controls and the weather panel's tab (its pencil);
-            // while the location is being edited, everywhere (clickAway)
-            mask: Region {
-                item: cityEdit.editing ? clickAway : mediaCard.visible ? mediaCard : null
-
-                Region { item: cityEdit }
-            }
-            // Typing goes here only while the location is being edited. Exclusively (on demand, Hyprland never gave this
-            // layer the keyboard), so a click anywhere else ends the edit first: it went to the window, and the typing
-            // carried on into the field, hidden behind it
-            WlrLayershell.keyboardFocus: cityEdit.editing ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
-
-            // A click outside the field while editing: cancelled, as a menu closes (that click goes no further)
-            MouseArea {
-                id: clickAway
-
-                anchors.fill: parent
-                enabled: cityEdit.editing
-                onPressed: cityEdit.finish(false)
-            }
 
             // Glitch the big lettering every few seconds, and on every new minute
             Timer {
@@ -718,31 +689,76 @@ ShellRoot {
             // The layout is drawn for a 1920x1080 screen, where the wallpaper (1920x1080 too) fills it exactly. Elsewhere
             // Caelestia crops the wallpaper to fill its area (PreserveAspectCrop, centred), which moves the falling figure:
             // the whole layout is a 1920x1080 stage scaled and centred the same way, so it stays put around him at any size
-            Item {
+            QtObject {
                 id: stage
 
                 // The wallpaper's area: left, top, right and bottom kept clear of it
                 readonly property var inset: root.wallInBorders ? Hyprland.monitorFor(win.modelData)?.lastIpcObject?.reserved ?? [0, 0, 0, 0] : [0, 0, 0, 0]
-                readonly property real areaW: win.width - inset[0] - inset[2]
-                readonly property real areaH: win.height - inset[1] - inset[3]
+                readonly property real areaW: win.modelData.width - inset[0] - inset[2]
+                readonly property real areaH: win.modelData.height - inset[1] - inset[3]
                 readonly property real fit: Math.max(areaW / width, areaH / height)
 
-                width: 1920
-                height: 1080
-                x: inset[0] + (areaW - width * fit) / 2
-                y: inset[1] + (areaH - height * fit) / 2
-                scale: fit
-                transformOrigin: Item.TopLeft
+                readonly property real width: 1920
+                readonly property real height: 1080
+                // (where the stage's top-left corner is on the screen)
+                readonly property real x: inset[0] + (areaW - width * fit) / 2
+                readonly property real y: inset[1] + (areaH - height * fit) / 2
                 // How far all three columns move down together (0 at 1920x1080 and larger): the left column's top kept below
                 // the band along the top that Caelestia keeps for itself on an empty workspace (dragging its panels out: its
                 // dragThreshold, 80, and its border), 120 screen pixels, where the weather panel's tab and pencil were out of
                 // the mouse's reach (a screen scaled down, or cropped: a wide one). All three, so they keep their places
                 readonly property real drop: Math.max(0, (120 - y) / fit - 120)
+                // The whole screen, in stage coordinates
+                readonly property rect screenArea: Qt.rect(-x / fit, -y / fit, win.modelData.width / fit, win.modelData.height / fit)
 
-                // ---- Left column: weather, calendar ----
+                // An item's rectangle with room for what's drawn past it: the tabs above the panels, their offset
+                // shadows, the tilt, the glitch's shake (18) and THWIP! over the media panel's corner
+                function around(item: Item): rect {
+                    const pad = 48;
+                    return Qt.rect(item.x - pad, item.y - pad, item.width + pad * 2, item.height + pad * 2);
+                }
+            }
+
+            // ---- Left column: weather, calendar ----
+            StageWindow {
+                id: leftWin
+
+                screen: win.modelData
+                stage: stage
+                // The whole screen while the location is being edited: the suggestions reach past the column, and a
+                // click anywhere is clickAway's
+                area: cityEdit.editing ? stage.screenArea : stage.around(leftCol)
+                // Over the windows while the location is being edited: what's typed is seen, and a click on a window
+                // reaches clickAway (below them, it went to the window)
+                WlrLayershell.layer: cityEdit.editing ? WlrLayer.Top : WlrLayer.Bottom
+                // Clicks pass through to the desktop except on the weather panel's tab (its pencil); while the location is
+                // being edited, everywhere (clickAway)
+                mask: Region {
+                    item: cityEdit.editing ? clickAway : null
+
+                    Region { item: cityEdit }
+                }
+                // Typing goes here only while the location is being edited. Exclusively (on demand, Hyprland never gave
+                // this layer the keyboard), so a click anywhere else ends the edit first: it went to the window, and the
+                // typing carried on into the field, hidden behind it
+                WlrLayershell.keyboardFocus: cityEdit.editing ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+
+                // A click outside the field while editing: cancelled, as a menu closes (that click goes no further)
+                MouseArea {
+                    id: clickAway
+
+                    x: leftWin.area.x
+                    y: leftWin.area.y
+                    width: leftWin.area.width
+                    height: leftWin.area.height
+                    enabled: cityEdit.editing
+                    onPressed: cityEdit.finish(false)
+                }
+
                 ColumnLayout {
-                    // (the whole column over the caption and the clock beside it while the location is edited: the
-                    // suggestions, wider than the panel, reach under them)
+                    id: leftCol
+
+                    // (over clickAway while the location is edited)
                     z: cityEdit.editing ? 1 : 0
                     x: stage.width * 0.30
                     y: 120 + stage.drop
@@ -1133,9 +1149,17 @@ ShellRoot {
                         }
                     }
                 }
+            }
 
-                // ---- Narration in the strip of sky above the falling figure's feet ----
+            // ---- Narration in the strip of sky above the falling figure's feet ----
+            StageWindow {
+                screen: win.modelData
+                stage: stage
+                area: stage.around(narration)
+
                 Caption {
+                    id: narration
+
                     x: stage.width * 0.463
                     y: stage.height * 0.13 + stage.drop
                     rotation: -4
@@ -1143,9 +1167,19 @@ ShellRoot {
                     wrapWidth: 140
                     text: root.lines[clock.date.getHours() % root.lines.length]
                 }
+            }
 
-                // ---- Right column: clock, sixth sense, media ----
+            // ---- Right column: clock, sixth sense, media ----
+            StageWindow {
+                screen: win.modelData
+                stage: stage
+                area: stage.around(rightCol)
+                // Clicks pass through to the desktop except on the media controls
+                mask: Region { item: mediaCard }
+
                 ColumnLayout {
+                    id: rightCol
+
                     x: stage.width * 0.555
                     y: stage.height * 0.05 + stage.drop
                     width: 430

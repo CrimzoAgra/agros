@@ -16,7 +16,7 @@ syntax() {
     [[ -z $out ]] || fail "${1#"$t"/} doesn't parse: $out"
 }
 
-for f in "$here"/.config/quickshell/*/shell.qml "$here"/.config/quickshell/common/*.qml "$here"/.local/share/caelestia-overlay/*.qml \
+for f in "$here"/.config/quickshell/*/*.qml "$here"/.local/share/caelestia-overlay/*.qml \
     "$here"/.local/share/caelestia-greeter/shell.qml "$here"/.local/share/dots-settings/*.qml; do
     [[ ${f##*/} == *-block.qml ]] && continue  # (fragments patch.py puts in Caelestia's files: checked there, below)
     syntax "$f"
