@@ -264,7 +264,7 @@ grep -q '360); // caelestia-overlay: no taller than 360' "$n/pages/WallpaperAndS
     grep -q 'Math.floor(width / 260)' "$n/pages/wallandstyle/WallpaperSelect.qml" || fail "the wallpaper's preview or the wallpapers' rows not sized to the window"
 # Each screen's own wallpaper with the wallpapers (not on Display); a page's skeleton drawn while it's made, the page a
 # frame later; the long lists' button the menus' split button
-{ grep -q "retitle: ({ Wallpaper: \"Each screen's own\" })" "$n/pages/wallandstyle/WallpaperSelect.qml" &&
+{ grep -q "AgrosScreenWalls {" "$n/pages/wallandstyle/WallpaperSelect.qml" && [ -f "$n/common/AgrosScreenWalls.qml" ] &&
     ! grep -q 'onlyGroups: \["Wallpaper"\]' "$n/pages/AgrosDisplay.qml" &&
     grep -q 'AgrosSkeleton {' "$n/Pages.qml" && grep -q 'onTriggered: root.buildPage(root.pendingIdx)' "$n/Pages.qml" &&
     grep -q 'stateLayer.onClicked: root.listOpen = !root.listOpen' "$n/common/AgrosRow.qml"; } ||

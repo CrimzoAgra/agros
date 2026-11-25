@@ -931,13 +931,25 @@ def nexus_pages():
 """),
         "modules/nexus/pages/ServicesPage.qml": fold("modules/nexus/pages/ServicesPage.qml", """            pageIds: ["notifs", "region"]
 """),
-        # (each screen's own wallpaper, with the wallpapers)
-        "modules/nexus/pages/wallandstyle/WallpaperSelect.qml": fold("modules/nexus/pages/wallandstyle/WallpaperSelect.qml", """            pageIds: ["look"]
-            onlyGroups: ["Wallpaper"]
-            skipKeys: ["look.wallpaper"]
-            retitle: ({ Wallpaper: "Each screen's own" })
-"""),
     }
+    # Wallpapers: the screens first, as arranged, each with its wallpaper, one clicked to give it its own
+    # (AgrosScreenWalls.qml); at the page's end if its buttons have moved
+    walls = read("modules/nexus/pages/wallandstyle/WallpaperSelect.qml")
+    screens = """        // caelestia-overlay: the screens, each with its wallpaper (AgrosScreenWalls.qml)
+        AgrosScreenWalls {
+            Layout.fillWidth: true
+            Layout.bottomMargin: Tokens.spacing.large
+        }
+
+"""
+    if walls.count("        ButtonRow {\n") == 1:
+        walls = insert(walls, "        ButtonRow {\n", screens)
+    else:
+        end = walls.rstrip().rfind("\n    }\n}")
+        if end < 0:
+            raise LookupError("WallpaperSelect.qml: its end")
+        walls = walls[:end + 1] + "\n" + screens + walls[end + 1:]
+    folded["modules/nexus/pages/wallandstyle/WallpaperSelect.qml"] = walls
 
     # Wallpaper & style's Colours: Nexus's is a "page under construction"; AgrOS's colour settings there (the scheme,
     # light or dark, its variant, colours from the wallpaper). One Caelestia has made itself is left as it is
@@ -967,7 +979,7 @@ PageBase {
 
     files = components("services/AgrosSettings.qml", "modules/nexus/common/AgrosRow.qml",
                        "modules/nexus/common/AgrosSections.qml", "modules/nexus/common/AgrosKeyCapture.qml",
-                       "modules/nexus/common/AgrosSkeleton.qml",
+                       "modules/nexus/common/AgrosSkeleton.qml", "modules/nexus/common/AgrosScreenWalls.qml",
                        "modules/nexus/pages/AgrosPage.qml", "modules/nexus/pages/AgrosHome.qml",
                        "modules/nexus/pages/AgrosDisplay.qml", "modules/nexus/pages/AgrosUpdates.qml")
     # Caelestia's options Nexus's own pages set (GlobalConfig.bar.persistent...), by their path: not shown again
