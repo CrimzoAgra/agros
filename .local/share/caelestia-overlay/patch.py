@@ -2730,6 +2730,13 @@ def bar_side():
     t = swap(t, "    x: content.isDetached ? (parent.width - content.nonAnimWidth) / 2 : 0\n",
              "    x: content.isDetached ? (parent.width - content.nonAnimWidth) / 2 : parent.width - width // caelestia-overlay: beside the bar on the right (bar_side)\n",
              "the popouts' place")
+    # (its x eased only to and from the middle, detached: against the bar it follows the popout's width as it changes,
+    # else, a step behind it, each popout first stretched right, into the bar, then slid left)
+    t = swap(t, """    Behavior on x {
+        Anim {""", """    Behavior on x {
+        enabled: content.isDetached // caelestia-overlay: bar_side
+
+        Anim {""", "the popouts' easing")
     out[cw] = swap(t, """        anchors.verticalCenter: parent.verticalCenter
         anchors.left: parent.left
         anchors.leftMargin: (-implicitWidth - 5) * root.offsetScale""", """        anchors.verticalCenter: parent.verticalCenter

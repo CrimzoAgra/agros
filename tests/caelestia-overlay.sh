@@ -387,7 +387,7 @@ grep -q "WARNING.*bar on the right" <<<"$out" && fail "the bar on the right does
 { grep -q 'readonly property bool barRight: true // bar_side' "$right/modules/drawers/Drawers.qml" &&
     grep -q 'anchors.right: true // caelestia-overlay: the bar on the right' "$right/modules/drawers/Exclusions.qml" &&
     grep -q 'anchors.left: parent.left // caelestia-overlay: the bar on the right' "$right/modules/bar/BarWrapper.qml" &&
-    grep -q 'anchors.right: parent.right // caelestia-overlay: out of the bar on the right' "$right/modules/bar/popouts/ClipWrapper.qml" &&
+    grep -q 'anchors.right: parent.right // caelestia-overlay: out of the bar on the right' "$right/modules/bar/popouts/ClipWrapper.qml" && grep -q 'enabled: content.isDetached // caelestia-overlay: bar_side' "$right/modules/bar/popouts/ClipWrapper.qml" &&
     grep -q 'anchors.rightMargin: bar?.exclusiveZone ?? 0 // caelestia-overlay: the bar on the right' "$right/modules/background/Background.qml" &&
     grep -q 'Behavior on anchors.rightMargin' "$right/modules/background/Visualiser.qml"; } || fail "the bar on the right not laid out for it"
 grep -q 'readonly property bool barRight: false // bar_side' "$dst/modules/drawers/Drawers.qml" || fail "the bar on the right with Settings saying left"
