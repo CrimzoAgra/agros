@@ -1,8 +1,4 @@
 #!/bin/sh
-# Opens Desktop Settings (~/.config/quickshell/settings), on a page if one is given (its id in the schema: windows,
-# input, screens, look, bar, panels, launcher, notifs, session, region, features, startup, keys, caelestia);
-# not twice (-n). Its launcher entry runs this
-# (its window named after its launcher entry, for its icon in the dock; every Quickshell window is org.quickshell otherwise)
-# Already open: its window to the front (windows.lua's focus_app, by that name), as qs -n then quits showing nothing
-hyprctl eval 'dots.focus_app(nil, "desktop-settings")' >/dev/null 2>&1
-QS_APP_ID=desktop-settings DOTS_SETTINGS_PAGE=${1:-} exec qs -c settings -n
+# Opens the settings: Caelestia's own (Nexus), AgrOS's pages in it (caelestia-overlay's nexus_pages: Home, Display,
+# Windows, Shortcuts, Updates...). Its launcher entry runs this, and the Super menu's settings button opens the same
+exec qs -c caelestia ipc call nexus open

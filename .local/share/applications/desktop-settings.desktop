@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
 Name=Desktop Settings
-Comment=Windows, features, startup apps and keyboard shortcuts of these dotfiles
+Comment=Look, screens, windows, sound, network, startup apps, shortcuts and updates
 Exec=desktop-settings
 Icon=preferences-desktop
 Terminal=false

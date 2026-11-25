@@ -2,12 +2,15 @@ pragma ComponentBehavior: Bound
 
 // caelestia-overlay: one AgrOS setting as a Nexus row (AgrosSettings.qml's, by its key): its name, what it does (wrapped,
 // not cut off as Nexus's own rows cut theirs), and its control: a switch, a row of buttons for a few short choices (a
-// menu for more), a spin box for whole numbers (a slider for the rest), a text field. Changes go through
-// AgrosSettings.set
+// menu for more), a spin box for whole numbers (a slider for the rest), a text field, shortcuts as chips with + to
+// record one; an app started at login with its icon, how it starts and a button removing it; pictures to pick one from
+// (a wallpaper) under it. Only its own control is made (a page of 100 rows, each with every kind of control hidden,
+// took seconds to show). Changes go through AgrosSettings.set
 
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
+import Quickshell.Widgets
 import Caelestia.Config
 import qs.components
 import qs.components.controls
@@ -24,6 +27,8 @@ ConnectedRect {
     readonly property var options: setting?.options ?? []
     // (a few short choices: buttons side by side)
     readonly property bool buttons: options.length > 0 && options.length <= 3 && options.reduce((n, o) => n + String(o.label ?? o.value).length, 0) <= 24
+    // (Caelestia's options with no description of their own have their path as one: not shown)
+    readonly property string description: /\s/.test(setting?.description ?? "") ? setting.description : ""
 
     function set(v: var): void {
         if (JSON.stringify(v) !== JSON.stringify(value))
@@ -31,56 +36,124 @@ ConnectedRect {
     }
 
     Layout.fillWidth: true
-    implicitHeight: row.implicitHeight + Tokens.padding.medium * 2
+    implicitHeight: col.implicitHeight + Tokens.padding.medium * 2
     clip: false
-    z: menuLoader.item?.expanded ? 1 : 0 // qmllint disable missing-property
+    z: control.item?.expanded ? 1 : 0 // qmllint disable missing-property
 
-    RowLayout {
-        id: row
+    ColumnLayout {
+        id: col
 
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
         anchors.leftMargin: Tokens.padding.largeIncreased
         anchors.rightMargin: Tokens.padding.largeIncreased
-        spacing: Tokens.spacing.large
+        spacing: Tokens.spacing.medium
 
-        ColumnLayout {
+        // Its name and its control side by side; the control under the name when that would leave the name too little
+        // room (a narrow page, a card on Nexus's Home)
+        GridLayout {
+            id: row
+
+            readonly property bool stacked: width > 0 && Math.min(control.implicitWidth, 340) > width - 200
+
             Layout.fillWidth: true
-            spacing: Tokens.spacing.extraSmall / 2
+            columns: stacked ? 1 : 3
+            columnSpacing: Tokens.spacing.large
+            rowSpacing: Tokens.spacing.medium
 
-            StyledText {
-                Layout.fillWidth: true
-                text: root.setting?.label ?? root.key
-                font: Tokens.font.body.small
-                wrapMode: Text.Wrap
+            IconImage {
+                visible: root.type === "startup"
+                implicitSize: 32
+                source: visible ? Quickshell.iconPath(root.setting?.icon ?? "", "application-x-executable") : ""
             }
 
-            StyledText {
+            ColumnLayout {
                 Layout.fillWidth: true
-                visible: text !== ""
-                text: root.setting?.description ?? ""
-                color: Colours.palette.m3outline
-                font: Tokens.font.label.small
-                wrapMode: Text.Wrap
+                spacing: Tokens.spacing.extraSmall / 2
+
+                StyledText {
+                    Layout.fillWidth: true
+                    text: root.setting?.label ?? root.key
+                    font: Tokens.font.body.small
+                    wrapMode: Text.Wrap
+                }
+
+                StyledText {
+                    Layout.fillWidth: true
+                    visible: text !== ""
+                    text: root.description
+                    color: Colours.palette.m3outline
+                    font: Tokens.font.label.small
+                    wrapMode: Text.Wrap
+                }
+
+                // (a shortcut another action has too)
+                StyledText {
+                    readonly property var others: {
+                        const out = [];
+                        if (root.type === "keys" && !root.setting?.modifier)
+                            for (const k of Array.from(root.value ?? []))
+                                for (const l of AgrosSettings.usage[AgrosSettings.norm(k)] ?? [])
+                                    if (l !== root.setting?.label && !out.includes(l))
+                                        out.push(l);
+                        return out;
+                    }
+
+                    Layout.fillWidth: true
+                    visible: others.length > 0
+                    text: "Also used by: " + others.join(", ")
+                    color: Colours.palette.m3error
+                    font: Tokens.font.label.small
+                    wrapMode: Text.Wrap
+                }
+            }
+
+            Loader {
+                id: control
+
+                Layout.maximumWidth: root.type === "keys" ? 340 : Number.POSITIVE_INFINITY
+                visible: !!sourceComponent
+                sourceComponent: ({
+                        bool: switchC,
+                        choice: root.buttons ? buttonsC : menuC,
+                        startup: startupC,
+                        keys: keysC,
+                        number: root.setting?.integer === true ? spinC : sliderC,
+                        text: fieldC
+                    })[root.type] ?? null
             }
         }
 
-        // A switch
+        // Pictures: the one set outlined
+        Loader {
+            Layout.fillWidth: true
+            active: root.type === "image"
+            visible: active
+            sourceComponent: picturesC
+        }
+    }
+
+    // A switch
+    Component {
+        id: switchC
+
         StyledSwitch {
-            visible: root.type === "bool"
             cLayer: 2
             checked: root.value === true
             onToggled: root.set(checked)
         }
+    }
 
-        // A few short choices: a button each, the current one filled
+    // A few short choices: a button each, the current one filled
+    Component {
+        id: buttonsC
+
         Row {
-            visible: root.type === "choice" && root.buttons
             spacing: Tokens.spacing.extraSmall
 
             Repeater {
-                model: root.type === "choice" && root.buttons ? root.options : []
+                model: root.options
 
                 TextButton {
                     required property var modelData
@@ -95,42 +168,126 @@ ConnectedRect {
                 }
             }
         }
+    }
 
-        // More choices: a menu
-        Loader {
-            id: menuLoader
+    // More choices: a menu
+    Component {
+        id: menuC
 
-            active: root.type === "choice" && !root.buttons
-            visible: active
+        SplitButton {
+            id: split
 
-            sourceComponent: SplitButton {
-                id: split
+            type: SplitButton.Tonal
+            fallbackText: root.options.find(o => o.value === root.value)?.label ?? String(root.value ?? "")
+            menuItems: items.instances
+            active: menuItems.find(i => i.value === root.value) ?? null
+            stateLayer.onClicked: split.expanded = !split.expanded
+            menu.onItemSelected: item => root.set(item.value)
 
-                type: SplitButton.Tonal
-                fallbackText: root.options.find(o => o.value === root.value)?.label ?? String(root.value ?? "")
-                menuItems: items.instances
-                active: menuItems.find(i => i.value === root.value) ?? null
-                stateLayer.onClicked: split.expanded = !split.expanded
-                menu.onItemSelected: item => root.set(item.value)
+            Variants {
+                id: items
 
-                Variants {
-                    id: items
+                model: root.options
 
-                    model: root.options
+                MenuItem {
+                    required property var modelData
 
-                    MenuItem {
-                        required property var modelData
+                    text: modelData.label || String(modelData.value) || "None"
+                    value: modelData.value
+                }
+            }
+        }
+    }
 
-                        text: modelData.label || String(modelData.value) || "None"
-                        value: modelData.value
+    // An app started at login: how it starts, and no more
+    Component {
+        id: startupC
+
+        Row {
+            spacing: Tokens.spacing.small
+
+            Loader {
+                anchors.verticalCenter: parent.verticalCenter
+                sourceComponent: buttonsC
+            }
+
+            IconButton {
+                anchors.verticalCenter: parent.verticalCenter
+                icon: "delete"
+                type: IconButton.Text
+                onClicked: root.set("removed")
+            }
+        }
+    }
+
+    // Shortcuts: each one a chip (red when another action has it too; x on hover takes it off), + records one more
+    Component {
+        id: keysC
+
+        Flow {
+            layoutDirection: Qt.RightToLeft
+            spacing: Tokens.spacing.extraSmall
+
+            IconButton {
+                id: add
+
+                visible: !root.setting?.readonly && (!root.setting?.modifier || (root.value ?? []).length === 0)
+                icon: "add"
+                type: IconButton.Tonal
+                onClicked: AgrosSettings.startCapture(root.key, !!root.setting?.modifier)
+            }
+
+            Repeater {
+                model: root.value ?? []
+
+                StyledRect {
+                    id: chip
+
+                    required property string modelData
+                    readonly property bool clash: !root.setting?.modifier && (AgrosSettings.usage[AgrosSettings.norm(modelData)] ?? []).length > 1
+
+                    implicitWidth: chipRow.implicitWidth + Tokens.padding.medium * 2
+                    implicitHeight: add.implicitHeight
+                    radius: Tokens.rounding.small
+                    color: clash ? Colours.palette.m3errorContainer : Colours.layer(Colours.palette.m3surfaceContainerHighest, 2)
+
+                    HoverHandler {
+                        id: chipHover
+                    }
+
+                    Row {
+                        id: chipRow
+
+                        anchors.centerIn: parent
+                        spacing: Tokens.spacing.extraSmall
+
+                        StyledText {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: AgrosSettings.pretty(chip.modelData)
+                            font: Tokens.font.mono.small
+                            color: chip.clash ? Colours.palette.m3onErrorContainer : Colours.palette.m3onSurface
+                        }
+
+                        MaterialIcon {
+                            anchors.verticalCenter: parent.verticalCenter
+                            visible: chipHover.hovered && !root.setting?.readonly
+                            text: "close"
+
+                            TapHandler {
+                                onTapped: root.set(Array.from(root.value ?? []).filter(k => k !== chip.modelData))
+                            }
+                        }
                     }
                 }
             }
         }
+    }
 
-        // A whole number
+    // A whole number
+    Component {
+        id: spinC
+
         StyledSpinBox {
-            visible: root.type === "number" && root.setting?.integer === true
             cLayer: 2
             from: root.setting?.min ?? 0
             to: root.setting?.max ?? 9999
@@ -138,10 +295,13 @@ ConnectedRect {
             value: typeof root.value === "number" ? root.value : 0
             onValueModified: root.set(Math.round(value))
         }
+    }
 
-        // Any other number: a slider, set when let go
+    // Any other number: a slider, set when let go
+    Component {
+        id: sliderC
+
         RowLayout {
-            visible: root.type === "number" && root.setting?.integer !== true
             spacing: Tokens.spacing.medium
 
             StyledSlider {
@@ -163,18 +323,80 @@ ConnectedRect {
                 horizontalAlignment: Text.AlignRight
             }
         }
+    }
 
-        // Text: set when done (Enter, or the field left); one that doesn't fit the setting's pattern isn't
+    // Text: set when done (Enter, or the field left); one that doesn't fit the setting's pattern isn't
+    Component {
+        id: fieldC
+
         StyledTextField {
-            id: field
-
             readonly property bool fits: !root.setting?.pattern || new RegExp(`^(?:${root.setting.pattern})$`).test(text)
 
-            visible: root.type === "text"
-            Layout.preferredWidth: 220
+            implicitWidth: 220
             text: typeof root.value === "string" ? root.value : ""
             placeholderText: root.setting?.placeholder ?? ""
             onEditingFinished: if (fits) root.set(text)
+        }
+    }
+
+    // Pictures: the one set outlined
+    Component {
+        id: picturesC
+
+        GridLayout {
+            columns: Math.max(2, Math.floor(width / 150))
+            columnSpacing: Tokens.spacing.small
+            rowSpacing: Tokens.spacing.small
+
+            Repeater {
+                model: root.options
+
+                StyledClippingRect {
+                    id: pic
+
+                    required property var modelData
+                    readonly property bool selected: modelData.value === root.value
+
+                    Layout.fillWidth: true
+                    implicitHeight: width * 9 / 16
+                    radius: Tokens.rounding.medium
+                    color: Colours.tPalette.m3surfaceContainerHigh
+
+                    // (no picture: "Same as the others", this screen's left to the one for every screen)
+                    StyledText {
+                        visible: !pic.modelData.value
+                        anchors.centerIn: parent
+                        width: parent.width - Tokens.padding.medium * 2
+                        horizontalAlignment: Text.AlignHCenter
+                        wrapMode: Text.Wrap
+                        text: pic.modelData.label ?? ""
+                        font: Tokens.font.label.medium
+                    }
+
+                    Image {
+                        visible: !!pic.modelData.value
+                        anchors.fill: parent
+                        asynchronous: true
+                        fillMode: Image.PreserveAspectCrop
+                        sourceSize.width: 300
+                        source: pic.modelData.value ? "file://" + pic.modelData.value.split("/").map(encodeURIComponent).join("/") : ""
+                    }
+
+                    StyledRect {
+                        anchors.fill: parent
+                        color: "transparent"
+                        radius: pic.radius
+                        border.width: pic.selected ? 3 : 0
+                        border.color: Colours.palette.m3primary
+                    }
+
+                    StateLayer {
+                        anchors.fill: parent
+                        radius: pic.radius
+                        onClicked: if (!pic.selected) root.set(pic.modelData.value)
+                    }
+                }
+            }
         }
     }
 }

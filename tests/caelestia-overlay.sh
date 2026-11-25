@@ -232,8 +232,26 @@ comps=$(awk '/readonly property list<Component> pageComps/,/^    \]/' "$n/PageCo
 { [[ $pages == "$comps" ]] && grep -q 'pageId: "windows"' "$n/PageCompRegistry.qml" && grep -q 'label: "Windows", // caelestia-overlay' "$n/PageRegistry.qml" &&
     [[ -f $dst/services/AgrosSettings.qml && -f $n/common/AgrosRow.qml && -f $n/pages/AgrosPage.qml ]]; } ||
     fail "AgrOS's pages not in Nexus, or its lists out of step ($pages pages, $comps components)"
-for f in "$n/common/AgrosRow.qml" "$n/pages/AgrosPage.qml" "$dst/services/AgrosSettings.qml"; do
-    for ty in Variants ScriptModel Process StdioCollector Singleton; do
+# Nexus opens on AgrOS's Home; Display where Nexus's TODO was, Updates in its placeholder, Shortcuts; the bar's popout
+# still opens its pages (Wallpaper & style...) where they went; the shortcut recorder over Nexus, and the shell's restart
+# a change needs held until Nexus closes; dots-settings's other pages folded into Nexus's own, without what Nexus sets
+{ awk '/readonly property list<Component> pageComps/,/^    \]/' "$n/PageCompRegistry.qml" | grep -m1 -q 'AgrosHome {}' &&
+    [[ $(awk '/readonly property list<var> pages/,/^    \]/' "$n/PageRegistry.qml" | grep -m1 -oE 'label: [^,]+') == 'label: "Home"' ]] &&
+    grep -q 'AgrosDisplay {}' "$n/PageCompRegistry.qml" && grep -q 'AgrosUpdates {}' "$n/PageCompRegistry.qml" &&
+    grep -q 'pageId: "keys"' "$n/PageCompRegistry.qml" &&
+    grep -qF '["home", "appearance", "display", "network", "bluetooth", "audio"].indexOf(root.queuedMode)' "$dst/modules/bar/popouts/Wrapper.qml" &&
+    grep -q 'AgrosKeyCapture {' "$n/Nexus.qml" && grep -q 'Component.onDestruction: AgrosSettings.flush()' "$n/Nexus.qml" &&
+    grep -q '^import qs.modules.nexus.common$' "$n/Nexus.qml"; } || fail "Nexus's AgrOS pages (Home, Display, Updates, Shortcuts) not where they go"
+for page in WallpaperAndStyle PanelsPage ServicesPage; do
+    grep -q 'AgrosSections {' "$n/pages/$page.qml" || fail "dots-settings's leftovers not folded into Nexus's $page"
+done
+grep -qE 'readonly property var covered: \[.*"bar\.persistent".*\]' "$n/common/AgrosSections.qml" ||
+    fail "Caelestia's options Nexus sets itself not listed (they'd show twice): $(grep 'property var covered' "$n/common/AgrosSections.qml")"
+# The pages in order as the popout names them: Home, Wallpaper & style, Display, Network, Connected devices, Audio
+[[ $(awk '/readonly property list<var> pages/,/^    \]/' "$n/PageRegistry.qml" | grep -oE '^ {12}icon: "[a-z_]+"' | head -6 | tr -d ' ' | tr '\n' ' ') == 'icon:"home" icon:"palette" icon:"monitor" icon:"wifi" icon:"devices_other" icon:"volume_up" ' ]] ||
+    fail "Nexus's first pages not Home, Wallpaper & style, Display, Network, Connected devices, Audio"
+for f in "$n"/common/Agros*.qml "$n"/pages/Agros*.qml "$dst/services/AgrosSettings.qml"; do
+    for ty in Variants ScriptModel Process StdioCollector Singleton FileView; do
         ! grep -qE "^\s*$ty \{|: $ty \{" "$f" || grep -qE '^import Quickshell(\.Io)?$' "$f" || fail "$f uses $ty without importing Quickshell"
     done
 done

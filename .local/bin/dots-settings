@@ -1,5 +1,5 @@
 #!/usr/bin/python3 -I
-"""The dotfiles' settings: what the Settings app (~/.config/quickshell/settings) shows and changes.
+"""The dotfiles' settings: what the settings window (Caelestia's Nexus, AgrOS's pages in it: caelestia-overlay) shows and changes.
 The list of settings, their defaults and how each one applies: ~/.local/share/dots-settings/schema.json. Your choices
 (only the ones that differ from the default): ~/.config/dots/settings.json. Hyprland's config reads them from
 ~/.config/dots/settings.lua (dots.setting(key) in hypr-user.lua), written here on every change; scripts from `values`.

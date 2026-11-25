@@ -731,9 +731,12 @@ def settings_button():
 
 
 def nexus_pages():
-    # AgrOS's settings in Caelestia's own settings (Nexus): its pages there (AgrosPage.qml: dots-settings's, drawn with
-    # Nexus's look, AgrosRow.qml), among Nexus's own in their categories. Nexus's two lists (the pages, and the component
-    # for each) go by position: each one goes into both at the same place
+    # AgrOS's settings in Caelestia's own settings (Nexus), its pages there among Nexus's own in their categories: the
+    # page it opens on (AgrosHome.qml), Display (AgrosDisplay.qml: Nexus's own is a TODO), Updates (AgrosUpdates.qml, in
+    # Nexus's placeholder), and dots-settings's pages (AgrosPage.qml); what's left of dots-settings's other pages (what
+    # Nexus doesn't show itself) under Nexus's Wallpaper & style, Panels and Services (AgrosSections.qml). Nexus's two
+    # lists (the pages, and the component for each) go by position: each one goes into both at the same place, and the
+    # bar's popout, which opens Nexus at a page by its position, is told where its pages went
     def entry(label, icon, desc, cat):
         return f"""        {{
             label: "{label}", // caelestia-overlay: AgrOS's
@@ -744,27 +747,102 @@ def nexus_pages():
 """
 
     def comp(label, page):
-        return f"""        Component {{
-            // {label} (caelestia-overlay: AgrOS's)
-            AgrosPage {{
+        body = page if page.endswith("}") else f"""AgrosPage {{
                 title: "{label}"
                 pageId: "{page}"
-            }}
+            }}"""
+        return f"""        Component {{
+            // {label} (caelestia-overlay: AgrOS's)
+            {body}
         }},
 """
 
-    # (end of Connectivity; end of System; start of Shell)
-    places = [("        // System\n", True, [("Mouse & keyboard", "mouse", "Pointer, touchpad, keyboard layout", "connectivity", "input")]),
-              ("        // Shell\n", True, [("Features", "extension", "Games, Lutris, the shell's extras", "system", "features"),
+    # (start; start of Connectivity; end of Connectivity; end of System; start of Shell)
+    places = [("        // Appearance\n", True, [("Home", "home", "The settings most looked for", "home", "AgrosHome {}")]),
+              ("        // Connectivity\n", False, [("Display", "monitor", "Screens, their arrangement, night light", "connectivity", "AgrosDisplay {}")]),
+              ("        // System\n", True, [("Mouse & keyboard", "mouse", "Pointer, touchpad, keyboard layout", "connectivity", "input")]),
+              ("        // Shell\n", True, [("Features", "auto_awesome", "Games, Lutris, the shell's extras", "system", "features"),
                                           ("Startup", "rocket_launch", "Apps started at login", "system", "startup")]),
-              ("        // Shell\n", False, [("Windows", "select_window", "Floating or tiling, focus, title bars", "shell", "windows")])]
+              ("        // Shell\n", False, [("Windows", "select_window", "Floating or tiling, focus, title bars", "shell", "windows"),
+                                           ("Shortcuts", "keyboard", "Keyboard shortcuts", "shell", "keys")])]
     reg, comps = read("modules/nexus/PageRegistry.qml"), read("modules/nexus/PageCompRegistry.qml")
     for anchor, before, pages in places:
         reg = insert(reg, anchor, "".join(entry(l, i, d, c) for l, i, d, c, _ in pages), before=before)
         comps = insert(comps, anchor, "".join(comp(l, page) for l, _, _, _, page in pages), before=before)
+    # Updates: Nexus's placeholder (the first under System, Plugins' the second)
+    comps = swap(comps, """        // System
+        Component {
+            PlaceholderComp {}
+        },
+""", """        // System
+        Component {
+            // Updates (caelestia-overlay: AgrOS's)
+            AgrosUpdates {}
+        },
+""", "updates placeholder")
+
+    # The bar's popout opens Nexus at these pages (by position): Home and Display come before them now
+    wrapper = swap(read("modules/bar/popouts/Wrapper.qml"), """["appearance", "network", "bluetooth", "audio"].indexOf(root.queuedMode)""",
+                   """["home", "appearance", "display", "network", "bluetooth", "audio"].indexOf(root.queuedMode) // caelestia-overlay: AgrOS's Home and Display before them""",
+                   "popout's nexus pages")
+
+    # Nexus: the shortcut recorder over it; closed, the changes that wait for it applied (the shell's restart)
+    nexus = read("modules/nexus/Nexus.qml")
+    nexus = insert(nexus, "import qs.modules.nexus\n", "import qs.modules.nexus.common\n", before=False)
+    nexus = insert(nexus, "    signal close\n", """    // caelestia-overlay: AgrOS's changes waiting for Nexus to close (the shell's restart), applied now
+    Component.onDestruction: AgrosSettings.flush()
+
+""", before=False)
+    nexus = insert(nexus, "    NavPane {\n", """    // caelestia-overlay: recording a shortcut (AgrOS's Shortcuts)
+    AgrosKeyCapture {
+        anchors.fill: parent
+        z: 10
+    }
+
+""")
+
+    # What's left of dots-settings's pages, at the end of Nexus's own (their content: the page's one ColumnLayout)
+    def fold(page, sections):
+        t = read(page)
+        i = t.rstrip().rfind("\n    }\n}")
+        if i < 0 or "AgrosSections" in t:
+            raise LookupError(f"{page}: its end")
+        return t[:i + 1] + f"""
+        // caelestia-overlay: AgrOS's settings Nexus doesn't show itself
+        AgrosSections {{
+            Layout.fillWidth: true
+            Layout.topMargin: Tokens.spacing.large
+            firstHeader: false
+{sections}        }}
+""" + t[i + 1:]
+
+    folded = {
+        "modules/nexus/pages/WallpaperAndStyle.qml": fold("modules/nexus/pages/WallpaperAndStyle.qml", """            pageIds: ["look", "panels"]
+            onlyGroups: ["Fonts (the shell's)", "Windows", "Shell", "Desktop"]
+"""),
+        "modules/nexus/pages/PanelsPage.qml": fold("modules/nexus/pages/PanelsPage.qml", """            pageIds: ["panels", "bar", "launcher", "session"]
+            skipGroups: ["Desktop"]
+"""),
+        "modules/nexus/pages/ServicesPage.qml": fold("modules/nexus/pages/ServicesPage.qml", """            pageIds: ["notifs", "region"]
+"""),
+    }
+
+    files = components("services/AgrosSettings.qml", "modules/nexus/common/AgrosRow.qml",
+                       "modules/nexus/common/AgrosSections.qml", "modules/nexus/common/AgrosKeyCapture.qml",
+                       "modules/nexus/pages/AgrosPage.qml", "modules/nexus/pages/AgrosHome.qml",
+                       "modules/nexus/pages/AgrosDisplay.qml", "modules/nexus/pages/AgrosUpdates.qml")
+    # Caelestia's options Nexus's own pages set (GlobalConfig.bar.persistent...), by their path: not shown again
+    covered = set()
+    for dirpath, _, names in os.walk(os.path.join(src, "modules/nexus")):
+        for name in names:
+            if name.endswith(".qml"):
+                with open(os.path.join(dirpath, name), encoding="utf-8") as f:
+                    covered |= set(re.findall(r"\b(?:GlobalConfig|Config)\.([a-zA-Z]+(?:\.[a-zA-Z]+)+)", f.read()))
+    sections = "modules/nexus/common/AgrosSections.qml"
+    files[sections] = swap(files[sections], "    readonly property var covered: []\n",
+                           f"    readonly property var covered: {json.dumps(sorted(covered))}\n", "covered options")
     return {"modules/nexus/PageRegistry.qml": reg, "modules/nexus/PageCompRegistry.qml": comps,
-            **components("services/AgrosSettings.qml", "modules/nexus/common/AgrosRow.qml",
-                         "modules/nexus/pages/AgrosPage.qml")}
+            "modules/bar/popouts/Wrapper.qml": wrapper, "modules/nexus/Nexus.qml": nexus, **folded, **files}
 
 
 def tray_click():

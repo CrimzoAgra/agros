@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Screens: the pointer between two screens of different heights (crossing.lua, LittleBigMouse's way): the edge matched
 # end to end both ways where the screens' sizes aren't known, the taller one's corner past the shorter one's edge leading over too, Hyprland's own crossing
-# and a pointer sliding along an edge or warped across left alone; and the Settings app's drag (shell.qml's
-# arrangeSnap, arrangeNormal): a screen let go snaps to a side of the other, lined up, never over it, the top left at 0,0
+# and a pointer sliding along an edge or warped across left alone; and the settings' drag (Nexus's Display page,
+# AgrosDisplay.qml's snap, normal): a screen let go snaps to a side of the other, lined up, never over it, the top left at 0,0
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
@@ -82,11 +82,12 @@ else
     skipped "no lua: the pointer's crossing not checked"
 fi
 if command -v node >/dev/null; then
-    qml=$here/.config/quickshell/settings/shell.qml
-    fns=$(for f in arrangeSnap arrangeNormal; do sed -n "/^    function $f(/,/^    }$/p" "$qml"; done |
+    qml=$here/.local/share/caelestia-overlay/AgrosDisplay.qml
+    fns=$(for f in snap normal; do sed -n "/^    function $f(/,/^    }$/p" "$qml"; done |
         sed -E '/^    function /{s/: (var|int|real)([,)])/\2/g; s/\): var \{$/) {/}')
     [[ -n $fns ]] || fail "the Settings app's screen snapping not found"
     out=$(node -e "$fns
+const arrangeSnap = snap, arrangeNormal = normal;
 const big = { x: 0, y: 0, w: 2560, h: 1440 }, small = { x: 2560, y: 0, w: 1920, h: 1080 };
 const show = p => p.x + ',' + p.y;
 console.log(show(arrangeSnap([big, small], 1, 2600, 30)));    // near its right side: lined up with the top

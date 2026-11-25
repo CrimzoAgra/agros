@@ -232,19 +232,25 @@ The default wallpaper is Caelestia's own (`assets/wallpaper.webp` in its shell).
 | `.config/systemd/user/` | User services: game-focus, tray-keeper, the update check, lutris-library, and `service-failed@` (a notification when game-focus or tray-keeper keeps crashing) |
 | `.local/share/applications/` | Launcher entries (and fixed copies of a package's own, e.g. HP Scan's with an icon that exists) |
 
-## Desktop Settings app
+## Settings
 
-A window in Caelestia's style for changing the whole desktop without editing files (Super menu: "Desktop Settings").
-Changes apply right away.
-- **`.config/quickshell/settings/`**: the app (`desktop-settings [page]` opens it, on a page if given). It draws
-  every page from the schema: one control per kind of setting (a switch, joined buttons or a list for a choice,
-  shortcuts, a slider and -/+ for a number, a text field, a JSON field, pictures), a button back to the default on any
-  that's changed, a note where AgrOS relies on the value, and a search over every page above the list of pages. Below
-  that list, whether changes are being applied, or why one wasn't (in red, with an error icon, wrapped in the list's
-  width)
+Caelestia's own settings window (Nexus), with AgrOS's settings in it, in its style (Super menu: the gear left of the
+updates button, or "Desktop Settings"). It opens on Home: the settings most looked for on four cards (Look, Screens,
+Windows, Sound & network), each with a button to its whole page.
+- **`.local/share/caelestia-overlay/`**'s `nexus_pages` (in `patch.py`) puts AgrOS's pages among Nexus's own: Home
+  (`AgrosHome.qml`), Display (`AgrosDisplay.qml`: the screens dragged into place, each one snapping to a side of
+  another; the main screen, night light, each screen's mode, scale, rotation and wallpaper), Mouse & keyboard,
+  Features, Startup, Windows and Shortcuts (each a page of the schema, `AgrosPage.qml`), and Updates
+  (`AgrosUpdates.qml`, in Nexus's placeholder: what's waiting and "Update all", run as a systemd user unit so a shell
+  restart doesn't stop it). What's left of the schema's other pages, what Nexus doesn't set itself, is added at the end
+  of Nexus's Wallpaper & style, Panels and Services pages (`AgrosSections.qml`). One control per kind of setting
+  (`AgrosRow.qml`): a switch, buttons for a few short choices or a menu for more, a spin box or a slider, a text field,
+  shortcuts as chips (+ records one, over the whole window: `AgrosKeyCapture.qml`), pictures. Changes are saved at
+  once and applied together a moment after the last one; one that restarts the shell (a Features switch) waits until
+  the window is closed (`AgrosSettings.qml`)
 - **`.local/share/dots-settings/schema.json`**: every setting, its kind, default, and how a change applies (reload
   Hyprland...). A new setting is added here, then read where it's used; a new kind of setting is added to
-  `dots-settings` and the app once, for every page
+  `dots-settings` and `AgrosRow.qml` once, for every page
 - **`.local/bin/dots-settings`**: saves your choices (only those that differ from the default) to
   `~/.config/dots/settings.json`, for this machine only, and writes them to `settings.lua` for Hyprland, where
   `dots.setting(key)` reads them (written again at Hyprland's load when the schema's md5sum isn't the one it was made

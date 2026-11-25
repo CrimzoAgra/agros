@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# The Settings app's apply (its command, from settings/shell.qml, run as the app runs it): each pending apply goes to
+# The settings' apply (its command, from Nexus's AgrosSettings.qml, run as it runs it): each pending apply goes to
 # dots-settings apply as one argument, whatever a set printed besides it (a line break or a quote ran as shell before),
 # and one failing makes the whole fail while the others still run
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
-qml=$here/.config/quickshell/settings/shell.qml
+qml=$here/.local/share/caelestia-overlay/AgrosSettings.qml
 cmd=$(sed -n "s/^ *applier.command = \[\"sh\", \"-c\", '\(.*\)', root.cli, ...root.pendingApply\];\$/\1/p" "$qml")
-[[ -n $cmd ]] || fail "the Settings app's apply command not found"
+[[ -n $cmd ]] || fail "the settings' apply command not found"
 # shellcheck disable=SC2016  # (expanded by the stand-in)
 printf '#!/bin/sh\nprintf "[%%s]" "$@" >>%s/calls; echo >>%s/calls\n[ "$2" != bad ]\n' "$t" "$t" >"$t/cli" && chmod +x "$t/cli"
 sh -c "$cmd" "$t/cli" hypr $'ok\ntouch '"$t/ran" 'a "b" $(touch '"$t/ran"')' || fail "the applies failed"
