@@ -1012,7 +1012,8 @@ def main(args):
             group["settings"] = [s for s in group["settings"] if not s.get("hidden")]
         print(json.dumps(pages))
     elif cmd in ("values", "now"):
-        print(json.dumps(values(settings)))
+        # (the Settings app's poll, "now", as its schema: no hidden one; scripts' "values" has every one)
+        print(json.dumps(values({k: s for k, s in settings.items() if cmd == "values" or not s.get("hidden")})))
     elif cmd == "get" and len(args) == 2 and args[1] in settings:
         print(json.dumps(current(settings[args[1]], stored())))
     elif cmd == "set" and len(args) in (3, 4) and args[1] in settings:
