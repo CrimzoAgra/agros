@@ -187,11 +187,6 @@ StyledWindow {
         width: root.shown.width
         height: root.shown.height
         clip: true
-        // None at all (a narrow screen's bar between two columns wider than it, their parts overlapping: its own
-        // part's width below 0): not drawn, its picture made again when it's back. Clipped to nothing, Qt left the
-        // picture (layer) as it was, and once the part came back (a popout under the bar's end) it drew nothing there:
-        // the bar black, the columns having given it that stretch
-        visible: width > 0 && height > 0
 
         Item {
             readonly property real pad: 48
@@ -201,7 +196,7 @@ StyledWindow {
             width: root.width + pad * 2
             height: root.height + pad * 2
             opacity: root.surfaceColour.a
-            layer.enabled: shownPart.visible
+            layer.enabled: true
             layer.effect: MultiEffect {
                 shadowEnabled: true
                 blurMax: 15

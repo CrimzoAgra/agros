@@ -156,16 +156,19 @@ Variants {
         // (across: the left border's column, as wide as its window, to where the middle panel is)
         readonly property real ownLeft: barAcross ? Math.max(columnNeeded, Math.min(columnArea.width, centerLeft)) : detached ? screenW - ownRight : Math.max(leftNeeded, Math.min(leftArea.width, centerLeft))
         readonly property rect leftOwn: barAcross ? barOwn : Qt.rect(0, 0, ownLeft, screenH)
-        readonly property rect rightOwn: barInCorner ? Qt.rect(screenW - ownRight, barTop ? barOwnDepth : 0, ownRight, screenH - barOwnDepth) : Qt.rect(screenW - ownRight, 0, ownRight, screenH)
+        // (the screen's height always, the bar across too: something of the bar's reaching over the column (barInCorner)
+        // has the bar's window, above it, draw that corner over its part, not take it: given back, a part Qt didn't
+        // draw again, the border black there on a narrow screen till something else in the window changed)
+        readonly property rect rightOwn: Qt.rect(screenW - ownRight, 0, ownRight, screenH)
         readonly property rect topOwn: barTop ? columnOwn : barBottom && detached ? Qt.rect(screenW - ownRight, 0, 0, topArea.height) : Qt.rect(ownLeft, 0, Math.max(0, screenW - ownLeft - ownRight), topArea.height)
         readonly property rect bottomOwn: barBottom ? columnOwn : barTop && detached ? Qt.rect(screenW - ownRight, screenH - bottomArea.height, 0, bottomArea.height) : Qt.rect(ownLeft, screenH - bottomArea.height, Math.max(0, screenW - ownLeft - ownRight), bottomArea.height)
 
         // The bar across: its window's part the strip along its edge, as deep as its window, between the left border's
         // column and the right window's (both the screen's height, the bar's ends included: its window, over theirs, has
         // the pointer all along it); with something of it open reaching over one of them (a popout under the bar's end,
-        // the dashboard under the clock), across that column too, as deep as what's open, and the column's part starts
-        // under it. The other middle panel's window between the two columns. A detached popout: the bar's window
-        // everything but the right column
+        // the dashboard under the clock), across that column too, as deep as what's open, drawn over the column's part
+        // there (the same border under it). The other middle panel's window between the two columns. A detached popout:
+        // the bar's window everything but the right column
         readonly property real barOpenLeft: {
             const w = leftPanels.popoutsWrapper;
             let l = w && w.width > 0 && w.height > 0 ? border + w.x : screenW;
@@ -188,10 +191,11 @@ Variants {
         readonly property rect barOwn: {
             if (detached)
                 return Qt.rect(0, 0, screenW - ownRight, screenH);
-            const x = barInLeftCorner ? 0 : ownLeft;
-            return Qt.rect(x, barTop ? 0 : screenH - barOwnDepth, (barInCorner ? screenW : screenW - ownRight) - x, barOwnDepth);
+            // (at least 1 px wide: a narrow screen's columns can be wider than it together, a part below 0 wide)
+            const x = barInLeftCorner ? 0 : Math.min(ownLeft, screenW - 1);
+            return Qt.rect(x, barTop ? 0 : screenH - barOwnDepth, Math.max(1, (barInCorner ? screenW : screenW - ownRight) - x), barOwnDepth);
         }
-        readonly property rect columnOwn: detached ? Qt.rect(0, barTop ? screenH : 0, ownLeft, 0) : barInLeftCorner ? Qt.rect(0, barTop ? barOwnDepth : 0, ownLeft, screenH - barOwnDepth) : Qt.rect(0, 0, ownLeft, screenH)
+        readonly property rect columnOwn: detached ? Qt.rect(0, barTop ? screenH : 0, ownLeft, 0) : Qt.rect(0, 0, ownLeft, screenH)
         // (how wide the column needs to be: its panels open, PanelsLeft.qml's)
         readonly property real columnNeeded: {
             const c = barTop ? topLeftPanels : bottomLeftPanels;
