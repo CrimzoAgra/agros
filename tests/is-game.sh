@@ -19,14 +19,17 @@ SteamGameId=1238840 sleep 30 & forsteam=$!
 GAME_NAME="EA App" sleep 30 & byentry=$!
 GAME_NAME="Assassin's Creed Origins" sleep 30 & origins=$!
 env -u GAME_NAME -u SteamGameId sleep 30 & byhand=$!
+# Steam's own client, which Lutris started with its first game's GAME_NAME: not started for that game
+cp /usr/bin/sleep "$t/steam"; GAME_NAME="Overwatch®" "$t/steam" 30 & steamclient=$!
 # Store launchers' windows tagged like games under Proton (store-launchers' list): Rockstar's, by its folder, and EA's
 (exec -a 'C:\Program Files\Rockstar Games\Launcher\Launcher.exe' sleep 30) & rockstar=$!
 (exec -a 'C:\EA Desktop\EADesktop.exe' sleep 30) & ea=$!
 mkdir -p "$t/home/.local/bin"; ln -s "$here/.local/bin/store-launchers" "$t/home/.local/bin/"
 # A program whose name has ") " in it (the start time in /proc/<pid>/stat is after the last ")")
 cp /usr/bin/sleep "$t/a) b"; "$t/a) b" 30 & odd=$!
-on_exit 'kill $game $native $relative $forlutris $forsteam $byentry $byhand $origins $odd $rockstar $ea'
-for _ in $(seq 50); do [[ $(cat "/proc/$odd/comm") == "a) b" && $(cat "/proc/$relative/comm") == game ]] && break; sleep 0.05; done
+on_exit 'kill $game $native $relative $forlutris $forsteam $byentry $byhand $origins $odd $rockstar $ea $steamclient'
+for _ in $(seq 50); do [[ $(cat "/proc/$odd/comm") == "a) b" && $(cat "/proc/$relative/comm") == game &&
+    $(cat "/proc/$steamclient/comm") == steam ]] && break; sleep 0.05; done
 start=$(sed 's/.*) //' "/proc/$odd/stat" | cut -d' ' -f20)
 out=$(cd "$here" && HOME=$t/home lua -e '
 local any = setmetatable({}, { __index = function(s) return s end, __call = function() end })
@@ -60,10 +63,10 @@ for _, f in ipairs(handlers) do process_age = process_age or up(f, "process_age"
 local odd, plain = process_age('"$odd"'), process_age('"$game"')
 io.write("age=", tostring(odd and plain and math.abs(odd - plain) < 5), "\n")
 for _, c in ipairs({ { "forlutris", '"$forlutris"' }, { "forsteam", '"$forsteam"' }, { "byentry", '"$byentry"' },
-                     { "byhand", '"$byhand"' }, { "origins", '"$origins"' } }) do
+                     { "byhand", '"$byhand"' }, { "origins", '"$origins"' }, { "steamclient", '"$steamclient"' } }) do
     io.write(c[1], "=", tostring(dots.started_for_game(c[2])), "\n")
 end')
-for want in tagged=true tagged_star=true plain=false native=true relative=true forlutris=true forsteam=true byentry=false byhand=false origins=true notsteam=false rockstar=false ea=false reads=1 cached=true \
+for want in tagged=true tagged_star=true plain=false native=true relative=true forlutris=true forsteam=true byentry=false byhand=false origins=true steamclient=false notsteam=false rockstar=false ea=false reads=1 cached=true \
     age=true; do
     grep -qx "$want" <<<"$out" || { echo "FAIL: is_game: wanted $want, got: $(tr '\n' ' ' <<<"$out")"; exit 1; }
 done

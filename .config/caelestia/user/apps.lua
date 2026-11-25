@@ -248,6 +248,10 @@ function dots.started_for_game(pid)
     env = "\0" .. env
     local steam = env:match("%zSteamGameId=(%d+)")
     if steam and steam ~= "0" then return true end
+    -- Steam's own client, which Lutris starts with the first game's GAME_NAME: not that game's window (opened over the
+    -- game, it didn't minimise it, and the game stayed over the screen, black)
+    local comm = (proc(pid, "comm") or ""):gsub("%s+$", "")
+    if comm == "steam" or comm == "steamwebhelper" then return false end
     local name = (env:match("%zGAME_NAME=([^%z]*)") or ""):lower()
     if name == "" then return false end
     return not launcher_names[name]
