@@ -436,7 +436,8 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
       a list older than 15 minutes is checked anew)
     - Opens over fullscreen games and videos too (`general.showOverFullscreen` in `shell.json`; notifications and
       toasts stay off fullscreen windows), with the whole shell (bar, border) while it's open, hidden again as it
-      closes (with the dashboard, power menu and popouts opened from it)
+      closes; so do the other panels, from their keys (dashboard, power menu, sidebar, utilities, Super+K) or from the
+      shell once it shows, the shell hidden again as the last one closes
   - Panels that open on hover (dashboard, Super menu, sidebar, volume, the bottom-right
     panel) open only from the screen's last 3
     pixels (not the last alone: Caelestia's dots' `cursor:hotspot_padding` keeps the pointer a pixel short of every

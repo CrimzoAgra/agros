@@ -182,9 +182,9 @@ c=$dst/modules/sidebar/Content.qml
 # ...and its top stays on the border as the opening curve overshoots (an inward notch at its top-left for a moment)
 grep -q 'anchors.topMargin: -notifications.anchors.topMargin - Math.max(0, slide)' "$dst/modules/drawers/Panels.qml" ||
     fail "the sidebar's top not held on the border past the end of its opening"
-# The Super menu over a fullscreen window shows the whole shell (bar, border), still above the window
+# The Super menu (or any panel) over a fullscreen window shows the whole shell (bar, border), still above the window
 w=$dst/modules/drawers/ContentWindow.qml
-{ grep -q 'shellHidden: hasFullscreen && !screenState.launcher' "$w" && grep -q 'fsTransitionProg: shellHidden ? 1' "$w" &&
+{ grep -q 'shellHidden: hasFullscreen && !(screenState.launcher || screenState.dashboard' "$w" && grep -q 'fsTransitionProg: shellHidden ? 1' "$w" &&
     [[ $(grep -c 'fullscreen: root.shellHidden' "$w") == 2 ]] && grep -q 'layer: ((hasFullscreen ? overFullscreen : fsTransitionProg > 0)' "$w"; } ||
     fail "the Super menu over a fullscreen window doesn't show the whole shell: $(grep -n 'shellHidden\|layer:' "$w")"
 # ...and the shell is above a fullscreen game only while something of it shows there (an empty overlay above it has

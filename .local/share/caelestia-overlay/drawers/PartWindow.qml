@@ -74,7 +74,8 @@ StyledWindow {
         return hasFullscreenOnNormalWs;
     }
 
-    readonly property bool shellHidden: hasFullscreen && !screenState.launcher
+    // (shown over a fullscreen game while any panel is open, not only the Super menu)
+    readonly property bool shellHidden: hasFullscreen && !(screenState.launcher || screenState.dashboard || screenState.session || screenState.sidebar || screenState.utilities)
     property real fsTransitionProg: shellHidden ? 1 : 0
     readonly property real sdfBorderOffset: 2 * fsTransitionProg // SDFs joins are not exact, so offset by 2px to ensure nothing shows
     readonly property real borderThickness: contentItem.Config.border.thickness * (1 - fsTransitionProg)

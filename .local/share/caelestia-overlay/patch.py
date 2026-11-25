@@ -2014,16 +2014,23 @@ def launcher_fullscreen():
               "            if (!root.launcherInterrupted) {\n", "launcher key")
     sc = swap(sc, '["launcher", "session", "dashboard"].includes(drawer)', '["session", "dashboard"].includes(drawer)',
               "launcher ipc")
+    # Every panel's key too (dashboard, power menu, sidebar, utilities, Super+K), with the whole shell, as the Super
+    # menu's; not when shell.json keeps Caelestia off fullscreen windows (opened under the game, unseen)
+    sc = swap(sc, "    readonly property bool hasFullscreen: Hypr.focusedWorkspace?.toplevels.values.some(t => t.lastIpcObject.fullscreen > 1) ?? false\n",
+              "    readonly property bool hasFullscreen: !GlobalConfig.general.showOverFullscreen && (Hypr.focusedWorkspace?.toplevels.values.some(t => t.lastIpcObject.fullscreen > 1) ?? false)\n",
+              "panels over fullscreen")
+    sc = insert(sc, "import Caelestia\n", "import Caelestia.Config\n", before=False)
     window = read("modules/drawers/ContentWindow.qml")
     window = swap(window, "    mask: hasFullscreen ? emptyRegion : regions\n", "    mask: shellHidden ? emptyRegion : regions\n",
                   "launcher mask")
-    # The whole shell (bar, border) shows while it's open, as over no fullscreen window, and hides again as it closes
-    # (with what was opened from it meanwhile). Above the fullscreen window only while something of it shows there (the
+    # The whole shell (bar, border) shows while it or another panel is open, as over no fullscreen window, and hides
+    # again as the last closes. Above the fullscreen window only while something of it shows there (the
     # Super menu, its opening and closing, a notification, the volume popup, a toast), else under it: an overlay above a
     # fullscreen game, even an empty one, has Hyprland redraw the whole screen every frame instead of showing the game's
     # frames alone (on a 2560x1440 300 Hz screen it took half the GPU from Overwatch)
     window = insert(window, "    property real fsTransitionProg: hasFullscreen ? 1 : 0\n",
-                    "    readonly property bool shellHidden: hasFullscreen && !screenState.launcher\n"
+                    "    readonly property bool shellHidden: hasFullscreen && !(screenState.launcher || screenState.dashboard || screenState.session\n"
+                    "        || screenState.sidebar || screenState.utilities)\n"
                     "    onShellHiddenChanged: {\n"
                     "        if (!shellHidden)\n"
                     "            return;\n"
@@ -3392,7 +3399,7 @@ SPLIT_NEEDS = (bar_menu, bar_space_refit, edge_triggers, launcher_fullscreen, sa
                top_edge_one_panel, tray_click, window_peek)
 SPLIT_READS = ("ContentWindow.qml", "Drawers.qml", "Exclusions.qml", "Interactions.qml", "Panels.qml", "PeekLayer.qml",
                "Regions.qml", "SnapPreview.qml")
-SPLIT_INPUTS = "ab47ab8fdb92e08c0c483b17f4592b3b0b33309af824eadd8b33e63b7e6f2f0e"
+SPLIT_INPUTS = "c605ed0ecbb4187a5d4e41afe7d2d20c143acc454f3db7836a6343a2fcb1be32"
 
 
 FEATURES = (
