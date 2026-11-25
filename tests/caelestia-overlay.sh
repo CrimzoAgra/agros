@@ -269,6 +269,10 @@ grep -q '360); // caelestia-overlay: no taller than 360' "$n/pages/WallpaperAndS
     grep -q 'AgrosSkeleton {' "$n/Pages.qml" && grep -q 'onTriggered: root.buildPage(root.pendingIdx)' "$n/Pages.qml" &&
     grep -q 'stateLayer.onClicked: root.listOpen = !root.listOpen' "$n/common/AgrosRow.qml"; } ||
     fail "screens' wallpapers not with the wallpapers, no page skeleton, or the lists' button not the split one"
+# Back and forward (buttons by the title, the mouse's), no close button in Nexus's own window
+{ grep -q 'function back(): void' "$n/NexusState.qml" && grep -q 'remember(); // caelestia-overlay' "$n/NexusState.qml" &&
+    grep -q 'acceptedButtons: Qt.BackButton | Qt.ForwardButton' "$n/Nexus.qml" && grep -q 'visible: !root.nState.isWindow' "$n/Nexus.qml" && grep -q 'implicitWidth: root.nState.isWindow ? 0 :' "$n/Nexus.qml" &&
+    grep -q 'icon: "arrow_forward"' "$n/common/PageBase.qml"; } || fail "Nexus's back and forward missing, or its close button still in its window"
 # (Wallpaper & style's Colours: AgrOS's colour settings, while Caelestia's is a placeholder)
 grep -q 'Page under construction' /etc/xdg/quickshell/caelestia/modules/nexus/pages/wallandstyle/ColourSelect.qml &&
     ! grep -q 'onlyGroups: \["Colours"\]' "$n/pages/wallandstyle/ColourSelect.qml" && fail "Colours still a page under construction"

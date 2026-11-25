@@ -1089,6 +1089,157 @@ def nexus_snappy():
             "modules/nexus/pages/WallpaperAndStyle.qml": style, **grids}
 
 
+def nexus_history():
+    # Settings (Nexus) browsed like a browser: back and forward beside a page's title (the pages, and their sub-pages,
+    # as they were shown; a sub-page's back arrow was the only way back), the mouse's back and forward buttons too; no
+    # close button in its own window (Hyprland's close, and its title bar's, do that)
+    state = read("modules/nexus/NexusState.qml")
+    state = swap(state, """    function openSubPage(idx: int): void {
+        subPageIdxStack.push(idx);
+        subPageOpened(idx);
+    }
+
+    function closeSubPage(): void {
+        subPageClosed();
+        subPageIdxStack.pop();
+    }
+
+    onCurrentPageIdxChanged: subPageIdxStack.length = 0
+""", """    function openSubPage(idx: int): void {
+        subPageIdxStack.push(idx);
+        subPageOpened(idx);
+        remember(); // caelestia-overlay
+    }
+
+    function closeSubPage(): void {
+        subPageClosed();
+        subPageIdxStack.pop();
+        remember(); // caelestia-overlay
+    }
+
+    // caelestia-overlay: where back and forward go: the pages, with their sub-pages, as they were shown
+    property var here: ({ page: currentPageIdx, subs: [] })
+    property var backStack: []
+    property var forwardStack: []
+    property bool travelling
+
+    function remember(): void {
+        const now = { page: currentPageIdx, subs: Array.from(subPageIdxStack) };
+        if (now.page === here.page && String(now.subs) === String(here.subs))
+            return;
+        if (!travelling) {
+            backStack = backStack.concat([here]);
+            forwardStack = [];
+        }
+        here = now;
+    }
+
+    function go(to: var): void {
+        travelling = true;
+        if (to.page !== currentPageIdx) {
+            currentPageIdx = to.page;
+            subPageIdxStack = to.subs; // (opened by the page, made a frame later: StackPage)
+        } else {
+            let same = 0;
+            while (same < Math.min(to.subs.length, subPageIdxStack.length) && to.subs[same] === subPageIdxStack[same])
+                same++;
+            while (subPageIdxStack.length > same)
+                closeSubPage();
+            for (const idx of to.subs.slice(same))
+                openSubPage(idx);
+        }
+        remember();
+        travelling = false;
+    }
+
+    function back(): void {
+        if (!backStack.length)
+            return;
+        const to = backStack[backStack.length - 1];
+        backStack = backStack.slice(0, -1);
+        forwardStack = forwardStack.concat([here]);
+        go(to);
+    }
+
+    function forward(): void {
+        if (!forwardStack.length)
+            return;
+        const to = forwardStack[forwardStack.length - 1];
+        forwardStack = forwardStack.slice(0, -1);
+        backStack = backStack.concat([here]);
+        go(to);
+    }
+
+    onCurrentPageIdxChanged: {
+        subPageIdxStack.length = 0;
+        remember(); // caelestia-overlay
+    }
+""", "history")
+
+    nexus = read("modules/nexus/Nexus.qml")
+    # (its shape none: a blob's drawn hidden or not)
+    nexus = swap(nexus, """        implicitWidth: windowBtn.implicitWidth + (root.nState.isWindow ? Tokens.padding.extraSmall : Tokens.padding.small) * 2
+        implicitHeight: windowBtn.implicitHeight + (root.nState.isWindow ? Tokens.padding.extraSmall : Tokens.padding.small)
+""", """        // caelestia-overlay: none in a window (no close button there)
+        implicitWidth: root.nState.isWindow ? 0 : windowBtn.implicitWidth + Tokens.padding.small * 2
+        implicitHeight: root.nState.isWindow ? 0 : windowBtn.implicitHeight + Tokens.padding.small
+""", "close button's shape")
+    nexus = swap(nexus, """    IconButton {
+        id: windowBtn
+""", """    IconButton {
+        id: windowBtn
+
+        visible: !root.nState.isWindow // caelestia-overlay: no close button in a window
+""", "close button")
+    nexus = insert(nexus, "    NavPane {\n", """    // caelestia-overlay: the mouse's back and forward buttons (other buttons, and the wheel, go to what's under it)
+    MouseArea {
+        anchors.fill: parent
+        z: 9
+        acceptedButtons: Qt.BackButton | Qt.ForwardButton
+        onPressed: mouse => mouse.button === Qt.BackButton ? root.nState.back() : root.nState.forward()
+    }
+
+""")
+
+    base = swap(read("modules/nexus/common/PageBase.qml"), """            Loader {
+                visible: active
+                active: root.isSubPage
+                asynchronous: true
+                sourceComponent: IconButton {
+                    icon: "arrow_back"
+                    font: Tokens.font.icon.medium
+                    type: IconButton.Tonal
+                    isRound: true
+                    inactiveColour: Colours.tPalette.m3surfaceContainerHigh
+                    inactiveOnColour: Colours.palette.m3onSurfaceVariant
+                    onClicked: root.nState.closeSubPage()
+                }
+            }
+""", """            // caelestia-overlay: back and forward, as browsed (out of a sub-page as before when nothing's before it)
+            HistoryButton {
+                visible: root.nState.backStack.length > 0 || root.isSubPage
+                icon: "arrow_back"
+                onClicked: root.nState.backStack.length ? root.nState.back() : root.nState.closeSubPage()
+            }
+
+            HistoryButton {
+                visible: root.nState.forwardStack.length > 0
+                icon: "arrow_forward"
+                onClicked: root.nState.forward()
+            }
+""", "back button")
+    base = insert(base, "    VerticalFadeFlickable {\n", """    component HistoryButton: IconButton {
+        font: Tokens.font.icon.medium
+        type: IconButton.Tonal
+        isRound: true
+        inactiveColour: Colours.tPalette.m3surfaceContainerHigh
+        inactiveOnColour: Colours.palette.m3onSurfaceVariant
+    }
+
+""")
+    return {"modules/nexus/NexusState.qml": state, "modules/nexus/Nexus.qml": nexus, "modules/nexus/common/PageBase.qml": base}
+
+
 def tray_click():
     # Collapsed tray: a click on its arrow opens it (not hovering). It closes on a click on the bar and its panels
     # outside the tray, or, as before, when the pointer leaves the bar for a window (not for a tray icon's menu). No
@@ -2373,6 +2524,7 @@ FEATURES = (
     ("settings button in the Super menu", settings_button),
     ("AgrOS's settings in Caelestia's (Nexus)", nexus_pages),
     ("settings: quicker page changes, pages as wide as the window", nexus_snappy),
+    ("settings: back and forward, no close button in its window", nexus_history),
     ("tray opens on click", tray_click),
     ("lock badges re-read at login", lock_refresh),
     ("notification sidebar without the utilities panel", sidebar_notifs_only),
@@ -2424,7 +2576,7 @@ def turned_off():
 # Features that build on another's version of a file (or, the utilities sidebar, on its trigger's geometry; the sidebar's
 # shape on the utilities panel's height, known while closed only with sidebar_notifs_only) and don't fit without it: off when that one is off or skipped. Several: it needs one of them (window peek: the dock's or the
 # workspace preview's popout, the previews it works on), off when all are
-NEEDS = {"nexus_snappy": ("nexus_pages",), "sidebar_shape": ("sidebar_notifs_only",), "settings_button": ("updates_button",), "top_edge_one_panel": ("sidebar_from_top",), "sidebar_from_top": ("sidebar_shape",),
+NEEDS = {"nexus_snappy": ("nexus_pages",), "nexus_history": ("nexus_snappy",), "sidebar_shape": ("sidebar_notifs_only",), "settings_button": ("updates_button",), "top_edge_one_panel": ("sidebar_from_top",), "sidebar_from_top": ("sidebar_shape",),
          "sidebar_with_utilities": ("sidebar_from_top",),
          "window_peek": ("dock", "workspace_preview")}
 
