@@ -687,8 +687,10 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
     `hyprbars-build` for the running Hyprland into `~/.local/lib/hyprbars/`. It runs
     as Hyprland starts (`--login`): after a Hyprland update or a patch change it rebuilds in the background, with the
     packaged build meanwhile (`agros-hyprbars`: the same patch, built by `hyprbars-build` in CI for the Hyprland
-    there, in place of the AUR's plain one; loaded only when built for the running Hyprland, its commit in it: on any
-    other, a point release too, the plugin's own check refuses it with a red "Version mismatch" error on screen), and a
+    there, in place of the AUR's plain one; loaded only when built for the running Hyprland, its commit in it and its
+    ABI hash in the stamp beside it, `/usr/lib/libhyprbars.so.built-for`: on any other, a point release or the same one
+    rebuilt against other libraries too, the plugin's own check refuses it with a red "Version mismatch" error on
+    screen), and a
     notification if the build fails. On the live USB (no compiler) only that packaged build, when it matches
 - **Keys** (`user/keys.lua`):
   - Ctrl+Shift+Esc opens btop (Task Manager; the open one if there is); Print selects an area to screenshot, opened

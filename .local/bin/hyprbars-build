@@ -27,15 +27,22 @@ aur=${HYPRBARS_PACKAGED:-/usr/lib/libhyprbars.so}  # (the packaged one, agros-hy
 # Hyprland named (its first one when run from an SSH login or a text console: there hyprctl didn't know it, and this
 # stopped on jq's parse error)
 hyprctl() { command hyprctl -i "${HYPRLAND_INSTANCE_SIGNATURE:-0}" "$@"; }
-# The packaged one loaded, only when it was built for this Hyprland (its commit is in it): any other Hyprland build, a
-# point release too, fails the plugin's own check with a red "Version mismatch" error on screen, at every login until
-# this account's build is made (a Hyprland update whose plugin build failed, offline at the update)
-load_packaged() { if [[ -n $hypr && -f $aur ]] && grep -qaF -- "$hypr" "$aur"; then hyprctl plugin load "$aur" >/dev/null 2>&1 || true; fi; }
+# The packaged one loaded, only when it was built for this Hyprland (its commit is in it, its ABI hash in the stamp the
+# package has beside it, $abi): any other Hyprland build, a point release or the same one rebuilt against other
+# libraries too, fails the plugin's own check with a red "Version mismatch" error on screen, at every login until this
+# account's build is made (a Hyprland update whose plugin build failed, offline at the update). (A package from before
+# the stamp: by its commit alone)
+load_packaged() {
+    [[ -n $hypr && -f $aur ]] && grep -qaF -- "$hypr" "$aur" || return 0
+    [[ -z ${abi:-} || ! -f $aur.built-for || $(cut -d' ' -f1 "$aur.built-for") == "$abi" ]] || return 0
+    hyprctl plugin load "$aur" >/dev/null 2>&1 || true
+}
 # On the live USB: never built (no compiler, nothing to keep it for); at login the packaged one the ISO ships is loaded,
 # patched as here, so the installer's window has the same title bar (when it was built for its Hyprland, as anywhere)
 if [[ -d ${HYPRBARS_LIVE:-/run/archiso} ]]; then
     if [[ ${1:-} == --login ]]; then
         hypr=$(hyprctl version -j 2>/dev/null | jq -r '.commit // empty' 2>/dev/null) || hypr=
+        abi=$(hyprctl version -j 2>/dev/null | jq -r '.abiHash // empty' 2>/dev/null) || abi=
         load_packaged
     fi
     exit 0
@@ -67,7 +74,8 @@ if [[ ${1:-} == --prebuild ]]; then
 else
     hypr=$(hyprctl version -j | jq -r .commit)
     ver=$(hyprctl version -j | jq -r .version)
-    build_id="$(hyprctl version -j | jq -r '.abiHash // .commit') $(sha256sum "$patch" | cut -d" " -f1)"
+    abi=$(hyprctl version -j | jq -r '.abiHash // empty')
+    build_id="${abi:-$hypr} $(sha256sum "$patch" | cut -d" " -f1)"
     prebuild=false
 fi
 # Whether hyprbars is running (hyprctl's load prints no error when one won't start): "mine" only this build (its version

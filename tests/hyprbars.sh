@@ -26,6 +26,16 @@ grep -qx -- "-i 0 plugin load $t/pkg/libhyprbars.so" "$t/login-calls" || fail "-
 : >"$t/login-calls"
 login 2222222222222222222222222222222222222222 || fail "--login on another Hyprland failed"
 grep -q 'plugin load' "$t/login-calls" && fail "--login: the packaged one loaded on a Hyprland it wasn't built for: $(cat "$t/login-calls")"
+# ...nor on the same commit rebuilt against other libraries (its ABI hash, which the package's stamp beside it has)
+echo "1111111111111111111111111111111111111111_aq_0.11 x" >"$t/pkg/libhyprbars.so.built-for"
+: >"$t/login-calls"
+login 1111111111111111111111111111111111111111 || fail "--login on a rebuilt Hyprland failed"
+grep -q 'plugin load' "$t/login-calls" && fail "--login: the packaged one loaded on a Hyprland rebuilt against other libraries"
+echo "1111111111111111111111111111111111111111_aq_0.12 x" >"$t/pkg/libhyprbars.so.built-for"
+: >"$t/login-calls"
+login 1111111111111111111111111111111111111111 || fail "--login with the packaged stamp failed"
+grep -qx -- "-i 0 plugin load $t/pkg/libhyprbars.so" "$t/login-calls" || fail "--login: the packaged one, its stamp this Hyprland's, not loaded"
+rm "$t/pkg/libhyprbars.so.built-for"
 # On the live USB: at login the packaged one is loaded (the installer's title bar), again only when it was built for
 # that Hyprland; nothing built; otherwise nothing at all
 mkdir -p "$t/live"

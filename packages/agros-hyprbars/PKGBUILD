@@ -40,5 +40,7 @@ build() {
 
 package() {
     install -Dm755 "$srcdir/home/.local/lib/hyprbars/libhyprbars.so" "$pkgdir/usr/lib/libhyprbars.so"
+    # (the Hyprland build it's for, its ABI hash first: hyprbars-build loads it only on that one)
+    install -Dm644 "$srcdir/home/.local/lib/hyprbars/built-for" "$pkgdir/usr/lib/libhyprbars.so.built-for"
     install -Dm644 "$srcdir/home/.local/lib/hyprbars/LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
 }
