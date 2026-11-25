@@ -143,7 +143,7 @@ for p in "${gated[@]}"; do
     for d in $(LC_ALL=C pacman -Qi -- "$p" 2>/dev/null | sed -n 's/^Depends On *: //p'); do
         d=${d%%[<>=]*}
         [[ $d =~ ^(hypr|aquamarine) ]] || continue
-        printf '%s\n' "${gated[@]}" | grep -qxF -- "$d" || fail "$p depends on $d, which agros-gate.conf doesn't hold back"
+        [[ " ${gated[*]} " == *" $d "* ]] || fail "$p depends on $d, which agros-gate.conf doesn't hold back"
     done
 done
 
