@@ -126,8 +126,10 @@ ShellRoot {
         return min ? column(parseInt(min[1])) : column(wsOf(t)?.id ?? 0);
     }
 
+    // (not X11 apps' menus either, as workspaceWindows: an open one made a card, an icon and a × of its own)
     function windowsIn(col: int): var {
-        return Hyprland.toplevels.values.filter(t => wsOf(t) && columnOf(t) === col && t.lastIpcObject?.mapped);
+        return Hyprland.toplevels.values.filter(t => wsOf(t) && columnOf(t) === col && t.lastIpcObject?.mapped
+            && !(t.lastIpcObject.tags ?? []).some(g => g.startsWith("xwl_popup")));
     }
 
     // Whether a workspace has windows the Super+Tab × moves or joins: not pinned ones, which show on every workspace
