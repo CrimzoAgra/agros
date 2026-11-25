@@ -117,6 +117,21 @@ got=$(cd "$out" && ls ./agros-*.pkg.tar.zst | sed 's|^\./||' | paste -sd' ')
     fail "agros-hyprbars not held with the Hyprland held back: $got"
 [[ $(printf '%s\n' "${held[@]}") == "agros-hyprbars: held while an Arch update breaks the tests" ]] ||
     fail "agros-hyprbars held, not said: ${held[*]}"
+# ...and with AGROS_HOLD_ONLY ("<name>: <why>" lines: the new build that broke the tests, one a new install fails with),
+# only those, AgrOS's own too, each with its why; the other new builds left to go out
+rm -f "$out"/*
+cp "$pub/libdeep-1-1-x86_64.pkg.tar.zst"* "$out/"
+pkg "$out" libx 3-1 'depend = libdeep'
+pkg "$out" built-dep 2-1
+pkg "$out" agros-hyprbars 0.58.0.r3.abc-1
+pkg "$out" agros-system r9-1
+held=()
+AGROS_HOLD_ONLY=$'libx: its new build fails lutris\nagros-hyprbars: a new install fails with it\nnosuch: x' hold_new "broke the tests" >/dev/null
+got=$(cd "$out" && ls ./*.pkg.tar.zst | sed 's|^\./||' | paste -sd' ')
+[[ $got == "agros-hyprbars-0.57.2.r3.abc-1-x86_64.pkg.tar.zst agros-system-r9-1-x86_64.pkg.tar.zst built-dep-2-1-x86_64.pkg.tar.zst libdeep-1-1-x86_64.pkg.tar.zst libx-2-1-x86_64.pkg.tar.zst" ]] ||
+    fail "not only the new builds AGROS_HOLD_ONLY names held: $got"
+[[ $(printf '%s\n' "${held[@]}" | sort | paste -sd,) == "agros-hyprbars: a new install fails with it,libx: its new build fails lutris" ]] ||
+    fail "the ones AGROS_HOLD_ONLY names not said with their why: ${held[*]}"
 # (a published one that can't be fetched, Pages down or its copy not checking out: stopped, not left out of the repo)
 rm -f "$out"/*
 pkg "$out" libx 3-1 'depend = libdeep'

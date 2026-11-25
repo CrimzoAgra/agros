@@ -1555,7 +1555,8 @@ breaks something holds back that one piece, never the rest (`.github/workflows/c
   packages: each checked again), and read back as pacman reads it: one entry a package, its folder, name, version and
   file what that package's `.PKGINFO` says, else nothing goes out
 - **Signed apart from the build.** The `repo` job runs AUR build scripts (as its builder user, with passwordless sudo),
-  `test` runs what was built and the tests, and `release` runs `repo-add` on the packages, so none has a secret: the
+  `test` runs what was built and the tests, `install` their install scripts, and `release` runs `repo-add` on the
+  packages, so none has a secret: the
   repo goes between them unsigned (`ci/build-repo.sh` refuses to start with a secret key at hand), with only AgrOS's
   public key (`ci/agros.asc`), which the published files it keeps are checked against and `agros-keyring` is made from.
   The `release` job puts the release together (the hold, the database, the approved list, the day Arch last passed) and
@@ -1598,14 +1599,29 @@ breaks something holds back that one piece, never the rest (`.github/workflows/c
   down: the record as it was, those held still held). Not in the held issue (nothing went wrong); the Friday status
   lists each one, until when.
 - **Tests that fail** (`ci/test-passes.sh`): all the tests are run again, to see which side broke them: with the
-  published `[agros]` (they pass: this run's new AUR builds broke them, swapped for the published ones by `build-repo.sh
-  --hold-new`; the new Hyprland still approved), then on Arch as of the last day the tests passed on it (its archive's
+  published `[agros]` (they pass: this run's new AUR builds broke them; the new Hyprland still approved). Which one:
+  each new build of a package the tests have installed (Caelestia's, Quickshell's) put alone over the published ones,
+  with the new builds it needs, and the tests that failed run again (twice when they fail: once is chance), then every
+  test with the others together; the one that fails them is held (`build-repo.sh --hold-new`, `AGROS_HOLD_ONLY`), with
+  each new build that needs it, the issue saying which and the tests it fails, and the rest goes out. Not found (each
+  passes alone, a failure that doesn't come again, the others together failing, more than 10 tries): every new AUR build
+  held, as before, the issue saying why. Then on Arch as of the last day the tests passed on it (its archive's
   snapshot; the day published as `agros-arch-ok`): they pass, an Arch update broke them (its Hyprland not approved, the
   new AUR builds held, no new ISO started: it would take that Arch, its gate holding back only Hyprland; AgrOS's own
   packages still out but `agros-hyprbars`: built for that Hyprland, it would start on none the machines or the ISO have,
   so the published one, built for the approved Hyprland, is kept, `AGROS_HOLD_OWN`). Failing even then: AgrOS's own
   code, and nothing goes out (so too when a pass can't install, a download failed: the issue says that pass, not AgrOS's
   code).
+- **A new install that fails** (`ci/install-test.sh`, the `install` job, between the tests and the release): the
+  release, as the release job makes it (the hold above, the database), installed for real into an empty root (base and
+  every `agros-*` package, pacstrap's mounts, `[cachyos]` above Arch's as machines have it, `[agros]` last, nothing
+  left out by NoExtract). A file another package ships too (an Arch or CachyOS package that starts shipping one of
+  AgrOS's), a conflict, a dependency not met or an install script failing, where pacman names an `[agros]` package
+  that is this run's new build: held, as one that doesn't build (the published one kept), named in the issue with
+  pacman's line, and the install tried again (3 times at most). One whose published one fails too isn't held (no
+  help), nor anything when no `[agros]` package is named; a download that keeps failing (3 tries) is the test not run,
+  not a failure: each said in the issue ("Heads-up" when nothing else is), the release out as it is. Hooks aren't
+  judged (a root no system has booted).
 - **Upstream's next release** no longer fitting AgrOS's changes (a check against a main branch, above): nothing held,
   everything goes out, and the issue below says which change to adapt before that release.
 - **Never an older commit's over a newer one.** Runs on `main` go one at a time, a newer push cancelling the one still

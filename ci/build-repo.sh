@@ -89,7 +89,8 @@ held=()
 # own nor the published file swapped for the published one (one never published: left out); nothing built, and no
 # database made: the release makes it next, each package's .PKGINFO checked first (ci/repo-db.sh), the published ones
 # brought back here too. AGROS_HOLD_WHY: why, said for each one in $AGROS_HELD; AGROS_HOLD_OWN: AgrOS's own packages
-# swapped too (their names: agros-hyprbars while Arch's Hyprland is held back)
+# swapped too (their names: agros-hyprbars while Arch's Hyprland is held back); AGROS_HOLD_ONLY: only the new builds it
+# names, "<name>: <why>" lines (the one that broke the tests, one a new install fails with), AgrOS's own too
 if [[ ${2:-} == --hold-new ]]; then
     cd "$out"
     hold_new "${AGROS_HOLD_WHY:-its new build held back}"

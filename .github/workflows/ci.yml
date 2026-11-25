@@ -30,8 +30,9 @@ permissions:
   contents: read
 
 # On main: the repo built first (repo), then tested (test: on what it built; when some fail, which side broke them, and
-# that held back alone, ci/test-passes.sh), then what passed put together (release), signed and put out (sign), and
-# said (report: one issue).
+# that held back alone, ci/test-passes.sh), installed for real as a new install gets it (install: what that fails with
+# held back too, ci/install-test.sh), then what passed put together (release), signed and put out (sign), and said
+# (report: one issue).
 # A pull request or another branch: only the tests, on the published repo.
 # AgrOS's signing key (the AGROS_GPG_KEY secret) is only ever in the sign job's signing step: repo runs AUR build
 # scripts (as its builder user, with sudo), test runs what was built and the tests, and release reads the packages with
@@ -46,6 +47,9 @@ jobs:
     if: ${{ !cancelled() && needs.agros.result != 'failure' && (needs.repo.result == 'success' || needs.repo.result == 'skipped') }}
     outputs:
       result: ${{ steps.tests.outputs.result }}
+      # (the new build that broke the tests, and what needs it: "<name>: <why>" lines, ci/test-passes.sh. None with
+      # hold-agros: which one wasn't found, every new AUR build held)
+      hold: ${{ steps.tests.outputs.hold }}
       gated: ${{ steps.gated.outputs.gated }}
       approved: ${{ steps.approved.outputs.approved }}
     runs-on: ubuntu-26.04
@@ -341,7 +345,7 @@ jobs:
     # approved Hyprland list; the day Arch last passed. No secret: pacman's repo-add reads the packages' .PKGINFO here,
     # and runs a line of the wrong kind as code (ci/own-check.sh refuses such a package first, ci/repo-db.sh again). The
     # sign job signs what this leaves
-    needs: [agros, repo, test]
+    needs: [agros, repo, test, install]
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     outputs:
       newer: ${{ steps.newer.outputs.newer }}
@@ -352,7 +356,8 @@ jobs:
       image: archlinux:latest
     steps:
       - *container-hooks
-      - name: Tools
+      - &release-tools
+        name: Tools
         run: |
           grep -q '^\[multilib\]' /etc/pacman.conf || printf '\n[multilib]\nInclude = /etc/pacman.d/mirrorlist\n' >>/etc/pacman.conf
           sed -i 's/^#*DownloadUser.*/#DownloadUser = alpm/' /etc/pacman.conf
@@ -382,18 +387,31 @@ jobs:
           AGROS_OWN_SUMS: ${{ needs.agros.outputs.sums }}
           AGROS_PUBLISHED: ${{ vars.AGROS_PUBLISHED || 'https://crimzoagra.github.io/agros/x86_64' }}
         run: ci/own-check.sh out/x86_64
-      - name: Held back (what broke the tests)
+      # (the install job makes the same hold, to install what goes out)
+      - &hold
+        name: Held back (what broke the tests)
         if: needs.test.outputs.result != 'ok'
         env:
           AGROS_PUBLISHED: ${{ vars.AGROS_PUBLISHED || 'https://crimzoagra.github.io/agros/x86_64' }}
           AGROS_HELD: /tmp/held/held
-          AGROS_HOLD_WHY: ${{ needs.test.outputs.result == 'hold-agros' && 'its new build broke AgrOS''s tests (they pass with the published one)' || 'held while an Arch update breaks AgrOS''s tests' }}
+          # (the new build that broke them, and what needs it, alone, when the tests found which: ci/test-passes.sh)
+          AGROS_HOLD_ONLY: ${{ needs.test.outputs.hold }}
+          AGROS_HOLD_WHY: ${{ needs.test.outputs.result == 'hold-agros' && 'held with every new AUR build, which one broke AgrOS''s tests not found (the tests below say why)' || 'held while an Arch update breaks AgrOS''s tests' }}
           # (an Arch update that broke them: its Hyprland not approved, so agros-hyprbars, built for it, held too, the
           # published one, built for the approved Hyprland the machines and the ISO stay on, kept)
           AGROS_HOLD_OWN: ${{ needs.test.outputs.result == 'hold-upstream' && 'agros-hyprbars' || '' }}
         run: |
           git config --global --add safe.directory '*'
+          mkdir -p /tmp/held
           ci/build-repo.sh out/x86_64 --hold-new
+      # What a new install fails with (the install job, ci/install-test.sh): held, the published one kept
+      - name: Held back (what a new install fails with)
+        if: needs.install.outputs.hold != ''
+        env:
+          AGROS_PUBLISHED: ${{ vars.AGROS_PUBLISHED || 'https://crimzoagra.github.io/agros/x86_64' }}
+          AGROS_HELD: /tmp/held/held
+          AGROS_HOLD_ONLY: ${{ needs.install.outputs.hold }}
+        run: ci/build-repo.sh out/x86_64 --hold-new
       - uses: actions/upload-artifact@v7
         with:
           name: held
@@ -468,6 +486,70 @@ jobs:
           name: unsigned
           path: /tmp/unsigned.tar
 
+  install:
+    # The release installed for real, as a new install gets it (ci/install-test.sh: base and every agros-* package into
+    # an empty root, with [cachyos] above Arch's as machines have it): what it fails with (a file another package ships
+    # too, an install script failing) held by the release job (the published one kept), what can't be held said. The
+    # release's packages made here as the release job makes them: the hold above, the database. Its own container,
+    # privileged (pacstrap's mounts), no secret: it runs the packages' install scripts as root, and hands on only names
+    needs: [agros, repo, test]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    outputs:
+      hold: ${{ steps.install.outputs.hold }}
+      note: ${{ steps.install.outputs.note }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 60
+    container:
+      image: archlinux:latest
+      options: --privileged
+    steps:
+      - *container-hooks
+      - *release-tools
+      - &cachyos-repo
+        name: CachyOS's repo, above Arch's (as machines have it)
+        run: |
+          m=https://mirror.cachyos.org/repo/x86_64/cachyos
+          # (--retry: a timeout or a 5xx from CachyOS's mirror tried again, for 2 minutes, not the whole run failed and
+          # the held issue opened for it)
+          curl -fsSL --retry 8 --retry-delay 15 -o /tmp/keyring.pkg "$m/$(curl -fsSL --retry 8 --retry-delay 15 "$m/" | grep -o 'cachyos-keyring-[^"]*\.pkg\.tar\.zst' | sort -V | tail -1)"
+          mkdir /tmp/k && bsdtar -xf /tmp/keyring.pkg -C /tmp/k
+          pacman-key --add /tmp/k/usr/share/pacman/keyrings/cachyos.gpg
+          pacman-key --lsign-key 882DCFE48E2051D48E2562ABF3B607488DB35A47
+          # (the keyring and the mirror list then installed from [cachyos] itself, their signatures by that key required:
+          # pacman -U of a downloaded file checked none, and ran its install script as root)
+          sed -i '/^\[core\]/i [cachyos]\nServer = '"$m"'\n' /etc/pacman.conf
+          pacman -Sy --noconfirm cachyos-keyring cachyos-mirrorlist
+          sed -i "s|^Server = $m\$|Include = /etc/pacman.d/cachyos-mirrorlist|" /etc/pacman.conf
+          # (tried again a minute later, five times: a mirror caught mid-sync serves a database and a signature that don't
+          # match, "signature ... is invalid", and pacman doesn't go on to the next mirror for it)
+          for i in 1 2 3 4 5; do
+            pacman -Syy --noconfirm && break
+            [ "$i" != 5 ] || exit 1; sleep 60
+          done
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          name: built
+          path: /tmp/built-tar
+      - name: The repo job's repo
+        run: ci/artifact.sh unpack /tmp/built-tar/built.tar out
+      - *hold
+      - name: The database
+        run: ci/repo-db.sh out/x86_64
+      - name: A new install, for real
+        id: install
+        shell: bash
+        env:
+          # (what it fails with held here too, to try again: the published ones fetched from there)
+          AGROS_PUBLISHED: ${{ vars.AGROS_PUBLISHED || 'https://crimzoagra.github.io/agros/x86_64' }}
+        run: |
+          # (the published packages it keeps checked against AgrOS's key: their signatures, where they have one)
+          pacman-key --add ci/agros.asc
+          pacman-key --lsign-key BFE9289F7759E521AE60CFCD23B6096B42D05E1E
+          ci/install-test.sh out/x86_64
+
   sign:
     # The release signed (ci/sign-repo.sh) and put out: the only place AgrOS's key is. A job of its own, so a container
     # of its own: in the release's, where repo-add read the packages, whatever a package's .PKGINFO started (a process
@@ -513,26 +595,8 @@ jobs:
           sed -i 's/^#*DownloadUser.*/#DownloadUser = alpm/' /etc/pacman.conf
           pacman-key --init
           pacman -Syu --noconfirm
-      - name: CachyOS's repo (the install check resolves AgrOS as installed)
-        run: |
-          m=https://mirror.cachyos.org/repo/x86_64/cachyos
-          # (--retry: a timeout or a 5xx from CachyOS's mirror tried again, for 2 minutes, not the whole run failed and
-          # the held issue opened for it)
-          curl -fsSL --retry 8 --retry-delay 15 -o /tmp/keyring.pkg "$m/$(curl -fsSL --retry 8 --retry-delay 15 "$m/" | grep -o 'cachyos-keyring-[^"]*\.pkg\.tar\.zst' | sort -V | tail -1)"
-          mkdir /tmp/k && bsdtar -xf /tmp/keyring.pkg -C /tmp/k
-          pacman-key --add /tmp/k/usr/share/pacman/keyrings/cachyos.gpg
-          pacman-key --lsign-key 882DCFE48E2051D48E2562ABF3B607488DB35A47
-          # (the keyring and the mirror list then installed from [cachyos] itself, their signatures by that key required:
-          # pacman -U of a downloaded file checked none, and ran its install script as root)
-          sed -i '/^\[core\]/i [cachyos]\nServer = '"$m"'\n' /etc/pacman.conf
-          pacman -Sy --noconfirm cachyos-keyring cachyos-mirrorlist
-          sed -i "s|^Server = $m\$|Include = /etc/pacman.d/cachyos-mirrorlist|" /etc/pacman.conf
-          # (tried again a minute later, five times: a mirror caught mid-sync serves a database and a signature that don't
-          # match, "signature ... is invalid", and pacman doesn't go on to the next mirror for it)
-          for i in 1 2 3 4 5; do
-            pacman -Syy --noconfirm && break
-            [ "$i" != 5 ] || exit 1; sleep 60
-          done
+      # (the install check resolves AgrOS as installed)
+      - *cachyos-repo
       - name: Install check (agros-desktop resolves in one transaction, none of what AgrOS leaves out; with CachyOS's CPU-optimised repos too)
         env:
           OWNER: ${{ github.repository_owner }}
@@ -564,7 +628,7 @@ jobs:
   report:
     # One issue for what this run held back or didn't put out (ci/report.sh), closed once a run puts all out (Pages'
     # deploy too: a release signed but never deployed closed the issue as all out)
-    needs: [agros, repo, test, release, sign, publish]
+    needs: [agros, repo, test, install, release, sign, publish]
     # (not for a run a newer push cancelled: its "nothing published" would open an issue the newer run then closes)
     if: ${{ !cancelled() && github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
     runs-on: ubuntu-26.04
@@ -594,7 +658,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RESULT: ${{ needs.test.outputs.result }}
           BUILD: ${{ needs.agros.result == 'success' && needs.repo.result || needs.agros.result }}
-          RELEASE: ${{ needs.release.result != 'success' && needs.release.result || needs.sign.result != 'success' && needs.sign.result || needs.publish.result }}
+          RELEASE: ${{ needs.install.result != 'success' && needs.install.result || needs.release.result != 'success' && needs.release.result || needs.sign.result != 'success' && needs.sign.result || needs.publish.result }}
+          # (what a new install fails with that holding couldn't help, or the install test not run: ci/install-test.sh)
+          INSTALL: ${{ needs.install.outputs.note }}
           NEWER: ${{ needs.release.outputs.newer }}
           HELD: /tmp/held/held
           REPORT: /tmp/report/report

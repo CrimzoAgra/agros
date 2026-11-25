@@ -120,23 +120,33 @@ reused() {
 # hold_new <why>: each package here neither AgrOS's own nor the published file swapped for the published one (one never
 # published: left out), said in held. AgrOS's own too when AGROS_HOLD_OWN names it (CI: agros-hyprbars, built for Arch's
 # Hyprland, while the tests hold that Hyprland back: the published one is built for the approved one, which the machines
-# and the ISO stay on, and the plugin only starts on the Hyprland it was built for). One published that can't be fetched
-# (Pages down past the retries, a copy that doesn't check out) stops it: left out, it went out missing from the repo,
-# said as "new, none published"
+# and the ISO stay on, and the plugin only starts on the Hyprland it was built for). AGROS_HOLD_ONLY ("<name>: <why>"
+# lines: the one new build that broke the tests, ci/test-passes.sh; one a new install fails with, ci/install-test.sh):
+# only those, AgrOS's own too, each said with its why, the other new builds left to go out. One published that can't be
+# fetched (Pages down past the retries, a copy that doesn't check out) stops it: left out, it went out missing from the
+# repo, said as "new, none published"
 hold_new() {
-    local pubfiles f n names=()
+    local pubfiles f n l why names=()
     pub_db || exit 1
     pubfiles=$(for f in "$pubdb"/*/desc; do field "$f" FILENAME; done)
     for f in "$out"/*.pkg.tar*; do
         [[ $f == *.sig ]] && continue
         grep -qxF -- "${f##*/}" <<<"$pubfiles" && continue
         n=$(bsdtar -xOf "$f" .PKGINFO | sed -n 's/^pkgname = //p')
-        [[ ( ${f##*/} == agros-* || $n == agros-* ) && " ${AGROS_HOLD_OWN:-} " != *" $n "* ]] && continue
-        names+=("$n")
+        why=$1
+        if [[ -n ${AGROS_HOLD_ONLY:-} ]]; then
+            why=
+            while IFS= read -r l; do [[ ${l%%: *} != "$n" ]] || why=${l#*: }; done <<<"$AGROS_HOLD_ONLY"
+            [[ -n $why ]] || continue
+        elif [[ ( ${f##*/} == agros-* || $n == agros-* ) && " ${AGROS_HOLD_OWN:-} " != *" $n "* ]]; then
+            continue
+        fi
+        names+=("$n: $why")
         rm -f "$f" "$f.sig"
     done
-    for n in "${names[@]}"; do
-        held+=("$n: $1")
+    for l in "${names[@]}"; do
+        held+=("$l")
+        n=${l%%: *}
         if pub_desc "$n" >/dev/null; then carry_over "$n" || exit 1; else echo "!! $n: new, none published: left out"; fi
     done
 }

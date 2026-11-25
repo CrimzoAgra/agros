@@ -37,7 +37,7 @@ bad = []
 for name, job in jobs.items():
     if name != "sign" and "AGROS_GPG_KEY" in json.dumps(job):
         bad.append(f"the signing key in the {name} job")
-for name in ("agros", "repo", "test", "release"):
+for name in ("agros", "repo", "test", "install", "release"):
     if "secrets." in json.dumps(jobs[name]):
         bad.append(f"a secret in the {name} job (it runs AUR build scripts, what was built, or repo-add)")
 sg = jobs.get("sign")

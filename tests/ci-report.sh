@@ -24,7 +24,7 @@ chmod +x "$t/bin/gh"
 go() { rm -f "$t/gh.log"; PATH=$t/bin:$PATH RUN_URL=https://run AGROS_RETRY_WAIT=0 HELD=$t/none REPORT=$t/none "$@" "$here/ci/report.sh" >/dev/null; grep -v '^gh issue list\|^gh label' "$t/gh.log" || true; }
 said() { local rc=0; rm -f "$t/gh.log"; PATH=$t/bin:$PATH RUN_URL=https://run AGROS_RETRY_WAIT=0 HELD=$t/none REPORT=$t/none "$@" "$here/ci/report.sh" >/dev/null 2>&1 || rc=$?; return "$rc"; }
 echo "quickshell-git: AgrOS's fix didn't build" >"$t/held"
-[[ $(go env BUILD=success RELEASE=success RESULT=ok HELD="$t/held") == "gh issue create --label held --title Held back: built and tested, but some packages didn't build --body-file "* ]] ||
+[[ $(go env BUILD=success RELEASE=success RESULT=ok HELD="$t/held") == "gh issue create --label held --title Held back: built and tested, but some packages were held back (below) --body-file "* ]] ||
     fail "a held package didn't open an issue: $(go env BUILD=success RELEASE=success RESULT=ok HELD="$t/held")"
 grep -q '^- quickshell-git: ' "$t/body" || fail "the issue doesn't say what was held: $(cat "$t/body")"
 echo 12 >"$t/open"
@@ -87,11 +87,27 @@ grep -q 'AHEAD lutris-overlay: x' "$t/body" || fail "the issue doesn't say what 
 echo 13 >"$t/open"
 [[ $(go env BUILD=success RELEASE=success RESULT=ok REPORT="$t/report") == "gh issue edit 13 --title Heads-up: "* ]] ||
     fail "the heads-up closed while it lasts: $(go env BUILD=success RELEASE=success RESULT=ok REPORT="$t/report")"
-[[ $(go env BUILD=success RELEASE=success RESULT=ok HELD="$t/held" REPORT="$t/report") == "gh issue edit 13 --title Held back: built and tested, but some packages didn't build --body-file "* ]] ||
+[[ $(go env BUILD=success RELEASE=success RESULT=ok HELD="$t/held" REPORT="$t/report") == "gh issue edit 13 --title Held back: built and tested, but some packages were held back (below) --body-file "* ]] ||
     fail "a hold not said over the heads-up: $(go env BUILD=success RELEASE=success RESULT=ok HELD="$t/held" REPORT="$t/report")"
 sed -i '/AHEAD/d' "$t/report"
 [[ $(go env BUILD=success RELEASE=success RESULT=ok REPORT="$t/report") == "gh issue close 13 "* ]] ||
     fail "the heads-up not closed once it's gone: $(go env BUILD=success RELEASE=success RESULT=ok REPORT="$t/report")"
+# What a new install fails with that holding couldn't help (or the install test not run: ci/install-test.sh): all went
+# out, the issue opened, said, kept open while it lasts; a hold over it said as one
+rm -f "$t/open"
+[[ $(go env BUILD=success RELEASE=success RESULT=ok INSTALL="agros-system: a new install fails with it, as published too") == "gh issue create --label held --title Heads-up: a new install of the release didn't go through (below), and holding a package couldn't help --body-file "* ]] ||
+    fail "a new install failing didn't open an issue: $(go env BUILD=success RELEASE=success RESULT=ok INSTALL=x)"
+grep -q '^- agros-system: a new install fails with it, as published too$' "$t/body" || fail "the issue doesn't say what a new install fails with: $(cat "$t/body")"
+echo 13 >"$t/open"
+[[ $(go env BUILD=success RELEASE=success RESULT=ok INSTALL=x HELD="$t/held") == "gh issue edit 13 --title Held back: "* ]] ||
+    fail "a hold not said over a new install failing: $(go env BUILD=success RELEASE=success RESULT=ok INSTALL=x HELD="$t/held")"
+[[ $(go env BUILD=success RELEASE=success RESULT=ok) == "gh issue close 13 "* ]] || fail "the issue not closed once a new install goes through"
+rm "$t/open"
+# (the tests' hold: the new build that broke them named in the held list)
+echo "caelestia-shell: its new build fails AgrOS's tests lutris (they pass with the published one)" >"$t/held2"
+[[ $(go env BUILD=success RELEASE=success RESULT=hold-agros HELD="$t/held2") == "gh issue create --label held --title Held back: a new AUR build broke AgrOS's tests --body-file "* ]] &&
+    grep -q "^- caelestia-shell: its new build fails AgrOS's tests lutris" "$t/body" ||
+    fail "the new build that broke the tests not said: $(go env BUILD=success RELEASE=success RESULT=hold-agros HELD="$t/held2") $(cat "$t/body")"
 # GitHub's API failing: never read as no issue open (a second one opened beside it, or one left open with the run
 # saying all went out), and the report job fails (the run shows it, the Friday status says it) rather than passing
 echo 12 >"$t/open"

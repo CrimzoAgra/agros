@@ -7,7 +7,9 @@
 #   RESULT   the tests' (ci/test-passes.sh): ok, hold-agros, hold-upstream, fail; empty: they didn't run
 #   BUILD    the build job's result (success, failure...); RELEASE the release job's, the sign job's after it, or
 #            Pages' deploy's after that
-#   HELD     a file: what was held back, "<name>: <why>" each (build-repo.sh's AGROS_HELD)
+#   HELD     a file: what was held back, "<name>: <why>" each (build-repo.sh's AGROS_HELD: what didn't build, the new
+#            build that broke the tests, one a new install fails with)
+#   INSTALL  what the install test (ci/install-test.sh) found that holding couldn't help, or that it couldn't run: lines
 #   REPORT   a file: the tests' report (test-passes.sh's AGROS_TEST_REPORT)
 #   RUN_URL  this run's page
 #   NEWER    true: the published repo was already a newer commit's (ci/newer.sh: this run a re-run of an older one),
@@ -23,6 +25,7 @@ shopt -s extglob
 held=$(cat "${HELD:-/dev/null}" 2>/dev/null)
 report=$(cat "${REPORT:-/dev/null}" 2>/dev/null)
 ahead=$(grep '^    AHEAD ' <<<"$report")
+install=${INSTALL:-}
 # (GitHub refuses an issue's text over 65536 characters, every try, and the issue then went on saying an earlier run's:
 # the tests' report that long, every test failing in all three passes with its why, cut short, said, its first lines
 # kept. The whole of it is the run's report artifact)
@@ -32,7 +35,7 @@ if ((${#report} > ${AGROS_REPORT_MAX:-50000})); then
 fi
 case ${BUILD:-}/${RESULT:-} in
     success/ok) state=ok ;;
-    success/hold-agros) state="this run's new AUR builds broke AgrOS's tests: the published ones kept" ;;
+    success/hold-agros) state="a new AUR build broke AgrOS's tests: held back (below), the published one kept" ;;
     success/hold-upstream) state="an Arch update broke AgrOS's tests: its Hyprland not approved, the new AUR builds held back, no new ISO" ;;
     success/fail) state="AgrOS's own code fails its tests: nothing published"
         # (a pass that couldn't run, ci/test-passes.sh's stopped: which side broke them isn't known)
@@ -58,7 +61,7 @@ again() {
 # (every open one: a second one, from a create GitHub made but answered as failed, closed beside the first)
 open=$(again gh issue list --label held --state open --json number -q '.[].number') || exit 1
 read -r first others <<<"$(paste -sd' ' <<<"$open")"
-if [[ $state == ok && -z $held && -z $ahead ]]; then
+if [[ $state == ok && -z $held && -z $ahead && -z $install ]]; then
     for n in $open; do
         again gh issue close "$n" --comment "Everything built and passed again: $RUN_URL" || exit 1
     done
@@ -67,7 +70,9 @@ if [[ $state == ok && -z $held && -z $ahead ]]; then
 fi
 title="Held back"
 if [[ $state == ok && -n $held ]]; then
-    state="built and tested, but some packages didn't build: the published ones kept"
+    state="built and tested, but some packages were held back (below): the published ones kept"
+elif [[ $state == ok && -n $install ]]; then
+    state="a new install of the release didn't go through (below), and holding a package couldn't help: it went out" title=Heads-up
 elif [[ $state == ok ]]; then
     state="upstream's next release no longer fits AgrOS's changes: everything went out, nothing held" title=Heads-up
 fi
@@ -80,6 +85,11 @@ body=$(mktemp)
         echo
         echo "**Held back** (the published version kept, the rest went out):"
         sed 's/^/- /' <<<"$held"
+    fi
+    if [[ -n $install ]]; then
+        echo
+        echo "**A new install** (ci/install-test.sh; the release went out as it is):"
+        sed 's/^/- /' <<<"$install"
     fi
     if [[ -n $report ]]; then
         echo
