@@ -228,6 +228,25 @@ Scope {
         return x > Math.min(width - config.border.minThickness, innerX + vx(panel)) && withinPanelHeight(panel, x, y);
     }
 
+    // caelestia-overlay: the panels along the top, where a narrow screen (a portrait one) hasn't room for them side by
+    // side: the one opening closes those it would overlap there (by where each is: open or not, its place is kept)
+    function makeRoom(opened: string): void {
+        const top = { dashboard: panels.dashboard };
+        if (!sidebarLeft)
+            top.sidebar = panels.sidebar;
+        if (utilitiesTop)
+            top.utilities = panels.utilities;
+        const mine = top[opened];
+        if (!mine)
+            return;
+        const a = innerX + vx(mine);
+        for (const name of Object.keys(top)) {
+            const b = innerX + vx(top[name]);
+            if (name !== opened && screenState[name] && a < b + top[name].width && b < a + mine.width)
+                screenState[name] = false;
+        }
+    }
+
     function inTopPanel(panel: Item, x: real, y: real): bool {
         const panelHeight = panel.height * (1 - (panel.offsetScale ?? 0)); // qmllint disable missing-property
         return y < Math.max(config.border.minThickness, topInset + panelHeight) && withinPanelWidth(panel, x, y);
@@ -480,6 +499,7 @@ Scope {
 
         function onDashboardChanged() {
             if (root.screenState.dashboard) {
+                root.makeRoom("dashboard");
                 // Dashboard became visible, immediately check if this should be shortcut mode
                 const inDashboardArea = root.inTopPanel(root.panels.dashboard, root.mouseX, root.mouseY);
                 if (!inDashboardArea) {
@@ -510,14 +530,17 @@ Scope {
             const band = Math.max(border.minThickness, border.thickness) + border.rounding;
             const inTrigger = (root.sidebarLeft ? root.mouseY > root.height - band : root.mouseY < band)
                 && root.withinPanelWidth(root.panels.sidebar, root.mouseX, root.mouseY);
-            if (root.screenState.sidebar)
+            if (root.screenState.sidebar) {
+                root.makeRoom("sidebar");
                 root.sidebarShortcutActive = !inTrigger && !root.inSidebar(root.mouseX, root.mouseY);
-            else
+            } else {
                 root.sidebarShortcutActive = false;
+            }
         }
 
         function onUtilitiesChanged() {
             if (root.screenState.utilities) {
+                root.makeRoom("utilities");
                 // Utilities became visible, immediately check if this should be shortcut mode
                 const inUtilitiesArea = root.inUtilities(root.mouseX, root.mouseY);
                 if (!inUtilitiesArea) {
