@@ -391,14 +391,47 @@ if [[ ${1:-} == --install ]]; then
     # (its messages in English: pacman's "error:" is what the reason below is found by; translated, "erro:" or
     # "Fehler:", it was lost. Messages only: the hooks it runs keep the system's locale)
     pacman_su() { SNAP_PAC_SKIP=y LC_ALL='' LC_MESSAGES=C pacman -Su --noconfirm --config "$conf" "$@" 2>&1 | tee "$prev/out"; return "${PIPESTATUS[0]}"; }
-    pacman_su "${targets[@]}"
+    args=("${targets[@]}")
+    pacman_su "${args[@]}"
     rc=$?
-    # AUR apps pacman can't install (a conflict, a file conflict, a dependency missing): it refuses the whole
+    # A conflict pacman won't settle by itself (--noconfirm answers its "Remove b?" no; a file another package owns):
+    # it refused the whole transaction, at every shutdown. The packages in conflict held back alone (conflict-hold:
+    # and what needs them or would break them, pacman's dry run, no partial upgrade), the rest tried again; a few
+    # times, pacman names one package conflict a run. Written down for agros-check ("<when> <why>", then "<name>
+    # <version>" each), the command a person runs to settle it in it. Nothing removed or replaced unattended. Still
+    # not worked out (or a runtime's rebuild among what it held): the whole update waits, as before, said
+    rm -f "$au/conflicts"
+    conflicted=() held=$prev/conflict-held
+    : >"$held"
+    for _ in 1 2 3; do
+        ((rc)) || break
+        said=$(/usr/lib/agros/bin/conflict-hold "$prev/out" "$conf" "$held")
+        c=$?
+        [[ $c == 0 || $c == 2 ]] || break
+        if [[ -n $said ]]; then
+            mapfile -t lines <<<"$said"
+            conflicted+=("${lines[@]}")
+            printf 'waits: %s\n' "${lines[@]}"
+        fi
+        # (a new runtime and its rebuilds go in together or not at all)
+        ign=$(pacman-conf --config "$conf" IgnorePkg 2>/dev/null)
+        mapfile -t together < <([[ -z $target ]] || cat "$aur/rebuild" 2>/dev/null; awk '{ for (i = 1; i <= NF; i += 2) print $i }' <<<"$target")
+        for x in "${together[@]}"; do ! grep -qxF -- "$x" <<<"$ign" || c=2; done
+        ((c == 0)) || break
+        # (an AUR app held, left out of the targets: named there, pacman would install it all the same)
+        kept=()
+        for x in "${args[@]}"; do grep -qxF -- "${x#agros-aur/}" <<<"$ign" || kept+=("$x"); done
+        args=("${kept[@]}")
+        echo "!! the install refused for a conflict: tried again without what conflicts"
+        pacman_su "${args[@]}"
+        rc=$?
+    done
+    # AUR apps pacman can't install (a dependency missing; a conflict pacman names, above): it refuses the whole
     # transaction, at every shutdown, and the system was never updated. Tried again without them (pacman installs
     # nothing of a transaction it refuses), but for those a new runtime in it needs (installed with it or not at all),
     # their version kept. Once that goes through, the AUR apps left out are written down for agros-check ("<when>
     # <pacman's error>", then "<name> <version>" each), until an install of them goes through
-    if ((rc && ${#targets[@]})); then
+    if ((rc && ${#targets[@]} && ${#conflicted[@]} == 0)); then
         keep=() drop=()
         for x in "${targets[@]}"; do
             if [[ -n $target ]] && grep -qxF "${x#agros-aur/}" "$aur/rebuild" 2>/dev/null; then keep+=("$x"); else drop+=("${x#agros-aur/}"); fi
@@ -407,16 +440,23 @@ if [[ ${1:-} == --install ]]; then
             why=$(grep -m1 '^error:' "$prev/out" | plain)
             echo "!! the AUR apps couldn't be installed (${drop[*]}): tried again without them"
             # (--ignore: -Su would take them from agros-aur too, newer than what's installed)
-            pacman_su --ignore "$(IFS=,; echo "${drop[*]}")" "${keep[@]}"
+            args=(--ignore "$(IFS=,; echo "${drop[*]}")" "${keep[@]}")
+            pacman_su "${args[@]}"
             rc=$?
             ((rc)) || { echo "$(date '+%F %H:%M') $why"; for x in "${drop[@]}"; do grep "^$x " "$aur/built"; done; } >"$au/aur-install-failed"
         fi
     elif ((!rc && ${#targets[@]})); then
         rm -f "$au/aur-install-failed"
     fi
+    if ((rc && ${#conflicted[@]})); then
+        echo "!! holding back what conflicts leaves no update that installs: the whole update waits"
+        result failed "$(grep -m1 '^error:' "$prev/out"); the whole update waits for a conflict: $(printf '%s; ' "${conflicted[@]}" | sed 's/; $//')"
+    elif ((${#conflicted[@]})); then
+        { echo "$(date '+%F %H:%M') $(printf '%s; ' "${conflicted[@]}" | sed 's/; $//' | plain)"; cat "$held"; } >"$au/conflicts"
+    fi
     if ((rc)); then
         echo "!! the install failed: pacman's package lists put back as they were"
-        result failed "$(grep -m1 '^error:' "$prev/out")"
+        ((${#conflicted[@]})) || result failed "$(grep -m1 '^error:' "$prev/out")"
         say "The update failed: it's tried again at the next shutdown"
         restore
         exit 1

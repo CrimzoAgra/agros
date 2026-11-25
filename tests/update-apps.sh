@@ -466,6 +466,32 @@ grep -q -- 'agros/libcava' "$t/paru" && fail "reinstalled with all its libraries
 rm -rf "$t/fix" "$t/bin/readelf" "$t/bin/ldconfig"
 stub paru 'echo "paru $*" >>"'"$t"'/paru"'
 
+# A conflict pacman won't settle by itself (--noconfirm, from Settings: its "Remove bar?" answered no; its messages in
+# English, read): what conflicts held back alone, the rest updated, said with the command a person runs, a problem for
+# Settings ("Finished, with problems"); nothing removed. Still refused without it: said, a problem too
+# shellcheck disable=SC2016  # (expanded by the stand-in)
+stub paru 'echo "paru $* ($LC_MESSAGES)" >>"'"$t"'/paru"
+case "$*" in *" -Su "*)
+    c=$(echo "$*" | sed -n "s/.*--config \([^ ]*\) .*/\1/p")
+    if [ -n "$CONFLICT" ] && { [ "$CONFLICT" = always ] || ! grep -q "^IgnorePkg = .*foo" "$c"; }; then
+        echo ":: foo-2-1 and bar-1-1 are in conflict. Remove bar? [y/N] error: unresolvable package conflicts detected"
+        echo "error: failed to prepare transaction (conflicting dependencies)"; echo; echo ":: foo-2-1 and bar-1-1 are in conflict"; exit 1
+    fi ;;
+esac'
+stub pacman 'true'
+conflict() { rm -f "$t/paru"; HOME=$t/home XDG_STATE_HOME=$t/state XDG_CACHE_HOME=$t/home/.cache PATH=$t/bin:$PATH \
+    "$here/.local/bin/update-apps" </dev/null 2>&1; }
+rc=0; out=$(CONFLICT=1 conflict) || rc=$?
+[[ $rc != 0 && $(grep -c -- " -Su --noconfirm (C)$" "$t/paru") == 2 &&
+    $out == *"!! Waits: foo conflicts with bar (needs a person: sudo pacman -Syu, which asks whether to remove bar)"* &&
+    $out == *"tried again without what conflicts"* && $out != *"leaves no update that installs"* ]] ||
+    fail "a conflict not held back alone, the rest updated, or not said: $rc $out / $(cat "$t/paru")"
+grep -q -- " -R" "$t/paru" && fail "a package removed for a conflict: $(cat "$t/paru")"
+rc=0; out=$(CONFLICT=always conflict) || rc=$?
+[[ $rc != 0 && $out == *"!! Holding back what conflicts leaves no update that installs"* ]] ||
+    fail "an update still refused for a conflict not said: $rc $out"
+stub paru 'echo "paru $*" >>"'"$t"'/paru"'
+
 # Run in a terminal: how it went said where it waits for a key, as the Updates app says it. A step that failed (its
 # error scrolled away above) isn't "Done.", which read as everything updated; all of it working is
 if scr=$(command -v script); then

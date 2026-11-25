@@ -321,7 +321,36 @@ if "${paru[@]}" -Sy --noconfirm; then
     # (those held for review left out: --ignore, a comma between two)
     ignore=()
     ((${#held[@]} == 0)) || ignore=(--ignore "$(IFS=,; echo "${held[*]}")")
-    "${paru[@]}" --config "$gated" -Su --noconfirm "${ignore[@]}" || status=1
+    if [[ -t 0 ]]; then
+        # (in a terminal pacman's questions are yours, a conflict's "Remove b?" too: no --noconfirm)
+        "${paru[@]}" --config "$gated" -Su "${ignore[@]}" || status=1
+    else
+        # A conflict pacman won't settle by itself (--noconfirm answers its "Remove b?" no; a file another package
+        # owns) refused the whole update: the packages in conflict held back alone (conflict-hold, as the shutdown's
+        # install: with what needs them or would break them, no partial upgrade), said with the command a person runs
+        # to settle it, and the rest tried again (a few times: pacman names one package conflict a run). Still not
+        # worked out: nothing of it installed, said. (pacman's messages in English: they're read)
+        su_out=$(mktemp --tmpdir agros-update.XXXXXX)
+        system_update() { LC_ALL='' LC_MESSAGES=C "${paru[@]}" --config "$gated" -Su --noconfirm "${ignore[@]}" 2>&1 | tee "$su_out"; return "${PIPESTATUS[0]}"; }
+        system_update
+        rc=$? conflicted=
+        for _ in 1 2 3; do
+            ((rc)) || break
+            said=$("$helpers/conflict-hold" "$su_out" "$gated")
+            c=$?
+            [[ $c == 0 || $c == 2 ]] || break
+            mapfile -t lines <<<"$said"
+            printf '!! Waits: %s\n' "${lines[@]}"
+            conflicted=1
+            ((c == 0)) || break
+            echo "!! Refused for a conflict: tried again without what conflicts"
+            system_update
+            rc=$?
+        done
+        ((rc == 0)) || [[ -z $conflicted ]] || echo "!! Holding back what conflicts leaves no update that installs: the system and AUR apps not updated"
+        ((rc == 0)) && [[ -z $conflicted ]] || status=1
+        rm -f "$su_out"
+    fi
     # The packages AgrOS dropped (agros-system's list: an app it replaced), removed once an update took them out of
     # what AgrOS installs, as the boot's update does (auto-update): only those in as a dependency that nothing needs
     # now. Its failing never fails the update: said, and tried again at the next one

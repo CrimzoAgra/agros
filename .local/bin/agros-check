@@ -94,9 +94,13 @@ grep -rqF 'name: "refreshDevices"' /etc/xdg/quickshell/caelestia 2>/dev/null ||
 if [[ " $(id -nG 2>/dev/null) " == *" wheel "* ]]; then
     run_updates="run Updates" see_log="see /var/log/auto-update.log, or "
     run_review="run update-apps in a terminal (it shows their build scripts to review first)"
+    # (a conflict pacman won't settle by itself: neither Updates nor the shutdown's install removes or replaces a
+    # package, a person does)
+    settle="settle the conflict in a terminal (Updates can't): sudo pacman -Syu asks what to do"
 else
     run_updates="ask an administrator to run Updates" see_log=""
     run_review="ask an administrator to run update-apps in a terminal (it shows their build scripts to review first)"
+    settle="ask an administrator to settle the conflict in a terminal (Updates can't)"
 fi
 # Quickshell uses Qt's private parts: a Qt version it wasn't rebuilt for can stop the shells from starting (the Qt it
 # was built for: written down by update-apps, which rebuilds it)
@@ -145,14 +149,27 @@ if read -r aiwhen aiat aiwhy 2>/dev/null <"$au/aur-install-failed"; then
     [[ -n $ai_left ]] &&
         problems+=("The automatic update couldn't install AUR apps at shutdown ($ai_left, $aiwhen $aiat${aiwhy:+: $(plain <<<"$aiwhy")}): the rest installed; $run_updates")
 fi
+# what the shutdown's install held back for a conflict pacman won't settle by itself (auto-update's "<when> <why>", the
+# command a person runs to settle it in it, then "<name> <version>" each): said while one isn't at that version yet
+if read -r cwhen cat cwhy 2>/dev/null <"$au/conflicts"; then
+    c_left=$(behind <(tail -n +2 "$au/conflicts"))
+    # (another account can't sudo: told to ask an administrator)
+    c_who=
+    [[ -n $see_log ]] || c_who="; ask an administrator to settle it"
+    [[ -n $c_left ]] &&
+        problems+=("The automatic update held back $c_left at shutdown, for a conflict ($cwhen $cat: $(plain <<<"$cwhy")): the rest installed$c_who")
+fi
 # firmware the shutdown couldn't install (fwupd's reason, e.g. the battery too low): tried again at the next one
 read -r fwwhen fwat fwwhy 2>/dev/null <"$au/firmware-failed" &&
     problems+=("A firmware update failed to install at shutdown ($fwwhen $fwat${fwwhy:+: $(plain <<<"$fwwhy")}): it's tried again at the next one, or $run_updates")
 # the install at shutdown failed (auto-update --install writes down how it went: "failed <date> <why>"); tried again
 # at the next shutdown, but it fails the same way until it's looked at
 read -r how when at why 2>/dev/null <"$au/install-result"
+# (a conflict pacman won't settle by itself, whose packages couldn't be held back alone: Updates can't settle it either)
+fix=$run_updates
+[[ ${why:-} == *conflict* ]] && fix=$settle
 [[ ${how:-} == failed ]] &&
-    problems+=("The automatic update failed to install at shutdown ($when $at${why:+: $(plain <<<"$why")}): ${see_log}$run_updates")
+    problems+=("The automatic update failed to install at shutdown ($when $at${why:+: $(plain <<<"$why")}): ${see_log}$fix")
 # nothing installed at shutdown several times in a row (its boot download never finishing: a short session, a download
 # that fails every boot; something else using pacman still running): "<shutdowns> <since> <the last one's why>",
 # written down beside how the last real install went

@@ -102,6 +102,12 @@ case \$1 in
         fds=\$(ls -l /proc/\$PPID/fd 2>/dev/null); case "\$fds" in *" $t/boot"*) echo "boot held" >>"$t/calls" ;; esac
         [ -z "\$PACMAN_HANG" ] || { echo \$\$ >"$t/hung"; exec sleep 60; }
         case " \$* " in *" agros-aur/"*) [ -z "\$PACMAN_AUR_RC" ] || { echo "error: failed to commit transaction (conflicting files)"; exit 1; } ;; esac
+        # (\$CONFLICT: that package's update conflicts with bar, pacman's own words, until pacman.conf holds it;
+        # \$CONFLICT_ALWAYS: still)
+        if [ -n "\$CONFLICT" ] && { [ -n "\$CONFLICT_ALWAYS" ] || ! grep -q "^IgnorePkg = .*\$CONFLICT" "\$4"; }; then
+            echo ":: \$CONFLICT-2-1 and bar-1-1 are in conflict. Remove bar? [y/N] error: unresolvable package conflicts detected"
+            echo "error: failed to prepare transaction (conflicting dependencies)"; echo; echo ":: \$CONFLICT-2-1 and bar-1-1 are in conflict"; exit 1
+        fi
         [ "\${PACMAN_RC:-0}" = 0 ] || echo "error: boom"; exit \${PACMAN_RC:-0} ;;
     -Sy) [ -z "\$SY_ERR" ] || { echo "\$SY_ERR" >&2; exit 1; }; exit 0 ;;
     -Sw) echo "keyrings-download \$*" >>"$t/calls" ;;
@@ -114,7 +120,9 @@ case \$1 in
     -Sup) if [ -n "\$SUW_BREAKS" ] && ! grep -q "IgnorePkg = libfoo" "\$3"; then
             echo "error: failed to prepare transaction (could not satisfy dependencies)"
             echo ":: installing libfoo (2-1) breaks dependency 'libfoo.so=1-64' required by hyprland"; exit 1
-        fi ;;
+        fi
+        # (what it would install, conflict-hold's: foo, unless pacman.conf holds it)
+        case "\$*" in *--print-format*) grep -q '^IgnorePkg = .*foo' "\$3" || echo "foo 2-1" ;; esac ;;
 esac
 EOF
 # snapper at shutdown: over DBus it fails (snapperd can't start while the system goes down), and only what worked is noted
@@ -633,6 +641,42 @@ lists; built; : >"$t/calls"
 QU=$newqt Q_HAVE=0.3-1 PACMAN_AUR_RC=1 "$t/auto-update" --install >/dev/null && fail "a new Qt installed without its rebuild"
 [[ $(res) == "failed "* && $(grep -c '^pacman -Su' "$t/calls") == 1 && $(cat "$t/pac/sync/core.db") == old ]] ||
     fail "a new Qt's rebuild refused, and the rest tried without it: $(res) $(cat "$t/calls")"
+# A conflict pacman won't settle by itself (--noconfirm answers its "Remove bar?" no): what conflicts held back alone,
+# the rest installed, said in the log and by agros-check with the command a person runs; never removed here. Still
+# refused without it: the whole update waits as before (failed, the lists back), said so, and agros-check doesn't send
+# the person to Updates, which can't settle it either
+lists; : >"$t/calls"
+CONFLICT=foo "$t/auto-update" --install >/dev/null || fail "the install beside a conflict failed: $(tail -5 "$t/log")"
+[[ $(res) == "ok "* && $(grep -c '^pacman -Su' "$t/calls") == 2 ]] && grep -q "^waits: foo conflicts with bar (needs a person: sudo pacman -Syu" "$t/log" ||
+    fail "the rest not installed without what conflicts, or not said: $(res) $(cat "$t/calls")"
+[[ $(sed -n 2p "$t/au/conflicts") == "foo 2-1" && $(head -1 "$t/au/conflicts") == *" foo conflicts with bar (needs a person: sudo pacman -Syu"* ]] ||
+    fail "what waits for a conflict not written down: $(cat "$t/au/conflicts" 2>/dev/null)"
+grep -q -- '--noconfirm.*-R\|-Rdd\|--overwrite' "$t/calls" && fail "a package removed or overwritten unattended: $(cat "$t/calls")"
+out=$(HOME=$t/h AUTO_UPDATE_DIR=$t/au PACMAN_DB_DIR=$t/pac "$here/.local/bin/agros-check" 2>&1) || true
+[[ $out == *"held back foo at shutdown, for a conflict ("*"foo conflicts with bar (needs a person: sudo pacman -Syu, which asks whether to remove bar)): the rest installed"* ]] ||
+    fail "agros-check didn't say what waits for a conflict: $out"
+lists; : >"$t/calls"
+CONFLICT=foo CONFLICT_ALWAYS=1 "$t/auto-update" --install >/dev/null && fail "an update still refused for a conflict reported success"
+[[ $(res) == "failed "*"the whole update waits for a conflict: foo conflicts with bar"* && $(cat "$t/pac/sync/core.db") == old && ! -e $t/au/conflicts ]] ||
+    fail "the whole update not held when holding what conflicts wasn't enough: $(res)"
+grep -q "^!! holding back what conflicts leaves no update that installs: the whole update waits" "$t/log" || fail "the whole update waiting not said in the log"
+out=$(HOME=$t/h AUTO_UPDATE_DIR=$t/au PACMAN_DB_DIR=$t/pac "$here/.local/bin/agros-check" 2>&1) || true
+[[ $out == *"failed to install at shutdown"*"settle the conflict in a terminal (Updates can't): sudo pacman -Syu asks what to do"* && $out != *"or run Updates"* ]] ||
+    fail "agros-check sent the person to Updates for a conflict: $out"
+# (the AUR apps built not left out for a repo's conflict; a new runtime held for one: the whole update waits, its
+# rebuilds go in with it or not at all)
+lists; built; : >"$aurdir/rebuild"; : >"$t/calls"
+Q_HAVE=0.2-1 CONFLICT=foo "$t/auto-update" --install >/dev/null || fail "the install beside a conflict, with AUR apps, failed"
+[[ $(res) == "ok "* && $(grep -c '^pacman -Su .* agros-aur/quickshell-git' "$t/calls") == 2 && ! -e $t/au/aur-install-failed ]] ||
+    fail "the AUR apps left out for a repo's conflict: $(res) $(cat "$t/calls")"
+lists; built; : >"$t/calls"
+QU=$newqt Q_HAVE=0.3-1 CONFLICT=qt6-base "$t/auto-update" --install >/dev/null && fail "a new Qt held for a conflict, its rebuild installed"
+[[ $(res) == "failed "*"the whole update waits for a conflict: qt6-base conflicts with bar"* && $(grep -c '^pacman -Su' "$t/calls") == 1 ]] ||
+    fail "a new Qt held for a conflict without the whole update waiting: $(res) $(cat "$t/calls")"
+# (no conflict: nothing of it, as before)
+lists; : >"$t/calls"
+"$t/auto-update" --install >/dev/null && [[ $(grep -c '^pacman -Su' "$t/calls") == 1 && ! -e $t/au/conflicts ]] ||
+    fail "an install with no conflict not as before: $(res) $(cat "$t/calls")"
 # (an install of them that goes through: the note gone)
 lists; built; : >"$aurdir/rebuild"
 Q_HAVE=0.2-1 "$t/auto-update" --install >/dev/null

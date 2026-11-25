@@ -878,6 +878,16 @@ helper a package update just brought works before `agros-links` has linked it), 
   installing them alone would take anything else (pacman's own dry run, `-Sp`: a newer library or another package, a
   partial upgrade of the rest of the update), said on stderr, and the update goes on with the code it has. Its callers
   install them and start themselves again: `update-apps` and `auto-update` (the boot's and the shutdown's)
+- **`.local/bin/conflict-hold`**: an update pacman refused for a conflict it won't settle by itself, held back only
+  where it conflicts. `--noconfirm` answers pacman's "a and b are in conflict. Remove b? [y/N]" no, and a file another
+  package owns ("exists in filesystem") fails the transaction too, so one conflicting package (CachyOS's or Arch's
+  against `[agros]`'s or the AUR's) stopped the whole system update at every shutdown; the dry runs (`-p`) don't check
+  conflicts. From the failed run's output (in English) it holds the packages named (`IgnorePkg`, in the pacman.conf the
+  update runs with) and, as `update-gate` does, what a partial upgrade would break (pacman's dry run: one whose update
+  needs a held one's new version, a library whose update would break a held one), and says each with the command a
+  person runs to settle it (`sudo pacman -Syu`, which asks whether to remove the other package; `--overwrite` with the
+  files, once they're known to be safe to replace). Nothing is removed or replaced unattended. Still not worked out
+  without them: said, and the whole update waits, as before (`tests/conflict-hold.sh`)
 - **`.local/bin/soname-broken`**: `[agros]`'s installed packages that no longer load, to reinstall from `[agros]`: one
   of the libraries their own programs load (ELF `NEEDED`, `readelf`, as `soname-hold` reads them) is gone from the
   system (not in `/usr/lib`, not in the loader's cache, `ldconfig -p`, nor among the package's own files), and
@@ -1206,7 +1216,11 @@ brings each change; nothing to run by hand).
   (the next package, an AUR build, the Flatpaks) ends with the session, no lock or package half in. No sudo rule of
   its own: a wheel account's sudo with its password, as before. A run, and `update-check`'s "Update now", wait while
   one carried past a logout is still installing (`systemctl is-active agros-pacman`)
-  After its `paru -Syu` it rebuilds
+  A conflict pacman won't settle by itself (a package conflict, a file conflict) holds back only what conflicts
+  (`conflict-hold`, above; with what needs it), the rest updated: said in its log ("Waits: a conflicts with b (needs a
+  person: ...)"), a problem for Settings, and when that still can't be worked out, nothing of it installed, said. Run in
+  a terminal, pacman's questions are yours (no `--noconfirm` on its `-Su`: a conflict's "Remove b?" answered by you,
+  a file conflict's error shown as pacman's). After its `paru -Syu` it rebuilds
   what's built on a runtime it changed (the boot's list, below), and on a Qt changed since they were last built, once
   the runtime is in: `[agros]`'s own at the version installed with AgrOS's Quickshell fix (through `auto-update-aur
   --fetch`, as the boot's), the AUR's others at their newest; not one that same `paru -Syu` updated (its repo's rebuild
@@ -1313,11 +1327,17 @@ brings each change; nothing to run by hand).
     failure), and the rest goes in. Only a new runtime waits for what's built on it: one of its rebuilds failed (or came
     out older than what's installed, which pacman would leave), and the whole update waits (a part of it would be a
     partial upgrade, and the shells or the Python apps wouldn't start), built again at the next boot, or by Updates (its
-    `update-apps` rebuilds the same ones after its `paru -Syu`). An AUR app pacman refuses at the install (a conflict, a
-    file conflict, a missing dependency: it refuses the whole transaction, and every shutdown failed the same way, the
+    `update-apps` rebuilds the same ones after its `paru -Syu`). An AUR app pacman refuses at the install (a missing
+    dependency; a conflict it names is held back alone, below: it refuses the whole transaction, and every shutdown failed the same way, the
     system never updated) is left out of a second try (`--ignore`; pacman installs nothing of a transaction it refuses),
     unless a new runtime in it needs it (then it fails as one, the lists put back); what's left out is written down
-    (`/var/lib/auto-update/aur-install-failed`) and named by `agros-check` until it's installed.
+    (`/var/lib/auto-update/aur-install-failed`) and named by `agros-check` until it's installed. A conflict pacman
+    won't settle by itself (`--noconfirm` answers its "Remove b?" no; a file another package owns), the repos' too,
+    holds back only what conflicts (`conflict-hold`: with what needs it or its update would break, no partial upgrade),
+    the rest tried again (up to 3 times: pacman names one package conflict a run); nothing removed or replaced. What
+    waits, why and the command a person runs to settle it is said in the log ("waits: ...") and written down
+    (`/var/lib/auto-update/conflicts`) for `agros-check` until it's installed. Still not worked out (or a new runtime
+    or its rebuild among what it held): the whole update waits, said, as a failure
     A Qt the shells were rebuilt for is written down (`/var/lib/auto-update/qt-built`), so Updates doesn't rebuild
     them again
   - **Firmware** (fwupd): its metadata refreshed (LVFS, signed) and checked at boot (nothing said when offline or
@@ -1371,13 +1391,16 @@ brings each change; nothing to run by hand).
   Log: `/var/log/auto-update.log` (its last 20 runs kept; readable by admins, `wheel`, only: it holds every account's
   updates);
   `agros-check` says an install at shutdown that failed or was held back (until one goes through), AUR builds, AUR
-  apps the install left out, or a firmware update that failed, and 3 shutdowns in a row with nothing installed, with the
+  apps the install left out, packages it held back for a conflict (with the command that settles it), or a firmware
+  update that failed, and 3 shutdowns in a row with nothing installed, with the
   last one's reason (the boot's download didn't finish: only a finished one is installed; something else using pacman
   still held its lock; a soft reboot, which keeps the kernel running; its unit stopped outside a shutdown, by hand or
   for rescue or emergency mode; with pacman's error when the download failed; on
   battery, nearly empty: below 15%, discharging; pacman's lists couldn't be kept aside, a full disk). Each says to run
   Updates (and where to read the log) to an admin alone; another account, its Updates without "Update all" and the log
-  closed to it, is told to ask an administrator to run Updates. An install cut off
+  closed to it, is told to ask an administrator to run Updates. One that failed for a conflict isn't sent to Updates,
+  which can't settle it either: "settle the conflict in a terminal (Updates can't): sudo pacman -Syu asks what to do"
+  (another account: to ask an administrator to). An install cut off
   has pacman's lists put back, and its lock removed, at the next boot or install. The boot's run (download, Flatpaks,
   AUR builds and all, everything it started: nothing it runs as a user leaves its unit) stops after 4 h; a Flatpak from
   a file isn't reinstalled with less than 35 min of that left (cut off between its removal and install, the app would be

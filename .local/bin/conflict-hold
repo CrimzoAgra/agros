@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+# An update pacman refused for a conflict holds back only what conflicts. With --noconfirm (the shutdown's install,
+# auto-update; Settings' Updates, update-apps) pacman answers its "a and b are in conflict. Remove b? [y/N]" no, and a
+# file another package owns ("exists in filesystem") fails the whole transaction too: one conflicting package (CachyOS's
+# or Arch's against [agros]'s or the AUR's) kept the whole system from updating at every shutdown. Nothing is removed or
+# replaced here: that's a person's choice
+#   conflict-hold <pacman's output> <pacman.conf> [<held>]
+# Reads the failed run's output (in English: LC_MESSAGES=C), holds the conflicting packages in <pacman.conf> (IgnorePkg,
+# edited in place), and with them, as update-gate does for its own, what a partial upgrade would break: a package whose
+# update needs one held (pacman's dry run: "unable to satisfy dependency"), and one whose update would break a held one.
+# Prints what waits and why, a line each, with the pacman command a person would run to settle it; appends to <held>
+# the "<name> <version>" of each package the update leaves out now (pacman's dry run before and after).
+# Exit 0: held, the update to try again with <pacman.conf>; 1: no conflict in the output (it failed for something
+# else); 2: the update still can't be worked out without them (the whole update waits)
+set -uo pipefail
+usage="usage: conflict-hold <pacman's output> <pacman.conf> [<held>]"
+out=${1:?$usage} conf=${2:?$usage} heldfile=${3:-/dev/null}
+# (what the update would install, "<name> <version>" a line: pacman's dry run, which doesn't check conflicts)
+plan() { LC_ALL=C pacman -Sup --config "$conf" --print-format '%n %v' 2>/dev/null | awk 'NF == 2'; }
+# Package conflicts (pacman's last lines: ":: a-2-1 and b-1-1 are in conflict", a reason in brackets after when there's
+# one; names with their version), then file conflicts ("e: /usr/x exists in filesystem (owned by b)", "/usr/x exists
+# in both 'p' and 'q'"): the packages to hold, and each one's line
+names=() why=()
+while read -r a b; do
+    a=${a%-*-*} b=${b%-*-*}
+    names+=("$a" "$b")
+    why+=("$a conflicts with $b (needs a person: sudo pacman -Syu, which asks whether to remove $b)")
+done < <(sed -nE 's/^:: ([^ ]+) and ([^ ]+) are in conflict( \(.*\))?$/\1 \2/p' "$out" | sort -u)
+declare -A files=() owner=()
+while IFS=$'\t' read -r pkg file by; do
+    names+=("$pkg")
+    files[$pkg]+=${files[$pkg]:+,}$file
+    [[ -z $by || -n ${owner[$pkg]:-} ]] || owner[$pkg]=$by
+done < <(sed -nE -e 's/^([^ ]+): (\/.*) exists in filesystem \(owned by ([^ )]+)\)$/\1\t\2\t\3/p' \
+    -e 's/^([^ ]+): (\/.*) exists in filesystem$/\1\t\2\t/p' \
+    -e "s/^(\/.*) exists in both '([^']+)' and '([^']+)'\$/\2\t\1\t\3\n\3\t\1\t\2/p" "$out" | sort -u)
+for pkg in "${!files[@]}"; do
+    of=${owner[$pkg]:+, owned by ${owner[$pkg]}}
+    why+=("$pkg: its files are on the system already (${files[$pkg]}$of) (needs a person: once they're known to be safe to replace, sudo pacman -Syu --overwrite '${files[$pkg]}')")
+done
+((${#names[@]})) || exit 1
+printf '%s\n' "${why[@]}"
+before=$(plan)
+sed -i "/^\\[options\\]/a IgnorePkg = $(printf '%s\n' "${names[@]}" | sort -u | paste -sd' ')" "$conf"
+# What a partial upgrade would break held with them, from pacman's dry run (update-gate's way): a few tries, one held
+# can hold another
+for try in 1 2 3 4 5 6; do
+    ((try < 6)) || exit 2
+    dry=$(LC_ALL=C pacman -Sup --config "$conf" --print-format '%n %v' 2>&1) && break
+    ignored=$(pacman-conf --config "$conf" IgnorePkg)
+    hold=$({
+        sed -nE "s/^:: installing ([^ ]+) .*breaks dependency '[^']*' required by ([^ ]+)\$/\\1 \\2/p" <<<"$dry" |
+            while read -r lib by; do grep -qxF -- "$by" <<<"$ignored" && echo "$lib"; done
+        sed -nE "s/^:: unable to satisfy dependency '[^']*' required by ([^ ]+)\$/\\1/p" <<<"$dry"
+    } | sort -u | paste -sd' ')
+    [[ -n $hold ]] || exit 2
+    sed -i "/^\\[options\\]/a IgnorePkg = $hold" "$conf"
+done
+left=$(awk -v after=" $(awk 'NF == 2 { printf "%s ", $1 }' <<<"$dry")" 'NF == 2 && !index(after, " " $1 " ")' <<<"$before")
+[[ -z $left ]] || printf '%s\n' "$left" >>"$heldfile"
+with=$(printf '%s\n' "$left" | cut -d' ' -f1 | grep -vxF -f <(printf '%s\n' "${names[@]}") | paste -sd' ' | sed 's/ /, /g')
+[[ -z $with ]] || echo "held with them (a partial upgrade otherwise): $with"
+exit 0
