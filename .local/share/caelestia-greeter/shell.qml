@@ -697,7 +697,8 @@ ShellRoot {
             Pill {
                 id: userPill
 
-                visible: root.users.length > 1
+                // (one account left but the last one to log in deleted or renamed: its list, to pick the one left)
+                visible: root.users.length > 1 || root.users.length > 0 && !root.users.includes(root.user)
                 icon: "person"
                 label: root.user
                 trailing: "unfold_more"
