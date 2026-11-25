@@ -642,9 +642,9 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
   - Snapping, as on Windows (floating mode; not games or fullscreen windows; needs the title bar plugin's hook): let
     go with the pointer at a screen's top edge, a window is maximised; at its left or right edge, that half; in a corner
     (the last sixth of an edge), that quarter; on the screen the pointer is on. The edges are inside Caelestia's border
-    and bar, where the pointer is held while a window is moved; a side with another screen beyond isn't one (the
-    pointer goes on across). A move takes effect after 5 px: a click on a maximised or snapped window's title bar (an
-    app's own too, or Super+click) leaves it as it is. A see-through
+    and bar, where the pointer is held while a window is moved; a side with another screen beyond (across the gap
+    between screens too) isn't one (the pointer goes on across). A move takes effect after 5 px: a click on a
+    maximised or snapped window's title bar (an app's own too, or Super+click) leaves it as it is. A see-through
     preview (the overlay's `SnapPreview.qml`) shows the zone and follows the pointer between zones. Dragged away, a
     snapped window gets back the size it had; maximised or floated by the switch, it's no longer snapped. Snapped
     windows next to each other (side by side or one above the other) share their seam: a two-way resize cursor over

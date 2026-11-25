@@ -444,12 +444,14 @@ local function seam() return 2 * (gaps_in() + border()) end
 local zones = { left = { 0, 0, 1, 2 }, right = { 1, 0, 1, 2 }, bottom = { 0, 1, 2, 1 }, tl = { 0, 0, 1, 1 },
                 tr = { 1, 0, 1, 1 }, bl = { 0, 1, 1, 1 }, br = { 1, 1, 1, 1 },
                 top = { 0, 0, 2, 1 } }  -- column, row, columns wide, rows high (of 2 x 2). (top: Snap Assist's only, below)
--- Another screen at that point (beside or above this one: a window, or the pointer, may go on across there)
+-- Another screen at that point (beside or above this one: a window, or the pointer, may go on across there), across
+-- monitors.lua's gap between screens too (crossing.lua takes the pointer over it)
 local function screen_beyond(m, px, py)
+    local g = dots.screen_gap or 0
     for _, o in ipairs(hl.get_monitors() or {}) do
         if o.name ~= m.name then
             local ow, oh = screen_size(o)
-            if px >= o.x and px < o.x + ow and py >= o.y and py < o.y + oh then return true end
+            if px >= o.x - g and px < o.x + ow + g and py >= o.y - g and py < o.y + oh + g then return true end
         end
     end
     return false

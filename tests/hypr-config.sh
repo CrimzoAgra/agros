@@ -1071,10 +1071,12 @@ r = snap("0xc", 1000, 500)
 check("off the edge, a screen beyond: left there", r.x, nil)
 -- ...and the same toward a screen on the left, above and below (the second one is 1152 x 2048 in its turned units): its
 -- edge no snap zone, a window reaching across left there
-local was_x, was_y = SCREENS[2].x, SCREENS[2].y
+local was_x, was_y, was_gap = SCREENS[2].x, SCREENS[2].y, dots.screen_gap
 for _, c in ipairs({ { "left", -1152, 0, { 0, 540 }, { -700, 300 } }, { "above", 0, -2048, { 960, 0 }, { 500, -400 } },
-                     { "below", 0, 1080, { 100, 1079 }, { 500, 1040 } } }) do
-    SCREENS[2].x, SCREENS[2].y = c[2], c[3]
+                     { "below", 0, 1080, { 100, 1079 }, { 500, 1040 } },
+                     -- (monitors.lua's 64 px gap between screens, which crossing.lua takes the pointer over: still beyond)
+                     { "right, across the gap", 1984, 0, { 1919, 540 }, { 1880, 300 }, 64 } }) do
+    SCREENS[2].x, SCREENS[2].y, dots.screen_gap = c[2], c[3], c[6]
     free.tags, free.at = {}, { x = 1000, y = 300 }
     r = snap("0xc", c[4][1], c[4][2])
     check("the edge toward a screen " .. c[1] .. ": no snap", r.tag == nil and tags(free) == "", true)
@@ -1082,7 +1084,7 @@ for _, c in ipairs({ { "left", -1152, 0, { 0, 540 }, { -700, 300 } }, { "above",
     r = snap("0xc", 1000, 500)
     check("off the edge toward a screen " .. c[1] .. ": left there", (r.x or "") .. (r.y or ""), "")
 end
-SCREENS[2].x, SCREENS[2].y = was_x, was_y
+SCREENS[2].x, SCREENS[2].y, dots.screen_gap = was_x, was_y, was_gap
 -- Each window's box as dispatched (address -> x, y, w, h), the dispatches then cleared
 local function placed()
     local p = {}
