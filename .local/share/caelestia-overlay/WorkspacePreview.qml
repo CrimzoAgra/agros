@@ -54,7 +54,8 @@ Column {
     spacing: Tokens.spacing.medium
 
     StyledText {
-        text: qsTr("Workspace %1").arg(root.workspace?.name || root.popouts.previewWs) // (its name: the 2nd screen's 11 is "1")
+        // (its column with two screens or more, as Super+N counts them: the 2nd screen's 11 is its 1; user/workspaces.lua)
+        text: qsTr("Workspace %1").arg(Hypr.monitors.values.length >= 2 ? (Number(root.popouts.previewWs) - 1) % 10 + 1 : root.popouts.previewWs)
         font: Tokens.font.body.medium
     }
 
