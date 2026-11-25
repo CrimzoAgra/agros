@@ -376,9 +376,11 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
       layout, hit tests and popout places unchanged: its y is the screen's x), each icon and text turned back upright;
       its popouts under or over it; its window a strip along that edge, above the right one (whose part has the bar's
       far end), holding that edge's middle panel too: the dashboard drops down under a top bar's clock (in its
-      calendar's place), the Super menu rises over a bottom bar; the other panels stay where they are, after the bar.
-      The controller works in the bar's terms there (`bu`/`bv`: across it, along it); the edge hovers the bar covers
-      are off (the notification sidebar's under a top bar: Super+K; the utilities' over a bottom one). The wallpaper's
+      calendar's place), the Super menu rises over a bottom bar. The panels the bar's edge pushes away go to the left
+      border's window (`PanelsLeft.qml`; `PanelsRight.qml`'s own copies kept shut, its `away`): a top bar's notification
+      centre and its pop-ups at the bottom-left (opened from the bottom edge there), a bottom bar's keep-awake panel
+      (utilities) at the top-left (from that corner); the others stay where they are, after the bar. The controller
+      works in the bar's terms there (`bu`/`bv`: across it, along it). The wallpaper's
       frame, the border's exclusive zones and the clock's and visualiser's margins follow the bar on every edge
     - A dock (`Dock.qml`, `DockMenu.qml`): pinned apps and open windows, Force quit; minimised windows dimmed; a
       click on a window or its preview brings it to the front. Turned off, its place is kept (the workspaces, tray and

@@ -28,6 +28,17 @@ Item {
     readonly property bool barRight: barEdge === "right"
     // The bar's popouts (the left window's), for the utilities panel
     required property var popouts
+    // Which of these are in the left border's window instead (the bar along the top or bottom: PanelsLeft.qml), theirs
+    // here kept shut (a state of their own, never open) and out of the way: notifs (the notification centre and its
+    // pop-ups) or utilities; that window's sidebar, the one the utilities panel goes as wide as when it's open
+    property string away
+    property var awaySidebar
+
+    ScreenState {
+        id: shut
+
+        modelData: root.screen
+    }
 
     readonly property alias osd: osd
     readonly property alias osdWrapper: osdWrapper
@@ -75,6 +86,7 @@ Item {
 
         LayoutMirroring.enabled: root.barRight
         screenState: root.screenState
+        height: root.away === "notifs" ? 0 : implicitHeight
         sidebarPanel: sidebar
         osdPanel: osdWrapper
         sessionPanel: sessionWrapper
@@ -112,8 +124,8 @@ Item {
         id: utilities
 
         LayoutMirroring.enabled: root.barRight
-        screenState: root.screenState
-        sidebar: sidebar
+        screenState: root.away === "utilities" ? shut : root.screenState
+        sidebar: root.away === "notifs" && root.awaySidebar ? root.awaySidebar : sidebar
         popouts: root.popouts
 
         anchors.bottom: parent.bottom
@@ -133,16 +145,18 @@ Item {
         id: sidebar
 
         LayoutMirroring.enabled: root.barRight
-        screenState: root.screenState
+        screenState: root.away === "notifs" ? shut : root.screenState
+        // (the utilities panel away: to the bottom)
+        readonly property real utilitiesRoom: root.away === "utilities" ? 0 : utilities.implicitHeight - (Tokens.padding.large - 2)
 
         anchors.top: notifications.bottom
         anchors.bottom: parent.bottom
         // Its grey card ends where that panel's background starts (the card sits its inner bottom spacing above this
         // edge): that panel's height whether open or not (sidebar_notifs_only keeps it built), less that spacing
-        anchors.bottomMargin: utilities.implicitHeight - (Tokens.padding.large - 2) + slide
+        anchors.bottomMargin: utilitiesRoom + slide
         anchors.right: parent.right
         // Both edges move together: closed, it's its bottom edge's distance from the top (plus 5) up, out of sight
-        readonly property real slide: (parent.height - utilities.implicitHeight + (Tokens.padding.large - 2) + 5) * offsetScale
+        readonly property real slide: (parent.height - utilitiesRoom + 5) * offsetScale
         // ...except at the end of opening, as the curve overshoots (slide below 0): its top stays on the border (going
         // past, it came away from it for a moment, an inward notch at its top-left); its bottom springs as before
         anchors.topMargin: -notifications.anchors.topMargin - Math.max(0, slide)

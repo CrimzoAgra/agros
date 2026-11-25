@@ -513,7 +513,7 @@
             {
               "key": "bar.side",
               "label": "Position",
-              "description": "The edge of the screen it's on. On the right, the volume pop-up, quick settings and power menu move to the left edge. Along the top, hovering its clock drops the dashboard down under it; along the bottom, the Super menu rises above it. The shell restarts to move it.",
+              "description": "The edge of the screen it's on. On the right, the volume pop-up, quick settings and power menu move to the left edge. Along the top, hovering its clock drops the dashboard down under it, and the notification centre and notifications move to the bottom-left; along the bottom, the Super menu rises above it and the keep-awake panel moves to the top-left. The shell restarts to move it.",
               "type": "choice",
               "default": "left",
               "options": [

@@ -73,12 +73,14 @@ Variants {
             readonly property Bar.BarWrapper bar: barWrapper
             readonly property var osd: rightPanels.osd
             readonly property var osdWrapper: rightPanels.osdWrapper
-            readonly property var notifications: rightPanels.notifications
+            // (the bar across: a top bar's notification centre and pop-ups, a bottom bar's utilities, in the left
+            // border's window: PanelsLeft.qml)
+            readonly property var notifications: topLeftPanels?.notifications ?? rightPanels.notifications
             readonly property var session: rightPanels.session
             readonly property var sessionWrapper: rightPanels.sessionWrapper
-            readonly property var utilities: rightPanels.utilities
+            readonly property var utilities: bottomLeftPanels?.utilities ?? rightPanels.utilities
             readonly property var toasts: rightPanels.toasts
-            readonly property var sidebar: rightPanels.sidebar
+            readonly property var sidebar: topLeftPanels?.sidebar ?? rightPanels.sidebar
             readonly property var dashboard: topPanels?.dashboard ?? barPanels?.dashboard ?? null
             readonly property var launcher: bottomPanels?.launcher ?? barPanels?.launcher ?? null
             readonly property var popoutsWrapper: leftPanels?.popoutsWrapper ?? null
@@ -114,7 +116,7 @@ Variants {
             return bar + edge - border + open;
         }
         readonly property real rightNeeded: {
-            const p = shared;
+            const p = rightPanels;
             if (!p.sidebar || !p.notifications || !p.utilities || !p.session || !p.osd || !p.toasts)
                 return edge;
             const sidebar = p.sidebar.offsetScale < 1 ? p.sidebar.width : 0;
@@ -151,31 +153,59 @@ Variants {
         readonly property bool detached: leftPanels.popouts?.isDetached ?? false
         readonly property real ownRight: Math.max(rightNeeded, Math.min(rightArea.width, screenW - centerRight))
         // (across: the left border's column, as wide as a window with nothing open)
-        readonly property real ownLeft: barAcross ? edge : detached ? screenW - ownRight : Math.max(leftNeeded, Math.min(leftArea.width, centerLeft))
+        // (across: the left border's column, as wide as its window, to where the middle panel is)
+        readonly property real ownLeft: barAcross ? Math.max(columnNeeded, Math.min(columnArea.width, centerLeft)) : detached ? screenW - ownRight : Math.max(leftNeeded, Math.min(leftArea.width, centerLeft))
         readonly property rect leftOwn: barAcross ? barOwn : Qt.rect(0, 0, ownLeft, screenH)
         readonly property rect rightOwn: barInCorner ? Qt.rect(screenW - ownRight, barTop ? barOwnDepth : 0, ownRight, screenH - barOwnDepth) : Qt.rect(screenW - ownRight, 0, ownRight, screenH)
         readonly property rect topOwn: barTop ? columnOwn : barBottom && detached ? Qt.rect(screenW - ownRight, 0, 0, topArea.height) : Qt.rect(ownLeft, 0, Math.max(0, screenW - ownLeft - ownRight), topArea.height)
         readonly property rect bottomOwn: barBottom ? columnOwn : barTop && detached ? Qt.rect(screenW - ownRight, screenH - bottomArea.height, 0, bottomArea.height) : Qt.rect(ownLeft, screenH - bottomArea.height, Math.max(0, screenW - ownLeft - ownRight), bottomArea.height)
 
-        // The bar across: its window's part the strip along its edge, as deep as its window, to the right window's column;
-        // with something of it open reaching over that column (a popout under the bar's right end, the dashboard under
-        // the clock), across the column too, as deep as what's open, and the right window's part starts under it. The
-        // left border's column (the top or bottom window's) from the strip to the screen's other edge; the other middle
-        // panel's window between that column and the right one. A detached popout: the bar's window everything but the
-        // right column
-        readonly property bool barInCorner: {
-            if (!barAcross || detached)
-                return false;
+        // The bar across: its window's part the strip along its edge, as deep as its window, between the left border's
+        // column and the right window's (both the screen's height, the bar's ends included: its window, over theirs, has
+        // the pointer all along it); with something of it open reaching over one of them (a popout under the bar's end,
+        // the dashboard under the clock), across that column too, as deep as what's open, and the column's part starts
+        // under it. The other middle panel's window between the two columns. A detached popout: the bar's window
+        // everything but the right column
+        readonly property real barOpenLeft: {
+            const w = leftPanels.popoutsWrapper;
+            let l = w && w.width > 0 && w.height > 0 ? border + w.x : screenW;
+            const m = barPanels.dashboard ?? barPanels.launcher;
+            if (m?.visible)
+                l = Math.min(l, border + m.x);
+            return l;
+        }
+        readonly property real barOpenRight: {
             const w = leftPanels.popoutsWrapper;
             let r = w && w.width > 0 && w.height > 0 ? border + w.x + w.width : 0;
             const m = barPanels.dashboard ?? barPanels.launcher;
             if (m?.visible)
                 r = Math.max(r, border + m.x + m.width);
-            return r + (config?.border.rounding ?? 0) > screenW - ownRight;
+            return r;
         }
-        readonly property real barOwnDepth: barInCorner ? Math.min(leftNeeded, barArea.height) : barArea.height
-        readonly property rect barOwn: detached ? Qt.rect(0, 0, screenW - ownRight, screenH) : Qt.rect(0, barTop ? 0 : screenH - barOwnDepth, barInCorner ? screenW : screenW - ownRight, barOwnDepth)
-        readonly property rect columnOwn: detached ? Qt.rect(0, barTop ? screenH : 0, ownLeft, 0) : Qt.rect(0, barTop ? barOwnDepth : 0, ownLeft, screenH - barOwnDepth)
+        readonly property bool barInCorner: barAcross && !detached && barOpenRight + (config?.border.rounding ?? 0) > screenW - ownRight
+        readonly property bool barInLeftCorner: barAcross && !detached && barOpenLeft - (config?.border.rounding ?? 0) < ownLeft
+        readonly property real barOwnDepth: barInCorner || barInLeftCorner ? Math.min(leftNeeded, barArea.height) : barArea.height
+        readonly property rect barOwn: {
+            if (detached)
+                return Qt.rect(0, 0, screenW - ownRight, screenH);
+            const x = barInLeftCorner ? 0 : ownLeft;
+            return Qt.rect(x, barTop ? 0 : screenH - barOwnDepth, (barInCorner ? screenW : screenW - ownRight) - x, barOwnDepth);
+        }
+        readonly property rect columnOwn: detached ? Qt.rect(0, barTop ? screenH : 0, ownLeft, 0) : barInLeftCorner ? Qt.rect(0, barTop ? barOwnDepth : 0, ownLeft, screenH - barOwnDepth) : Qt.rect(0, 0, ownLeft, screenH)
+        // (how wide the column needs to be: its panels open, PanelsLeft.qml's)
+        readonly property real columnNeeded: {
+            const c = barTop ? topLeftPanels : bottomLeftPanels;
+            let w = 0;
+            if (c?.notifications?.visible)
+                w = c.notifications.width;
+            if (c?.sidebar && c.sidebar.offsetScale < 1)
+                w = Math.max(w, c.sidebar.width);
+            if (c?.utilities && c.utilities.offsetScale < 1)
+                w = Math.max(w, c.utilities.implicitWidth);
+            return edge + (w > 0 ? step(w) : 0);
+        }
+        property real columnHeld
+        onColumnNeededChanged: columnHeld = Math.max(columnHeld, columnNeeded)
 
         // How big each window is: room for its panels from the start, grown when something needs more, never shrunk.
         // A window resized as a panel opened or closed showed its old picture at the new size for a frame (a flicker);
@@ -195,6 +225,8 @@ Variants {
             // panel; rarer and wider, toasts beside the open sidebar, grow it once)
             rightHeld = Math.max(rightNeeded, edge + step(Math.max(shared.sidebar?.width || 448, shared.utilities?.implicitWidth ?? 0)));
             topHeld = Math.max(topNeeded, Math.min(screenH / 2, edge + 640));
+            // (across: as wide as the panels it takes, known closed)
+            columnHeld = Math.max(columnNeeded, barAcross ? edge + step(Math.max(rightPanels.sidebar?.width || 448, rightPanels.utilities?.implicitWidth ?? 0)) : edge);
             bottomHeld = Math.max(bottomNeeded, Math.min(screenH / 2, edge + 640));
         }
 
@@ -205,7 +237,7 @@ Variants {
         readonly property rect bottomArea: barBottom ? columnArea : Qt.rect(0, screenH - Math.min(bottomHeld, screenH), screenW, Math.min(bottomHeld, screenH))
         // (across: the bar's window a strip along its edge, the whole screen with a detached popout; the left border's)
         readonly property rect barArea: detached ? Qt.rect(0, 0, screenW, screenH) : Qt.rect(0, barTop ? 0 : screenH - Math.min(leftHeld, screenH), screenW, Math.min(leftHeld, screenH))
-        readonly property rect columnArea: Qt.rect(0, 0, edge, screenH)
+        readonly property rect columnArea: Qt.rect(0, 0, Math.min(columnHeld, screenW), screenH)
 
         // (a top bar: the dashboard, in the bar's window, drops down under the clock that opened it (bar_side's change to
         // Bar.qml); opened otherwise (its shortcut), in the middle. Its middle's screen x, -1 for the screen's)
@@ -462,6 +494,8 @@ Variants {
                 id: rightPanels
 
                 barEdge: scope.barEdge
+                away: scope.barTop ? "notifs" : scope.barBottom ? "utilities" : ""
+                awaySidebar: topLeftPanels.sidebar
                 screen: scope.modelData
                 screenState: scope.screenState
                 bar: barWrapper
@@ -503,12 +537,36 @@ Variants {
             bar: barWrapper
             grabActive: focusGrab.active
 
+            // (a top bar: the left border's column, the notification centre and its pop-ups in it)
+            showsOverFullscreen: topLeftPanels.notifications?.visible ?? false
+
             regions: [
                 PartRegion {
                     win: top
                     panel: topPanels.dashboard
                     y: -top.area.y
                     height: (panel?.height ?? 0) * (1 - (topPanels.dashboard?.offsetScale ?? 1)) + scope.border
+                },
+                // (from the screen's bottom edge up)
+                PartRegion {
+                    win: top
+                    panel: topLeftPanels.notifications
+                    height: (panel?.height ?? 0) + scope.border
+                },
+                PartRegion {
+                    win: top
+                    panel: topLeftPanels.sidebar
+                    x: -top.area.x
+                    width: (panel?.width ?? 0) * (1 - (topLeftPanels.sidebar?.offsetScale ?? 1)) + scope.border
+                }
+            ]
+
+            hiddenRegions: [
+                Region {
+                    x: (topLeftPanels.notifications?.x ?? 0) + top.innerLeft - top.area.x
+                    y: (topLeftPanels.notifications?.y ?? 0) + top.innerTop - top.area.y
+                    width: topLeftPanels.notifications?.width ?? 0
+                    height: topLeftPanels.notifications?.height ?? 0
                 }
             ]
 
@@ -519,8 +577,37 @@ Variants {
                     win: top
                     panel: topPanels.dashboard
                     deformAmount: 0.1
+                },
+                PartBg {
+                    id: leftNotifsBg
+
+                    win: top
+                    panel: topLeftPanels.notifications
+                },
+                PartBg {
+                    id: leftSidebarBg
+
+                    win: top
+                    panel: topLeftPanels.sidebar
+                    deformAmount: 0.03
                 }
             ]
+
+            PanelsLeft {
+                id: topLeftPanels
+
+                part: scope.barTop ? "notifs" : "none"
+                barEdge: scope.barEdge
+                screen: scope.modelData
+                screenState: scope.screenState
+                bar: barWrapper
+                borderThickness: top.borderThickness
+                others: rightPanels
+                popouts: leftPanels.popouts
+
+                deform: leftNotifsBg.deformMatrix
+                sidebarDeform: leftSidebarBg.deformMatrix
+            }
 
             PanelsEdge {
                 id: topPanels
@@ -558,6 +645,13 @@ Variants {
                     panel: bottomPanels.launcher
                     y: scope.screenH - height - bottom.area.y
                     height: (panel?.height ?? 0) * (1 - (bottomPanels.launcher?.offsetScale ?? 1)) + scope.border
+                },
+                // (a bottom bar: the left border's column, the utilities panel in it, from the screen's top edge down)
+                PartRegion {
+                    win: bottom
+                    panel: bottomLeftPanels.utilities
+                    y: -bottom.area.y
+                    height: Math.max(0, (panel?.y ?? 0) + (panel?.height ?? 0)) + scope.border
                 }
             ]
 
@@ -568,8 +662,31 @@ Variants {
                     win: bottom
                     panel: bottomPanels.launcher
                     deformAmount: 0.1
+                },
+                PartBg {
+                    id: leftUtilsBg
+
+                    win: bottom
+                    panel: bottomLeftPanels.utilities
+                    deformAmount: 0.15
                 }
             ]
+
+            PanelsLeft {
+                id: bottomLeftPanels
+
+                part: scope.barBottom ? "utilities" : "none"
+                barEdge: scope.barEdge
+                screen: scope.modelData
+                screenState: scope.screenState
+                bar: barWrapper
+                borderThickness: bottom.borderThickness
+                others: rightPanels
+                popouts: leftPanels.popouts
+
+                deform: leftUtilsBg.deformMatrix
+                rawDeform: leftUtilsBg.rawDeformMatrix
+            }
 
             PanelsEdge {
                 id: bottomPanels

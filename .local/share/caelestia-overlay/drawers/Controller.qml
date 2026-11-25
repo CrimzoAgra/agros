@@ -37,6 +37,10 @@ Scope {
     readonly property bool barTop: barEdge === "top"
     readonly property bool barBottom: barEdge === "bottom"
     readonly property bool across: barTop || barBottom
+    // ...and where the panels the bar's edge pushes away are (PanelsLeft.qml): a top bar's notification centre at the
+    // bottom-left (its hover edge the bottom one there), a bottom bar's utilities at the top-left (its corner the top one)
+    readonly property bool sidebarLeft: barTop
+    readonly property bool utilitiesTop: barBottom
 
     // (the pointer's x as it'd be with the bar on the left)
     function mx(x: real): real {
@@ -94,7 +98,20 @@ Scope {
     }
 
     function atSidebarEdge(x: real, y: real): bool {
-        return !barTop && y < Math.max(config.border.minThickness, config.border.thickness) + config.border.rounding && withinPanelWidth(panels.sidebar, x, y) && root.edgeHover(false, y < root.edgePx || root.sideShared("top"));
+        if (sidebarLeft)
+            return y > height - Math.max(config.border.minThickness, config.border.thickness) - config.border.rounding && withinPanelWidth(panels.sidebar, x, y) && root.edgeHover(false, y >= height - root.edgePx || root.sideShared("bottom"));
+        return y < Math.max(config.border.minThickness, config.border.thickness) + config.border.rounding && withinPanelWidth(panels.sidebar, x, y) && root.edgeHover(false, y < root.edgePx || root.sideShared("top"));
+    }
+
+    // (over the open sidebar, wherever it is; the utilities panel)
+    function inSidebar(x: real, y: real): bool {
+        if (sidebarLeft)
+            return x < innerX + panels.sidebar.x + panels.sidebar.width && withinPanelHeight(panels.sidebar, x, y);
+        return inRightPanel(panels.sidebar, x, y);
+    }
+
+    function inUtilities(x: real, y: real): bool {
+        return utilitiesTop ? inTopPanel(panels.utilities, x, y) : inBottomPanel(panels.utilities, x, y);
     }
 
     function sidebarHoverOpens(atEdge: bool): bool {
@@ -311,7 +328,7 @@ Scope {
                 root.panels.osd.hovered = true;
             }
 
-            const showSidebar = pressed && dragStart.x > Math.min(width - config.border.minThickness, innerX + vx(panels.sidebar));
+            const showSidebar = pressed && !sidebarLeft && dragStart.x > Math.min(width - config.border.minThickness, innerX + vx(panels.sidebar));
 
             // Show sidebar on hover (top-right corner, bounded by notification panel height)
             if (config.sidebar.showOnHover && !screenState.session) {
@@ -335,7 +352,7 @@ Scope {
                 screenState.sidebar = true;
             }
         } else {
-            const outOfSidebar = x < width - panels.sidebar.width * (1 - panels.sidebar.offsetScale);
+            const outOfSidebar = sidebarLeft ? x > innerX + panels.sidebar.width * (1 - panels.sidebar.offsetScale) : x < width - panels.sidebar.width * (1 - panels.sidebar.offsetScale);
             // Show osd on hover
             const showOsd = outOfSidebar && inRightPanel(panels.osdWrapper, x, y) && root.edgeHover(screenState.osd, x >= width - root.edgePx || root.sideShared("right"));
 
@@ -363,7 +380,7 @@ Scope {
                 if (root.sidebarHoverOpens(showSidebarHover) && !screenState.sidebar && !screenState.dashboard) {
                     screenState.sidebar = true;
                 } else {
-                    const inSidebarArea = inRightPanel(panels.sidebar, x, y) || inRightPanel(panels.sessionWrapper, x, y);
+                    const inSidebarArea = inSidebar(x, y) || inRightPanel(panels.sessionWrapper, x, y);
                     if (inSidebarArea)
                         sidebarShortcutActive = false; // hovered: back to hover control
                     else if (!sidebarShortcutActive)
@@ -372,7 +389,7 @@ Scope {
             }
 
             // Hide sidebar on drag
-            if (pressed && inRightPanel(panels.sidebar, dragStart.x, 0) && dragX > config.sidebar.dragThreshold)
+            if (pressed && !sidebarLeft && inRightPanel(panels.sidebar, dragStart.x, 0) && dragX > config.sidebar.dragThreshold)
                 screenState.sidebar = false;
         }
 
@@ -409,7 +426,7 @@ Scope {
         }
 
         // Show utilities on hover
-        const showUtilities = inBottomPanel(panels.utilities, x, y, true) && root.edgeHover(screenState.utilities, !barBottom && (y >= height - root.edgePx || root.sideShared("bottom")));
+        const showUtilities = utilitiesTop ? inTopPanel(panels.utilities, x, y) && root.edgeHover(screenState.utilities, y < root.edgePx || root.sideShared("top")) : inBottomPanel(panels.utilities, x, y, true) && root.edgeHover(screenState.utilities, y >= height - root.edgePx || root.sideShared("bottom"));
 
         // Always update visibility based on hover if not in shortcut mode
         if (!utilitiesShortcutActive) {
@@ -436,9 +453,9 @@ Scope {
                 root.dashboardShortcutActive = false;
                 root.osdShortcutActive = false;
                 root.sidebarShortcutActive = false;
-                if (!root.inRightPanel(root.panels.sidebar, root.mouseX, root.mouseY))
+                if (!root.inSidebar(root.mouseX, root.mouseY))
                     root.screenState.sidebar = false;
-                if (!root.inBottomPanel(root.panels.utilities, root.mouseX, root.mouseY))
+                if (!root.inUtilities(root.mouseX, root.mouseY))
                     root.screenState.utilities = false;
 
                 root.utilitiesShortcutActive = false;
@@ -486,10 +503,11 @@ Scope {
         function onSidebarChanged() {
             // Not when the hover trigger (the top edge over it) opened it: it's still above the screen then
             const border = root.config.border;
-            const inTrigger = !root.barTop && root.mouseY < Math.max(border.minThickness, border.thickness) + border.rounding
+            const band = Math.max(border.minThickness, border.thickness) + border.rounding;
+            const inTrigger = (root.sidebarLeft ? root.mouseY > root.height - band : root.mouseY < band)
                 && root.withinPanelWidth(root.panels.sidebar, root.mouseX, root.mouseY);
             if (root.screenState.sidebar)
-                root.sidebarShortcutActive = !inTrigger && !root.inRightPanel(root.panels.sidebar, root.mouseX, root.mouseY);
+                root.sidebarShortcutActive = !inTrigger && !root.inSidebar(root.mouseX, root.mouseY);
             else
                 root.sidebarShortcutActive = false;
         }
@@ -497,7 +515,7 @@ Scope {
         function onUtilitiesChanged() {
             if (root.screenState.utilities) {
                 // Utilities became visible, immediately check if this should be shortcut mode
-                const inUtilitiesArea = root.inBottomPanel(root.panels.utilities, root.mouseX, root.mouseY);
+                const inUtilitiesArea = root.inUtilities(root.mouseX, root.mouseY);
                 if (!inUtilitiesArea) {
                     root.utilitiesShortcutActive = true;
                 }
