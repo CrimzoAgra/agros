@@ -12,15 +12,17 @@ import qs.modules.bar.popouts as BarPopouts
 Item {
     id: root
 
-    // top, bottom or left
+    // top, bottom, left or none
     required property string part
     required property ShellScreen screen
     required property ScreenState screenState
     required property Bar.BarWrapper bar
     required property real borderThickness
-    // The bar on the right (Drawers.qml): the inner area after the left border, before the bar (the popouts beside the
-    // bar there: bar_side's change to their wrapper)
-    property bool barRight
+    // The bar's edge (Drawers.qml): the inner area after the border, before the bar on its side (the popouts beside
+    // the bar there: bar_side's change to their wrapper). none: no panel (the bar across holds its edge's)
+    property string barEdge: "left"
+    // (a top bar's dashboard: under its middle's screen x, -1: in the middle; Drawers.qml)
+    property real dashboardAt: -1
     // The screen's panels (Drawers.qml), for the launcher
     required property var panels
     // The deformation of its blob background (the window's PanelBg), the panel drawn with it
@@ -35,15 +37,17 @@ Item {
 
     anchors.fill: parent
     anchors.margins: borderThickness
-    anchors.leftMargin: barRight ? borderThickness : bar.implicitWidth
-    anchors.rightMargin: barRight ? bar.implicitWidth : borderThickness
+    anchors.leftMargin: barEdge === "left" ? bar.implicitWidth : borderThickness
+    anchors.rightMargin: barEdge === "right" ? bar.implicitWidth : borderThickness
+    anchors.topMargin: barEdge === "top" ? bar.implicitWidth : borderThickness
+    anchors.bottomMargin: barEdge === "bottom" ? bar.implicitWidth : borderThickness
 
     // (in a Loader filling this, so each panel's anchors are on this item, as in Caelestia's)
     Loader {
         id: panel
 
         anchors.fill: parent
-        sourceComponent: root.part === "top" ? dashboardPanel : root.part === "bottom" ? launcherPanel : popoutsPanel
+        sourceComponent: root.part === "top" ? dashboardPanel : root.part === "bottom" ? launcherPanel : root.part === "left" ? popoutsPanel : null
     }
 
     Component {
@@ -57,8 +61,9 @@ Item {
 
                 screenState: root.screenState
 
-                anchors.horizontalCenter: parent.horizontalCenter
                 anchors.top: parent.top
+                // (in the middle, or under dashboardAt; by x, not an anchor: one let go of leaves x where it was)
+                x: root.dashboardAt < 0 ? (parent.width - width) / 2 : Math.max(0, Math.min(parent.width - width, root.dashboardAt - root.anchors.leftMargin - width / 2))
 
                 transform: Matrix4x4 {
                     matrix: root.deform

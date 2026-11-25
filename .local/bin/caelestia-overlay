@@ -31,14 +31,14 @@ mkdir -p "${dst%/*}"
 exec 9>"$dst.lock"
 [[ -n ${CAELESTIA_REBUILDING:-} ]] || flock 9
 # What the build is made from, as one checksum: Caelestia's files (name, size, time), this script, patch.py and the
-# overlay's files, and the caelestia.* settings patch.py reads (DOTS_SETTINGS: the tests' settings command)
+# overlay's files, and the settings patch.py reads, caelestia.* and bar.side (DOTS_SETTINGS: the tests' settings command)
 share=$HOME/.local/share/caelestia-overlay
 stamp=$( {
     find "$src/" -printf '%P %s %T@\n' | sort
     find "$share/" -type f ! -path '*/__pycache__/*' -print0 | sort -z | xargs -0r cat
     cat "$(readlink -f "$0")"
     "${DOTS_SETTINGS:-$helpers/dots-settings}" values 2>/dev/null |
-        jq -c 'with_entries(select(.key | startswith("caelestia.")))' 2>/dev/null || true
+        jq -c 'with_entries(select(.key | startswith("caelestia.") or . == "bar.side"))' 2>/dev/null || true
 } | sha256sum | cut -d' ' -f1)
 if [[ -z $plain && -e $dst/shell.qml && $(cat "$dst/.agros-built" 2>/dev/null) == "$stamp" ]]; then
     echo "Caelestia overlay up to date: nothing to rebuild"

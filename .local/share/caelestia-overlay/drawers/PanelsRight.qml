@@ -21,9 +21,11 @@ Item {
     required property ScreenState screenState
     required property Bar.BarWrapper bar
     required property real borderThickness
-    // The bar on the right (Drawers.qml): these panels against the left edge instead, each placed (and slid in) as its
-    // mirror image (LayoutMirroring on each one's own anchors, not inherited: what's inside a panel isn't mirrored)
-    property bool barRight
+    // The bar's edge (Drawers.qml). On the right: these panels against the left edge instead, each placed (and slid in)
+    // as its mirror image (LayoutMirroring on each one's own anchors, not inherited: what's inside a panel isn't
+    // mirrored). Along the top or bottom: where they are, after the bar
+    property string barEdge: "left"
+    readonly property bool barRight: barEdge === "right"
     // The bar's popouts (the left window's), for the utilities panel
     required property var popouts
 
@@ -38,8 +40,10 @@ Item {
 
     anchors.fill: parent
     anchors.margins: borderThickness
-    anchors.leftMargin: barRight ? borderThickness : bar.implicitWidth
+    anchors.leftMargin: barEdge === "left" ? bar.implicitWidth : borderThickness
     anchors.rightMargin: barRight ? bar.implicitWidth : borderThickness
+    anchors.topMargin: barEdge === "top" ? bar.implicitWidth : borderThickness
+    anchors.bottomMargin: barEdge === "bottom" ? bar.implicitWidth : borderThickness
 
     Item {
         id: osdWrapper

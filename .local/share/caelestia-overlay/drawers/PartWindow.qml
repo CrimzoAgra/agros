@@ -23,10 +23,11 @@ import qs.modules.bar as Bar
 StyledWindow {
     id: root
 
-    // left, right, top or bottom (with the bar on the right, "left" is the bar's window, on the right: Drawers.qml)
+    // left, right, top or bottom (with the bar on the right, "left" is the bar's window, on the right; along the top or
+    // bottom, a strip there, and "top" or "bottom" the left border's column: Drawers.qml)
     required property string part
-    // The bar on the right (Drawers.qml's barRight): the border's side and the inner area mirrored
-    property bool barRight
+    // The bar's edge (Drawers.qml's barEdge): the border as thick as the bar on that side, the inner area after it
+    property string barEdge: "left"
     // This window on the screen (logical pixels): room for its panels, kept (a window resized as a panel opened or
     // closed showed its old picture at the new size for a frame, a flicker)
     required property rect area
@@ -46,6 +47,9 @@ StyledWindow {
     property bool showsOverFullscreen
     // Whether this window takes the keyboard (the launcher's, the session menu's)
     property bool wantsKeyboard
+    // Over the other windows of the shell (the bar along the top or bottom: its far end is in the right window's part,
+    // which draws the border there), unless a fullscreen window's open
+    property bool above
     // The input region besides this window's stretch of the border: Regions of panels, in screen coordinates (R)
     default property alias content: interactions.data
     property alias regions: panelRegions.regions
@@ -77,9 +81,15 @@ StyledWindow {
     readonly property real borderRounding: contentItem.Config.border.rounding * (1 - fsTransitionProg)
     readonly property real shadowOpacity: 0.7 * (1 - fsTransitionProg)
     readonly property real borderLayoutThickness: shellHidden ? 0 : contentItem.Config.border.thickness
+    // (the bar's thickness, whichever its edge: its implicitWidth)
     readonly property real barWidth: bar?.implicitWidth ?? 0
-    // Where the screen's inner area (less the bar and border) starts: after the bar, or after the left border
-    readonly property real innerLeft: barRight ? borderThickness : barWidth
+    // Where the screen's inner area (less the bar and border) starts: after the bar, or after the left or top border
+    readonly property real innerLeft: barEdge === "left" ? barWidth : borderThickness
+    readonly property real innerTop: barEdge === "top" ? barWidth : borderThickness
+    // (each side's border: the bar on its side)
+    function sideThickness(side: string): real {
+        return barEdge === side ? barWidth : borderThickness;
+    }
 
     property color surfaceColour: Colours.tPalette.m3surface
 
@@ -109,7 +119,7 @@ StyledWindow {
     // Above a fullscreen window only while something of it shows there (the whole shell: the Super menu open, its
     // opening and closing; or what showsOverFullscreen says), else under it: an overlay above a fullscreen game, even an
     // empty one, has Hyprland redraw the whole screen every frame instead of showing the game's frames alone
-    WlrLayershell.layer: ((hasFullscreen ? fsTransitionProg < 1 || showsOverFullscreen : fsTransitionProg > 0) && contentItem.Config.general.showOverFullscreen) || (hasSpecialWorkspace && hasFullscreenOnNormalWs) ? WlrLayer.Overlay : WlrLayer.Top
+    WlrLayershell.layer: ((hasFullscreen ? fsTransitionProg < 1 || showsOverFullscreen : fsTransitionProg > 0) && contentItem.Config.general.showOverFullscreen) || (hasSpecialWorkspace && hasFullscreenOnNormalWs) || (above && !hasFullscreen) ? WlrLayer.Overlay : WlrLayer.Top
     WlrLayershell.keyboardFocus: wantsKeyboard ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 
     mask: shellHidden ? hiddenRegion : inputRegion
@@ -151,10 +161,13 @@ StyledWindow {
         height: root.own.height
 
         Region {
-            x: (root.barRight ? root.contentItem.Config.border.clampedThickness : root.bar.clampedWidth) + root.dragMaskPadding - root.area.x
-            y: root.contentItem.Config.border.clampedThickness + root.dragMaskPadding - root.area.y
-            width: root.screen.width - root.bar.clampedWidth - root.contentItem.Config.border.clampedThickness - root.dragMaskPadding * 2
-            height: root.screen.height - root.contentItem.Config.border.clampedThickness * 2 - root.dragMaskPadding * 2
+            readonly property real border: root.contentItem.Config.border.clampedThickness
+            readonly property bool across: root.barEdge === "top" || root.barEdge === "bottom"
+
+            x: (root.barEdge === "left" ? root.bar.clampedWidth : border) + root.dragMaskPadding - root.area.x
+            y: (root.barEdge === "top" ? root.bar.clampedWidth : border) + root.dragMaskPadding - root.area.y
+            width: root.screen.width - (across ? border : root.bar.clampedWidth) - border - root.dragMaskPadding * 2
+            height: root.screen.height - (across ? root.bar.clampedWidth : border) - border - root.dragMaskPadding * 2
             intersection: Intersection.Subtract
         }
 
@@ -210,10 +223,10 @@ StyledWindow {
                     anchors.margins: -50 // Make border thicker to smooth out bulge from closed drawers
                     group: blobGroup
                     radius: root.borderRounding
-                    borderLeft: (root.barRight ? root.borderThickness : root.barWidth) - anchors.margins - root.sdfBorderOffset
-                    borderRight: (root.barRight ? root.barWidth : root.borderThickness) - anchors.margins - root.sdfBorderOffset
-                    borderTop: root.borderThickness - anchors.margins - root.sdfBorderOffset
-                    borderBottom: root.borderThickness - anchors.margins - root.sdfBorderOffset
+                    borderLeft: root.sideThickness("left") - anchors.margins - root.sdfBorderOffset
+                    borderRight: root.sideThickness("right") - anchors.margins - root.sdfBorderOffset
+                    borderTop: root.sideThickness("top") - anchors.margins - root.sdfBorderOffset
+                    borderBottom: root.sideThickness("bottom") - anchors.margins - root.sdfBorderOffset
                 }
             }
         }

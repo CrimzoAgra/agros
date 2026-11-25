@@ -26,9 +26,17 @@ Scope {
     // The left window's (its border's layout thickness, fullscreen: shellHidden)
     property real borderThickness
     property bool fullscreen
-    // The bar on the right (Drawers.qml): this works in the screen seen in a mirror, as if the bar were on the left
-    // (the pointer's x mirrored as it comes in, Interactions.qml's mx; the panels' through vx), so all below is as is
-    property bool barRight
+    // The bar's edge (Drawers.qml). On the right: this works in the screen seen in a mirror, as if the bar were on the
+    // left (the pointer's x mirrored as it comes in, Interactions.qml's mx; the panels' through vx), so all below is as
+    // is. Along the top or bottom (across): the bar's things in the bar's own terms (across it from the screen's edge,
+    // u; along it, v: what the bar's own y is, its content turned a quarter), the panels after it where they are; the
+    // dashboard opens from the clock, not the top edge (a top bar), the launcher and utilities not from the bottom one
+    // (a bottom bar), the notification sidebar not from the top one (a top bar)
+    property string barEdge: "left"
+    readonly property bool barRight: barEdge === "right"
+    readonly property bool barTop: barEdge === "top"
+    readonly property bool barBottom: barEdge === "bottom"
+    readonly property bool across: barTop || barBottom
 
     // (the pointer's x as it'd be with the bar on the left)
     function mx(x: real): real {
@@ -38,6 +46,23 @@ Scope {
     // (a panel's x in its inner area, as it'd be with the bar on the left)
     function vx(p: Item): real {
         return barRight ? width - bar.implicitWidth - borderThickness - p.x - p.width : p.x;
+    }
+
+    // (the inner area's start, x in the mirror and y; how far the bottom border reaches up: the bar's where it is)
+    readonly property real innerX: across ? borderThickness : bar.implicitWidth
+    readonly property real innerY: barTop ? bar.implicitWidth : borderThickness
+    readonly property real topInset: barTop ? bar.implicitWidth : config.border.thickness
+    readonly property real bottomInset: barBottom ? bar.implicitWidth : config.border.thickness
+
+    // (a point in the bar's terms: u across it from the screen's edge, v along it)
+    function bu(x: real, y: real): real {
+        return barTop ? y : barBottom ? height - y : x;
+    }
+    function bv(x: real, y: real): real {
+        return across ? x : y;
+    }
+    function onBar(x: real, y: real): bool {
+        return bu(x, y) < bar.implicitWidth;
     }
 
     // The pointer: where it last was (screen coordinates), whether a button is held, whether it's over the shell
@@ -69,7 +94,7 @@ Scope {
     }
 
     function atSidebarEdge(x: real, y: real): bool {
-        return y < Math.max(config.border.minThickness, config.border.thickness) + config.border.rounding && withinPanelWidth(panels.sidebar, x, y) && root.edgeHover(false, y < root.edgePx || root.sideShared("top"));
+        return !barTop && y < Math.max(config.border.minThickness, config.border.thickness) + config.border.rounding && withinPanelWidth(panels.sidebar, x, y) && root.edgeHover(false, y < root.edgePx || root.sideShared("top"));
     }
 
     function sidebarHoverOpens(atEdge: bool): bool {
@@ -129,18 +154,20 @@ Scope {
         return !((d1 < 0 || d2 < 0 || d3 < 0) && (d1 > 0 || d2 > 0 || d3 > 0));
     }
 
-    function aimPopout(x: real, y: real): void {
+    function aimPopout(sx: real, sy: real): void {
+        // (in the bar's terms: x across it, y along it)
+        const x = bu(sx, sy), y = bv(sx, sy);
         aimY = y;
         const a = aimAnchor;
         const w = panels.popoutsWrapper;
         if (popouts.hasCurrent && w.width > 0 && w.height > 0 && a.x >= 0) {
-            const px = bar.implicitWidth + vx(w);
-            const top = borderThickness + w.y;
+            const px = barTop ? innerY + w.y : barBottom ? height - innerY - w.y - w.height : bar.implicitWidth + vx(w);
+            const top = across ? borderThickness + w.x : borderThickness + w.y;
             // Only the part of the popout within a 2:1 slope of the anchor (~63° up or down): with a tall popout,
             // a triangle to its far corners would swallow moves along the bar to the next buttons
             const reach = (px - a.x) * 2;
             const t = Math.max(top, a.y - reach);
-            const b = Math.min(top + w.height, a.y + reach);
+            const b = Math.min(top + (across ? w.width : w.height), a.y + reach);
             // Tip 1 px left of the anchor, so a first step straight down/up still counts
             if (t < b && inTriangle(x, y, a.x - 1, a.y, px, t, px, b)) {
                 aimTimer.restart(); // heading for the popout: switch only if the pointer stops here
@@ -155,45 +182,51 @@ Scope {
     property Timer aimTimer: Timer {
         interval: 300
         onTriggered: {
-            root.aimAnchor = Qt.point(root.mouseX, root.mouseY);
-            if (root.containsMouse && root.mouseX < root.bar.implicitWidth)
+            root.aimAnchor = Qt.point(root.bu(root.mouseX, root.mouseY), root.bv(root.mouseX, root.mouseY));
+            if (root.containsMouse && root.onBar(root.mouseX, root.mouseY))
                 root.bar.checkPopout(root.aimY);
         }
     }
 
     function withinPanelHeight(panel: Item, x: real, y: real): bool {
-        const panelY = root.borderThickness + panel.y;
+        const panelY = root.innerY + panel.y;
         return y >= panelY - config.border.rounding && y <= panelY + panel.height + config.border.rounding;
     }
 
     function withinPanelWidth(panel: Item, x: real, y: real): bool {
-        const panelX = bar.implicitWidth + vx(panel);
+        const panelX = innerX + vx(panel);
         return x >= panelX - config.border.rounding && x <= panelX + panel.width + config.border.rounding;
     }
 
+    // (the bar's popouts: between the bar and the popout's far side, within its span)
     function inLeftPanel(panel: Item, x: real, y: real): bool {
-        return x < bar.implicitWidth + vx(panel) + panel.width && withinPanelHeight(panel, x, y);
+        if (barTop)
+            return y < innerY + panel.y + panel.height && withinPanelWidth(panel, x, y);
+        if (barBottom)
+            return y > innerY + panel.y && withinPanelWidth(panel, x, y);
+        return x < innerX + vx(panel) + panel.width && withinPanelHeight(panel, x, y);
     }
 
     function inRightPanel(panel: Item, x: real, y: real): bool {
-        return x > Math.min(width - config.border.minThickness, bar.implicitWidth + vx(panel)) && withinPanelHeight(panel, x, y);
+        return x > Math.min(width - config.border.minThickness, innerX + vx(panel)) && withinPanelHeight(panel, x, y);
     }
 
     function inTopPanel(panel: Item, x: real, y: real): bool {
         const panelHeight = panel.height * (1 - (panel.offsetScale ?? 0)); // qmllint disable missing-property
-        return y < Math.max(config.border.minThickness, config.border.thickness + panelHeight) && withinPanelWidth(panel, x, y);
+        return y < Math.max(config.border.minThickness, topInset + panelHeight) && withinPanelWidth(panel, x, y);
     }
 
     function inBottomPanel(panel: Item, x: real, y: real, isCorner = false): bool {
         const panelHeight = panel.height * (1 - (panel.offsetScale ?? 0)); // qmllint disable missing-property
-        return y > height - Math.max(config.border.minThickness, config.border.thickness + panelHeight) - (isCorner ? config.border.rounding : 0) && withinPanelWidth(panel, x, y);
+        return y > height - Math.max(config.border.minThickness, bottomInset + panelHeight) - (isCorner ? config.border.rounding : 0) && withinPanelWidth(panel, x, y);
     }
 
     function wheel(event: WheelEvent): void {
         if (fullscreen)
             return;
-        if (mx(event.x) < bar.implicitWidth) {
-            bar.handleWheel(event.y, event.angleDelta);
+        const x = mx(event.x);
+        if (onBar(x, event.y)) {
+            bar.handleWheel(bv(x, event.y), event.angleDelta);
         }
     }
 
@@ -202,10 +235,10 @@ Scope {
         // caelestia-overlay: a right-click on the bar opens its menu (again, where clicked), any other click closes it
         if (popouts.currentName === "barmenu")
             popouts.hasCurrent = false;
-        if (button === Qt.RightButton && x < bar.implicitWidth)
-            bar.openMenu(y);
+        if (button === Qt.RightButton && onBar(x, y))
+            bar.openMenu(bv(x, y));
         // caelestia-overlay: a click anywhere but on the tray closes it
-        if (!(x < bar.implicitWidth && bar.trayAt(y)))
+        if (!(onBar(x, y) && bar.trayAt(bv(x, y))))
             bar.closeTray();
     }
 
@@ -252,14 +285,15 @@ Scope {
         }
 
         // Show bar in non-exclusive mode on hover
-        if (!screenState.bar && config.bar.showOnHover && x < bar.clampedWidth)
+        if (!screenState.bar && config.bar.showOnHover && bu(x, y) < bar.clampedWidth)
             bar.isHovered = true;
 
-        // Show/hide bar on drag
-        if (pressed && dragStart.x < bar.clampedWidth) {
-            if (dragX > config.bar.dragThreshold)
+        // Show/hide bar on drag (across it, away from its edge)
+        const dragOut = barTop ? dragY : barBottom ? -dragY : dragX;
+        if (pressed && bu(dragStart.x, dragStart.y) < bar.clampedWidth) {
+            if (dragOut > config.bar.dragThreshold)
                 screenState.bar = true;
-            else if (dragX < -config.bar.dragThreshold)
+            else if (dragOut < -config.bar.dragThreshold)
                 screenState.bar = false;
         }
 
@@ -277,11 +311,11 @@ Scope {
                 root.panels.osd.hovered = true;
             }
 
-            const showSidebar = pressed && dragStart.x > Math.min(width - config.border.minThickness, bar.implicitWidth + vx(panels.sidebar));
+            const showSidebar = pressed && dragStart.x > Math.min(width - config.border.minThickness, innerX + vx(panels.sidebar));
 
             // Show sidebar on hover (top-right corner, bounded by notification panel height)
             if (config.sidebar.showOnHover && !screenState.session) {
-                const showSidebarHover = y < Math.max(config.border.minThickness, config.border.thickness) + config.border.rounding && withinPanelWidth(panels.sidebar, x, y) && root.edgeHover(false, y < root.edgePx || root.sideShared("top"));
+                const showSidebarHover = root.atSidebarEdge(x, y);
                 if (root.sidebarHoverOpens(showSidebarHover) && !screenState.sidebar && !screenState.dashboard)
                     screenState.sidebar = true;
             }
@@ -325,7 +359,7 @@ Scope {
 
             // Show/hide sidebar on hover
             if (config.sidebar.showOnHover && !pressed) {
-                const showSidebarHover = y < Math.max(config.border.minThickness, config.border.thickness) + config.border.rounding && withinPanelWidth(panels.sidebar, x, y) && root.edgeHover(false, y < root.edgePx || root.sideShared("top"));
+                const showSidebarHover = root.atSidebarEdge(x, y);
                 if (root.sidebarHoverOpens(showSidebarHover) && !screenState.sidebar && !screenState.dashboard) {
                     screenState.sidebar = true;
                 } else {
@@ -343,7 +377,9 @@ Scope {
         }
 
         // Show launcher on hover, or show/hide on drag if hover is disabled
-        if (config.launcher.showOnHover) {
+        if (barBottom) {
+            // (a bottom bar: not from the bottom edge, the bar's there)
+        } else if (config.launcher.showOnHover) {
             if (!screenState.launcher && inBottomPanel(panels.launcher, x, y) && root.edgeHover(false, y >= height - root.edgePx || root.sideShared("bottom")))
                 screenState.launcher = true;
         } else if (pressed && inBottomPanel(panels.launcher, dragStart.x, dragStart.y) && withinPanelWidth(panels.launcher, x, y)) {
@@ -354,7 +390,7 @@ Scope {
         }
 
         // Show dashboard on hover
-        const showDashboard = config.dashboard.showOnHover && inTopPanel(panels.dashboard, x, y) && root.edgeHover(screenState.dashboard, y < root.edgePx || root.sideShared("top")) && (screenState.dashboard || !screenState.sidebar && !withinPanelWidth(panels.sidebar, x, y)); // caelestia-overlay: not over the sidebar's span
+        const showDashboard = config.dashboard.showOnHover && inTopPanel(panels.dashboard, x, y) && root.edgeHover(screenState.dashboard, !barTop && (y < root.edgePx || root.sideShared("top"))) && (screenState.dashboard || !screenState.sidebar && !withinPanelWidth(panels.sidebar, x, y)); // caelestia-overlay: not over the sidebar's span
 
         // Always update visibility based on hover if not in shortcut mode
         if (!dashboardShortcutActive) {
@@ -365,7 +401,7 @@ Scope {
         }
 
         // Show/hide dashboard on drag (for touchscreen devices)
-        if (pressed && inTopPanel(panels.dashboard, dragStart.x, dragStart.y) && withinPanelWidth(panels.dashboard, x, y)) {
+        if (pressed && !barTop && inTopPanel(panels.dashboard, dragStart.x, dragStart.y) && withinPanelWidth(panels.dashboard, x, y)) {
             if (dragY > config.dashboard.dragThreshold)
                 screenState.dashboard = true;
             else if (dragY < -config.dashboard.dragThreshold)
@@ -373,7 +409,7 @@ Scope {
         }
 
         // Show utilities on hover
-        const showUtilities = inBottomPanel(panels.utilities, x, y, true) && root.edgeHover(screenState.utilities, y >= height - root.edgePx || root.sideShared("bottom"));
+        const showUtilities = inBottomPanel(panels.utilities, x, y, true) && root.edgeHover(screenState.utilities, !barBottom && (y >= height - root.edgePx || root.sideShared("bottom")));
 
         // Always update visibility based on hover if not in shortcut mode
         if (!utilitiesShortcutActive) {
@@ -384,7 +420,7 @@ Scope {
         }
 
         // Show popouts on hover
-        if (x < bar.implicitWidth && !WindowDrag.dragging) {
+        if (onBar(x, y) && !WindowDrag.dragging) {
             root.aimPopout(x, y);
         } else if ((!popouts.currentName.startsWith("traymenu") || ((popouts.current as StackView)?.depth ?? 0) <= 1) && !inLeftPanel(panels.popoutsWrapper, x, y)) {
             popouts.hasCurrent = false;
@@ -450,7 +486,7 @@ Scope {
         function onSidebarChanged() {
             // Not when the hover trigger (the top edge over it) opened it: it's still above the screen then
             const border = root.config.border;
-            const inTrigger = root.mouseY < Math.max(border.minThickness, border.thickness) + border.rounding
+            const inTrigger = !root.barTop && root.mouseY < Math.max(border.minThickness, border.thickness) + border.rounding
                 && root.withinPanelWidth(root.panels.sidebar, root.mouseX, root.mouseY);
             if (root.screenState.sidebar)
                 root.sidebarShortcutActive = !inTrigger && !root.inRightPanel(root.panels.sidebar, root.mouseX, root.mouseY);

@@ -513,12 +513,14 @@
             {
               "key": "bar.side",
               "label": "Position",
-              "description": "The side of the screen it's on. On the right, the volume pop-up, quick settings and power menu move to the left edge. The shell restarts to move it.",
+              "description": "The edge of the screen it's on. On the right, the volume pop-up, quick settings and power menu move to the left edge. Along the top, hovering its clock drops the dashboard down under it; along the bottom, the Super menu rises above it. The shell restarts to move it.",
               "type": "choice",
               "default": "left",
               "options": [
                 {"value": "left", "label": "Left"},
-                {"value": "right", "label": "Right"}
+                {"value": "right", "label": "Right"},
+                {"value": "top", "label": "Top"},
+                {"value": "bottom", "label": "Bottom"}
               ],
               "apply": "caelestia"
             },

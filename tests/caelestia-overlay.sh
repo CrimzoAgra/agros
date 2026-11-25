@@ -78,7 +78,8 @@ sidebar_edge_released() { # <Interactions.qml>
         { echo "not the first thing each move does: $(grep -A2 'onPositionChanged: event => {\|function move(x: real, y: real): void {' "$1")"; return; }
     edge=$(sed -n 's/^ *const showSidebarHover = \(.*\);$/\1/p' "$1" | sort -u)
     fn=$(sed -n '/^    function atSidebarEdge(x: real, y: real): bool {$/,/^    }$/p' "$1")
-    [[ $(wc -l <<<"$edge") == 1 ]] && grep -qF "return $edge;" <<<"$fn" || { echo "its edge isn't the hover's: $fn / $edge"; return; }
+    # (the edge itself, or written out as it)
+    [[ $(wc -l <<<"$edge") == 1 ]] && { [[ $edge == "root.atSidebarEdge(x, y)" ]] || grep -qF "return $edge;" <<<"$fn"; } || { echo "its edge isn't the hover's: $fn / $edge"; return; }
     if grep -q sidebarTriggerY <<<"$edge"; then
         grep -qF "$(grep -m1 'const sidebarTriggerY = ' "$1" | sed 's/^ *//')" <<<"$fn" || { echo "its trigger height isn't the hover's: $fn"; return; }
     fi
@@ -93,8 +94,8 @@ for f in "$i" "$dst/modules/drawers/SnapPreview.qml"; do
 done
 # ...nor the bar's popouts on hover while a window is dragged over the bar (one dragged to the left edge to snap it
 # opened the dock's): the bar then as if the pointer were off it, whose path closes an open one
-grep -qx '        if (x < bar.implicitWidth && !WindowDrag.dragging) {' "$i" ||
-    fail "the bar's popouts open on hover while a window is dragged: $(grep -F 'if (x < bar.implicitWidth' "$i")"
+grep -qx '        if (onBar(x, y) && !WindowDrag.dragging) {' "$i" ||
+    fail "the bar's popouts open on hover while a window is dragged: $(grep -F 'if (onBar(x, y)' "$i")"
 grep -q '^            popouts.hasCurrent = false;' <<<"$(grep -A2 -F '        } else if ((!popouts.currentName.startsWith("traymenu")' "$i")" ||
     fail "the bar's popouts not closed off the bar"
 # The panels' edge hover (edgeHover): opens only at the edge, with no button held and no window dragged; an open one
@@ -375,7 +376,7 @@ lint_new() { [[ ! -x /usr/lib/qt6/bin/qmllint ]] || python3 -I "$t/lint.py" "$1"
 new=$(lint_new /etc/xdg/quickshell/caelestia "$dst")
 [[ -z $new ]] || fail "the patched QML uses what Caelestia doesn't have (qmllint): $new"
 
-# The bar on the right (Settings: bar.side): the split windows' layout mirrored (drawers/: barRight), the border's zones
+# The bar on the right (Settings: bar.side): the split windows' layout mirrored (drawers/: barEdge), the border's zones
 # swapped, the bar's content and its popouts against its inner edge, the wallpaper's frame and the clock's and the
 # visualiser's margins on the other side; with it on the left (the run above), none of that
 printf '#!/bin/sh\necho "{\\"bar.side\\": \\"right\\"}"\n' >"$t/bin/dots-settings-right"; chmod +x "$t/bin/dots-settings-right"
@@ -384,15 +385,40 @@ cp -as /etc/xdg/quickshell/caelestia "$right"
 out=$(HOME=$t DOTS_SETTINGS=$t/bin/dots-settings-right python3 "$t/.local/share/caelestia-overlay/patch.py" /etc/xdg/quickshell/caelestia "$right" 2>&1) ||
     fail "the overlay with the bar on the right failed: $(tail -3 <<<"$out")"
 grep -q "WARNING.*bar on the right" <<<"$out" && fail "the bar on the right doesn't fit: $(grep 'bar on the right' <<<"$out")"
-{ grep -q 'readonly property bool barRight: true // bar_side' "$right/modules/drawers/Drawers.qml" &&
+{ grep -q 'readonly property string barEdge: "right" // bar_side' "$right/modules/drawers/Drawers.qml" &&
     grep -q 'anchors.right: true // caelestia-overlay: the bar on the right' "$right/modules/drawers/Exclusions.qml" &&
     grep -q 'anchors.left: parent.left // caelestia-overlay: the bar on the right' "$right/modules/bar/BarWrapper.qml" &&
     grep -q 'anchors.right: parent.right // caelestia-overlay: out of the bar on the right' "$right/modules/bar/popouts/ClipWrapper.qml" && grep -q 'enabled: content.isDetached // caelestia-overlay: bar_side' "$right/modules/bar/popouts/ClipWrapper.qml" &&
     grep -q 'anchors.rightMargin: bar?.exclusiveZone ?? 0 // caelestia-overlay: the bar on the right' "$right/modules/background/Background.qml" &&
     grep -q 'Behavior on anchors.rightMargin' "$right/modules/background/Visualiser.qml"; } || fail "the bar on the right not laid out for it"
-grep -q 'readonly property bool barRight: false // bar_side' "$dst/modules/drawers/Drawers.qml" || fail "the bar on the right with Settings saying left"
+grep -q 'readonly property string barEdge: "left" // bar_side' "$dst/modules/drawers/Drawers.qml" || fail "the bar on the right with Settings saying left"
 new=$(lint_new /etc/xdg/quickshell/caelestia "$right")
 [[ -z $new ]] || fail "the patched QML, the bar on the right, uses what Caelestia doesn't have (qmllint): $new"
+
+# (and moving it rebuilds: the build's checksum has it, as it has the caelestia.* settings)
+grep -qF 'startswith("caelestia.") or . == "bar.side"' "$here/.local/bin/caelestia-overlay" || fail "moving the bar in Settings doesn't rebuild the shell"
+
+# ...along the top or bottom: the bar turned a quarter, its icons and texts upright, its popouts under or over it, the
+# zones and the wallpaper's frame on its edge; a top bar's clock opens the dashboard
+for side in top bottom; do
+    printf '#!/bin/sh\necho "{\\"bar.side\\": \\"%s\\"}"\n' "$side" >"$t/bin/dots-settings-$side"; chmod +x "$t/bin/dots-settings-$side"
+    across=$t/$side-dst
+    cp -as /etc/xdg/quickshell/caelestia "$across"
+    out=$(HOME=$t DOTS_SETTINGS=$t/bin/dots-settings-$side python3 "$t/.local/share/caelestia-overlay/patch.py" /etc/xdg/quickshell/caelestia "$across" 2>&1) ||
+        fail "the overlay with the bar along the $side failed: $(tail -3 <<<"$out")"
+    grep -q "WARNING.*bar on the right, top or bottom" <<<"$out" && fail "the bar along the $side doesn't fit: $(grep 'bar on the right' <<<"$out")"
+    { grep -q "readonly property string barEdge: \"$side\" // bar_side" "$across/modules/drawers/Drawers.qml" &&
+        grep -q "anchors.$side: true // caelestia-overlay: the bar along the $side" "$across/modules/drawers/Exclusions.qml" &&
+        grep -q 'rotation: -90' "$across/modules/bar/BarWrapper.qml" &&
+        (($(grep -rc 'rotation: 90 // caelestia-overlay: upright' "$across/modules/bar" | awk -F: '{s += $2} END {print s}') >= 17)) &&
+        grep -q "anchors.$side: parent.$side // caelestia-overlay: out of the bar along the $side" "$across/modules/bar/popouts/ClipWrapper.qml" &&
+        grep -q "anchors.${side}Margin: bar?.exclusiveZone ?? 0 // caelestia-overlay: the bar along the $side" "$across/modules/background/Background.qml" &&
+        grep -q "Behavior on anchors.${side}Margin" "$across/modules/background/Visualiser.qml"; } || fail "the bar along the $side not laid out for it"
+    if [[ $side == top ]]; then grep -q 'clockDashboard = true;' "$across/modules/bar/Bar.qml" || fail "a top bar's clock doesn't open the dashboard"
+    else grep -q 'clockDashboard' "$across/modules/bar/Bar.qml" && fail "a bottom bar's clock opens the dashboard"; fi
+    new=$(lint_new /etc/xdg/quickshell/caelestia "$across")
+    [[ -z $new ]] || fail "the patched QML, the bar along the $side, uses what Caelestia doesn't have (qmllint): $new"
+done
 
 # The lock screen says how many notifications came, not what they say (a one-time code read off a locked screen):
 # AgrOS's shell.json turns on Caelestia's lock.hideNotifs, and its notification list there still goes by it

@@ -2689,19 +2689,22 @@ def split_windows():
 
 
 def bar_side():
-    # The bar on the right, when the Settings app says so (bar.side): the shell as with it on the left, mirrored. The
-    # split windows' layout does most of it (drawers/: barRight, set here); Caelestia's own files that place things by
-    # the bar's side: the bar's content against its window's inner edge (it slides in from the screen's edge), the
-    # popouts beside it (and sliding out of it), the border's exclusive zones (the bar's on the right, a border's on the
-    # left), the wallpaper's frame (wallpaper_in_borders: its margins, and its growth as the bar comes in), the music
-    # visualiser's and the desktop clock's margin. The panels on the right edge move to the left one (drawers/
-    # PanelsRight.qml). Left (the default), nothing changes
-    if setting_values().get("bar.side") != "right":
+    # The bar on another edge, when the Settings app says so (bar.side). The split windows' layout does most of it
+    # (drawers/: barEdge, set here). On the right: the shell as with it on the left, mirrored; Caelestia's own files that
+    # place things by the bar's side: the bar's content against its window's inner edge (it slides in from the screen's
+    # edge), the popouts beside it (and sliding out of it), the border's exclusive zones (the bar's on the right, a
+    # border's on the left), the wallpaper's frame (wallpaper_in_borders: its margins, and its growth as the bar comes
+    # in), the music visualiser's and the desktop clock's margin. The panels on the right edge move to the left one
+    # (drawers/PanelsRight.qml). Along the top or bottom: bar_across. Left (the default), nothing changes
+    side = setting_values().get("bar.side")
+    if side not in ("right", "top", "bottom"):
         return {}
     out = {}
     d = "modules/drawers/Drawers.qml"
-    out[d] = swap(read(d), "        readonly property bool barRight: false // bar_side\n",
-                  "        readonly property bool barRight: true // bar_side\n", "the drawers' bar side")
+    out[d] = swap(read(d), '        readonly property string barEdge: "left" // bar_side\n',
+                  f'        readonly property string barEdge: "{side}" // bar_side\n', "the drawers' bar edge")
+    if side != "right":
+        return {**out, **bar_across(side)}
     ex = "modules/drawers/Exclusions.qml"
     t = swap(read(ex), """    ExclusionZone {
         anchors.left: true
@@ -2763,6 +2766,237 @@ def bar_side():
              "                    anchors.rightMargin: (ShellState.componentsFor(root.screen)?.bar?.exclusiveZone ?? 0) + Tokens.spacing.small * Config.background.visualiser.spacing // caelestia-overlay: bar_side\n",
              "the visualiser's margin")
     out[vi] = swap(t, "                    Behavior on anchors.leftMargin {\n", "                    Behavior on anchors.rightMargin {\n", "the visualiser's margin's animation")
+    return out
+
+
+# (bar_across: an icon or text of the bar's, upright in it turned)
+UPRIGHT = "rotation: 90 // caelestia-overlay: upright, the bar turned a quarter (bar_side)"
+
+
+def upright(text, opening, what):
+    """text with the item whose opening lines are opening (unique) turned upright (UPRIGHT after its first line)"""
+    if text.count(opening) != 1:
+        raise LookupError(what)
+    first = opening.split("\n")[0]
+    indent = len(first) - len(first.lstrip()) + 4
+    return text.replace(opening, f"{first}\n{' ' * indent}{UPRIGHT}\n" + opening[len(first) + 1:])
+
+
+def bar_across(side):
+    # bar_side's along the top or bottom (side): the same bar turned a quarter, its top at the left (everything in it,
+    # its popouts' places, the pointer's tests and its own: as it is, its y the screen's x), as long as the screen is
+    # wide; its icons and texts turned back upright (a few words, as one: the clock's date). Its popouts under or over
+    # it, along it under the entry; the zones, the wallpaper's frame, the visualiser's and the desktop clock's margin on
+    # its edge. A top bar's clock opens the dashboard (drawers/: in the bar's window, dropping down under the clock)
+    # instead of its calendar; the bar's other entries close it
+    top = side == "top"
+    out = {}
+    ex = "modules/drawers/Exclusions.qml"
+    t = swap(read(ex), """    ExclusionZone {
+        anchors.left: true
+        exclusiveZone: root.bar.exclusiveZone""", f"""    ExclusionZone {{
+        anchors.{side}: true // caelestia-overlay: the bar along the {side} (bar_side)
+        exclusiveZone: root.bar.exclusiveZone""", "the bar's exclusive zone")
+    out[ex] = swap(t, f"""    ExclusionZone {{
+        anchors.{side}: true
+    }}""", f"""    ExclusionZone {{
+        anchors.left: true // caelestia-overlay: the border's, on the left (bar_side)
+    }}""", "the border's exclusive zone")
+
+    bw = "modules/bar/BarWrapper.qml"
+    t = swap(read(bw), "    visible: width > Config.border.thickness\n",
+             "    visible: implicitWidth > Config.border.thickness // caelestia-overlay: its thickness, whichever its edge (bar_side)\n",
+             "the bar's shown")
+    out[bw] = swap(t, """        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        anchors.right: parent.right
+
+        active: root.shouldBeVisible""", f"""        // caelestia-overlay: the bar along the {side}: the same bar turned a quarter (its top at the left), as long as
+        // the screen is wide, against its window's inner edge as it slides in (bar_side)
+        x: (root.width - width) / 2
+        y: {"root.height - root.contentWidth / 2" if top else "root.contentWidth / 2"} - height / 2
+        height: root.width
+        rotation: -90
+
+        active: root.shouldBeVisible""", "the bar's content")
+
+    bar = "modules/bar/Bar.qml"
+    t = read(bar)
+    for entry in ("OsIcon {\n                        objectName: \"taskbarLogo\"\n",
+                  "Power {\n                        objectName: \"taskbarPowerButton\"\n"):
+        t = upright(t, "                    " + entry, "the bar's " + entry.split()[0])
+    if top:
+        t = insert(t, "\n    function closeTray(): void {\n", """
+    // caelestia-overlay: the dashboard the clock opened (the bar on top: bar_side)
+    property bool clockDashboard
+
+    Connections {
+        function onDashboardChanged(): void {
+            if (!root.screenState.dashboard)
+                root.clockDashboard = false;
+        }
+
+        target: root.screenState
+    }
+""")
+        t = swap(t, """        const id = ch.entryId;
+        const top = ch.y;
+""", """        const id = ch.entryId;
+        const top = ch.y;
+
+        // caelestia-overlay: the bar on top: its clock opens the dashboard, dropping down under it (in its calendar's
+        // place); the bar's other entries close the one it opened (bar_side)
+        if (id === "clock" && Config.dashboard.showOnHover) {
+            popouts.currentCenter = (ch.item as Item).mapToItem(root, 0, (ch.item as Item).implicitHeight / 2).y ?? 0;
+            popouts.hasCurrent = false;
+            clockDashboard = true;
+            screenState.dashboard = true;
+            return;
+        }
+        if (clockDashboard) {
+            clockDashboard = false;
+            screenState.dashboard = false;
+        }
+""", "the clock's dashboard")
+    out[bar] = t
+
+    # The icons and texts
+    comps = "modules/bar/components/"
+    for rel, openings in (
+        ("workspaces/Workspace.qml", ("        StyledText {\n            animate: true\n",
+                                      "        MaterialIcon {\n            fill: 1\n            grade: 25\n",
+                                      "                delegate: MaterialIcon {\n                    id: win\n")),
+        ("TrayItem.qml", ("    ColouredIcon {\n        id: icon\n",)),
+        ("Clock.qml", ("    component Digits: Row {\n        id: digits\n",
+                       "            sourceComponent: MaterialIcon {\n                text: \"calendar_month\"\n",
+                       "            sourceComponent: ColumnLayout {\n                spacing: layout.spacing - 4\n",
+                       "            sourceComponent: StyledText {\n                text: Time.amPmStr.toLowerCase()\n")),
+        ("StatusIcons.qml", tuple(f"""                        {kind} {{
+                            animate: true
+                            text: {what}""" for kind, what in (("MaterialIcon", "Icons.getVolumeIcon"),
+                                                                ("MaterialIcon", "Icons.getMicVolumeIcon"),
+                                                                ("StyledText", "Hypr.kbLayout"),
+                                                                ("MaterialIcon", "Nmcli.activeEthernet")))),
+        ("status/BatteryStatus.qml", ("MaterialIcon {\n    required property color colour\n",)),
+        ("status/BluetoothStatus.qml", ("        MaterialIcon {\n            animate: true\n            text: {\n",
+                                        "            MaterialIcon {\n                id: device\n")),
+        ("status/LockStatus.qml", ("        MaterialIcon {\n            id: lockIcon\n",)),
+        ("ActiveWindow.qml", ("    MaterialIcon {\n        id: icon\n",)),
+        ("Dock.qml", ("                    IconImage {\n                        // Visual size every icon is scaled to",)),
+    ):
+        t = read(comps + rel)
+        for o in openings:
+            t = upright(t, o, f"{rel}'s {o.split()[0].removeprefix('delegate:')}")
+        out[comps + rel] = t
+    # (the clock's hours and minutes side by side now: a colon between them)
+    out[comps + "Clock.qml"] = swap(out[comps + "Clock.qml"], """        Digits {
+            Layout.alignment: Qt.AlignHCenter
+            text: Time.hourStr
+        }
+""", f"""        Digits {{
+            Layout.alignment: Qt.AlignHCenter
+            text: Time.hourStr
+        }}
+
+        // caelestia-overlay: the hours and minutes side by side, the bar along an edge: a colon between (bar_side)
+        StyledText {{
+            {UPRIGHT}
+            Layout.topMargin: -parent.spacing - 4
+            Layout.alignment: Qt.AlignHCenter
+            text: ":"
+            font: root.font.build()
+            color: root.colour
+        }}
+""", "the clock's hours")
+
+    cw = "modules/bar/popouts/ClipWrapper.qml"
+    t = swap(read(cw), "    property real offsetScale: x > 0 || content.hasCurrent ? 0 : 1\n",
+             "    property real offsetScale: content.isDetached || content.hasCurrent ? 0 : 1 // caelestia-overlay: bar_side\n",
+             "the popouts' open")
+    t = swap(t, """    implicitWidth: content.implicitWidth * (1 - offsetScale)
+    implicitHeight: content.implicitHeight
+""", f"""    // caelestia-overlay: the bar along the {side}: the popouts {"under" if top else "over"} it, along it at their entry, sliding
+    // out of it (bar_side)
+    implicitWidth: content.implicitWidth
+    implicitHeight: content.implicitHeight * (1 - offsetScale)
+""", "the popouts' size")
+    t = swap(t, """    y: {
+        if (content.isDetached)
+            return (parent.height - content.nonAnimHeight) / 2;
+
+        const off = content.currentCenter - borderThickness - content.nonAnimHeight / 2;
+        const diff = parent.height - Math.floor(off + content.nonAnimHeight);
+        if (diff < 0)
+            return off + diff;
+        return Math.max(off, 0);
+    }
+""", f"    y: content.isDetached ? (parent.height - content.nonAnimHeight) / 2 : {'0' if top else 'parent.height - height'}\n",
+             "the popouts' place across")
+    t = swap(t, "    x: content.isDetached ? (parent.width - content.nonAnimWidth) / 2 : 0\n", """    x: {
+        if (content.isDetached)
+            return (parent.width - content.nonAnimWidth) / 2;
+
+        const off = content.currentCenter - borderThickness - content.nonAnimWidth / 2;
+        const diff = parent.width - Math.floor(off + content.nonAnimWidth);
+        if (diff < 0)
+            return off + diff;
+        return Math.max(off, 0);
+    }
+""", "the popouts' place along")
+    t = swap(t, "    Behavior on x {\n        Anim {", """    Behavior on x {
+        enabled: root.offsetScale < 1 // caelestia-overlay: from entry to entry along the bar (bar_side)
+
+        Anim {""", "the popouts' easing along")
+    t = swap(t, "    Behavior on y {\n        enabled: root.offsetScale < 1\n",
+             "    Behavior on y {\n        enabled: content.isDetached // caelestia-overlay: bar_side\n", "the popouts' easing across")
+    out[cw] = swap(t, """        anchors.verticalCenter: parent.verticalCenter
+        anchors.left: parent.left
+        anchors.leftMargin: (-implicitWidth - 5) * root.offsetScale""", f"""        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.{side}: parent.{side} // caelestia-overlay: out of the bar along the {side} (bar_side)
+        anchors.{side}Margin: (-implicitHeight - 5) * root.offsetScale""", "the popouts' slide")
+    wr = "modules/bar/popouts/Wrapper.qml"
+    t = swap(read(wr), "    Behavior on implicitWidth {\n        Anim {", """    Behavior on implicitWidth {
+        enabled: root.offsetScale < 1 // caelestia-overlay: the bar across: its width, not its height, set as it opens (bar_side)
+
+        Anim {""", "the popouts' width easing")
+    out[wr] = swap(t, "    Behavior on implicitHeight {\n        enabled: root.offsetScale < 1\n\n", "    Behavior on implicitHeight {\n",
+                   "the popouts' height easing")
+
+    bg = "modules/background/Background.qml"
+    t = read(bg)
+    # (the wallpaper in the frame: wallpaper_in_borders's, when it's on)
+    if "anchors.leftMargin: bar?.exclusiveZone ?? 0\n" in t:
+        t = swap(t, "                readonly property real edge: bar?.width ?? 0\n",
+                 "                readonly property real edge: bar?.implicitWidth ?? 0 // caelestia-overlay: its thickness, whichever its edge (bar_side)\n",
+                 "the wallpaper's edge")
+        t = swap(t, """                anchors.leftMargin: bar?.exclusiveZone ?? 0
+                anchors.topMargin: frame
+                anchors.rightMargin: frame
+                anchors.bottomMargin: frame""", f"""                anchors.leftMargin: frame
+                anchors.topMargin: {"bar?.exclusiveZone ?? 0 // caelestia-overlay: the bar along the top (bar_side)" if top else "frame"}
+                anchors.rightMargin: frame
+                anchors.bottomMargin: {"frame" if top else "bar?.exclusiveZone ?? 0 // caelestia-overlay: the bar along the bottom (bar_side)"}""",
+                 "the wallpaper's frame")
+        t = swap(t, """                    Scale {
+                        xScale: wallpaper.width > 0 ? (win.width - wallpaper.frame - wallpaper.edge) / wallpaper.width : 1
+                    },
+                    Translate {
+                        x: wallpaper.edge - wallpaper.anchors.leftMargin
+                    }""", f"""                    Scale {{
+                        yScale: wallpaper.height > 0 ? (win.height - wallpaper.frame - wallpaper.edge) / wallpaper.height : 1
+                    }},
+                    Translate {{
+                        y: {"wallpaper.edge - wallpaper.anchors.topMargin" if top else "0 // (grown from its top edge)"}
+                    }}""", "the wallpaper's growth")
+    out[bg] = swap(t, "            anchors.leftMargin: Tokens.padding.extraLargeIncreased + Tokens.sizes.bar.innerWidth + Math.max(Tokens.padding.small, Config.border.thickness)\n",
+                   f"            anchors.{side}Margin: Tokens.padding.extraLargeIncreased + Tokens.sizes.bar.innerWidth + Math.max(Tokens.padding.small, Config.border.thickness) // caelestia-overlay: bar_side\n",
+                   "the desktop clock's margin")
+    vi = "modules/background/Visualiser.qml"
+    t = swap(read(vi), "                    anchors.leftMargin: (ShellState.componentsFor(root.screen)?.bar?.exclusiveZone ?? 0) + Tokens.spacing.small * Config.background.visualiser.spacing\n",
+             f"                    anchors.{side}Margin: (ShellState.componentsFor(root.screen)?.bar?.exclusiveZone ?? 0) + Tokens.spacing.small * Config.background.visualiser.spacing // caelestia-overlay: bar_side\n",
+             "the visualiser's margin")
+    out[vi] = swap(t, "                    Behavior on anchors.leftMargin {\n", f"                    Behavior on anchors.{side}Margin {{\n",
+                   "the visualiser's margin's animation")
     return out
 
 
@@ -2835,7 +3069,7 @@ FEATURES = (
     ("lock screen on the main screen only", lock_main_screen),
     ("the bar's popout kept across the gaps between its entries", bar_gaps),
     ("the shell in four windows, each redrawn on its own (less GPU)", split_windows),
-    ("the bar on the right, when Settings puts it there", bar_side),
+    ("the bar on the right, top or bottom, when Settings puts it there", bar_side),
 )
 
 

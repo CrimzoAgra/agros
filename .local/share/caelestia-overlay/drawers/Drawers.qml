@@ -31,10 +31,17 @@ Variants {
         readonly property real screenW: modelData?.width ?? 0
         readonly property real screenH: modelData?.height ?? 0
         readonly property real border: config?.border.thickness ?? 0
-        // The bar on the right (bar_side in patch.py sets this, by the Settings app's bar.side): everything laid out as
-        // with it on the left, then mirrored. Sizes and parts are worked out as for a left bar (in "virtual" x, the
-        // screen seen in a mirror); each window's place, and anything placed by x in screen coordinates, mirrored back
-        readonly property bool barRight: false // bar_side
+        // The bar's edge (bar_side in patch.py sets this, by the Settings app's bar.side): left, right, top or bottom.
+        // On the right: everything laid out as with it on the left, then mirrored. Sizes and parts are worked out as for
+        // a left bar (in "virtual" x, the screen seen in a mirror); each window's place, and anything placed by x in
+        // screen coordinates, mirrored back. Along the top or bottom (across): its window a strip there, holding that
+        // edge's middle panel too (the dashboard under a top bar, the launcher over a bottom one: they come out of the
+        // bar), that panel's own window the left border's column instead; the right window as before
+        readonly property string barEdge: "left" // bar_side
+        readonly property bool barRight: barEdge === "right"
+        readonly property bool barTop: barEdge === "top"
+        readonly property bool barBottom: barEdge === "bottom"
+        readonly property bool barAcross: barTop || barBottom
         // (a rect, mirrored across the screen when the bar is on the right)
         function mr(r: rect): rect {
             return barRight ? Qt.rect(screenW - r.x - r.width, r.y, r.width, r.height) : r;
@@ -43,6 +50,8 @@ Variants {
         function vx(p: Item): real {
             return barRight ? screenW - barWrapper.implicitWidth - border - p.x - p.width : p.x;
         }
+        // (where the inner area starts, in virtual x: after the bar, or the left border with the bar across)
+        readonly property real innerX: barAcross ? border : barWrapper.implicitWidth
         // (the x, in a window, of something width wide against the screen's edge away from the bar: the right one with
         // the bar on the left)
         function edgeX(width: real, win: PartWindow): real {
@@ -70,8 +79,8 @@ Variants {
             readonly property var utilities: rightPanels.utilities
             readonly property var toasts: rightPanels.toasts
             readonly property var sidebar: rightPanels.sidebar
-            readonly property var dashboard: topPanels?.dashboard ?? null
-            readonly property var launcher: bottomPanels?.launcher ?? null
+            readonly property var dashboard: topPanels?.dashboard ?? barPanels?.dashboard ?? null
+            readonly property var launcher: bottomPanels?.launcher ?? barPanels?.launcher ?? null
             readonly property var popoutsWrapper: leftPanels?.popoutsWrapper ?? null
             readonly property var popouts: leftPanels?.popouts ?? null
         }
@@ -84,7 +93,7 @@ Variants {
             panels: shared
             config: scope.config
             bar: barWrapper
-            barRight: scope.barRight
+            barEdge: scope.barEdge
             borderThickness: left.borderLayoutThickness
             fullscreen: left.shellHidden
         }
@@ -94,6 +103,13 @@ Variants {
         readonly property real leftNeeded: {
             const popouts = leftPanels.popouts;
             const bar = Math.max(barWrapper.contentWidth, config?.border.minThickness ?? 0);
+            if (barAcross) {
+                // (across: how deep, with the popouts and the panel it holds under or over it)
+                const open = popouts && (popouts.hasCurrent || leftPanels.popoutsWrapper.height > 0) ? step(popouts.nonAnimHeight) : 0;
+                const m = barPanels.dashboard ?? barPanels.launcher;
+                const held = m?.visible ? step(barPanels.dashboard ? m.nonAnimHeight : m.implicitHeight) : 0;
+                return bar + edge - border + Math.max(open, held);
+            }
             const open = popouts && (popouts.hasCurrent || leftPanels.popoutsWrapper.width > 0) ? step(popouts.nonAnimWidth) : 0;
             return bar + edge - border + open;
         }
@@ -116,26 +132,50 @@ Variants {
         // Only when the dashboard or the launcher, open, reaches past the top window's part (a narrow screen) do the side
         // ones give way, as little as their own panels let them; and a detached popout, in the middle, takes the left
         // window's part across to the right one
+        // (the middle panels of the top and bottom windows: with the bar across, the one not in the bar's window)
+        readonly property var stripPanels: barTop ? [shared.launcher] : barBottom ? [shared.dashboard] : [shared.dashboard, shared.launcher]
         readonly property real centerLeft: {
             let x = screenW;
-            for (const p of [shared.dashboard, shared.launcher])
+            for (const p of stripPanels)
                 if (p?.visible)
-                    x = Math.min(x, barWrapper.implicitWidth + vx(p) - 64);
+                    x = Math.min(x, innerX + vx(p) - 64);
             return x;
         }
         readonly property real centerRight: {
             let x = 0;
-            for (const p of [shared.dashboard, shared.launcher])
+            for (const p of stripPanels)
                 if (p?.visible)
-                    x = Math.max(x, barWrapper.implicitWidth + vx(p) + p.width + 64);
+                    x = Math.max(x, innerX + vx(p) + p.width + 64);
             return x;
         }
+        readonly property bool detached: leftPanels.popouts?.isDetached ?? false
         readonly property real ownRight: Math.max(rightNeeded, Math.min(rightArea.width, screenW - centerRight))
-        readonly property real ownLeft: leftPanels.popouts?.isDetached ? screenW - ownRight : Math.max(leftNeeded, Math.min(leftArea.width, centerLeft))
-        readonly property rect leftOwn: Qt.rect(0, 0, ownLeft, screenH)
-        readonly property rect rightOwn: Qt.rect(screenW - ownRight, 0, ownRight, screenH)
-        readonly property rect topOwn: Qt.rect(ownLeft, 0, Math.max(0, screenW - ownLeft - ownRight), topArea.height)
-        readonly property rect bottomOwn: Qt.rect(ownLeft, screenH - bottomArea.height, Math.max(0, screenW - ownLeft - ownRight), bottomArea.height)
+        // (across: the left border's column, as wide as a window with nothing open)
+        readonly property real ownLeft: barAcross ? edge : detached ? screenW - ownRight : Math.max(leftNeeded, Math.min(leftArea.width, centerLeft))
+        readonly property rect leftOwn: barAcross ? barOwn : Qt.rect(0, 0, ownLeft, screenH)
+        readonly property rect rightOwn: barInCorner ? Qt.rect(screenW - ownRight, barTop ? barOwnDepth : 0, ownRight, screenH - barOwnDepth) : Qt.rect(screenW - ownRight, 0, ownRight, screenH)
+        readonly property rect topOwn: barTop ? columnOwn : barBottom && detached ? Qt.rect(screenW - ownRight, 0, 0, topArea.height) : Qt.rect(ownLeft, 0, Math.max(0, screenW - ownLeft - ownRight), topArea.height)
+        readonly property rect bottomOwn: barBottom ? columnOwn : barTop && detached ? Qt.rect(screenW - ownRight, screenH - bottomArea.height, 0, bottomArea.height) : Qt.rect(ownLeft, screenH - bottomArea.height, Math.max(0, screenW - ownLeft - ownRight), bottomArea.height)
+
+        // The bar across: its window's part the strip along its edge, as deep as its window, to the right window's column;
+        // with something of it open reaching over that column (a popout under the bar's right end, the dashboard under
+        // the clock), across the column too, as deep as what's open, and the right window's part starts under it. The
+        // left border's column (the top or bottom window's) from the strip to the screen's other edge; the other middle
+        // panel's window between that column and the right one. A detached popout: the bar's window everything but the
+        // right column
+        readonly property bool barInCorner: {
+            if (!barAcross || detached)
+                return false;
+            const w = leftPanels.popoutsWrapper;
+            let r = w && w.width > 0 && w.height > 0 ? border + w.x + w.width : 0;
+            const m = barPanels.dashboard ?? barPanels.launcher;
+            if (m?.visible)
+                r = Math.max(r, border + m.x + m.width);
+            return r + (config?.border.rounding ?? 0) > screenW - ownRight;
+        }
+        readonly property real barOwnDepth: barInCorner ? Math.min(leftNeeded, barArea.height) : barArea.height
+        readonly property rect barOwn: detached ? Qt.rect(0, 0, screenW - ownRight, screenH) : Qt.rect(0, barTop ? 0 : screenH - barOwnDepth, barInCorner ? screenW : screenW - ownRight, barOwnDepth)
+        readonly property rect columnOwn: detached ? Qt.rect(0, barTop ? screenH : 0, ownLeft, 0) : Qt.rect(0, barTop ? barOwnDepth : 0, ownLeft, screenH - barOwnDepth)
 
         // How big each window is: room for its panels from the start, grown when something needs more, never shrunk.
         // A window resized as a panel opened or closed showed its old picture at the new size for a frame (a flicker);
@@ -150,7 +190,7 @@ Variants {
         onTopNeededChanged: topHeld = Math.max(topHeld, topNeeded)
         onBottomNeededChanged: bottomHeld = Math.max(bottomHeld, bottomNeeded)
         Component.onCompleted: {
-            leftHeld = Math.max(leftNeeded, Math.min(screenW / 3, leftNeeded + 512));
+            leftHeld = Math.max(leftNeeded, Math.min(barAcross ? screenH / 2 : screenW / 3, leftNeeded + 512));
             // (the sidebar's width is a setting, known while it's closed: the right window as wide as it, or the utilities
             // panel; rarer and wider, toasts beside the open sidebar, grow it once)
             rightHeld = Math.max(rightNeeded, edge + step(Math.max(shared.sidebar?.width || 448, shared.utilities?.implicitWidth ?? 0)));
@@ -159,10 +199,26 @@ Variants {
         }
 
         // (a detached popout is in the middle of the screen: the left window as wide as the screen while it's there)
-        readonly property rect leftArea: Qt.rect(0, 0, leftPanels.popouts?.isDetached ? screenW : Math.min(leftHeld, screenW), screenH)
+        readonly property rect leftArea: barAcross ? barArea : Qt.rect(0, 0, detached ? screenW : Math.min(leftHeld, screenW), screenH)
         readonly property rect rightArea: Qt.rect(screenW - Math.min(rightHeld, screenW), 0, Math.min(rightHeld, screenW), screenH)
-        readonly property rect topArea: Qt.rect(0, 0, screenW, Math.min(topHeld, screenH))
-        readonly property rect bottomArea: Qt.rect(0, screenH - Math.min(bottomHeld, screenH), screenW, Math.min(bottomHeld, screenH))
+        readonly property rect topArea: barTop ? columnArea : Qt.rect(0, 0, screenW, Math.min(topHeld, screenH))
+        readonly property rect bottomArea: barBottom ? columnArea : Qt.rect(0, screenH - Math.min(bottomHeld, screenH), screenW, Math.min(bottomHeld, screenH))
+        // (across: the bar's window a strip along its edge, the whole screen with a detached popout; the left border's)
+        readonly property rect barArea: detached ? Qt.rect(0, 0, screenW, screenH) : Qt.rect(0, barTop ? 0 : screenH - Math.min(leftHeld, screenH), screenW, Math.min(leftHeld, screenH))
+        readonly property rect columnArea: Qt.rect(0, 0, edge, screenH)
+
+        // (a top bar: the dashboard, in the bar's window, drops down under the clock that opened it (bar_side's change to
+        // Bar.qml); opened otherwise (its shortcut), in the middle. Its middle's screen x, -1 for the screen's)
+        property real dashAt: -1
+
+        Connections {
+            function onDashboardChanged(): void {
+                if (scope.screenState.dashboard)
+                    scope.dashAt = scope.barTop && ctl.containsMouse && ctl.mouseY < barWrapper.implicitWidth ? (leftPanels.popouts?.currentCenter ?? -1) : -1;
+            }
+
+            target: scope.screenState
+        }
 
         Exclusions {
             screen: scope.modelData
@@ -174,7 +230,7 @@ Variants {
             id: left
 
             part: "left"
-            barRight: scope.barRight
+            barEdge: scope.barEdge
             screen: scope.modelData
             monitor: scope.monitor
             area: scope.mr(scope.leftArea)
@@ -182,12 +238,29 @@ Variants {
             controller: ctl
             bar: barWrapper
             grabActive: focusGrab.active
+            // (a bottom bar: the launcher's in this window)
+            wantsKeyboard: scope.barBottom && (scope.screenState.launcher || scope.screenState.session)
+            // (across: over the right window, whose part has the bar's far end, and the pointer all along the bar)
+            above: scope.barAcross
 
             regions: [
                 PartRegion {
                     win: left
                     panel: leftPanels.popoutsWrapper
-                    width: panel.width * (1 - leftPanels.popoutsWrapper.offsetScale)
+                    width: scope.barAcross ? panel.width : panel.width * (1 - leftPanels.popoutsWrapper.offsetScale)
+                },
+                Region {
+                    x: -left.area.x
+                    y: (scope.barBottom ? scope.screenH - height : 0) - left.area.y
+                    width: scope.barAcross ? scope.screenW : 0
+                    height: barWrapper.implicitWidth
+                },
+                // (across: the panel of the bar's edge, from that edge, over the bar, to where it's out)
+                PartRegion {
+                    win: left
+                    panel: barPanels.dashboard ?? barPanels.launcher
+                    y: scope.barBottom ? scope.screenH - height - left.area.y : -left.area.y
+                    height: (panel?.height ?? 0) * (1 - ((barPanels.dashboard ?? barPanels.launcher)?.offsetScale ?? 1)) + barWrapper.implicitWidth
                 }
             ]
 
@@ -201,12 +274,22 @@ Variants {
                     win: left
                     panel: leftPanels.popoutsWrapper
                     deformAmount: leftPanels.popouts.isDetached ? 0.05 : leftPanels.popouts.hasCurrent ? 0.15 : 0.1
-                    x: (leftPanels.popoutsWrapper?.x ?? 0) + (leftPanels.popouts?.x ?? 0) + left.innerLeft - (scope.barRight ? 0 : (leftPanels.popouts?.width ?? 0) * extraWidth)
-                    implicitWidth: (leftPanels.popouts?.width ?? 0) * (1 + extraWidth)
+                    x: (leftPanels.popoutsWrapper?.x ?? 0) + (leftPanels.popouts?.x ?? 0) + left.innerLeft - (scope.barRight || scope.barAcross ? 0 : (leftPanels.popouts?.width ?? 0) * extraWidth)
+                    implicitWidth: (leftPanels.popouts?.width ?? 0) * (scope.barAcross ? 1 : 1 + extraWidth)
+                    // (across: the popout as it slides, and taller into the bar instead)
+                    y: (leftPanels.popoutsWrapper?.y ?? 0) + left.innerTop + (scope.barAcross ? (leftPanels.popouts?.y ?? 0) - (scope.barTop ? (leftPanels.popouts?.height ?? 0) * extraWidth : 0) : 0)
+                    implicitHeight: scope.barAcross ? (leftPanels.popouts?.height ?? 0) * (1 + extraWidth) : (leftPanels.popoutsWrapper?.height ?? 0)
 
                     Behavior on extraWidth {
                         Anim {}
                     }
+                },
+                PartBg {
+                    id: barPanelBg
+
+                    win: left
+                    panel: barPanels.dashboard ?? barPanels.launcher
+                    deformAmount: 0.1
                 }
             ]
 
@@ -214,7 +297,7 @@ Variants {
                 id: leftPanels
 
                 part: "left"
-                barRight: scope.barRight
+                barEdge: scope.barEdge
                 screen: scope.modelData
                 screenState: scope.screenState
                 bar: barWrapper
@@ -224,12 +307,30 @@ Variants {
                 deform: popoutBg.deformMatrix
             }
 
+            // (across: the dashboard under a top bar, the launcher over a bottom one)
+            PanelsEdge {
+                id: barPanels
+
+                part: scope.barTop ? "top" : scope.barBottom ? "bottom" : "none"
+                barEdge: scope.barEdge
+                screen: scope.modelData
+                screenState: scope.screenState
+                bar: barWrapper
+                borderThickness: left.borderThickness
+                panels: shared
+                dashboardAt: scope.dashAt
+
+                deform: barPanelBg.deformMatrix
+            }
+
             Bar.BarWrapper {
                 id: barWrapper
 
-                anchors.top: parent.top
-                anchors.bottom: parent.bottom
+                // (across: a strip along the top or bottom, as thick as its implicitWidth, whichever its edge)
                 x: scope.barRight ? parent.width - width : 0
+                y: scope.barBottom ? parent.height - height : 0
+                width: scope.barAcross ? parent.width : implicitWidth
+                height: scope.barAcross ? implicitWidth : parent.height
 
                 screen: scope.modelData
                 screenState: scope.screenState
@@ -244,7 +345,7 @@ Variants {
             id: right
 
             part: "right"
-            barRight: scope.barRight
+            barEdge: scope.barEdge
             screen: scope.modelData
             monitor: scope.monitor
             area: scope.mr(scope.rightArea)
@@ -360,7 +461,7 @@ Variants {
             PanelsRight {
                 id: rightPanels
 
-                barRight: scope.barRight
+                barEdge: scope.barEdge
                 screen: scope.modelData
                 screenState: scope.screenState
                 bar: barWrapper
@@ -393,7 +494,7 @@ Variants {
             id: top
 
             part: "top"
-            barRight: scope.barRight
+            barEdge: scope.barEdge
             screen: scope.modelData
             monitor: scope.monitor
             area: scope.mr(scope.topArea)
@@ -407,7 +508,7 @@ Variants {
                     win: top
                     panel: topPanels.dashboard
                     y: -top.area.y
-                    height: panel.height * (1 - topPanels.dashboard.offsetScale) + scope.border
+                    height: (panel?.height ?? 0) * (1 - (topPanels.dashboard?.offsetScale ?? 1)) + scope.border
                 }
             ]
 
@@ -424,8 +525,8 @@ Variants {
             PanelsEdge {
                 id: topPanels
 
-                part: "top"
-                barRight: scope.barRight
+                part: scope.barTop ? "none" : "top"
+                barEdge: scope.barEdge
                 screen: scope.modelData
                 screenState: scope.screenState
                 bar: barWrapper
@@ -441,7 +542,7 @@ Variants {
             id: bottom
 
             part: "bottom"
-            barRight: scope.barRight
+            barEdge: scope.barEdge
             screen: scope.modelData
             monitor: scope.monitor
             area: scope.mr(scope.bottomArea)
@@ -449,14 +550,14 @@ Variants {
             controller: ctl
             bar: barWrapper
             grabActive: focusGrab.active
-            wantsKeyboard: scope.screenState.launcher || scope.screenState.session
+            wantsKeyboard: !scope.barBottom && (scope.screenState.launcher || scope.screenState.session)
 
             regions: [
                 PartRegion {
                     win: bottom
                     panel: bottomPanels.launcher
                     y: scope.screenH - height - bottom.area.y
-                    height: panel.height * (1 - bottomPanels.launcher.offsetScale) + scope.border
+                    height: (panel?.height ?? 0) * (1 - (bottomPanels.launcher?.offsetScale ?? 1)) + scope.border
                 }
             ]
 
@@ -473,8 +574,8 @@ Variants {
             PanelsEdge {
                 id: bottomPanels
 
-                part: "bottom"
-                barRight: scope.barRight
+                part: scope.barBottom ? "none" : "bottom"
+                barEdge: scope.barEdge
                 screen: scope.modelData
                 screenState: scope.screenState
                 bar: barWrapper

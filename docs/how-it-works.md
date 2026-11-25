@@ -368,11 +368,18 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
   longer fits a new Caelestia version is skipped, not broken; one that still fits but whose QML no longer loads (a
   renamed Caelestia component) is reported by `agros-check`
   - Bar:
-    - On the left or the right (Settings › Panels › Bar › Position, `bar.side`; `bar_side` in `patch.py`, the shell
-      rebuilt): on the right, the split windows' layout (`drawers/`, `barRight`) is the left one mirrored: the bar and
-      its popouts on the right, the volume pop-up, quick settings, power menu and notification sidebar against the left
-      edge, the pointer's rules worked out as with the bar on the left (`Controller.qml`'s `mx`/`vx`); the wallpaper's
-      frame, the border's exclusive zones and the clock's and visualiser's margins follow it. Top and bottom: not yet
+    - On any edge (Settings › Panels › Bar › Position, `bar.side`; `bar_side` in `patch.py`, the shell rebuilt;
+      `caelestia-overlay`'s build checksum includes it): on the right, the split windows' layout (`drawers/`, `barEdge`)
+      is the left one mirrored: the bar and its popouts on the right, the volume pop-up, quick settings, power menu and
+      notification sidebar against the left edge, the pointer's rules worked out as with the bar on the left
+      (`Controller.qml`'s `mx`/`vx`). Along the top or bottom (`bar_across`): the same bar turned a quarter (its own
+      layout, hit tests and popout places unchanged: its y is the screen's x), each icon and text turned back upright;
+      its popouts under or over it; its window a strip along that edge, above the right one (whose part has the bar's
+      far end), holding that edge's middle panel too: the dashboard drops down under a top bar's clock (in its
+      calendar's place), the Super menu rises over a bottom bar; the other panels stay where they are, after the bar.
+      The controller works in the bar's terms there (`bu`/`bv`: across it, along it); the edge hovers the bar covers
+      are off (the notification sidebar's under a top bar: Super+K; the utilities' over a bottom one). The wallpaper's
+      frame, the border's exclusive zones and the clock's and visualiser's margins follow the bar on every edge
     - A dock (`Dock.qml`, `DockMenu.qml`): pinned apps and open windows, Force quit; minimised windows dimmed; a
       click on a window or its preview brings it to the front. Turned off, its place is kept (the workspaces, tray and
       clock stay put)

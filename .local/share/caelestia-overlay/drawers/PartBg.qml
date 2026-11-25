@@ -13,7 +13,7 @@ BlobRect {
 
     group: win.blobGroup
     x: (panel?.x ?? 0) + win.innerLeft
-    y: (panel?.y ?? 0) + win.borderThickness
+    y: (panel?.y ?? 0) + win.innerTop
     implicitWidth: panel?.width ?? 0
     implicitHeight: panel?.height ?? 0
     radius: Tokens.rounding.extraLarge

@@ -10,8 +10,8 @@ Region {
     required property PartWindow win
     required property Item panel
 
-    x: (panel?.x ?? 0) + (win.barRight ? win.contentItem.Config.border.thickness : win.barWidth) - win.area.x
-    y: (panel?.y ?? 0) + win.contentItem.Config.border.thickness - win.area.y
+    x: (panel?.x ?? 0) + (win.barEdge === "left" ? win.barWidth : win.contentItem.Config.border.thickness) - win.area.x
+    y: (panel?.y ?? 0) + (win.barEdge === "top" ? win.barWidth : win.contentItem.Config.border.thickness) - win.area.y
     width: panel?.width ?? 0
     height: panel?.height ?? 0
     intersection: Intersection.Combine
