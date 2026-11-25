@@ -157,7 +157,7 @@ Singleton {
         for (const p of pages)
             for (const g of p.groups ?? [])
                 for (const s of g.settings ?? [])
-                    m[s.key] = s;
+                    m[s.key] = m[s.key] ?? s; // (the first: "caelestia", every option again, names them by their path only)
         byKey = m;
     }
 

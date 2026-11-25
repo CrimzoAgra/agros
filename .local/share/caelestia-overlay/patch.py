@@ -932,6 +932,24 @@ def nexus_pages():
         "modules/nexus/pages/ServicesPage.qml": fold("modules/nexus/pages/ServicesPage.qml", """            pageIds: ["notifs", "region"]
 """),
     }
+    # Wallpaper & style: those screens in the place of its one preview, with more than one screen
+    style = folded["modules/nexus/pages/WallpaperAndStyle.qml"]
+    style = swap(style, """        StyledClippingRect {
+            id: wallWrapper
+""", """        // caelestia-overlay: the screens, each with its wallpaper (AgrosScreenWalls.qml), with more than one; the
+        // preview with one
+        AgrosScreenWalls {
+            id: screenWalls
+
+            Layout.fillWidth: true
+        }
+
+        StyledClippingRect {
+            id: wallWrapper
+
+            visible: !screenWalls.visible
+""", "Wallpaper & style's preview")
+    folded["modules/nexus/pages/WallpaperAndStyle.qml"] = style
     # Wallpapers: the screens first, as arranged, each with its wallpaper, one clicked to give it its own
     # (AgrosScreenWalls.qml); at the page's end if its buttons have moved
     walls = read("modules/nexus/pages/wallandstyle/WallpaperSelect.qml")

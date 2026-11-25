@@ -259,6 +259,23 @@ ClippingRectangle {
         }
     }
 
+    // A window just opened: the windows read again a moment later. Settings (Nexus) is titled before it opens; the read
+    // that title asked for, from before it was there, was the one its opening got too: not in the dock till a focus change
+    Connections {
+        target: Hyprland
+        function onRawEvent(event: HyprlandEvent): void {
+            if (event.name === "openwindow")
+                reread.restart();
+        }
+    }
+
+    Timer {
+        id: reread
+
+        interval: 300
+        onTriggered: Hyprland.refreshToplevels()
+    }
+
     function close(win: HyprlandToplevel): void {
         Hypr.dispatch(`hl.dsp.window.close({ window = "address:0x${win.address}" })`);
     }

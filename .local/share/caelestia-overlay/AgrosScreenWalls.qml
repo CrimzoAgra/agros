@@ -107,7 +107,7 @@ ColumnLayout {
         visible: !root.selected
         Layout.leftMargin: Tokens.padding.small
         Layout.topMargin: Tokens.spacing.small
-        text: "Click a screen to give it a wallpaper of its own. The ones below go on the screens without one."
+        text: "Click a screen to give it a wallpaper of its own. Screens without one share the main wallpaper."
         color: Colours.palette.m3outline
         font: Tokens.font.label.medium
         wrapMode: Text.Wrap
