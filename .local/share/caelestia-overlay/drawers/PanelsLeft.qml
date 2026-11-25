@@ -81,6 +81,7 @@ Item {
 
                 LayoutMirroring.enabled: true
                 screenState: root.screenState
+                fromBottom: true
 
                 // PanelsRight.qml's turned over: above the pop-ups, as tall as what's in it, at most half the screen;
                 // closed, both edges as far down, out of sight below the screen; its bottom stays on the border as
@@ -113,6 +114,7 @@ Item {
                 sidebar: root.others.sidebar
                 popouts: root.popouts
                 horizontalStretch: 1
+                fromTop: true
                 deformMatrix: root.rawDeform
 
                 // (dropping down from the top: its slide on the top, not the bottom)

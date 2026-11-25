@@ -368,7 +368,8 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
   longer fits a new Caelestia version is skipped, not broken; one that still fits but whose QML no longer loads (a
   renamed Caelestia component) is reported by `agros-check`
   - Bar:
-    - On any edge (Settings › Panels › Bar › Position, `bar.side`; `bar_side` in `patch.py`, the shell rebuilt;
+    - On any edge, the bottom by default (Settings › Panels › Taskbar › Position and Home's Look card, `bar.side`;
+      `bar_side` in `patch.py`, the shell rebuilt;
       `caelestia-overlay`'s build checksum includes it): on the right, the split windows' layout (`drawers/`, `barEdge`)
       is the left one mirrored: the bar and its popouts on the right, the volume pop-up, quick settings, power menu and
       notification sidebar against the left edge, the pointer's rules worked out as with the bar on the left
@@ -381,10 +382,14 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
       centre and its pop-ups at the bottom-left (opened from the bottom edge there), a bottom bar's keep-awake panel
       (utilities) at the top-left (from that corner); the others stay where they are, after the bar. The controller
       works in the bar's terms there (`bu`/`bv`: across it, along it). The wallpaper's
-      frame, the border's exclusive zones and the clock's and visualiser's margins follow the bar on every edge
+      frame, the border's exclusive zones and the clock's and visualiser's margins follow the bar on every edge. A
+      panel moved to another edge keeps its larger spacing on its inner sides (`fromTop`, `fromBottom`, mirroring:
+      `split_windows`). Over a bottom bar the open launcher keeps the bar's popouts shut (they'd run into its shape)
     - A dock (`Dock.qml`, `DockMenu.qml`): pinned apps and open windows, Force quit; minimised windows dimmed; a
       click on a window or its preview brings it to the front. Turned off, its place is kept (the workspaces, tray and
-      clock stay put)
+      clock stay put). It sits on the bar's middle whatever is beside it (shorter and scrolling if they crowd it); a new
+      icon grows in, the dock with it. Along the top or bottom the open windows are right of the pinned apps. Its
+      switches are on Settings › Panels › Taskbar › Dock (`AgrosBarDock.qml`)
     - A window's icon found by one lookup for the bar, the dock and Alt+Tab (`.config/quickshell/common/WindowApps.qml`:
       Quickshell's, else `.local/bin/app-for-window`: the class's last part, a Flatpak's id, the window's program)
     - Right-clicking the empty bar between the workspaces and the tray (not on the dock) opens a menu (`BarMenu.qml`)
@@ -433,7 +438,8 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
     over the bar, one dragged to the left edge to snap it (`edge_triggers`)
   - Notifications:
     - The sidebar slides down from the top when you hover the top edge above it, with notifications only (no
-      divider, ending above the bottom-right panel); Super+N (the letter) opens it alone, and Super+K (Caelestia's
+      divider, as tall as its notifications, at most half the screen, a shadow at its bottom while it scrolls:
+      `sidebar_fit`); Super+N (the letter) opens it alone, and Super+K (Caelestia's
       "show all": the launcher, dashboard, volume slider and bottom-right panel, Caelestia's utilities: quick settings)
       opens it too, merged with the bottom-right panel. The launcher closing (Esc) closes them all unless hovered
       (Caelestia's left the bottom-right panel open)

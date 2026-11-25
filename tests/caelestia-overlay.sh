@@ -94,8 +94,11 @@ for f in "$i" "$dst/modules/drawers/SnapPreview.qml"; do
 done
 # ...nor the bar's popouts on hover while a window is dragged over the bar (one dragged to the left edge to snap it
 # opened the dock's): the bar then as if the pointer were off it, whose path closes an open one
-grep -qx '        if (onBar(x, y) && !WindowDrag.dragging) {' "$i" ||
+grep -qx '        if (onBar(x, y) && !WindowDrag.dragging && !(barBottom && screenState.launcher)) {' "$i" ||
     fail "the bar's popouts open on hover while a window is dragged: $(grep -F 'if (onBar(x, y)' "$i")"
+# ...nor over a bottom bar while the launcher is open over it (a popout's shape would run into the launcher's), shut as
+# it opens
+grep -q 'if (root.screenState.launcher && root.barBottom)' "$i" || fail "a bottom bar's popout left open under the launcher"
 grep -q '^            popouts.hasCurrent = false;' <<<"$(grep -A2 -F '        } else if ((!popouts.currentName.startsWith("traymenu")' "$i")" ||
     fail "the bar's popouts not closed off the bar"
 # The panels' edge hover (edgeHover): opens only at the edge, with no button held and no window dragged; an open one
@@ -169,9 +172,12 @@ icons=$(sed -n 's/^ *roleValue: "\(.*\)"$/\1/p' /etc/xdg/quickshell/caelestia/mo
 ours=$(python3 -c 'import json, sys; print(*sorted(i["id"] for i in json.load(open(sys.argv[1]))["bar"]["statusIcons"]), sep="\n")' \
     "$here/.config/caelestia/shell.json")
 [[ -n $icons && $icons == "$ours" ]] || fail "shell.json's status icons aren't Caelestia's: $(paste -sd' ' <<<"$ours") / $(paste -sd' ' <<<"$icons")"
-# Its grey card hangs from the top border when it slides down from the top: flush with it, top corners square
+# Its grey card hangs from the top border when it slides down from the top: flush with it, top corners square (rising
+# from the bottom, PanelsLeft.qml's: the bottom ones, flush with that)
 c=$dst/modules/sidebar/Content.qml
-{ grep -q 'topLeftRadius: 0' "$c" && grep -q 'topRightRadius: 0' "$c" && grep -q 'anchors.topMargin: 0' "$w"; } ||
+{ grep -q 'topLeftRadius: root.fromBottom ? radius : 0' "$c" && grep -q 'bottomRightRadius: root.fromBottom ? 0 : radius' "$c" &&
+    grep -q 'anchors.topMargin: root.fromBottom ? Tokens.padding.large - 2 : 0' "$w" &&
+    grep -q 'fromBottom: true' "$dst/modules/drawers/PanelsLeft.qml" && grep -q 'fromTop: true' "$dst/modules/drawers/PanelsLeft.qml"; } ||
     fail "the sidebar's card not flush with the top border: $(grep -n 'Radius\|topMargin' "$c" "$w")"
 # ...and its top stays on the border as the opening curve overshoots (an inward notch at its top-left for a moment)
 grep -q 'anchors.topMargin: -notifications.anchors.topMargin - Math.max(0, slide)' "$dst/modules/drawers/Panels.qml" ||

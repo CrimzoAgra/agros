@@ -200,7 +200,7 @@ Scope {
         interval: 300
         onTriggered: {
             root.aimAnchor = Qt.point(root.bu(root.mouseX, root.mouseY), root.bv(root.mouseX, root.mouseY));
-            if (root.containsMouse && root.onBar(root.mouseX, root.mouseY))
+            if (root.containsMouse && root.onBar(root.mouseX, root.mouseY) && !(root.barBottom && root.screenState.launcher))
                 root.bar.checkPopout(root.aimY);
         }
     }
@@ -436,8 +436,9 @@ Scope {
             utilitiesShortcutActive = false;
         }
 
-        // Show popouts on hover
-        if (onBar(x, y) && !WindowDrag.dragging) {
+        // Show popouts on hover (not while the launcher is open over a bottom bar: in the bar's window, over the dock,
+        // a popout's shape would run into its own)
+        if (onBar(x, y) && !WindowDrag.dragging && !(barBottom && screenState.launcher)) {
             root.aimPopout(x, y);
         } else if ((!popouts.currentName.startsWith("traymenu") || ((popouts.current as StackView)?.depth ?? 0) <= 1) && !inLeftPanel(panels.popoutsWrapper, x, y)) {
             popouts.hasCurrent = false;
@@ -448,6 +449,9 @@ Scope {
     // Monitor individual visibility changes
     property Connections stateChanges: Connections {
         function onLauncherChanged() {
+            // (a bottom bar's popout shut as the launcher opens over it)
+            if (root.screenState.launcher && root.barBottom)
+                root.popouts.hasCurrent = false;
             // If launcher is hidden, clear shortcut flags for dashboard and OSD
             if (!root.screenState.launcher) {
                 root.dashboardShortcutActive = false;

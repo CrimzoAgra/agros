@@ -2876,8 +2876,55 @@ def split_windows():
     inputs = hashlib.sha256("".join(read(f"modules/drawers/{n}") for n in SPLIT_READS).encode()).hexdigest()
     if inputs != SPLIT_INPUTS:
         raise LookupError(f"the drawers files changed since drawers/ was made from them (now {inputs})")
-    return {f"modules/drawers/{n}": own(f"drawers/{n}") for n in sorted(os.listdir(os.path.join(here, "drawers")))
-            if n.endswith(".qml")}
+    out = {f"modules/drawers/{n}": own(f"drawers/{n}") for n in sorted(os.listdir(os.path.join(here, "drawers")))
+           if n.endswith(".qml")}
+    # The notification sidebar and the utilities panel where PanelsLeft.qml and a mirrored PanelsRight.qml put them:
+    # each keeps the larger spacing on its inner sides and the smaller (the border makes up the rest) on the screen's
+    # edges, wherever those are (Caelestia's margins are for the right edge, and the top or bottom one; mirroring moves
+    # the panel, not its content's margins): on the left when mirrored, at the top for a utilities panel hanging from
+    # it (fromTop), at the bottom for a sidebar rising from it (fromBottom; its card's square corners there too)
+    sidebar = swap(read("modules/sidebar/Wrapper.qml"), """        anchors.leftMargin: Tokens.padding.large
+        anchors.margins: CUtils.clamp(anchors.leftMargin - Config.border.thickness, 0, anchors.leftMargin)
+        anchors.bottomMargin: anchors.leftMargin - 2
+        anchors.topMargin: 0
+""", """        // caelestia-overlay (split_windows): the smaller spacing on the screen's edges, wherever they are
+        anchors.leftMargin: root.LayoutMirroring.enabled ? root.edgePadding : Tokens.padding.large
+        anchors.margins: root.edgePadding
+        anchors.bottomMargin: root.fromBottom ? 0 : Tokens.padding.large - 2
+        anchors.topMargin: root.fromBottom ? Tokens.padding.large - 2 : 0
+""", "sidebar content margins")
+    sidebar = swap(sidebar, "            implicitWidth: Tokens.sizes.sidebar.width - content.anchors.leftMargin - content.anchors.margins\n",
+                   "            implicitWidth: Tokens.sizes.sidebar.width - Tokens.padding.large - root.edgePadding\n"
+                   "            fromBottom: root.fromBottom\n", "sidebar content width")
+    sidebar = insert(sidebar, "    readonly property Props props: Props {}\n", """    // caelestia-overlay (split_windows): rising from the bottom (PanelsLeft.qml); its spacing on the screen's edges
+    property bool fromBottom
+    readonly property real edgePadding: CUtils.clamp(Tokens.padding.large - Config.border.thickness, 0, Tokens.padding.large)
+""", before=False)
+    content = swap(read("modules/sidebar/Content.qml"), """            topLeftRadius: 0
+            topRightRadius: 0
+""", """            topLeftRadius: root.fromBottom ? radius : 0
+            topRightRadius: root.fromBottom ? radius : 0
+            bottomLeftRadius: root.fromBottom ? 0 : radius
+            bottomRightRadius: root.fromBottom ? 0 : radius
+""", "sidebar card corners")
+    content = insert(content, "    required property ScreenState screenState\n",
+                     "    // caelestia-overlay (split_windows): rising from the bottom, its square corners there\n"
+                     "    property bool fromBottom\n", before=False)
+    utilities = swap(read("modules/utilities/Wrapper.qml"), """        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.margins: Tokens.padding.large
+""", """        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.margins: Tokens.padding.large
+        // caelestia-overlay (split_windows): the smaller spacing on the screen's edges, wherever they are
+        anchors.leftMargin: root.LayoutMirroring.enabled ? root.totalPadding - anchors.margins : anchors.margins
+        anchors.topMargin: root.fromTop ? root.totalPadding - anchors.margins : anchors.margins
+""", "utilities content margins")
+    utilities = insert(utilities, "    property real horizontalStretch\n",
+                       "    // caelestia-overlay (split_windows): hanging from the top (PanelsLeft.qml)\n    property bool fromTop\n",
+                       before=False)
+    return out | {"modules/sidebar/Wrapper.qml": sidebar, "modules/sidebar/Content.qml": content,
+                  "modules/utilities/Wrapper.qml": utilities}
 
 
 def bar_side():
@@ -2887,7 +2934,8 @@ def bar_side():
     # edge), the popouts beside it (and sliding out of it), the border's exclusive zones (the bar's on the right, a
     # border's on the left), the wallpaper's frame (wallpaper_in_borders: its margins, and its growth as the bar comes
     # in), the music visualiser's and the desktop clock's margin. The panels on the right edge move to the left one
-    # (drawers/PanelsRight.qml). Along the top or bottom: bar_across. Left (the default), nothing changes
+    # (drawers/PanelsRight.qml). Along the top or bottom: bar_across. Left (Caelestia's own; AgrOS's default is the
+    # bottom), nothing changes
     side = setting_values().get("bar.side")
     if side not in ("right", "top", "bottom"):
         return {}

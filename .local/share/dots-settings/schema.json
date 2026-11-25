@@ -515,7 +515,7 @@
               "label": "Bar position",
               "description": "The screen edge it's on; the panels there move out of its way. The shell restarts to move it.",
               "type": "choice",
-              "default": "left",
+              "default": "bottom",
               "options": [
                 {"value": "left", "label": "Left"},
                 {"value": "right", "label": "Right"},
