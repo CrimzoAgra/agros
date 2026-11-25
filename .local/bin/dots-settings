@@ -7,7 +7,7 @@ The list of settings, their defaults and how each one applies: ~/.local/share/do
   dots-settings values               every setting's current value, as JSON (for scripts; not Caelestia's options
                                      nor the screens', which get has)
   dots-settings now                  every setting's current value, Caelestia's and the screens' too, as JSON: the
-                                     Settings app's look every few seconds (no option lists, no shortcut list)
+                                     Settings app's look every few seconds (no option lists, no shortcut list, no hidden one)
   dots-settings get KEY              one setting's current value, as JSON
   dots-settings set KEY VALUE        change it (VALUE as JSON: true, "tiling"...) and apply it
   dots-settings set KEY VALUE --later  change it, and print how to apply it (to apply several changes once)
