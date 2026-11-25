@@ -402,7 +402,7 @@ new=$(lint_new /etc/xdg/quickshell/caelestia "$right")
 grep -qF 'startswith("caelestia.") or . == "bar.side"' "$here/.local/bin/caelestia-overlay" || fail "moving the bar in Settings doesn't rebuild the shell"
 
 # ...along the top or bottom: the bar turned a quarter, its icons and texts upright, its popouts under or over it, the
-# zones and the wallpaper's frame on its edge; a top bar's clock opens the dashboard
+# zones and the wallpaper's frame on its edge, the dock's open apps right of its pins; a top bar's clock opens the dashboard
 for side in top bottom; do
     printf '#!/bin/sh\necho "{\\"bar.side\\": \\"%s\\"}"\n' "$side" >"$t/bin/dots-settings-$side"; chmod +x "$t/bin/dots-settings-$side"
     across=$t/$side-dst
@@ -416,7 +416,8 @@ for side in top bottom; do
         (($(grep -rc 'rotation: 90 // caelestia-overlay: upright' "$across/modules/bar" | awk -F: '{s += $2} END {print s}') >= 17)) &&
         grep -q "anchors.$side: parent.$side // caelestia-overlay: out of the bar along the $side" "$across/modules/bar/popouts/ClipWrapper.qml" &&
         grep -q "anchors.${side}Margin: bar?.exclusiveZone ?? 0 // caelestia-overlay: the bar along the $side" "$across/modules/background/Background.qml" &&
-        grep -q "Behavior on anchors.${side}Margin" "$across/modules/background/Visualiser.qml"; } || fail "the bar along the $side not laid out for it"
+        grep -q "Behavior on anchors.${side}Margin" "$across/modules/background/Visualiser.qml" &&
+        grep -q 'readonly property bool pinsFirst: true' "$across/modules/bar/components/Dock.qml"; } || fail "the bar along the $side not laid out for it"
     if [[ $side == top ]]; then grep -q 'clockDashboard = true;' "$across/modules/bar/Bar.qml" || fail "a top bar's clock doesn't open the dashboard"
     else grep -q 'clockDashboard' "$across/modules/bar/Bar.qml" && fail "a bottom bar's clock opens the dashboard"; fi
     new=$(lint_new /etc/xdg/quickshell/caelestia "$across")

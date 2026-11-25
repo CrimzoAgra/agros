@@ -37,6 +37,8 @@ ClippingRectangle {
     property real dragY
     readonly property bool dragging: dragFrom >= 0
     readonly property int firstPinned: items.findIndex(i => i.pinned)
+    // The bar along the top or bottom: the pinned apps first and the open ones after them, on their right (bar_side)
+    readonly property bool pinsFirst: false
     // Set by the first focus change Hyprland reports (after that, an empty workspace means no window has focus)
     property bool focusKnown: false
     // Window addresses, the last focused first: which of an app's windows its icon brings up
@@ -57,7 +59,8 @@ ClippingRectangle {
     // details that never goes away (a gear icon nothing could close)
     readonly property var wins: Hypr.toplevels.values.filter(t => t.lastIpcObject?.mapped && monitor?.activeWorkspace && (t.workspace?.id === monitor.activeWorkspace.id || t.workspace?.name === `special:minimised-${monitor.activeWorkspace.id}`) && !Hypr.isToplevelIgnored(t, ["xwl_popup"]))  // not menus/popups of X11 apps (e.g. Steam's top menus)
 
-    // One icon per app: the apps with windows open that aren't pinned first, then the pinned apps. wins: the app's
+    // One icon per app: the apps with windows open that aren't pinned first, then the pinned apps (pinsFirst: the other
+    // way round). wins: the app's
     // windows here (in the order they opened); win: the one its icon brings up (the focused one, else the last focused)
     readonly property var items: {
         if (!DesktopEntries.applications.values.length)
@@ -90,9 +93,8 @@ ClippingRectangle {
             const entry = entryFor(windowId(ws[0].lastIpcObject));
             return { uid: "app:" + k, key: entry?.id ?? k, entry, wins: ws, win: pick(ws), pinned: false };
         });
-        if (out.length && pinned.length)
-            out.push({ uid: "sep", sep: true });
-        return out.concat(pinned);
+        const sep = out.length && pinned.length ? [{ uid: "sep", sep: true }] : [];
+        return pinsFirst ? pinned.concat(sep, out) : out.concat(sep, pinned);
     }
 
     // A window's (or pinned app's) app file: the one lookup the bar and switcher use too (WindowApps.qml, as
@@ -118,9 +120,19 @@ ClippingRectangle {
 
     // Lowest index a dragged item can land on (only the pinned group can be reordered)
     function minDropIndex(): int {
+        if (pinsFirst)
+            return 0;
         if (firstPinned < 0)
             return items.length;
         return dragFrom < firstPinned ? firstPinned - 1 : firstPinned;
+    }
+
+    // And the highest (pinsFirst: an open app's onto the separator, after the last pin)
+    function maxDropIndex(): int {
+        if (!pinsFirst)
+            return items.length - 1;
+        const pins = items.filter(i => i.pinned).length;
+        return items[dragFrom]?.pinned ? pins - 1 : pins;
     }
 
     function updateDrag(y: real): void {
@@ -133,7 +145,7 @@ ClippingRectangle {
         }
         if (y >= column.implicitHeight)
             to = items.length - 1;
-        dragTo = to < minDropIndex() ? dragFrom : to;
+        dragTo = to < minDropIndex() || to > maxDropIndex() ? dragFrom : to;
 
         // Scroll when dragging near the top or bottom edge
         const vy = y - flick.contentY;
@@ -154,7 +166,7 @@ ClippingRectangle {
         if (!moved?.entry && !moved?.pinned)
             return;
         const order = items.filter(i => i.pinned && i !== moved).map(i => i.key);
-        const at = Math.max(0, Math.min(order.length, to - firstPinned + (from < firstPinned ? 1 : 0)));
+        const at = Math.max(0, Math.min(order.length, pinsFirst ? to : to - firstPinned + (from < firstPinned ? 1 : 0)));
         order.splice(at, 0, moved.key);
         // Keep pins whose app isn't installed right now
         const next = order.concat(pins.filter(p => !order.includes(p) && !order.includes(keyFor(p))));

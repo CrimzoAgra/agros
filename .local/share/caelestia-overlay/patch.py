@@ -2913,6 +2913,9 @@ def bar_across(side):
         for o in openings:
             t = upright(t, o, f"{rel}'s {o.split()[0].removeprefix('delegate:')}")
         out[comps + rel] = t
+    # The dock's open apps on the right of its pinned ones, where a turned column would put them on the left
+    out[comps + "Dock.qml"] = swap(out[comps + "Dock.qml"], "    readonly property bool pinsFirst: false\n",
+                                   "    readonly property bool pinsFirst: true\n", "the dock's order")
     # (the clock's hours and minutes side by side now: a colon between them)
     out[comps + "Clock.qml"] = swap(out[comps + "Clock.qml"], """        Digits {
             Layout.alignment: Qt.AlignHCenter
