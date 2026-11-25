@@ -1035,6 +1035,41 @@ def nexus_pages():
         // Behaviour
         SectionHeader {
 """, "the taskbar page's first section")
+        # ...and the dock among its components, after the clock: its page (AgrosBarDock.qml) the sub-page after the
+        # clock's, the 12th (Panels' stack: its 6 pages, then the bar's 5 components)
+        taskbar = swap(taskbar, """        NavRow {
+            last: true
+            icon: "schedule"
+            text: Tr.tr("Clock")
+            subtext: Tr.tr("Date, icon, background")
+            onClicked: root.nState.openSubPage(10)
+        }
+""", """        NavRow {
+            icon: "schedule"
+            text: Tr.tr("Clock")
+            subtext: Tr.tr("Date, icon, background")
+            onClicked: root.nState.openSubPage(10)
+        }
+
+        // caelestia-overlay: AgrOS's dock
+        NavRow {
+            last: true
+            icon: "apps"
+            text: "Dock"
+            subtext: "Pinned apps and open windows"
+            onClicked: root.nState.openSubPage(11)
+        }
+""", "the taskbar page's clock row")
+        comps = swap(comps, """                Component {
+                    BarClock {}
+                }
+""", """                Component {
+                    BarClock {}
+                }
+                Component {
+                    AgrosBarDock {}
+                }
+""", "the clock's sub-page")
     except LookupError:
         taskbar = None
     folded = {
@@ -1118,7 +1153,8 @@ PageBase {
                        "modules/nexus/common/AgrosSkeleton.qml", "modules/nexus/common/AgrosScreenWalls.qml",
                        "modules/nexus/common/AgrosSearch.qml",
                        "modules/nexus/pages/AgrosPage.qml", "modules/nexus/pages/AgrosHome.qml",
-                       "modules/nexus/pages/AgrosDisplay.qml", "modules/nexus/pages/AgrosUpdates.qml")
+                       "modules/nexus/pages/AgrosDisplay.qml", "modules/nexus/pages/AgrosUpdates.qml",
+                       *(["modules/nexus/pages/AgrosBarDock.qml"] if taskbar else []))
     # Caelestia's options Nexus's own pages set (GlobalConfig.bar.persistent...), by their path: not shown again
     covered = set()
     for dirpath, _, names in os.walk(os.path.join(src, "modules/nexus")):

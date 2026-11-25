@@ -294,8 +294,12 @@ ClippingRectangle {
 
     implicitWidth: Tokens.sizes.bar.innerWidth
     implicitHeight: column.implicitHeight + Tokens.padding.small * 2
-    height: Math.min(implicitHeight, parent?.height ?? implicitHeight)
-    anchors.verticalCenter: parent?.verticalCenter
+    // On the bar's middle, wherever its entry is and whatever's beside it (the bar's own length, not the room between
+    // its neighbours): as long as it fits there, its room as far as the nearer end of its entry (then it scrolls)
+    readonly property Item bar: parent?.parent ?? null
+    readonly property real middle: bar ? bar.height / 2 - parent.y : (parent?.height ?? 0) / 2
+    height: Math.max(0, Math.min(implicitHeight, 2 * Math.min(middle, (parent?.height ?? 0) - middle)))
+    y: middle - height / 2
 
     color: items.length ? Colours.tPalette.m3surfaceContainer : "transparent"
     radius: Tokens.rounding.full
@@ -356,12 +360,20 @@ ClippingRectangle {
                     // which window has focus
                     readonly property bool focused: (modelData.wins ?? []).some(t => root.focusKnown ? t.activated : t.lastIpcObject?.focusHistoryID === 0)
                     readonly property bool dragged: root.dragFrom === index
+                    // New here (a window opened, an app pinned): its place opens, the dock growing to it, as it comes in
+                    property real grown: 0
+
+                    Component.onCompleted: grown = 1
 
                     width: column.width
-                    opacity: modelData.wins?.length && modelData.wins.every(t => t.workspace?.name?.startsWith("special:minimised")) ? 0.5 : 1  // all minimised: dimmed
-                    height: modelData.sep ? Tokens.spacing.medium : width
+                    opacity: (modelData.wins?.length && modelData.wins.every(t => t.workspace?.name?.startsWith("special:minimised")) ? 0.5 : 1) * grown  // all minimised: dimmed
+                    height: (modelData.sep ? Tokens.spacing.medium : width) * grown
                     z: dragged ? 10 : 0
-                    scale: dragged ? 1.12 : 1
+                    scale: (dragged ? 1.12 : 1) * (0.4 + 0.6 * grown)
+
+                    Behavior on grown {
+                        Anim {}
+                    }
 
                     transform: Translate {
                         y: cell.dragged ? root.dragY - cell.y - cell.height / 2 : root.dragShift(cell.index)
