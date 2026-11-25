@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The kinds of update, and how each is listed and run: the one place the Updates app's update-apps and the boot's
 # auto-update (as each AgrOS user) both use. Its updates and --list never run as root; its queries (--qt-now,
-# --runtime-target, --runtimes-now, --built-on) do, from auto-update and auto-update-aur.
+# --runtime-target, --built-on) do, from auto-update and auto-update-aur.
 #   update-kinds --list              what's waiting, one per line: kind<TAB>name<TAB>old<TAB>new. Kinds: system, aur,
 #                                    firmware, flatpak, appimage, capri, proton, dev; an "offline" line when the package
 #                                    servers can't be reached
@@ -14,7 +14,6 @@
 #                                    what Quickshell and Caelestia must be built for (update-apps, auto-update)
 #   update-kinds --runtime-target    the runtimes (below) a "name old -> new" list on stdin changes: "<name> <new> ..."
 #                                    (nothing when the part of its version that counts doesn't change)
-#   update-kinds --runtimes-now      the runtimes installed, "<name> <version>" each
 #   update-kinds --built-on [<dbpath>]   what's built on the runtimes a "name old -> new" list on stdin changes, one per
 #                                    line (all of them: the callers keep those from the AUR). update-apps and the boot's
 #                                    auto-update-aur both rebuild those
@@ -53,7 +52,6 @@ changed() {
 }
 case ${1:-} in
     --runtime-target) changed | while read -r name _ new _; do printf '%s %s ' "$name" "$new"; done; exit 0 ;;
-    --runtimes-now) runtimes | while read -r n _; do pacman -Q "$n" 2>/dev/null; done; exit 0 ;;
     --built-on)
         db=()
         [[ -n ${2:-} ]] && db=(--dbpath "$2")

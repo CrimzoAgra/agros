@@ -58,7 +58,7 @@ qt_built() { [[ $(cat "${AUTO_UPDATE_DIR:-/var/lib/auto-update}/qt-built" 2>/dev
 # names a Qt package that wasn't installed then ("none"): what's built since was built for the Qt there is now, not one
 # to rebuild for
 qt_mark() { mkdir -p "${qt_stamp%/*}" && { [[ -s $qt_stamp && $(cat "$qt_stamp") != *" none "* ]] || qt_now >"$qt_stamp"; }; }
-# qt_rebuild ["name old -> new" lines: the runtimes the paru -Syu changed]
+# qt_rebuild ["name old -> new" lines: the packages the paru -Syu changed, the runtimes among them]
 qt_rebuild() {
     local changes=${1:-} old new p pkgs=() i
     # (Qt changed since the stamp: as "name old -> new" lines too)
@@ -278,7 +278,8 @@ for what in sleep:shutdown:handle-lid-switch sleep:shutdown; do
     inhibitor=$!
     break
 done
-runtimes=$("$helpers/update-kinds" --runtimes-now)
+# (what's installed before: the packages this run updates, the runtimes among them and their repos' rebuilds for them)
+before=$(pacman -Q 2>/dev/null)
 # Through the upstream gate (update-gate): the lists synced first, then Hyprland and its libraries updated only to
 # versions AgrOS's CI has checked (held, said, else)
 gated=$(mktemp --tmpdir agros-pacman.XXXXXX.conf)
@@ -333,9 +334,10 @@ else
     status=1
 fi
 rm -f "$gated"
-# (the runtimes it changed: "name old -> new")
+# (the packages it changed: "name old -> new". Not only the runtimes: a repo's rebuild for a new one, [agros]'s
+# Quickshell for a new Qt, came in the same run, and rebuilt again here it failed as CI's relabelled one)
 changes=$(awk 'NR == FNR { old[$1] = $2; next } ($1 in old) && old[$1] != $2 { print $1, old[$1], "->", $2 }' \
-    <(printf '%s\n' "$runtimes") <("$helpers/update-kinds" --runtimes-now))
+    <(printf '%s\n' "$before") <(pacman -Q 2>/dev/null))
 qt_rebuild "$changes" || status=1
 [[ -z $inhibitor ]] || kill "$inhibitor" 2>/dev/null
 # The rest, kind by kind (each under its own "== " title)

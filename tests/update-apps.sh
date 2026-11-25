@@ -305,7 +305,7 @@ check
 # shellcheck disable=SC2016  # (expanded by the stand-ins)
 stub paru 'echo "paru $*" >>"'"$t"'/paru"; case "$*" in *" -Su "*) echo "$PY_NEW" >"'"$t"'/py" ;; esac'
 # shellcheck disable=SC2016
-stub pacman 'case "$1 $2" in "-Q python") echo "python $(cat "'"$t"'/py")" ;; "-Q qt6-base" | "-Q qt6-declarative") echo "$2 6.9.0-1" ;;
+stub pacman 'case "$1 $2" in "-Q python" | "-Q ") echo "python $(cat "'"$t"'/py")" ;; "-Q qt6-base" | "-Q qt6-declarative") echo "$2 6.9.0-1" ;;
     "-Qoq /usr/lib/python3.13/") printf "%s\n" python-foo python-repo ;; "-Qm python-foo") true ;; *) exit 1 ;; esac'
 for v in 3.14.0-1 3.13.8-1; do
     echo 3.13.7-1 >"$t/py"; rm -f "$t/paru"
@@ -317,6 +317,26 @@ for v in 3.14.0-1 3.13.8-1; do
         grep -q -- --rebuild "$t/paru" && fail "rebuilt for a Python bugfix release: $(cat "$t/paru")"
     fi
 done
+
+# A new Qt and [agros]'s Quickshell rebuilt for it (CI's, relabelled 1.1) in the same paru -Su: that one not built again
+# here (at the AUR's release, older than CI's, it was refused, and every run ended "with problems", the Qt not written
+# down), as the boot's builds skip one their download brings; the Qt written down
+# shellcheck disable=SC2016  # (expanded by the stand-ins)
+stub paru 'echo "paru $*" >>"'"$t"'/paru"; case "$*" in *" -Su "*) touch "'"$t"'/qt-new" ;; esac'
+# shellcheck disable=SC2016
+stub pacman 'qt=6.9.0-1 qs=0.2.1-1; [ -e "'"$t"'/qt-new" ] && qt=6.10.0-1 qs=0.2.1-1.1
+    case "$1 $2" in "-Q ") printf "%s\n" "qt6-base $qt" "qt6-declarative $qt" "quickshell-git $qs" ;;
+    "-Q qt6-base" | "-Q qt6-declarative") echo "$2 $qt" ;; "-Q quickshell-git") echo "quickshell-git $qs" ;;
+    -Qi*) echo "Required By     : quickshell-git"; echo "Optional For    : None" ;; "-Slq agros") echo quickshell-git ;; *) exit 1 ;; esac'
+stub auto-update-aur 'echo "$*" >>"'"$t"'/fetch"; exit 1'
+echo "qt6-base 6.9.0 qt6-declarative 6.9.0 " >"$t/state/quickshell-qt"; rm -f "$t/paru" "$t/fetch" "$t/qt-new"
+out=$(AUTO_UPDATE_AUR=$t/bin/auto-update-aur HOME=$t/home XDG_STATE_HOME=$t/state XDG_CACHE_HOME=$t/home/.cache \
+    PATH=$t/bin:$PATH "$here/.local/bin/update-apps" </dev/null 2>&1) || true
+[[ ! -e $t/fetch && $out != *"quickshell-git"* ]] || fail "[agros]'s Quickshell its repo rebuilt in the same run built again: $out"
+[[ $(cat "$t/state/quickshell-qt") == "qt6-base 6.10.0 qt6-declarative 6.10.0 " ]] ||
+    fail "the new Qt not written down after its repo's rebuild came with it: $(cat "$t/state/quickshell-qt")"
+rm -f "$t/bin/auto-update-aur" "$t/qt-new"
+stub paru 'echo "paru $*" >>"'"$t"'/paru"'
 
 # AgrOS's own update code first (update-first): the lists synced with a newer agros-scripts or agros-system, those
 # installed alone, then the run started again with the new code (its arguments, its password), which decides the

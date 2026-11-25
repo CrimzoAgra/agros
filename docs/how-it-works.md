@@ -897,7 +897,7 @@ helper a package update just brought works before `agros-links` has linked it), 
   while the first synced that copy failed on its lock, and Updates opened during the 6-hourly check said "Couldn't
   check for updates"). Also
   the one list of runtimes whose new version breaks what's built on them (Qt, Python's minor version) and its queries
-  (`--runtime-target`, `--runtimes-now`, `--built-on`): what the boot's AUR builds and `update-apps` both rebuild
+  (`--runtime-target`, `--built-on`): what the boot's AUR builds and `update-apps` both rebuild
 - **`.local/bin/agros-each-user`**: runs a command as each AgrOS user (pacman hooks, the boot's update): only
   AgrOS's own program, the user's link to it run from `/usr/lib/agros/bin` (a user's own file there held pacman's
   lock, and every update), for 10 minutes at most (`--limit`: the title bar plugin's hook, 5; it builds from AgrOS's
@@ -1177,7 +1177,8 @@ brings each change; nothing to run by hand).
   After its `paru -Syu` it rebuilds
   what's built on a runtime it changed (the boot's list, below), and on a Qt changed since they were last built, once
   the runtime is in: `[agros]`'s own at the version installed with AgrOS's Quickshell fix (through `auto-update-aur
-  --fetch`, as the boot's), the AUR's others at their newest. VSCodium's own updater (which only opens the website) is
+  --fetch`, as the boot's), the AUR's others at their newest; not one that same `paru -Syu` updated (its repo's rebuild
+  for it, as the boot's builds skip it). VSCodium's own updater (which only opens the website) is
   off
 - **The boot update** (`agros-system`: `packages/agros-system/auto-update`, for every account): updates everything at
   every boot. Then: Flatpaks (system-wide and yours), AppImages, Proton builds and developer tools (`update-kinds
