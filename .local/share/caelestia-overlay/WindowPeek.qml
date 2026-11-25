@@ -120,7 +120,8 @@ Singleton {
     Connections {
         target: Hyprland
 
-        function onRawEvent(event: HyprlandEvent): void {
+        // (event untyped: Qt 6.12.1's qmllint no longer finds Quickshell's HyprlandEvent, and failed the overlay)
+        function onRawEvent(event): void {
             if (root.shown && ["workspace", "workspacev2", "activespecial", "activespecialv2", "focusedmon", "focusedmonv2"].includes(event.name))
                 root.shown = null;
         }
