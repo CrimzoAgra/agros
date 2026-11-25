@@ -385,10 +385,12 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
       frame, the border's exclusive zones and the clock's and visualiser's margins follow the bar on every edge. A
       panel moved to another edge keeps its larger spacing on its inner sides (`fromTop`, `fromBottom`, mirroring:
       `split_windows`). Over a bottom bar the open launcher keeps the bar's popouts shut (they'd run into its shape)
+      Panels along the top that would overlap there (a portrait screen) don't stay open together: the one opening
+      closes the others (`makeRoom`, `Controller.qml`)
     - A dock (`Dock.qml`, `DockMenu.qml`): pinned apps and open windows, Force quit; minimised windows dimmed; a
       click on a window or its preview brings it to the front. Turned off, its place is kept (the workspaces, tray and
       clock stay put). It sits on the bar's middle whatever is beside it (shorter and scrolling if they crowd it); a new
-      icon grows in, the dock with it. Along the top or bottom the open windows are right of the pinned apps. Its
+      icon grows in, the dock with it, and a closed one shrinks away (not on a workspace switch). Along the top or bottom the open windows are right of the pinned apps. Its
       switches are on Settings › Panels › Taskbar › Dock (`AgrosBarDock.qml`)
     - A window's icon found by one lookup for the bar, the dock and Alt+Tab (`.config/quickshell/common/WindowApps.qml`:
       Quickshell's, else `.local/bin/app-for-window`: the class's last part, a Flatpak's id, the window's program)
