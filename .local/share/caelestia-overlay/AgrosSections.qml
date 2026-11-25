@@ -24,6 +24,10 @@ ColumnLayout {
     property list<string> onlyGroups
     property list<string> skipGroups
     property list<string> skipKeys
+    // (not the settings on another of AgrOS's pages: Advanced's, which lists Caelestia's options)
+    property bool skipListed
+    // (a group with more rows than this starts closed, its header opening it; -1: none)
+    property int foldOver: -1
     // (a group's title as shown, by its title in the schema: "Each screen's own" for the wallpapers')
     property var retitle: ({})
     property bool notice: true
@@ -31,14 +35,14 @@ ColumnLayout {
     // (Caelestia's options, by their path in its shell.json, that Nexus's own pages set)
     readonly property var covered: []
     // (the kinds AgrosRow.qml has a control for)
-    readonly property list<string> kinds: ["bool", "choice", "number", "text", "startup", "image", "keys"]
+    readonly property list<string> kinds: ["bool", "choice", "number", "text", "startup", "image", "keys", "json"]
     readonly property var groups: {
         const out = [];
         for (const id of pageIds)
             for (const g of AgrosSettings.page(id)?.groups ?? []) {
                 if (skipGroups.includes(g.title ?? "") || onlyGroups.length && !onlyGroups.includes(g.title ?? ""))
                     continue;
-                const keys = (g.settings ?? []).filter(s => kinds.includes(s.type) && !skipKeys.includes(s.key) && !(s.key.startsWith("caelestia-shell.") && covered.includes(s.key.slice(16)))).map(s => s.key);
+                const keys = (g.settings ?? []).filter(s => kinds.includes(s.type) && !skipKeys.includes(s.key) && !(skipListed && AgrosSettings.listed[s.key]) && !(s.key.startsWith("caelestia-shell.") && covered.includes(s.key.slice(16)))).map(s => s.key);
                 if (keys.length)
                     out.push({
                         title: g.title ?? "",
@@ -131,18 +135,41 @@ ColumnLayout {
                         required property string modelData
                         required property int index
                         readonly property var keys: root.groups.find(g => g.title === modelData)?.keys ?? []
+                        readonly property bool folds: root.foldOver >= 0 && keys.length > root.foldOver
+                        property bool open: !folds
 
                         Layout.fillWidth: true
                         spacing: Tokens.spacing.extraSmall / 2
 
-                        SectionHeader {
-                            first: root.firstHeader && group.index === 0
-                            text: root.retitle[group.modelData] ?? group.modelData
+                        RowLayout {
+                            Layout.fillWidth: true
+
+                            SectionHeader {
+                                Layout.fillWidth: true
+                                first: root.firstHeader && group.index === 0
+                                text: (root.retitle[group.modelData] ?? group.modelData) + (group.folds ? ` (${group.keys.length})` : "")
+                            }
+
+                            MaterialIcon {
+                                visible: group.folds
+                                text: group.open ? "expand_less" : "expand_more"
+                                color: Colours.palette.m3onSurfaceVariant
+                            }
+
+                            TapHandler {
+                                enabled: group.folds
+                                onTapped: group.open = !group.open
+                            }
+
+                            HoverHandler {
+                                enabled: group.folds
+                                cursorShape: Qt.PointingHandCursor
+                            }
                         }
 
                         Repeater {
                             model: ScriptModel {
-                                values: group.keys
+                                values: group.open ? group.keys : []
                             }
 
                             AgrosRow {

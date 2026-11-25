@@ -762,7 +762,14 @@ def nexus_pages():
               ("        // Connectivity\n", False, [("Display", "monitor", "Screens, their arrangement, night light", "connectivity", "AgrosDisplay {}")]),
               ("        // System\n", True, [("Mouse & keyboard", "mouse", "Pointer, touchpad, keyboard layout", "connectivity", "input")]),
               ("        // Shell\n", True, [("Features", "auto_awesome", "Games, Lutris, the shell's extras", "system", "features"),
-                                          ("Startup", "rocket_launch", "Apps started at login", "system", "startup")]),
+                                          ("Startup", "rocket_launch", "Apps started at login", "system", "startup"),
+                                          # (Caelestia's options no other page has: the old Settings app's "All Caelestia
+                                          # options", less the ones shown elsewhere)
+                                          ("Advanced", "tune", "Every other option of the shell's", "system", """AgrosPage {
+                title: "Advanced"
+                pageId: "caelestia"
+                advanced: true
+            }""")]),
               ("        // Shell\n", False, [("Windows", "select_window", "Floating or tiling, focus, title bars", "shell", "windows"),
                                            ("Shortcuts", "keyboard", "Keyboard shortcuts", "shell", "keys")])]
     reg, comps = read("modules/nexus/PageRegistry.qml"), read("modules/nexus/PageCompRegistry.qml")
@@ -788,12 +795,12 @@ def nexus_pages():
              ("look", "Look & feel", ["palette", "select_window", "dock_to_bottom"]),
              ("devices", "Devices", ["monitor", "volume_up", "mouse", "devices_other", "wifi"]),
              ("apps", "Apps & shortcuts", ["apps", "rocket_launch", "keyboard"]),
-             ("system", "System", ["update", "auto_awesome", "build", "globe", "info"])]
+             ("system", "System", ["update", "auto_awesome", "build", "globe", "tune", "info"])]
     # (Nexus's Plugins page: a placeholder, nothing on it yet: left out until Caelestia fills it)
     drop = {"extension"}
     agros = {"palette": ["look", "panels"], "dock_to_bottom": ["panels", "bar", "launcher", "session"], "build": ["notifs", "region"],
              "monitor": ["screens"], "mouse": ["input"], "auto_awesome": ["features"], "rocket_launch": ["startup"],
-             "select_window": ["windows"], "keyboard": ["keys"]}
+             "select_window": ["windows"], "keyboard": ["keys"], "tune": ["caelestia"]}
 
     def items(text, head):
         """The list at head ("readonly property list<var> pages: ["): where its items start and end, and each item
@@ -934,21 +941,23 @@ def nexus_pages():
     }
     # Wallpaper & style: those screens in the place of its one preview, with more than one screen
     style = folded["modules/nexus/pages/WallpaperAndStyle.qml"]
-    style = swap(style, """        StyledClippingRect {
-            id: wallWrapper
-""", """        // caelestia-overlay: the screens, each with its wallpaper (AgrosScreenWalls.qml), with more than one; the
+    # (the preview by its id, whatever it is: StyledClippingRect, on Caelestia's main a ClipRect; left as it is if gone)
+    head = re.search(r"\n        ([A-Za-z.]+) \{\n            id: wallWrapper\n", style)
+    if head:
+        style = style.replace(head.group(0), f"""
+        // caelestia-overlay: the screens, each with its wallpaper (AgrosScreenWalls.qml), with more than one; the
         // preview with one
-        AgrosScreenWalls {
+        AgrosScreenWalls {{
             id: screenWalls
 
             Layout.fillWidth: true
-        }
+        }}
 
-        StyledClippingRect {
+        {head.group(1)} {{
             id: wallWrapper
 
             visible: !screenWalls.visible
-""", "Wallpaper & style's preview")
+""", 1)
     folded["modules/nexus/pages/WallpaperAndStyle.qml"] = style
     # Wallpapers: the screens first, as arranged, each with its wallpaper, one clicked to give it its own
     # (AgrosScreenWalls.qml); at the page's end if its buttons have moved

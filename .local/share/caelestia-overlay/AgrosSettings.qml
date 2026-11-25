@@ -19,6 +19,8 @@ Singleton {
     property var pages: []
     // Every setting by its key (the same objects as in pages): rows look themselves up here
     property var byKey: ({})
+    // (the keys on dots-settings's pages but "caelestia", which lists every Caelestia option again)
+    property var listed: ({})
     property bool loaded
     property var queue: []
     property bool again
@@ -159,6 +161,13 @@ Singleton {
                 for (const s of g.settings ?? [])
                     m[s.key] = m[s.key] ?? s; // (the first: "caelestia", every option again, names them by their path only)
         byKey = m;
+        const l = {};
+        for (const p of pages)
+            if (p.id !== "caelestia")
+                for (const g of p.groups ?? [])
+                    for (const s of g.settings ?? [])
+                        l[s.key] = true;
+        listed = l;
     }
 
     Process {

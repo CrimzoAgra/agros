@@ -250,10 +250,10 @@ grep -qE 'readonly property var covered: \[.*"bar\.persistent".*\]' "$n/common/A
 # The pages in AgrOS's groups (Home; Look & feel; Devices; Apps & shortcuts; System), the components moved with them
 # (each page's component still the one after it was), a title over each group, the search keeping what it finds
 icons=$(awk '/readonly property list<var> pages/,/^    \]/' "$n/PageRegistry.qml" | grep -oE '^ {12}icon: "[a-z_]+"' | sed -E 's/.*"(.*)"/\1/' | tr '\n' ' ')
-[[ $icons == "home palette select_window dock_to_bottom monitor volume_up mouse devices_other wifi apps rocket_launch keyboard update auto_awesome build globe info " ]] ||
+[[ $icons == "home palette select_window dock_to_bottom monitor volume_up mouse devices_other wifi apps rocket_launch keyboard update auto_awesome build globe tune info " ]] ||
     fail "Nexus's pages not in AgrOS's groups: $icons"
-{ awk '/readonly property list<Component> pageComps/,/^    \]/' "$n/PageCompRegistry.qml" | grep -E 'AgrosHome \{\}|WallpaperAndStyle \{\}|pageId: "windows"|PanelsPage \{\}|AgrosDisplay \{\}' | tr -d ' ' | tr '\n' ' ' |
-    grep -qx 'AgrosHome{} WallpaperAndStyle{} pageId:"windows" PanelsPage{} AgrosDisplay{} '; } || fail "Nexus's page components not moved with their pages"
+{ awk '/readonly property list<Component> pageComps/,/^    \]/' "$n/PageCompRegistry.qml" | grep -E 'AgrosHome \{\}|WallpaperAndStyle \{\}|pageId: "windows"|PanelsPage \{\}|AgrosDisplay \{\}|pageId: "caelestia"' | tr -d ' ' | tr '\n' ' ' |
+    grep -qx 'AgrosHome{} WallpaperAndStyle{} pageId:"windows" PanelsPage{} AgrosDisplay{} pageId:"caelestia" '; } || fail "Nexus's page components not moved with their pages"
 { grep -qF 'readonly property var titles: {"look": "Look & feel", "devices": "Devices", "apps": "Apps & shortcuts", "system": "System"}' "$n/PageRegistry.qml" &&
     grep -q 'text: item.groupTitle' "$n/navpane/NavLocations.qml" && grep -q 'AgrosSettings.matches(p, nState.searchText)' "$n/navpane/NavLocations.qml" && grep -qF 'j > index && root.shown[j]' "$n/navpane/NavLocations.qml" &&
     grep -q 'property: "searchText"' "$n/NavPane.qml"; } || fail "the nav list's group titles or search missing"

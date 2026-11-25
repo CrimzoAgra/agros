@@ -11,6 +11,8 @@ PageBase {
     id: root
 
     required property string pageId
+    // (Advanced: Caelestia's options not on another page, its groups closed)
+    property bool advanced
 
     Component.onCompleted: AgrosSettings.reload()
 
@@ -19,5 +21,7 @@ PageBase {
         anchors.top: parent.top
         width: root.cappedWidth
         pageIds: [root.pageId]
+        skipListed: root.advanced
+        foldOver: root.advanced ? 0 : -1
     }
 }

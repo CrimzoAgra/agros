@@ -32,6 +32,8 @@ ConnectedRect {
     readonly property bool long: options.length > 8
     readonly property string current: options.find(o => o.value === value)?.label || String(value ?? "")
     property bool listOpen
+    // (back to its default: one it has, changed from it; not one living elsewhere, fixed, or the screens' places)
+    readonly property bool changed: setting?.default !== undefined && setting?.get === undefined && !setting?.readonly && type !== "arrange" && JSON.stringify(value) !== JSON.stringify(setting.default)
     // (Caelestia's options with no description of their own have their path as one: not shown)
     readonly property string description: /\s/.test(setting?.description ?? "") ? setting.description : ""
 
@@ -77,11 +79,25 @@ ConnectedRect {
                 Layout.fillWidth: true
                 spacing: Tokens.spacing.extraSmall / 2
 
-                StyledText {
+                // Its name; back to its default at its end (by the name, not the control: a button coming and going
+                // there changed the control's width, which the row's layout follows, which looped)
+                RowLayout {
                     Layout.fillWidth: true
-                    text: root.setting?.label ?? root.key
-                    font: Tokens.font.body.small
-                    wrapMode: Text.Wrap
+                    spacing: Tokens.spacing.small
+
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: root.setting?.label ?? root.key
+                        font: Tokens.font.body.small
+                        wrapMode: Text.Wrap
+                    }
+
+                    IconButton {
+                        visible: root.changed
+                        icon: "undo"
+                        type: IconButton.Text
+                        onClicked: root.set(root.setting.default)
+                    }
                 }
 
                 StyledText {
@@ -125,7 +141,8 @@ ConnectedRect {
                         startup: startupC,
                         keys: keysC,
                         number: root.setting?.integer === true ? spinC : sliderC,
-                        text: fieldC
+                        text: fieldC,
+                        json: jsonC
                     })[root.type] ?? null
             }
         }
@@ -443,6 +460,27 @@ ConnectedRect {
             text: typeof root.value === "string" ? root.value : ""
             placeholderText: root.setting?.placeholder ?? ""
             onEditingFinished: if (fits) root.set(text)
+        }
+    }
+
+    // Any JSON value (Caelestia's lists), as text: kept when it reads as JSON, red while it doesn't
+    Component {
+        id: jsonC
+
+        StyledTextField {
+            readonly property bool fits: {
+                try {
+                    JSON.parse(text);
+                    return true;
+                } catch (e) {
+                    return false;
+                }
+            }
+
+            implicitWidth: 340
+            text: JSON.stringify(root.value ?? null)
+            color: fits ? Colours.palette.m3onSurface : Colours.palette.m3error
+            onEditingFinished: if (fits) root.set(JSON.parse(text))
         }
     }
 
