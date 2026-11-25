@@ -2934,8 +2934,8 @@ def bar_gaps():
 
 
 def tray_over_dock():
-    # The tray, opened, grows from its end over what's before it in the bar (the dock), on top of it with a background
-    # of its own, its place in the bar the closed tray's: Caelestia's grew in the bar's layout, the dock shrinking to
+    # The tray, opened, grows from its end over what's before it in the bar (the dock), on top of it, its place in the
+    # bar the closed tray's: Caelestia's grew in the bar's layout, the dock shrinking to
     # make room. The bar's hit tests (its popouts, the click that closes the tray, the right-click menu's span) find
     # the open tray where it reaches
     bar = read("modules/bar/Bar.qml")
@@ -2985,10 +2985,6 @@ def tray_over_dock():
     readonly property real closedHeight: Config.bar.tray.compact ? Math.max(Config.bar.tray.background ? width : 0, expandIcon.implicitHeight + (Config.bar.tray.background ? Tokens.padding.extraSmall : 0) + padding) : nonAnimHeight
 
 """)
-    tray = swap(tray, """    color: Qt.alpha(Colours.tPalette.m3surfaceContainer, (Config.bar.tray.background && items.count > 0) ? Colours.tPalette.m3surfaceContainer.a : 0)
-""", """    // caelestia-overlay (tray_over_dock): open, a background of its own over what it covers
-    color: expanded && Config.bar.tray.compact ? Colours.tPalette.m3surfaceContainerHigh : Qt.alpha(Colours.tPalette.m3surfaceContainer, (Config.bar.tray.background && items.count > 0) ? Colours.tPalette.m3surfaceContainer.a : 0)
-""", "the tray's colour")
     return {"modules/bar/Bar.qml": bar, "modules/bar/components/Tray.qml": tray}
 
 
