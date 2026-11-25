@@ -125,6 +125,10 @@ PageBase {
                 }
 
                 AgrosRow {
+                    key: "look.amoled"
+                }
+
+                AgrosRow {
                     key: "look.scheme"
                 }
 

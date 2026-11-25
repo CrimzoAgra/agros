@@ -392,10 +392,11 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
       clock stay put). It sits on the bar's middle whatever is beside it (shorter and scrolling if they crowd it); a new
       icon grows in, the dock with it, and a closed one shrinks away (not on a workspace switch). Along the top or bottom the open windows are right of the pinned apps. Its
       switches are on Settings › Panels › Taskbar › Dock (`AgrosBarDock.qml`)
-    - The tray, opened, grows from its end over the dock, its place in the bar the closed tray's: nothing beside it
-      squeezed (`tray_over_dock`)
-    - AMOLED black (Settings › Wallpaper & style, under Dark theme; `look.amoled`, `amoled`): in dark mode the
-      scheme's backgrounds pure black, the bar, its border and the panels, read live from `settings.json`
+    - The tray, opened, grows from its end over the dock on the bar's own colour, with the dock's padding, its place in
+      the bar the closed tray's: nothing beside it squeezed (`tray_over_dock`)
+    - AMOLED black (Settings › Wallpaper & style under Dark theme, and Home's Look card; `look.amoled`, `amoled`): in
+      dark mode the scheme's backgrounds pure black, the bar, its border and the panels, the surfaces on them darkened
+      to match; read live from `settings.json`
     - A window's icon found by one lookup for the bar, the dock and Alt+Tab (`.config/quickshell/common/WindowApps.qml`:
       Quickshell's, else `.local/bin/app-for-window`: the class's last part, a Flatpak's id, the window's program)
     - Right-clicking the empty bar between the workspaces and the tray (not on the dock) opens a menu (`BarMenu.qml`)

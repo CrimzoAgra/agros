@@ -1590,8 +1590,8 @@ def sidebar_notifs_only():
 
 def amoled():
     # Settings' AMOLED black (look.amoled in ~/.config/dots/settings.json, read as it changes): in dark mode the scheme's
-    # backgrounds pure black, the bar, its border and the panels (background, surface and the lowest containers; the
-    # cards on them keep theirs); the scheme read again as it's turned on or off
+    # backgrounds pure black, the bar, its border and the panels (background, surface and the lowest containers), the
+    # surfaces on them darkened to match; the scheme read again as it's turned on or off
     rel = "services/Colours.qml"
     c = swap(read(rel), """    function load(data: string, isPreview: bool): void {
         const colours = isPreview ? preview : current;
@@ -1631,11 +1631,16 @@ def amoled():
                 colours[propName] = `#${colour}`;
         }
 
-        // caelestia-overlay (amoled): dark, its backgrounds black
-        if (amoled && scheme.mode !== "light")
+        // caelestia-overlay (amoled): dark, its backgrounds black, the surfaces on them (cards, pills, the bar's
+        // entries) darkened to match, still apart from it and each other, their tint kept
+        if (amoled && scheme.mode !== "light") {
             for (const name of ["m3background", "m3surface", "m3surfaceDim", "m3surfaceContainerLowest", "m3surfaceContainerLow"])
                 if (colours.hasOwnProperty(name))
                     colours[name] = "#000000";
+            for (const name of ["m3surfaceContainer", "m3surfaceContainerHigh", "m3surfaceContainerHighest", "m3surfaceVariant", "m3surfaceBright"])
+                if (colours.hasOwnProperty(name))
+                    colours[name] = Qt.darker(colours[name], 1.7);
+        }
     }
 """, "the scheme's colours")
     return {rel: c}
@@ -2934,8 +2939,8 @@ def bar_gaps():
 
 
 def tray_over_dock():
-    # The tray, opened, grows from its end over what's before it in the bar (the dock), on top of it, its place in the
-    # bar the closed tray's: Caelestia's grew in the bar's layout, the dock shrinking to
+    # The tray, opened, grows from its end over what's before it in the bar (the dock), on top of it (the bar's colour
+    # behind it), its place in the bar the closed tray's: Caelestia's grew in the bar's layout, the dock shrinking to
     # make room. The bar's hit tests (its popouts, the click that closes the tray, the right-click menu's span) find
     # the open tray where it reaches
     bar = read("modules/bar/Bar.qml")
@@ -2985,6 +2990,15 @@ def tray_over_dock():
     readonly property real closedHeight: Config.bar.tray.compact ? Math.max(Config.bar.tray.background ? width : 0, expandIcon.implicitHeight + (Config.bar.tray.background ? Tokens.padding.extraSmall : 0) + padding) : nonAnimHeight
 
 """)
+    # Open, the bar's own colour behind it (what it covers hidden, the tray itself not set apart: grey, AMOLED's black),
+    # the dock's padding at its ends
+    tray = swap(tray, """    color: Qt.alpha(Colours.tPalette.m3surfaceContainer, (Config.bar.tray.background && items.count > 0) ? Colours.tPalette.m3surfaceContainer.a : 0)
+""", """    // caelestia-overlay (tray_over_dock): open, the bar's colour behind it
+    color: expanded && Config.bar.tray.compact ? Colours.tPalette.m3surface : Qt.alpha(Colours.tPalette.m3surfaceContainer, (Config.bar.tray.background && items.count > 0) ? Colours.tPalette.m3surfaceContainer.a : 0)
+""", "the tray's colour")
+    tray = swap(tray, "    readonly property int padding: Config.bar.tray.background ? Tokens.padding.medium : Tokens.padding.extraSmall\n",
+                "    readonly property int padding: Config.bar.tray.background ? Tokens.padding.medium : Tokens.padding.small // caelestia-overlay: the dock's\n",
+                "the tray's padding")
     return {"modules/bar/Bar.qml": bar, "modules/bar/components/Tray.qml": tray}
 
 
@@ -3229,7 +3243,9 @@ def bar_across(side):
     for rel, openings in (
         ("workspaces/Workspace.qml", ("        StyledText {\n            animate: true\n",
                                       "        MaterialIcon {\n            fill: 1\n            grade: 25\n",
-                                      "                delegate: MaterialIcon {\n                    id: win\n")),
+                                      "                delegate: MaterialIcon {\n                    id: win\n",
+                                      # (the focused workspace's random shape: an oval lay on its side)
+                                      "        MaterialShape {\n            implicitSize: Tokens.sizes.bar.innerWidth - Tokens.padding.small\n")),
         ("TrayItem.qml", ("    ColouredIcon {\n        id: icon\n",)),
         ("Clock.qml", ("    component Digits: Row {\n        id: digits\n",
                        "            sourceComponent: MaterialIcon {\n                text: \"calendar_month\"\n",
