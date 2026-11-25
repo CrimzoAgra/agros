@@ -78,9 +78,20 @@ Column {
                 color: Colours.tPalette.m3surfaceContainerHighest
 
                 ScreencopyView {
+                    id: winPreview
+
                     anchors.fill: parent
                     captureSource: win.modelData.wayland // qmllint disable unresolved-type
-                    live: root.visible
+                    // A snapshot as it shows, then one a second: live, every frame of the window was copied as long as it
+                    // showed (and hovering along the dock opened one after another), keeping the GPU busy
+                    live: false
+
+                    Timer {
+                        running: root.visible && !!winPreview.captureSource
+                        repeat: true
+                        interval: 1000
+                        onTriggered: winPreview.captureFrame()
+                    }
                     constraintSize.width: win.width
                     constraintSize.height: win.height
                 }

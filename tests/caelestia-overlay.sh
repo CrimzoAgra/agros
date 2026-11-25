@@ -48,10 +48,12 @@ grep -q 'onExclusiveZoneChanged: Quickshell.execDetached(\["hyprctl", "eval", "d
 # The notification sidebar closes on a curve that doesn't overshoot (opens as before), and its hover edge doesn't open
 # it while a pop-up shows, nor afterwards for a pointer that stayed there until it leaves (the window too)
 w=$dst/modules/sidebar/Wrapper.qml i=$dst/modules/drawers/Interactions.qml
+# (the shell in four windows, split_windows: the pointer's rules are Controller.qml's, Interactions.qml's moved there)
+[[ -f $dst/modules/drawers/Controller.qml ]] && i=$dst/modules/drawers/Controller.qml
 grep -q 'type: offsetBehavior.targetValue > 0.5 ? Anim.Emphasized : Anim.DefaultSpatial' "$w" ||
     fail "the sidebar's close curve not changed: $(grep -A6 'Behavior on offsetScale' "$w")"
 { [[ $(grep -c 'root.sidebarHoverOpens(showSidebarHover) && !screenState.sidebar' "$i") == 2 ]] &&
-    grep -q 'sidebarHoverHeld = false' <<<"$(grep -A2 'if (!containsMouse) {' "$i")"; } || fail "the sidebar's hover edge not gated on pop-ups"
+    grep -q 'sidebarHoverHeld = false' <<<"$(grep -A2 'if (!containsMouse) {\|function left(): void {' "$i")"; } || fail "the sidebar's hover edge not gated on pop-ups"
 if command -v node >/dev/null; then
     fn=$(sed -n '/^    function sidebarHoverOpens(atEdge: bool): bool {$/,/^    }$/p' "$i" | sed 's/(atEdge: bool): bool {/(atEdge) {/')
     seq=$(node -e "let sidebarHoverHeld = false; const panels = { notifications: { height: 0 } };
@@ -71,8 +73,9 @@ fi
 # by a pop-up coming up under a pointer resting there
 sidebar_edge_released() { # <Interactions.qml>
     local edge fn
-    grep -q '^        root.sidebarHoverOpens(root.atSidebarEdge(event.x, event.y));' <<<"$(grep -A1 '^    onPositionChanged: event => {$' "$1" | tail -1)" ||
-        { echo "not the first thing each move does: $(grep -A2 'onPositionChanged: event => {' "$1")"; return; }
+    # (onPositionChanged's in Interactions.qml, move()'s in the four windows' Controller.qml)
+    grep -qE '^        root.sidebarHoverOpens\(root.atSidebarEdge\((event\.)?x, (event\.)?y\)\);' <<<"$(grep -A1 '^    onPositionChanged: event => {$\|^    function move(x: real, y: real): void {$' "$1" | tail -1)" ||
+        { echo "not the first thing each move does: $(grep -A2 'onPositionChanged: event => {\|function move(x: real, y: real): void {' "$1")"; return; }
     edge=$(sed -n 's/^ *const showSidebarHover = \(.*\);$/\1/p' "$1" | sort -u)
     fn=$(sed -n '/^    function atSidebarEdge(x: real, y: real): bool {$/,/^    }$/p' "$1")
     [[ $(wc -l <<<"$edge") == 1 ]] && grep -qF "return $edge;" <<<"$fn" || { echo "its edge isn't the hover's: $fn / $edge"; return; }
@@ -175,8 +178,20 @@ grep -q 'anchors.topMargin: -notifications.anchors.topMargin - Math.max(0, slide
 # The Super menu over a fullscreen window shows the whole shell (bar, border), still above the window
 w=$dst/modules/drawers/ContentWindow.qml
 { grep -q 'shellHidden: hasFullscreen && !screenState.launcher' "$w" && grep -q 'fsTransitionProg: shellHidden ? 1' "$w" &&
-    [[ $(grep -c 'fullscreen: root.shellHidden' "$w") == 2 ]] && grep -q 'layer: ((hasFullscreen || fsTransitionProg > 0)' "$w"; } ||
+    [[ $(grep -c 'fullscreen: root.shellHidden' "$w") == 2 ]] && grep -q 'layer: ((hasFullscreen ? overFullscreen : fsTransitionProg > 0)' "$w"; } ||
     fail "the Super menu over a fullscreen window doesn't show the whole shell: $(grep -n 'shellHidden\|layer:' "$w")"
+# ...and the shell is above a fullscreen game only while something of it shows there (an empty overlay above it has
+# Hyprland redraw the whole screen every frame)
+grep -q 'overFullscreen: fsTransitionProg < 1 || panels.notifications.visible' "$w" ||
+    fail "the shell stays above fullscreen games with nothing of it showing: $(grep -n 'overFullscreen' "$w")"
+# The shell in four windows (split_windows, drawers/): made from the drawers files above, so it's on with them all (a
+# change to them without making drawers/ again skips it: a WARNING, failed above). Each window drawn only where it is,
+# over a fullscreen game only while something of it shows there; the pointer's rules (Controller.qml) Interactions.qml's
+d=$dst/modules/drawers
+{ grep -q 'PartWindow {' "$d/Drawers.qml" && [[ $(grep -c '^            part: "' "$d/Drawers.qml") == 4 ]] &&
+    grep -q 'hasFullscreen ? fsTransitionProg < 1 || showsOverFullscreen' "$d/PartWindow.qml" &&
+    grep -q 'function move(x: real, y: real): void' "$d/Controller.qml" && grep -q 'controller.move(event.x, event.y)' "$d/Interactions.qml"; } ||
+    fail "the shell isn't in its four windows: $(ls "$d")"
 # An external screen's brightness change shows no popup (its slider isn't there: volume alone showed); a built-in one's
 # does, once its level was read
 w=$dst/modules/osd/Wrapper.qml
@@ -213,9 +228,14 @@ grep -q '^            layer.enabled: true$' <<<"$(sed -n '/^        ScreencopyVi
 { grep -q 'name: "calendar"' "$dst/modules/bar/popouts/Content.qml" && grep -q 'sourceComponent: ClockCalendar {}' "$dst/modules/bar/popouts/Content.qml" &&
     grep -q '} else if (id === "clock") {' "$dst/modules/bar/Bar.qml" && grep -q 'Dash.Calendar {' "$dst/modules/bar/popouts/ClockCalendar.qml"; } ||
     fail "no calendar on hovering the bar's clock"
+# Going down the bar from one entry to the next (the clock's calendar to the status icons under it), its popout isn't
+# closed in the gap between them: it stays until the next entry's takes its place
+grep -q '^        if (!ch)$' <<<"$(sed -n '/^    function checkPopout(y: real): void {$/,/^    }$/p' "$dst/modules/bar/Bar.qml")" &&
+    ! grep -q 'popouts.hasCurrent = false;' <<<"$(grep -A1 '^        if (!ch)' "$dst/modules/bar/Bar.qml")" ||
+    fail "the bar's popout closes in the gaps between its entries"
 # The top edge opens the dashboard or the notification sidebar, never both at once (a narrow screen's dashboard covers
 # the sidebar's span): the dashboard not over the sidebar's span nor with it open, the sidebar not with the dashboard open
-w=$dst/modules/drawers/Interactions.qml
+w=$i
 { grep -q '(screenState.dashboard || !screenState.sidebar && !withinPanelWidth(panels.sidebar, x, y))' "$w" &&
     [[ $(grep -c '&& !screenState.sidebar && !screenState.dashboard)' "$w") == 2 ]]; } ||
     fail "the top edge still opens the dashboard and the sidebar together: $(grep -n 'showDashboard =\|screenState.sidebar)' "$w")"

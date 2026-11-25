@@ -6,6 +6,7 @@
 #                                                             (exit 1 when one was skipped: caelestia-overlay keeps the
 #                                                             WARNING lines for agros-check)
 #          patch.py --list   the features as JSON (the Settings app's Features page, settings caelestia.<id>)
+import hashlib
 import json
 import os
 import pwd
@@ -1748,7 +1749,10 @@ def launcher_fullscreen():
     window = swap(window, "    mask: hasFullscreen ? emptyRegion : regions\n", "    mask: shellHidden ? emptyRegion : regions\n",
                   "launcher mask")
     # The whole shell (bar, border) shows while it's open, as over no fullscreen window, and hides again as it closes
-    # (with what was opened from it meanwhile). Above the fullscreen window all along (the layer: hasFullscreen)
+    # (with what was opened from it meanwhile). Above the fullscreen window only while something of it shows there (the
+    # Super menu, its opening and closing, a notification, the volume popup, a toast), else under it: an overlay above a
+    # fullscreen game, even an empty one, has Hyprland redraw the whole screen every frame instead of showing the game's
+    # frames alone (on a 2560x1440 300 Hz screen it took half the GPU from Overwatch)
     window = insert(window, "    property real fsTransitionProg: hasFullscreen ? 1 : 0\n",
                     "    readonly property bool shellHidden: hasFullscreen && !screenState.launcher\n"
                     "    onShellHiddenChanged: {\n"
@@ -1757,13 +1761,15 @@ def launcher_fullscreen():
                     "        screenState.session = false;\n"
                     "        screenState.dashboard = false;\n"
                     "        panels.popouts.close();\n"
-                    "    }\n")
+                    "    }\n"
+                    "    readonly property bool overFullscreen: fsTransitionProg < 1 || panels.notifications.visible\n"
+                    "        || panels.osd.offsetScale < 1 || panels.toasts.implicitHeight > 0\n")
     window = swap(window, "fsTransitionProg: hasFullscreen ? 1 : 0", "fsTransitionProg: shellHidden ? 1 : 0",
                   "launcher shell")
     window = swap(window, "borderLayoutThickness: hasFullscreen ? 0", "borderLayoutThickness: shellHidden ? 0",
                   "launcher border")
     window = swap(window, "WlrLayershell.layer: (fsTransitionProg > 0 && ",
-                  "WlrLayershell.layer: ((hasFullscreen || fsTransitionProg > 0) && ", "launcher layer")
+                  "WlrLayershell.layer: ((hasFullscreen ? overFullscreen : fsTransitionProg > 0) && ", "launcher layer")
     if window.count("fullscreen: root.hasFullscreen\n") != 2:  # the clicks' and the bar's
         raise LookupError("launcher bar")
     window = window.replace("fullscreen: root.hasFullscreen\n", "fullscreen: root.shellHidden\n")
@@ -2651,6 +2657,46 @@ def lock_main_screen():
     return {rel: s}
 
 
+def bar_gaps():
+    # The bar's popout kept while the pointer crosses a gap between two of its entries: Caelestia closed it there and
+    # the next entry's opened anew (the clock's calendar closed on the way down to the status icons under it)
+    bar = swap(read("modules/bar/Bar.qml"), """        if (!ch) {
+            popouts.hasCurrent = false;
+            return;
+        }
+""", """        // caelestia-overlay: in a gap between two entries, the popout as it was (going from one entry to the next, it
+        // closed there and the next one's opened anew); off the bar sideways, the drawers close it
+        if (!ch)
+            return;
+""", "bar gaps")
+    return {"modules/bar/Bar.qml": bar}
+
+
+def split_windows():
+    # Each screen's shell in four windows instead of Caelestia's one full-screen one (drawers/*.qml, whole files over
+    # modules/drawers/): the left one (the bar and its popouts), the right one (sidebar, session, OSD, notifications,
+    # utilities, toasts), the top one (dashboard) and the bottom one (launcher). Caelestia redrew the whole screen, in the
+    # shell and in Hyprland (with the blur under it), every frame of every animation: a panel sliding in now redraws its
+    # own window. Made from the drawers files as the features before this one leave them (their changes are in
+    # drawers/), so it needs them all on (NEEDS_ALL), and those files exactly as they were then (SPLIT_INPUTS, their fingerprint):
+    # Caelestia's changed, or a feature's patch to them, and this one is skipped (the shell as before, one window) until
+    # drawers/ is made again from the new ones
+    inputs = hashlib.sha256("".join(read(f"modules/drawers/{n}") for n in SPLIT_READS).encode()).hexdigest()
+    if inputs != SPLIT_INPUTS:
+        raise LookupError(f"the drawers files changed since drawers/ was made from them (now {inputs})")
+    return {f"modules/drawers/{n}": own(f"drawers/{n}") for n in sorted(os.listdir(os.path.join(here, "drawers")))
+            if n.endswith(".qml")}
+
+
+# What split_windows is made from: the features that change the drawers files, and those files' fingerprint after them
+SPLIT_NEEDS = (bar_menu, bar_space_refit, edge_triggers, launcher_fullscreen, safe_triangle, sidebar_alone,
+               sidebar_from_top, sidebar_not_over_popups, sidebar_shape, sidebar_with_utilities, snap_preview,
+               top_edge_one_panel, tray_click, window_peek)
+SPLIT_READS = ("ContentWindow.qml", "Drawers.qml", "Exclusions.qml", "Interactions.qml", "Panels.qml", "PeekLayer.qml",
+               "Regions.qml", "SnapPreview.qml")
+SPLIT_INPUTS = "ab47ab8fdb92e08c0c483b17f4592b3b0b33309af824eadd8b33e63b7e6f2f0e"
+
+
 FEATURES = (
     ("launcher pin buttons", launcher),
     ("bar dock", dock),
@@ -2709,6 +2755,8 @@ FEATURES = (
     ("a wallpaper of its own for each screen", screen_wallpapers),
     ("the wallpaper inside the bar and border", wallpaper_in_borders),
     ("lock screen on the main screen only", lock_main_screen),
+    ("the bar's popout kept across the gaps between its entries", bar_gaps),
+    ("the shell in four windows, each redrawn on its own (less GPU)", split_windows),
 )
 
 
@@ -2732,6 +2780,8 @@ def turned_off():
 NEEDS = {"nexus_snappy": ("nexus_pages",), "settings_open_at": ("nexus_pages",), "nexus_history": ("nexus_snappy",), "sidebar_shape": ("sidebar_notifs_only",), "settings_button": ("updates_button",), "top_edge_one_panel": ("sidebar_from_top",), "sidebar_from_top": ("sidebar_shape",),
          "sidebar_with_utilities": ("sidebar_from_top",),
          "window_peek": ("dock", "workspace_preview")}
+# ...and features that need every one of a list: off when any of them is off or skipped
+NEEDS_ALL = {"split_windows": tuple(f.__name__ for f in SPLIT_NEEDS)}
 
 if sys.argv[1:] == ["--list"]:
     print(json.dumps([{"id": f.__name__, "label": name} for name, f in FEATURES]))
@@ -2760,6 +2810,15 @@ for name, feature in FEATURES:
             print(f"WARNING: {name} skipped, it needs {' or '.join(labels[n] for n in needs)}: {', '.join(why)}")
         else:
             print(f"Off: {name} (needs {' or '.join(labels[n] for n in needs)})")
+        continue
+    gone = [n for n in NEEDS_ALL.get(feature.__name__, ()) if n in off]
+    if gone:
+        off.add(feature.__name__)
+        if any(n in skipped for n in gone):
+            skipped.add(feature.__name__)
+            print(f"WARNING: {name} skipped, it needs {' and '.join(labels[n] for n in gone)}, which didn't fit")
+        else:
+            print(f"Off: {name} (needs {' and '.join(labels[n] for n in gone)})")
         continue
     try:
         write(feature())

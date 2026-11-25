@@ -114,7 +114,16 @@ ColumnLayout {
                 id: preview
 
                 captureSource: root.shows(previewBox.modelData) ? previewBox.modelData.wayland : null // qmllint disable unresolved-type
-                live: visible
+                // A snapshot as it shows, then one a second: live, every frame of the window was copied as long as it
+                // showed (and hovering along the dock opened one after another), keeping the GPU busy
+                live: false
+
+                Timer {
+                    running: preview.visible && !!preview.captureSource
+                    repeat: true
+                    interval: 1000
+                    onTriggered: preview.captureFrame()
+                }
 
                 // Fitted to the menu's width (a tall window: as tall as that, at most)
                 constraintSize.width: root.width
@@ -170,8 +179,19 @@ ColumnLayout {
                     readonly property size size: root.fit(tile.modelData, tile.tileWidth, tile.tileWidth * 0.6)
 
                     ScreencopyView {
+                        id: tilePreview
+
                         captureSource: root.shows(tile.modelData) ? tile.modelData.wayland : null // qmllint disable unresolved-type
-                        live: visible
+                        // A snapshot as it shows, then one a second: live, every frame of the window was copied as long as it
+                        // showed (and hovering along the dock opened one after another), keeping the GPU busy
+                        live: false
+
+                        Timer {
+                            running: tilePreview.visible && !!tilePreview.captureSource
+                            repeat: true
+                            interval: 1000
+                            onTriggered: tilePreview.captureFrame()
+                        }
                         constraintSize.width: tile.tileWidth
                         constraintSize.height: tile.tileWidth * 0.6
 
