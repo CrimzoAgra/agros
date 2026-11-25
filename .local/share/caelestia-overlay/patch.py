@@ -2864,6 +2864,65 @@ def bar_gaps():
     return {"modules/bar/Bar.qml": bar}
 
 
+def tray_over_dock():
+    # The tray, opened, grows from its end over what's before it in the bar (the dock), on top of it with a background
+    # of its own, its place in the bar the closed tray's: Caelestia's grew in the bar's layout, the dock shrinking to
+    # make room. The bar's hit tests (its popouts, the click that closes the tray, the right-click menu's span) find
+    # the open tray where it reaches
+    bar = read("modules/bar/Bar.qml")
+    bar = swap(bar, """            DelegateChoice {
+                roleValue: "tray"
+                delegate: EntryWrapper {
+                    Tray {
+""", """            DelegateChoice {
+                roleValue: "tray"
+                delegate: EntryWrapper {
+                    // caelestia-overlay (tray_over_dock): the closed tray's room; opened, over what's before it
+                    z: 1
+                    Layout.preferredHeight: trayItem.closedHeight
+
+                    Tray {
+                        id: trayItem
+
+                        anchors.bottom: parent?.bottom
+""", "the tray's entry")
+    bar = swap(bar, """        return (childAt(width / 2, y) as EntryWrapper)?.entryId === "tray";
+""", """        return entryAt(y)?.entryId === "tray";
+""", "the tray's click test")
+    # (the popouts' and the scroll's)
+    old = "        const ch = childAt(width / 2, y) as EntryWrapper;\n"
+    if not bar.count(old):
+        raise LookupError("the popouts' entry test")
+    bar = bar.replace(old, "        const ch = entryAt(y);\n")
+    bar = swap(bar, """                const index = Math.floor(((y - top - tray.padding * 2 + tray.spacing) / tray.layout.implicitHeight) * tray.items.count);
+""", """                const index = Math.floor(((y - top - tray.y - tray.padding * 2 + tray.spacing) / tray.layout.implicitHeight) * tray.items.count);
+""", "the tray's item test")
+    bar = swap(bar, """        if (y < (ws ? ws.y + ws.height : 0) || y > (tray ? tray.y : height))
+""", """        if (y < (ws ? ws.y + ws.height : 0) || y > (tray ? tray.y + (tray.item?.y ?? 0) : height))
+""", "the bar menu's span")
+    bar = insert(bar, "    function checkPopout(y: real): void {\n", """    // caelestia-overlay (tray_over_dock): the entry at y, the open tray first where it reaches over the one before it
+    function entryAt(y: real): EntryWrapper {
+        for (let i = 0; i < repeater.count; i++) {
+            const e = repeater.itemAt(i) as EntryWrapper;
+            if (e?.entryId === "tray" && e.item && y >= e.y + e.item.y && y <= e.y + e.item.y + e.item.height)
+                return e;
+        }
+        return childAt(width / 2, y) as EntryWrapper;
+    }
+
+""")
+    tray = read("modules/bar/components/Tray.qml")
+    tray = insert(tray, "    clip: true\n", """    // caelestia-overlay (tray_over_dock): its height closed, its room in the bar open or not
+    readonly property real closedHeight: Config.bar.tray.compact ? Math.max(Config.bar.tray.background ? width : 0, expandIcon.implicitHeight + (Config.bar.tray.background ? Tokens.padding.extraSmall : 0) + padding) : nonAnimHeight
+
+""")
+    tray = swap(tray, """    color: Qt.alpha(Colours.tPalette.m3surfaceContainer, (Config.bar.tray.background && items.count > 0) ? Colours.tPalette.m3surfaceContainer.a : 0)
+""", """    // caelestia-overlay (tray_over_dock): open, a background of its own over what it covers
+    color: expanded && Config.bar.tray.compact ? Colours.tPalette.m3surfaceContainerHigh : Qt.alpha(Colours.tPalette.m3surfaceContainer, (Config.bar.tray.background && items.count > 0) ? Colours.tPalette.m3surfaceContainer.a : 0)
+""", "the tray's colour")
+    return {"modules/bar/Bar.qml": bar, "modules/bar/components/Tray.qml": tray}
+
+
 def split_windows():
     # Each screen's shell in four windows instead of Caelestia's one full-screen one (drawers/*.qml, whole files over
     # modules/drawers/): the left one (the bar and its popouts), the right one (sidebar, session, OSD, notifications,
@@ -3312,6 +3371,7 @@ FEATURES = (
     ("the wallpaper inside the bar and border", wallpaper_in_borders),
     ("lock screen on the main screen only", lock_main_screen),
     ("the bar's popout kept across the gaps between its entries", bar_gaps),
+    ("the tray opens over the dock, nothing beside it squeezed", tray_over_dock),
     ("the shell in four windows, each redrawn on its own (less GPU)", split_windows),
     ("the bar on the right, top or bottom, when Settings puts it there", bar_side),
 )
@@ -3348,7 +3408,7 @@ NEEDS = {"bar_side": ("split_windows",), "nexus_snappy": ("nexus_pages",), "sett
          "sidebar_with_utilities": ("sidebar_from_top",),
          "window_peek": ("dock", "workspace_preview")}
 # ...and features that need every one of a list: off when any of them is off or skipped
-NEEDS_ALL = {"split_windows": tuple(f.__name__ for f in SPLIT_NEEDS)}
+NEEDS_ALL = {"split_windows": tuple(f.__name__ for f in SPLIT_NEEDS), "tray_over_dock": ("tray_click", "bar_menu")}
 
 if sys.argv[1:] == ["--list"]:
     print(json.dumps([{"id": f.__name__, "label": name} for name, f in FEATURES]))
