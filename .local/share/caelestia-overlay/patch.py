@@ -965,13 +965,38 @@ def nexus_pages():
 {sections}        }}
 """ + t[i + 1:]
 
+    # The bar's edge (AgrOS's: bar_side) first on Nexus's Taskbar page, where the bar's settings are, not at the end of
+    # Panels' AgrOS sections; there still if that page has changed
+    tb = "modules/nexus/pages/panels/TaskbarPanel.qml"
+    try:
+        taskbar = swap(read(tb), """        // Behaviour
+        SectionHeader {
+            first: true
+""", """        // caelestia-overlay: which edge it's on (AgrOS's setting: the shell restarts with it there)
+        SectionHeader {
+            first: true
+            text: "Position"
+        }
+
+        AgrosRow {
+            first: true
+            last: true
+            key: "bar.side"
+        }
+
+        // Behaviour
+        SectionHeader {
+""", "the taskbar page's first section")
+    except LookupError:
+        taskbar = None
     folded = {
         "modules/nexus/pages/WallpaperAndStyle.qml": fold("modules/nexus/pages/WallpaperAndStyle.qml", """            pageIds: ["look", "panels"]
             onlyGroups: ["Fonts (the shell's)", "Windows", "Shell", "Desktop"]
 """),
         "modules/nexus/pages/PanelsPage.qml": fold("modules/nexus/pages/PanelsPage.qml", """            pageIds: ["panels", "bar", "launcher", "session"]
             skipGroups: ["Desktop"]
-"""),
+""" + ("""            skipKeys: ["bar.side"]
+""" if taskbar else "")),
         "modules/nexus/pages/ServicesPage.qml": fold("modules/nexus/pages/ServicesPage.qml", """            pageIds: ["notifs", "region"]
 """),
     }
@@ -1059,7 +1084,7 @@ PageBase {
     return {"modules/nexus/PageRegistry.qml": reg, "modules/nexus/PageCompRegistry.qml": comps,
             "modules/bar/popouts/Wrapper.qml": wrapper, "modules/nexus/Nexus.qml": nexus,
             "modules/nexus/NexusState.qml": state, "modules/nexus/NavPane.qml": pane,
-            "modules/nexus/navpane/NavLocations.qml": nav, **folded, **files}
+            "modules/nexus/navpane/NavLocations.qml": nav, **folded, **files, **({tb: taskbar} if taskbar else {})}
 
 
 def nexus_snappy():

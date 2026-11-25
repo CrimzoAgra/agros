@@ -2,7 +2,7 @@ pragma ComponentBehavior: Bound
 
 // caelestia-overlay: the page Nexus opens on, AgrOS's: the settings most often looked for, on four cards (Look,
 // Screens, Windows, Sound & network), each with a button to its whole page. Look: the screens with their wallpapers (the wallpaper alone with one), light or dark, the
-// colour scheme. Screens: where they stand and the main one, night light. Windows: floating or tiling, title bars,
+// colour scheme, the bar's edge. Screens: where they stand and the main one, night light. Windows: floating or tiling, title bars,
 // focus. Sound & network: the volume, the output, Wi-Fi and Bluetooth
 
 import QtQuick
@@ -126,6 +126,10 @@ PageBase {
 
                 AgrosRow {
                     key: "look.scheme"
+                }
+
+                AgrosRow {
+                    key: "bar.side"
                     last: true
                 }
             }

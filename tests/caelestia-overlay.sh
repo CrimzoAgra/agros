@@ -395,6 +395,9 @@ grep -q 'readonly property string barEdge: "left" // bar_side' "$dst/modules/dra
 new=$(lint_new /etc/xdg/quickshell/caelestia "$right")
 [[ -z $new ]] || fail "the patched QML, the bar on the right, uses what Caelestia doesn't have (qmllint): $new"
 
+# (set in Settings first on its Taskbar page and on Home's Look card, not again at the end of Panels)
+{ grep -q 'key: "bar.side"' "$dst/modules/nexus/pages/panels/TaskbarPanel.qml" && grep -q 'key: "bar.side"' "$dst/modules/nexus/pages/AgrosHome.qml" &&
+    grep -q 'skipKeys: \["bar.side"\]' "$dst/modules/nexus/pages/PanelsPage.qml"; } || fail "the bar's position not on Settings' Taskbar page and Home"
 # (and moving it rebuilds: the build's checksum has it, as it has the caelestia.* settings)
 grep -qF 'startswith("caelestia.") or . == "bar.side"' "$here/.local/bin/caelestia-overlay" || fail "moving the bar in Settings doesn't rebuild the shell"
 
