@@ -113,6 +113,8 @@ ColumnLayout {
 
                             SectionHeader {
                                 Layout.fillWidth: true
+                                // (its own column's spacing: in a row, SectionHeader can't find it)
+                                Layout.topMargin: first ? 0 : Tokens.spacing.largeIncreased - group.spacing
                                 first: root.firstHeader && group.index === 0
                                 text: (root.retitle[group.modelData] ?? group.modelData) + (group.folds ? ` (${group.keys.length})` : "")
                             }
