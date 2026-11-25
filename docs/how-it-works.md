@@ -491,7 +491,8 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
   (reported by `agros-check`)
 - **`.local/bin/caelestia-start`**: starts Caelestia at login (Caelestia's `execs.lua` runs it, so set by
   `agros-hyprland-settings`), running `caelestia-overlay` first (at every login: it rebuilds only what's out of date,
-  so one an update left waiting for a game is made then). `caelestia-start --prepare` (`caelestia-prepare.service`,
+  so one an update left waiting for a game is made then; Caelestia's CLI failing, a Python update it isn't rebuilt for
+  yet: `qs -c caelestia` directly). `caelestia-start --prepare` (`caelestia-prepare.service`,
   `agros-scripts`' user unit in `graphical-session-pre.target`, which uwsm starts Hyprland after) does that build, and
   a first login's wallpaper and colours, before Hyprland starts (at most a minute: then Hyprland starts and the run
   there does what's left), so the run at Hyprland's start starts the shell at once (built there, the live USB's

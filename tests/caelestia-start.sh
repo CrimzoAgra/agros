@@ -55,6 +55,13 @@ rm -rf "$t/home/.config/quickshell/caelestia"
 FAIL=1 run
 [[ $(grep -c 'shell -d' "$t/home/started") -eq 3 ]] || fail "a failed build: the shell wasn't started anyway"
 grep -q 'overlay checked: exit 1' "$log" || fail "a failed build: its exit code isn't logged"
+# Caelestia's CLI failing (a Python update it isn't rebuilt for yet): the shell started by qs directly
+cp "$t/bin/caelestia" "$t/caelestia.ok"; cp "$t/bin/qs" "$t/qs.ok"
+printf '#!/bin/sh\n[ "$1" = shell ] && exit 1\nexec %s "$@"\n' "$t/caelestia.ok" >"$t/bin/caelestia"
+printf '#!/bin/sh\n[ "$1" = -c ] && echo "qs $*" >>"$HOME/started"\nexec %s "$@"\n' "$t/qs.ok" >"$t/bin/qs"
+run
+[[ $(tail -1 "$t/home/started") == "qs -c caelestia -n -d" ]] || fail "Caelestia's CLI failing: the shell not started by qs: $(tail -2 "$t/home/started")"
+cp "$t/caelestia.ok" "$t/bin/caelestia"; cp "$t/qs.ok" "$t/bin/qs"
 
 # An install from before the mark, with a wallpaper picked since (Caelestia's path.txt): not replaced
 rm "$t/home/.local/state/agros/wallpaper-set"; : >"$t/home/started"

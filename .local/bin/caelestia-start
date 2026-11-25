@@ -77,8 +77,9 @@ fi
 if [[ -e $again ]]; then
     { caelestia scheme set -n dynamic && rm -f "$again" && echo "colours set again, for Hyprland"; } >>"$log" 2>&1 9>&- &
 fi
-# (even when the build failed: Caelestia as it comes, rather than no bar at all; it daemonizes and returns)
-caelestia shell -d >>"$log" 2>&1 9>&-
+# (even when the build failed: Caelestia as it comes, rather than no bar at all; it daemonizes and returns. Its CLI
+# failing (a Python update it isn't rebuilt for yet): the qs it runs, directly)
+caelestia shell -d >>"$log" 2>&1 9>&- || qs -c caelestia -n -d >>"$log" 2>&1 9>&-
 for _ in $(seq 300); do "$helpers/qs-running" /quickshell/caelestia/shell.qml && break; sleep 0.1; done
 # ...and its config loaded: it answers on its IPC. One that doesn't load leaves Quickshell running with nothing on
 # screen (no bar, no notifications, no lock screen): AgrOS's changes on a Caelestia or Quickshell other than the one CI
