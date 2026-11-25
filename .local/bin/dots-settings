@@ -845,14 +845,13 @@ def current(setting, saved):
         value = caelestia_value(setting, at(caelestia_file(setting["key"].split(".", 1)[0]), setting["path"]))
         return setting["caelestia_default"] if value is MISSING else value
     value = saved.get(setting["key"], setting["default"])
-    # Saved before the setting changed (an option gone, another type): its default, as shown and as applied
+    # Saved before the setting changed (an option gone, another type, a narrower range or another form): its default,
+    # as shown and as applied
     if setting["type"] == "choice" and not setting.get("open") and value not in [o["value"] for o in setting.get("options", [])]:
         return setting["default"]
     if setting["type"] == "bool" and not isinstance(value, bool):
         return setting["default"]
-    if setting["type"] == "number" and (isinstance(value, bool) or not isinstance(value, (int, float))):
-        return setting["default"]
-    if setting["type"] == "text" and not isinstance(value, str):
+    if setting["type"] in ("number", "text") and check(setting["key"], setting, value):
         return setting["default"]
     if setting["type"] == "keys":
         if not (isinstance(value, list) and all(isinstance(v, str) for v in value)):

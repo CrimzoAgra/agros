@@ -255,7 +255,8 @@ Windows, Sound & network), each with a button to its whole page.
 - **`.local/bin/dots-settings`**: saves your choices (only those that differ from the default) to
   `~/.config/dots/settings.json`, for this machine only, and writes them to `settings.lua` for Hyprland, where
   `dots.setting(key)` reads them (written again at Hyprland's load when the schema's md5sum isn't the one it was made
-  from: an update); scripts use `dots-settings get KEY` or `values`. Where a setting lives elsewhere it
+  from: an update); scripts use `dots-settings get KEY` or `values`. One saved that an update's schema no longer takes
+  (an option gone, another kind, out of a narrower range, not in its form) is its default, kept in the file. Where a setting lives elsewhere it
   says so in the schema, and `dots-settings` reads and writes it there:
   - `caelestia-shell.<option>` / `caelestia-tokens.<option>`: one of Caelestia's own options, in its `shell.json` /
     `shell-tokens.json`, written through `json-edit`. Caelestia watches those files, so the change shows at once (no

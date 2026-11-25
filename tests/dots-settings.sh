@@ -40,5 +40,16 @@ for k, s in settings.items():
     want = s["default"]
     shown = got.get(k, "nil")
     assert shown == (str(want).lower() if isinstance(want, bool) else str(want)), (k, shown, want)
+# A value saved before the setting changed (its range narrowed by an update, or a hand edit: out of range, not a whole
+# number, NaN) is its default, as shown and as written for Hyprland; a text no longer in its form too
+num = dict(settings["input.repeat_rate"])
+txt = {"key": "x.text", "type": "text", "default": "ab", "pattern": "[a-z]+"}
+for bad in (0, 101, 35.5, float("nan"), float("inf"), True):
+    assert ds.current(num, {num["key"]: bad}) == num["default"], (bad, ds.current(num, {num["key"]: bad}))
+assert ds.current(num, {num["key"]: 50}) == 50, "a value in range not kept"
+assert ds.current(txt, {"x.text": "A1"}) == "ab" and ds.current(txt, {"x.text": "cd"}) == "cd", "a text's form not held"
+json.dump({num["key"]: 500}, open(ds.SETTINGS, "w"))
+ds.write_lua(settings)
+assert f'["{num["key"]}"] = {num["default"]},' in open(f"{t}/settings.lua").read(), "an out-of-range value written for Hyprland"
 P
 echo "ok dots-settings"
