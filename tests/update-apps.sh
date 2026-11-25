@@ -70,6 +70,44 @@ out=$(HOME=$t/home XDG_STATE_HOME=$t/state XDG_CACHE_HOME=$t/home/.cache PATH=$t
 [[ ! -e $t/paru && $out == "Only an administrator can install updates"* ]] ||
     fail "an update tried by an account that can't sudo, or not said: $out / $(cat "$t/paru" 2>/dev/null)"
 stub id 'echo users wheel'  # (an admin's, from here on)
+# Nor "Update now" while an update's install, carried on past a logout, is still going (paru-sudo's unit); once it's
+# done, offered
+rm -f "$seen" "$t/sent"; stub systemctl '[ "$*" = "is-active -q agros-pacman" ]'
+check
+[[ ! -e $t/sent ]] || fail "\"Update now\" offered while an install carried on past a logout"
+rm "$t/bin/systemctl"
+check
+[[ -e $t/sent ]] || fail "\"Update now\" not offered once that install was done"
+rm -f "$seen" "$t/sent"
+
+# paru's sudo (paru-sudo, every paru of the update's): pacman run as root in a system unit of its own (agros-pacman:
+# logging out, which ends every process of yours, doesn't cut it off), its output the caller's (--pipe), power off,
+# sleep and the lid held off in it, its exit pacman's; sudo's options (-A, askpass) kept. Anything else (paru's sudo
+# -v) sudo's own. Stand-ins: sudo, systemd-run and systemd-inhibit note what they're given and run it
+# shellcheck disable=SC2016  # (expanded by the stand-ins)
+for c in sudo systemd-run systemd-inhibit; do
+    printf '#!/bin/sh
+echo "%s $*" >>%s/ps
+while [ "${1#-}" != "$1" ]; do shift; done
+exec "$@"
+' "$c" "$t" >"$t/ps-$c"
+done
+mkdir -p "$t/ps-bin"
+for c in sudo systemd-run systemd-inhibit; do mv "$t/ps-$c" "$t/ps-bin/$c"; done
+printf '#!/bin/sh
+echo "pacman $*"
+exit 3
+' >"$t/ps-bin/pacman"
+chmod +x "$t/ps-bin/"*
+rc=0; out=$(PATH=$t/ps-bin:$PATH "$here/.local/bin/paru-sudo" -A pacman -Su --noconfirm) || rc=$?
+[[ $rc == 3 && $out == "pacman -Su --noconfirm" ]] || fail "paru-sudo's pacman not run, or its exit not pacman's: $rc $out"
+grep -q "^sudo -A systemd-run --unit=agros-pacman .*--pipe .*systemd-inhibit " "$t/ps" &&
+    grep -q "^systemd-inhibit --what=sleep:shutdown:handle-lid-switch --mode=block .* pacman -Su --noconfirm$" "$t/ps" ||
+    fail "pacman not run in its own system unit, power off and sleep held: $(cat "$t/ps")"
+rm "$t/ps"
+PATH=$t/ps-bin:$PATH "$here/.local/bin/paru-sudo" -A -v
+[[ $(cat "$t/ps") == "sudo -A -v" ]] || fail "paru's sudo -v not sudo's own: $(cat "$t/ps")"
+rm -r "$t/ps" "$t/ps-bin"
 
 # Your password once for the whole run (no terminal: the Updates app): asked again when it was wrong, then every sudo
 # of the run (each paru's) given it by askpass with no dialog, and its copy gone once the run ends. Cancelled: nothing
@@ -104,6 +142,8 @@ for _ in 1 2; do
         </dev/null >/dev/null 2>&1 || true  # (its other steps, not stubbed here, fail)
 done
 [[ -s $t/state/quickshell-qt ]] || fail "the Qt Quickshell was built for not written down"
+grep -q -- "^paru --sudoloop --sudo $here/.local/bin/paru-sudo .*-Sy " "$t/paru" && ! grep -v -- "-Qua$\|--sudo $here/.local/bin/paru-sudo " "$t/paru" ||
+    fail "the update's paru not given paru-sudo as its sudo: $(cat "$t/paru")"
 ! grep -q -- --rebuild "$t/paru" || fail "Quickshell rebuilt with Qt unchanged: $(cat "$t/paru")"
 # Around a pacman -Syu, between update-apps --qt-mark and --qt-rebuild: a new Qt rebuilds Quickshell and Caelestia
 # (only those installed, as the Updates app does), and the new Qt is written down; Qt unchanged: nothing rebuilt
@@ -230,7 +270,7 @@ grep -q -- "--what=sleep:shutdown --mode=block .*tail --pid=" "$t/inhibit" ||
 # The boot's run (auto-update active) still to download what its AUR builds need (its "downloading" mark): waited for,
 # paru not run until the mark is gone (both writing pacman's cache at once would corrupt it)
 mkdir -p "$t/au"; touch "$t/au/downloading"; rm -f "$t/paru"
-stub systemctl 'true'
+stub systemctl '[ "$*" = "is-active -q auto-update" ]'  # (the boot's run active; no install past a logout)
 stub sleep 'exec /usr/bin/sleep 0.1'  # (its 5 s between looks)
 HOME=$t/home XDG_STATE_HOME=$t/state XDG_CACHE_HOME=$t/home/.cache AUTO_UPDATE_DIR=$t/au PATH=$t/bin:$PATH \
     "$here/.local/bin/update-apps" </dev/null >"$t/wait-out" 2>&1 &

@@ -159,9 +159,15 @@ PageBase {
             // Running: that unit active, or the lock held (the unit waits a moment for one, then leaves that one be).
             // A second "Update all", or the page opened again,
             // follows the running one's log instead, and ends as it did. Exit 100: none running (to follow).
+            // An update logged out of: its pacman carries on in a system unit (agros-pacman, update-apps' paru-sudo),
+            // the rest of it and its log gone; waited for, said, then the list looked up again (exit 100).
             // The follower ends with Caelestia (pdeathsig), its tail with it (--pid)
             command: ["setpriv", "--pdeathsig", "TERM", "sh", "-c", `running() { systemctl --user is-active -q agros-update-apps || ! flock -n "$1.lock" true; }
                 if running "$1"; then echo "== An update started earlier is still running"
+                elif systemctl is-active -q agros-pacman; then
+                    echo "== An install started earlier (before a logout) is still finishing"
+                    while systemctl is-active -q agros-pacman; do sleep 1; done
+                    exit 100
                 elif [ "$2" = start ]; then
                     : >"$1"; rm -f "$1.status"
                     systemd-run --user --unit=agros-update-apps --collect --quiet sh -c "$3" "$0" "$1" ||

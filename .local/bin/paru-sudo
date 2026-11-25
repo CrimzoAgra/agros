@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# paru's sudo for update-apps (paru --sudo): pacman run as root in a system unit of its own (agros-pacman), outside your
+# session, as PackageKit's daemon runs it. Logging out ends every process of yours (update-apps, paru, sudo): a pacman
+# under them was cut off halfway, packages half in and its lock left behind. Its output stays the caller's (--pipe:
+# Settings' log, the terminal; a write once that's gone fails, never kills it: a service ignores SIGPIPE), its exit is
+# pacman's. Power off, sleep and the lid held off in it, as update-apps holds them in your session (gone with it).
+# Anything else (paru's sudo -v) is sudo's own. No rule of its own: the sudo a wheel account has, as before
+#   paru-sudo [sudo's options] pacman <pacman's arguments>
+flags=()
+while [[ ${1:-} == -* ]]; do flags+=("$1"); shift; done
+[[ ${1:-} == pacman || ${1:-} == */pacman ]] || exec sudo "${flags[@]}" "$@"
+# (in the caller's folder: a package paru built, named by a relative path)
+exec sudo "${flags[@]}" systemd-run --unit=agros-pacman --description="Updates' pacman" --collect --quiet --pipe \
+    --same-dir \
+    systemd-inhibit --what=sleep:shutdown:handle-lid-switch --mode=block --who=Updates --why="Installing updates" "$@"

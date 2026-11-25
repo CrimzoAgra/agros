@@ -31,6 +31,8 @@ unset HYPRLAND_INSTANCE_SIGNATURE WAYLAND_DISPLAY DISPLAY
 # (a test that wants one signs with its own)
 export AGROS_GATE=$t/agros-gate.conf AGROS_GATE_CACHE=$t/agros-approved AGROS_GATE_KEYRING=$t/agros-gate-keyring.gpg \
     AGROS_ARCH_OK=$t/agros-arch-ok
+# Nor its /etc's .pacnew files (agros-check's note, as a notification that waited for a server the tests don't have)
+export AGROS_ETC=$t/etc
 # No __pycache__ left in the checkout by the Python a test loads: a python3 first on PATH, with -B (the tests'
 # python3 -I ignores the variable)
 export PYTHONDONTWRITEBYTECODE=1

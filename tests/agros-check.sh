@@ -170,4 +170,32 @@ out=$(arch_ok "$(date -ud '40 days ago' +%Y/%m/%d)" "@$(date -d '39 days ago' +%
 grep -q "checks haven't passed" <<<"$out" && fail "a copy not refreshed since counted to today: $out"
 out=$(arch_ok "not a date" "now")
 grep -q "checks haven't passed" <<<"$out" && fail "a copy that isn't a date said: $out"
+# .pacnew files in /etc (lib.sh's stand-in, AGROS_ETC): named, with how to merge them; as a notification once each (by
+# path and time: one a later update leaves again is said again). pacman.conf's AgrOS lines the boot put back
+# (auto-update's pacman-conf-repaired): noted too, once
+mkdir -p "$AGROS_ETC/pacman.d"
+touch "$AGROS_ETC/pacman.conf.pacnew" "$AGROS_ETC/pacman.d/mirrorlist.pacnew"
+# shellcheck disable=SC2016  # (expanded by the stand-in)
+printf '#!/bin/sh
+echo "$*" >>%s/sent
+' "$t" >"$t/notify-send"; chmod +x "$t/notify-send"
+note() { HOME=$h AUTO_UPDATE_DIR=$t/au NOTIFY_WHEN_UP_TRIES=1 PATH=$t:$PATH "$here/.local/bin/agros-check" --notify 2>&1; }
+sent() { grep -c "Config files to look at" "$t/sent" 2>/dev/null; }
+out=$(note)
+[[ $out == *"beside yours, the package's new version (yours is kept): $AGROS_ETC/pacman.conf.pacnew, $AGROS_ETC/pacman.d/mirrorlist.pacnew. To merge them: sudo pacdiff"* ]] ||
+    fail "the .pacnew files not noted, or not how to merge them: $out"
+[[ $(sent) == 1 ]] || fail "the .pacnew files not said in a notification: $(cat "$t/sent" 2>/dev/null)"
+note >/dev/null
+[[ $(sent) == 1 ]] || fail "the same .pacnew files said again at the next login"
+touch -d '1 hour ago' "$AGROS_ETC/pacman.conf.pacnew"
+note >/dev/null
+[[ $(sent) == 2 ]] || fail "a .pacnew a later update left again not said"
+echo "2026-11-25 08:01 the upstream gate's Include, AgrOS's repo ([agros])" >"$t/au/pacman-conf-repaired"
+out=$(note)
+[[ $out == *"pacman.conf had lost AgrOS's lines (the upstream gate's Include, AgrOS's repo (agros); a pacman.conf.pacnew merged whole?): the automatic update put them back (2026-11-25 08:01)"* &&
+    $(sent) == 3 ]] || fail "pacman.conf's repair not noted, or not in a notification: $out"
+note >/dev/null
+[[ $(sent) == 3 ]] || fail "pacman.conf's repair said again"
+rm -r "$AGROS_ETC" "$t/au/pacman-conf-repaired"
+[[ $(note) != *pacnew* ]] || fail "a .pacnew noted with none left"
 echo "ok agros-check"

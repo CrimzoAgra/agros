@@ -28,17 +28,24 @@ quiet_passim() {
 # [agros] where missing, at install and at upgrade (machines installed before); a SigLevel of yours there stays. And
 # its second server, AgrOS's mirror on Cloudflare R2 (agros's mirror.yml), after its others: pacman tries GitHub Pages
 # first, the mirror when Pages can't be reached. Its line commented out (#Server = <mirror>) is yours: not added again.
-# Both taken out at removal (agros_repo remove), only as added
+# Both taken out at removal (agros_repo remove), only as added. agros_repo restore: as add, and [agros] itself put back
+# where it's gone, last, as agros-iso has it (the boot's update, auto-update: a pacman.conf.pacnew merged whole)
 _agros_sig='SigLevel = Required DatabaseRequired'
+_agros_pages='https://crimzoagra.github.io/agros/$arch'
 _agros_mirror='https://pub-f1a3a482900748e8b69cd81361ab96e1.r2.dev/repo/$arch'
 agros_repo() {
-    local conf=$_r/etc/pacman.conf new
-    [[ -f $conf ]] && grep -q '^\[agros\][[:space:]]*$' "$conf" || return 0
-    new=$(awk -v mode="${1:-add}" -v sig="$_agros_sig" -v murl="$_agros_mirror" '
+    local conf=$_r/etc/pacman.conf new mode=${1:-add}
+    [[ -f $conf ]] && { [[ $mode == restore ]] || grep -q '^\[agros\][[:space:]]*$' "$conf"; } || return 0
+    new=$(awk -v mode="${mode/restore/add}" -v sig="$_agros_sig" -v murl="$_agros_mirror" -v purl="$_agros_pages" '
         { line[NR] = $0 }
         END {
             mirror = "Server = " murl
             for (i = 1; i <= NR; i++) if (line[i] ~ /^\[agros\][ \t]*$/) { s = i; break }
+            if (!s) {
+                for (i = 1; i <= NR; i++) print line[i]
+                printf "\n[agros]\n%s\nServer = %s\n%s\n", sig, purl, mirror
+                exit
+            }
             e = NR
             for (i = s + 1; i <= NR; i++) if (line[i] ~ /^[ \t]*\[/) { e = i - 1; break }
             last = s

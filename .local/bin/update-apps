@@ -25,7 +25,8 @@ helpers=$(dirname "$(readlink -f "$0")")  # (the shared helpers, beside this: no
 # (its log is all it shows), so from there AUR updates are built WITHOUT that review (--skipreview: paru would wait on a
 # pager no one sees). Which ones it builds is said first, in that log; those the boot's builds hold for review are left
 # out (held_aur)
-paru=(paru --sudoloop)
+# (paru's sudo, paru-sudo: its pacman runs in a system unit of its own, so logging out can't cut an install off)
+paru=(paru --sudoloop --sudo "$helpers/paru-sudo")
 [[ -t 0 ]] || { export SUDO_ASKPASS=$helpers/askpass; paru+=(--sudoflags -A --skipreview); }
 au_dir=${AUTO_UPDATE_DIR:-/var/lib/auto-update}
 # held_aur: the AUR apps the boot's builds hold until their build files are reviewed (auto-update-aur's guard), one
@@ -183,6 +184,8 @@ if [[ ${1:-} == --check ]]; then
     # (an admin's only: another account's "Update now" only failed)
     admin || exit 0
     ! snapshot || exit 0
+    # (nor while an update's install, carried on past a logout, is still going: paru-sudo's unit)
+    ! systemctl is-active -q agros-pacman 2>/dev/null || exit 0
     all=$(list_updates)
     list=$(grep -v '^offline' <<<"$all" | cut -f2 | sed '/^$/d' | sort -u)
     [[ -n $list ]] || exit 0
@@ -251,6 +254,10 @@ status=0 # 1 if any step failed (the Updates app says "Finished, with problems")
 downloading() { systemctl is-active -q auto-update 2>/dev/null && [[ -e $au_dir/db/db.lck || -e $au_dir/downloading ]]; }
 downloading && echo "Waiting for the update started at boot to finish downloading..."
 while downloading; do sleep 5; done
+# (an install a run before this one started, then logged out of, still going on: its unit's, paru-sudo's)
+installing() { systemctl is-active -q agros-pacman 2>/dev/null; }
+installing && echo "Waiting for an install already running (one carried on past a logout) to finish..."
+while installing; do sleep 5; done
 qt_mark
 if [[ ! -t 0 ]]; then
     mapfile -t held < <(held_aur | sort -u)

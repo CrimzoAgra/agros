@@ -68,6 +68,12 @@ pac post_upgrade
 [[ $(cat "$conf") == "$(sed '1a Include = /etc/pacman.d/agros-noextract.conf' "$t/mine")" ]] ||
     fail "a setting of yours changed or added again: $(cat "$conf")"
 
+# No [agros] at all (a chroot's or CI's pacman.conf, these packages installed from files): not added by the install or
+# an upgrade; the boot's repair alone puts it back (agros_repo restore: auto-update, tests/auto-update-pacman-conf.sh)
+printf '%s\n' '[options]' 'Architecture = auto' >"$conf"
+pac post_install; pac post_upgrade
+grep -q '^\[agros\]' "$conf" && fail "[agros] added by the install where pacman.conf had none: $(cat "$conf")"
+
 # Removal: the Includes and what it added to [agros] out, the rest as it was; passwd's PAM line out
 cachyos
 pac post_install

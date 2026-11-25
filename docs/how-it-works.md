@@ -1080,7 +1080,9 @@ brings each change; nothing to run by hand).
   - "Update all" runs `update-apps`, showing its progress; shown only while something is waiting, and taking no click
     for a second after it appears (where "Check again" was, under the pointer: a double-click there isn't an install).
     The update runs in a systemd unit of its own (`agros-update-apps`): Settings closed, or Caelestia restarted, it
-    carries on (its log: `$XDG_RUNTIME_DIR/update-apps.log`), and the page opened again follows it
+    carries on (its log: `$XDG_RUNTIME_DIR/update-apps.log`), and the page opened again follows it. Logged out of, its
+    pacman carries on (below, `paru-sudo`), the rest of the run ends; the page opened after the next login says "An
+    install started earlier (before a logout) is still finishing", waits for it, then lists what's left
   - Its log's errors in red, but not pacman's "failed retrieving file ... from <mirror>" (that mirror lacked it, the
     next one is tried); "failed to retrieve some files" and a failed run stay red
 - **Files never unpacked** (`packages/agros-system/agros-noextract.conf` at `/etc/pacman.d/agros-noextract.conf`,
@@ -1165,6 +1167,12 @@ brings each change; nothing to run by hand).
     machine from before the gate, a merged `pacman.conf.pacnew`; its removal takes it out): pacman can't read a config
     including a missing file, and the ISO's `pacman.conf` for the installed system is in place before anything is
     installed
+  - The boot's update puts it back too, and `[agros]` itself (last, as agros-iso has it) where either is gone (a
+    `pacman.conf.pacnew` merged whole: a manual `pacman -Syu` then took Hyprland unchecked, and AgrOS's packages
+    turned foreign), before anything else, as root: by `agros-system`'s own install code (pacman's copy of its
+    install script: `pacman_includes`, `agros_repo restore`; the install and upgrade never add a missing `[agros]`, a
+    chroot's or CI's `pacman.conf`). Said in the log, and once by `agros-check` after login
+    (`/var/lib/auto-update/pacman-conf-repaired`, until the next boot)
 - **`.local/bin/update-apps`**: updates everything (system and AUR apps with `paru` through the upstream gate, then each
   kind `update-kinds` runs: firmware with fwupd, Flatpaks, AppImages, Capri, Proton builds, developer tools), like at
   boot. `--list` is what Settings' Updates page shows (`update-kinds --list`); every 6 hours (`update-check.timer`) it checks,
@@ -1189,6 +1197,15 @@ brings each change; nothing to run by hand).
   is a process of its own and sudo, with no terminal, remembers the password per calling process, so `update-apps`
   asks for it and checks it first (again when wrong, three tries), keeps it for that run only in a file of yours in
   `$XDG_RUNTIME_DIR` (RAM), which `askpass` gives each sudo (`AGROS_ASKPASS_FILE`), and removes it when the run ends.
+  Its pacman runs outside your session, as PackageKit's daemon's does: paru's sudo is `.local/bin/paru-sudo` (`paru
+  --sudo`), which runs each root pacman as `sudo systemd-run --unit=agros-pacman --pipe --same-dir` (a system service;
+  its output still the log or the terminal, its exit pacman's; power off, sleep and the lid held off in it,
+  `systemd-inhibit`, as `update-apps`' own lock goes with your session) and anything else (`sudo -v`) as sudo itself.
+  Logging out ends every process of yours, `update-apps`, `paru` and `sudo` too: a pacman under them was cut off
+  halfway, packages half in and its lock left behind. Now the install in progress finishes; what's left of the run
+  (the next package, an AUR build, the Flatpaks) ends with the session, no lock or package half in. No sudo rule of
+  its own: a wheel account's sudo with its password, as before. A run, and `update-check`'s "Update now", wait while
+  one carried past a logout is still installing (`systemctl is-active agros-pacman`)
   After its `paru -Syu` it rebuilds
   what's built on a runtime it changed (the boot's list, below), and on a Qt changed since they were last built, once
   the runtime is in: `[agros]`'s own at the version installed with AgrOS's Quickshell fix (through `auto-update-aur
@@ -1693,6 +1710,12 @@ breaks something holds back that one piece, never the rest (`.github/workflows/c
   `caelestia-hypr-refresh`. It refreshes `~/.config/hypr` alone (files you haven't edited replaced, Caelestia's new
   version written beside the ones you have as `.new`) and checks the config. Not `caelestia update`: its own system
   update skips the Qt rebuild (the boot update's and Settings' Updates page's), and a new Qt leaves the shell unable to start
+- **Config files to look at after an update** (a low-urgency note from `agros-check`, once per file): `.pacnew` files
+  under `/etc` (`find`; pacman kept a file you or the installer changed and wrote the package's new one beside it).
+  Merge them with `sudo pacdiff` (each beside its file), or by hand (what you want of it into the file, then the
+  `.pacnew` removed). Said again when a later update leaves one again (by its path and time:
+  `~/.local/state/agros/etc-noted`). Also noted: `pacman.conf`'s AgrOS lines the boot's update put back (above, the
+  upstream gate)
 - **An update broke the system**: boot the snapshot from before it (Esc at start-up; it runs in RAM, above), then Btrfs
   Assistant's Snapper, Browse/Restore, to keep it (the manual's
   [If an update goes wrong](../manual/12-updates.md#if-an-update-goes-wrong))

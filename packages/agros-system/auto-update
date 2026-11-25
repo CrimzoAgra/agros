@@ -443,6 +443,32 @@ else
     recover
 fi
 
+# pacman.conf's AgrOS lines put back where they're gone (a pacman.conf.pacnew merged whole): the upstream gate's Include
+# (without it a pacman -Syu by hand takes Hyprland unchecked) and the [agros] repo (without it AgrOS's packages turn
+# foreign, never updated again). By agros-system's own install code, its upgrade's (pacman keeps its install script),
+# [agros] put back too (agros_repo restore). Said in the log and, after login, by agros-check (pacman-conf-repaired,
+# until the next boot's run)
+conf_lacks() {
+    grep -qE '^[[:space:]]*Include[[:space:]]*=[[:space:]]*/etc/pacman\.d/agros-gate\.conf[[:space:]]*(#.*)?$' "$1" ||
+        echo "the upstream gate's Include"
+    grep -q '^\[agros\][[:space:]]*$' "$1" || echo "AgrOS's repo ([agros])"
+}
+conf_repair() {
+    local conf=${AGROS_ROOT:-}/etc/pacman.conf missing inst
+    rm -f "$au/pacman-conf-repaired"
+    [[ -f $conf ]] && missing=$(conf_lacks "$conf" | paste -sd, | sed 's/,/, /g') && [[ -n $missing ]] || return 0
+    for inst in "$pacdb"/local/agros-system-*/install; do
+        (. "$inst" && pacman_includes && agros_repo restore) >/dev/null 2>&1
+    done
+    if [[ -n $(conf_lacks "$conf") ]]; then
+        echo "!! pacman.conf lacks $missing, and it couldn't be put back"
+    else
+        echo "pacman.conf lacked $missing (a pacman.conf.pacnew merged whole?): put back"
+        echo "$(date '+%F %R') $missing" >"$au/pacman-conf-repaired"
+    fi
+}
+conf_repair
+
 # wait for the network (at most ~2 min; what fails without it is said below)
 /usr/lib/agros/bin/wait-online https://archlinux.org
 
