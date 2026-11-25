@@ -229,21 +229,39 @@ Scope {
     }
 
     // caelestia-overlay: the panels along the top, where a narrow screen (a portrait one) hasn't room for them side by
-    // side: the one opening closes those it would overlap there (by where each is: open or not, its place is kept)
+    // side: the ones just opened kept, the others they'd overlap there closed (by where each is: open or not, its place
+    // is kept). Settled once what opens together has opened (Super+K's all at once: one closing another as it came, they
+    // went in and out, and the volume slider, which the sidebar shuts, stayed); of those, the dashboard last (it
+    // overlaps both others: the sidebar and the utilities panel kept side by side)
+    property var topOpened: []
+
     function makeRoom(opened: string): void {
+        topOpened = [...topOpened, opened];
+        Qt.callLater(settleTop);
+    }
+
+    function settleTop(): void {
+        const opened = topOpened;
+        topOpened = [];
         const top = { dashboard: panels.dashboard };
         if (!sidebarLeft)
             top.sidebar = panels.sidebar;
         if (utilitiesTop)
             top.utilities = panels.utilities;
-        const mine = top[opened];
-        if (!mine)
-            return;
-        const a = innerX + vx(mine);
-        for (const name of Object.keys(top)) {
-            const b = innerX + vx(top[name]);
-            if (name !== opened && screenState[name] && a < b + top[name].width && b < a + mine.width)
+        const order = [...opened.filter(n => n !== "dashboard"), ...opened.filter(n => n === "dashboard"), ...Object.keys(top).filter(n => !opened.includes(n))];
+        const kept = [];
+        for (const name of order) {
+            const p = top[name];
+            if (!p || !screenState[name] || kept.includes(p))
+                continue;
+            const a = innerX + vx(p);
+            if (kept.some(k => {
+                const b = innerX + vx(k);
+                return a < b + k.width && b < a + p.width;
+            }))
                 screenState[name] = false;
+            else
+                kept.push(p);
         }
     }
 
@@ -476,16 +494,18 @@ Scope {
                 root.dashboardShortcutActive = false;
                 root.osdShortcutActive = false;
                 root.sidebarShortcutActive = false;
-                if (!root.inSidebar(root.mouseX, root.mouseY))
+                // (caelestia-overlay: hovered only with the pointer on the shell, its last place there no longer counting)
+                const on = root.containsMouse;
+                if (!(on && root.inSidebar(root.mouseX, root.mouseY)))
                     root.screenState.sidebar = false;
-                if (!root.inUtilities(root.mouseX, root.mouseY))
+                if (!(on && root.inUtilities(root.mouseX, root.mouseY)))
                     root.screenState.utilities = false;
 
                 root.utilitiesShortcutActive = false;
 
                 // Also hide dashboard and OSD if they're not being hovered
-                const inDashboardArea = root.inTopPanel(root.panels.dashboard, root.mouseX, root.mouseY);
-                const inOsdArea = root.inRightPanel(root.panels.osdWrapper, root.mouseX, root.mouseY);
+                const inDashboardArea = on && root.inTopPanel(root.panels.dashboard, root.mouseX, root.mouseY);
+                const inOsdArea = on && root.inRightPanel(root.panels.osdWrapper, root.mouseX, root.mouseY);
 
                 if (!inDashboardArea) {
                     root.screenState.dashboard = false;
@@ -501,7 +521,7 @@ Scope {
             if (root.screenState.dashboard) {
                 root.makeRoom("dashboard");
                 // Dashboard became visible, immediately check if this should be shortcut mode
-                const inDashboardArea = root.inTopPanel(root.panels.dashboard, root.mouseX, root.mouseY);
+                const inDashboardArea = root.containsMouse && root.inTopPanel(root.panels.dashboard, root.mouseX, root.mouseY);
                 if (!inDashboardArea) {
                     root.dashboardShortcutActive = true;
                 }
@@ -514,7 +534,7 @@ Scope {
         function onOsdChanged() {
             if (root.screenState.osd) {
                 // OSD became visible, immediately check if this should be shortcut mode
-                const inOsdArea = root.inRightPanel(root.panels.osdWrapper, root.mouseX, root.mouseY);
+                const inOsdArea = root.containsMouse && root.inRightPanel(root.panels.osdWrapper, root.mouseX, root.mouseY);
                 if (!inOsdArea) {
                     root.osdShortcutActive = true;
                 }
@@ -528,11 +548,11 @@ Scope {
             // Not when the hover trigger (the top edge over it) opened it: it's still above the screen then
             const border = root.config.border;
             const band = Math.max(border.minThickness, border.thickness) + border.rounding;
-            const inTrigger = (root.sidebarLeft ? root.mouseY > root.height - band : root.mouseY < band)
+            const inTrigger = root.containsMouse && (root.sidebarLeft ? root.mouseY > root.height - band : root.mouseY < band)
                 && root.withinPanelWidth(root.panels.sidebar, root.mouseX, root.mouseY);
             if (root.screenState.sidebar) {
                 root.makeRoom("sidebar");
-                root.sidebarShortcutActive = !inTrigger && !root.inSidebar(root.mouseX, root.mouseY);
+                root.sidebarShortcutActive = !inTrigger && !(root.containsMouse && root.inSidebar(root.mouseX, root.mouseY));
             } else {
                 root.sidebarShortcutActive = false;
             }
@@ -541,8 +561,10 @@ Scope {
         function onUtilitiesChanged() {
             if (root.screenState.utilities) {
                 root.makeRoom("utilities");
-                // Utilities became visible, immediately check if this should be shortcut mode
-                const inUtilitiesArea = root.inUtilities(root.mouseX, root.mouseY);
+                // Utilities became visible, immediately check if this should be shortcut mode (caelestia-overlay: the
+                // pointer on the shell: off it, its last place there says nothing, (0, 0) before it ever came: the top-left
+                // corner, a bottom bar's utilities panel's, which then closed at the first move)
+                const inUtilitiesArea = root.containsMouse && root.inUtilities(root.mouseX, root.mouseY);
                 if (!inUtilitiesArea) {
                     root.utilitiesShortcutActive = true;
                 }
