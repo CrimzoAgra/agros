@@ -36,6 +36,9 @@ tests() {
     # approves Hyprland)
     ((rc == 0 || ${#failed[@]})) || { echo "    the tests didn't run (run.sh: exit $rc)" >>"$report"; result fail 1; }
 }
+# stopped <why>: a pass that couldn't be run (a download failed, an install refused), said in the report too: the issue
+# read as AgrOS's own code failing, with nothing under it saying otherwise
+stopped() { echo "$1"; echo "    $1: not known which side broke the tests" >>"$report"; result fail 1; }
 ahead=
 result() {
     if [[ -n $ahead ]]; then
@@ -45,21 +48,21 @@ result() {
     echo "result=$1" >>"$out"; echo "Tests: $1"; exit "${2:-0}"
 }
 agros_at "$built"
-pacman -Syuu --noconfirm --needed caelestia-shell >/dev/null || { echo "!! the built [agros] didn't install"; result fail 1; }
+pacman -Syuu --noconfirm --needed caelestia-shell >/dev/null || stopped "!! the built [agros] didn't install"
 echo "- With this run's [agros], on today's Arch:" >>"$report"
 tests
 ahead=$(sed -n 's/^ok \([^ ]*\) .*(AHEAD: \(.*\))$/    AHEAD \1: \2/p' <<<"$log")
 ((${#failed[@]})) || { echo "    all passed" >>"$report"; result ok; }
 agros_at "$published"
 # (-yy: the sync db is the built one, newer than the published; -y kept it, checked against the published .sig)
-pacman -Syyuu --noconfirm >/dev/null || { echo "!! the published [agros] didn't install"; result fail 1; }
+pacman -Syyuu --noconfirm >/dev/null || stopped "!! the published [agros] didn't install"
 echo "- All again with the published [agros]:" >>"$report"
 tests
 ((${#failed[@]})) || { echo "    passed: this run's new AUR builds broke them" >>"$report"; result hold-agros; }
 [[ $day =~ ^[0-9]{4}/[0-9]{2}/[0-9]{2}$ ]] || { echo "    (no day Arch last passed on: not tried on an older Arch)" >>"$report"; result fail 1; }
 # shellcheck disable=SC2016  # (pacman's own variables)
 printf 'Server = https://archive.archlinux.org/repos/%s/$repo/os/$arch\n' "$day" >"${MIRRORLIST:-/etc/pacman.d/mirrorlist}"
-pacman -Syyuu --noconfirm >/dev/null || { echo "!! Arch as of $day didn't install"; result fail 1; }
+pacman -Syyuu --noconfirm >/dev/null || stopped "!! Arch as of $day didn't install"
 echo "- All again on Arch as of $day (the last day they passed on it):" >>"$report"
 tests
 ((${#failed[@]})) || { echo "    passed: an Arch update since broke them" >>"$report"; result hold-upstream; }

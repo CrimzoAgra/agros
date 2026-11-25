@@ -63,6 +63,10 @@ rm -f "$t/body"
 (($(wc -m <"$t/body") <= 65536)) || fail "a long report's issue over GitHub's 65536 characters: $(wc -m <"$t/body")"
 grep -q '^    FAIL test1: ' "$t/body" && grep -q "^    \.\.\. cut short here, [0-9]* more lines: the run's report artifact" "$t/body" ||
     fail "a long report not cut short, said: $(head -c 300 "$t/body")"
+# (a pass of the tests that couldn't run, ci/test-passes.sh's "!!" line: not said as AgrOS's own code failing)
+printf -- '- With this run'"'"'s [agros], on today'"'"'s Arch:\n    FAIL lutris: x\n    !! the published [agros] didn'"'"'t install: not known which side broke the tests\n' >"$t/stopped"
+[[ $(go env BUILD=success RESULT=fail REPORT="$t/stopped") == "gh issue create --label held --title Held back: the tests couldn't be run through (said below) --body-file "* ]] ||
+    fail "tests that couldn't run through said as AgrOS's code failing: $(go env BUILD=success RESULT=fail REPORT="$t/stopped")"
 # A re-run of an older run, the published repo already a newer commit's (ci/newer.sh): nothing put out, the issue as
 # the newer run left it, neither opened nor closed nor edited
 echo 12 >"$t/open"

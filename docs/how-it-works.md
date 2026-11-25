@@ -1577,7 +1577,8 @@ breaks something holds back that one piece, never the rest (`.github/workflows/c
   snapshot; the day published as `agros-arch-ok`): they pass, an Arch update broke them (its Hyprland not approved, the
   new AUR builds held, AgrOS's own packages still out but `agros-hyprbars`: built for that Hyprland, it would start
   on none the machines or the ISO have, so the published one, built for the approved Hyprland, is kept,
-  `AGROS_HOLD_OWN`). Failing even then: AgrOS's own code, and nothing goes out.
+  `AGROS_HOLD_OWN`). Failing even then: AgrOS's own code, and nothing goes out (so too when a pass can't install, a
+  download failed: the issue says that pass, not AgrOS's code).
 - **Upstream's next release** no longer fitting AgrOS's changes (a check against a main branch, above): nothing held,
   everything goes out, and the issue below says which change to adapt before that release.
 - **Never an older commit's over a newer one.** Runs on `main` go one at a time, a newer push cancelling the one still

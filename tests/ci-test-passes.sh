@@ -9,7 +9,8 @@ mkdir -p "$t/repo/ci" "$t/repo/tests" "$t/bin"
 cp "$here/ci/test-passes.sh" "$t/repo/ci/"
 printf '[core]\nInclude = x\n[agros]\nServer = https://example.invalid/old\n' >"$t/pacman.conf"
 : >"$t/mirrorlist"
-printf '#!/bin/sh\nexit 0\n' >"$t/bin/pacman"
+# (pacman fails while [agros] is the one $PACFAIL names: a download that failed)
+printf '#!/bin/sh\n[ -z "$PACFAIL" ] || ! grep -q "^Server = .*/$PACFAIL\\$" %s/pacman.conf\n' "$t" >"$t/bin/pacman"
 printf '#!/bin/sh\nshift 2\nexec "$@"\n' >"$t/bin/runuser"
 # (the stand-in tests: hypr-api and lutris; they fail where $BROKEN names the [agros] or the Arch they run on, and pass
 # saying upstream's next release doesn't fit where it names main: the line a test makes for it, lib.sh's ok_line;
@@ -58,6 +59,11 @@ grep -qx '    AHEAD lutris: no longer fits main; x' "$t/report" || fail "upstrea
     fail "upstream's main not said once, at the end: $(cat "$t/report")"
 [[ $(go "lutris@main hypr-api@today hypr-api@always" 2026/11/14) == "result=fail | all|all|all" ]] ||
     fail "AgrOS's own break not a failure with a test saying upstream's main doesn't fit"
+# (a pass that couldn't install, a download failed: nothing out, and said in the report, not read as AgrOS's code)
+[[ $(PACFAIL=published go "lutris@built") == "result=fail | all" ]] ||
+    fail "the published [agros] not installing: not a failure: $(PACFAIL=published go "lutris@built")"
+grep -q "^    !! the published \[agros\] didn't install: not known which side" "$t/report" ||
+    fail "an install that failed not in the report: $(cat "$t/report")"
 # (not in a background job, which starts with Ctrl+C ignored: dotfiles-sync-edge's Ctrl+C then never reached the sync)
 [[ ! -s $t/int ]] || fail "the tests ran with Ctrl+C ignored: $(sort -u "$t/int")"
 echo "ok ci-test-passes"
