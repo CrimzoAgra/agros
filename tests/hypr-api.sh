@@ -4,7 +4,7 @@
 # files over them, as /etc/skel has it) loaded by Hyprland itself (--verify-config: an unknown function or setting is an
 # error), and every name of Hyprland's Lua API AgrOS uses (hl.*, its dispatchers, its events, the settings read by name
 # and those made in one-line hl.config calls: in handlers too, which a load doesn't run) in the API Hyprland ships (its
-# Lua stubs, made from its source)
+# Lua stubs, made from its source); and every hypr* library a gated package (agros-gate.conf) needs held back too
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
@@ -135,6 +135,17 @@ for b in sorted(set(bad)):
     print(b)
 sys.exit(1 if bad else 0)
 PY
+
+# The upstream gate holds all of Hyprland's own libraries: each hypr* or aquamarine package a gated one depends on is
+# gated too (a new one, not held, would update on every machine unchecked, a manual pacman -Syu too)
+read -ra gated < <(sed -n 's/^[[:space:]]*IgnorePkg[[:space:]]*=[[:space:]]*//p' "$here/packages/agros-system/agros-gate.conf" | paste -sd' ')
+for p in "${gated[@]}"; do
+    for d in $(LC_ALL=C pacman -Qi -- "$p" 2>/dev/null | sed -n 's/^Depends On *: //p'); do
+        d=${d%%[<>=]*}
+        [[ $d =~ ^(hypr|aquamarine) ]] || continue
+        printf '%s\n' "${gated[@]}" | grep -qxF -- "$d" || fail "$p depends on $d, which agros-gate.conf doesn't hold back"
+    done
+done
 
 # The whole config, loaded by Hyprland (Caelestia's dots fetched at the pinned commit: offline, not checked)
 dots=$(sed -n 's/^_dots=//p' "$here/packages/agros-hyprland-settings/PKGBUILD")

@@ -1099,8 +1099,9 @@ brings each change; nothing to run by hand).
   - CI's test job runs every test against the newest Hyprland from Arch (the real one loading the whole config,
     `tests/hypr-api.sh`; against Hyprland's own Lua stubs, in handlers too: every Hyprland name and event AgrOS uses,
     the settings it reads by name, and those it makes in one-line `hl.config` calls (a multi-line one only through the
-    load); the plugin built; the overlay applied); when all pass, those versions go on the approved list, published
-    beside the `[agros]` repo (`agros-approved`, "name version" without the pkgrel, earlier approvals kept). The
+    load); every hypr* library a gated package needs gated too; the plugin built; the overlay applied); when all
+    pass, those versions go on the approved list, published beside the `[agros]` repo (`agros-approved`, "name
+    version" without the pkgrel, earlier approvals kept). The
     versions are read before anything built is in the test job (its builds run there as root and could make a later list
     say anything) and handed on as a job output, not an artifact; the list read after the tests only takes one out (Arch
     moved on meanwhile), never adds one. Each package's version is approved on its own, not as the set it was tested in
