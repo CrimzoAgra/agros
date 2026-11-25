@@ -99,7 +99,16 @@ local list = screens()
 if #list >= 2 then
     for k, m in ipairs(list) do
         for i = 1, 10 do
-            hl.workspace_rule({ workspace = tostring((k - 1) * 10 + i), monitor = m.name, default = (i == 1) })
+            -- (named by their column: the 2nd screen's 11 is its "1", in the bar and the previews)
+            hl.workspace_rule({ workspace = tostring((k - 1) * 10 + i), monitor = m.name, default = (i == 1),
+                                default_name = tostring(i) })
+        end
+    end
+    -- (the rule names a workspace as it's made: those already there named now)
+    for _, ws in ipairs(hl.get_workspaces() or {}) do
+        local id = ws.id or 0
+        if id > 10 and id <= #list * 10 and ws.name == tostring(id) then
+            pcall(hl.dispatch, hl.dsp.workspace.rename({ workspace = id, name = tostring(column(id)) }))
         end
     end
 end

@@ -379,9 +379,17 @@ end)
 -- a window starts (my patch hooks Hyprland's drag start), so the drag goes on from the new size. Apps can't do it
 -- themselves: Hyprland never tells them they're maximised. Without the plugin, a drag leaves it maximised in name
 local snap_drag_start, snap_drag_end, keep_reachable  -- (Snapping and Always within reach, below)
+local game_drags = {}  -- (fullscreen games being dragged, by address: fullscreen again where they're dropped)
 function dots.window_drag_start(address, kind)
     local win = by_address(address)
     if not win then return end
+    -- A fullscreen game (or one as big as its screen: Hyprland takes it out of fullscreen to drag it, and the handler
+    -- above floats it at the screen's size)
+    if kind == "move" and dots.is_game and dots.is_game(win) then
+        local m = win.monitor or hl.get_active_monitor()
+        local w, h = m and screen_size(m)
+        game_drags[address] = (win.fullscreen or 0) > 0 or (w and win.size.x >= w - 1 and win.size.y >= h - 1) or nil
+    end
     -- A snapped window (below) dragged away: back to the size it had before it was snapped (Windows' way); a maximised
     -- one too, when it was snapped there (else to the standard size)
     local before = snap_drag_start(win, kind)
@@ -799,7 +807,19 @@ function dots.window_drag_step(_, kind)
     if kind == "move" and moving then update_zone() elseif follow then follow_step() end
 end
 function dots.window_drag_end(address, kind)
-    snap_drag_end(by_address(address), kind)
+    local win = by_address(address)
+    snap_drag_end(win, kind)
+    -- A fullscreen game dragged to another screen (Super+drag): fullscreen on the screen it's dropped on. Left floating,
+    -- Wine moved it itself to where that screen is in XWayland's layout, which isn't Hyprland's: off every screen
+    if game_drags[address] and win and kind == "move" then
+        local m = hl.get_monitor_at_cursor()
+        local ws = m and m.active_workspace
+        if ws and (ws.id or 0) > 0 and not (win.workspace and win.workspace.id == ws.id) then
+            hl.dispatch(hl.dsp.window.move({ workspace = ws.id, follow = false, window = win }))
+        end
+        hl.dispatch(hl.dsp.window.fullscreen({ mode = "fullscreen", action = "set", window = win }))
+    end
+    game_drags[address] = nil
 end
 
 -- Always within reach --------------------------------------------------------------------------------------------------

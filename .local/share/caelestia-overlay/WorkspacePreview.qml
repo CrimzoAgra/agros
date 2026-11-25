@@ -6,6 +6,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Hyprland
+import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Widgets
 import Caelestia.Config
@@ -27,11 +28,33 @@ Column {
     readonly property real monH: mon ? (turned ? mon.width : mon.height) / mon.scale : 1080
     // 280 px wide, the dock menu's width (DockMenu.qml): smaller than Caelestia's own previews (400)
     readonly property real factor: 280 / monW
+    // Its screen's own wallpaper, set in Settings (screens.<its description>.wallpaper in settings.json, as the
+    // background's), else the one for every screen
+    property var settings: ({})
+    readonly property string wallpaper: {
+        const own = settings[`screens.${workspace?.monitor?.description ?? ""}.wallpaper`];
+        return typeof own === "string" && own !== "" ? own : Wallpapers.current;
+    }
+
+    FileView {
+        path: `${Quickshell.env("HOME")}/.config/dots/settings.json`
+        watchChanges: true
+        onFileChanged: reload()
+        onLoaded: {
+            try {
+                const all = JSON.parse(text());
+                root.settings = all && typeof all === "object" ? all : {};
+            } catch (e) {
+                root.settings = {};
+            }
+        }
+        onLoadFailed: root.settings = {}
+    }
 
     spacing: Tokens.spacing.medium
 
     StyledText {
-        text: qsTr("Workspace %1").arg(root.popouts.previewWs)
+        text: qsTr("Workspace %1").arg(root.workspace?.name || root.popouts.previewWs) // (its name: the 2nd screen's 11 is "1")
         font: Tokens.font.body.medium
     }
 
@@ -41,19 +64,19 @@ Column {
         radius: Tokens.rounding.medium
         color: Colours.tPalette.m3surfaceContainerHigh
 
-        // The wallpaper behind, as on screen (and as in the Super+Tab switcher's previews): the one Caelestia shows, by
+        // The wallpaper behind, as on screen (and as in the Super+Tab switcher's previews): its screen's, by
         // its own file (a URL of the fixed link to it kept the old picture in the image cache after a change), each part
         // encoded ("#", "%"); a video wallpaper (Caelestia's coming ones) isn't a picture: its still that Caelestia keeps
         Image {
             property string failedFor
 
             anchors.fill: parent
-            source: Wallpapers.current ? (failedFor === Wallpapers.current ? `file://${Paths.state}/wallpaper/thumbnail.jpg` : `file://${Wallpapers.current.split("/").map(encodeURIComponent).join("/")}`) : ""
+            source: root.wallpaper ? (failedFor === root.wallpaper ? `file://${Paths.state}/wallpaper/thumbnail.jpg` : `file://${root.wallpaper.split("/").map(encodeURIComponent).join("/")}`) : ""
             fillMode: Image.PreserveAspectCrop
             sourceSize.width: 400
             asynchronous: true
             cache: true
-            onStatusChanged: if (status === Image.Error) failedFor = Wallpapers.current
+            onStatusChanged: if (status === Image.Error) failedFor = root.wallpaper
         }
 
         // Floating windows last, so they're drawn on top like on screen. Each window keeps its live picture as the list

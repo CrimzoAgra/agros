@@ -15,6 +15,9 @@ hl.on("config.reloaded", function() hl.exec_cmd("~/.local/bin/greeter-theme-sync
 -- screen's size: the game on part of the screen, clicks elsewhere). Again at each config reload, as above
 hl.on("hyprland.start", function() hl.exec_cmd("~/.local/bin/xwayland-primary") end)
 hl.on("config.reloaded", function() hl.exec_cmd("~/.local/bin/xwayland-primary") end)
+-- (and as a screen comes back: XWayland makes its outputs anew without a primary, and the reload for it waits while a
+-- game runs, the very time Wine needs one: clicks off, the pointer offset)
+hl.on("monitor.added", function() hl.exec_cmd("~/.local/bin/xwayland-primary") end)
 
 -- Clear the text console under the desktop, so no old text shows when the desktop closes (shutdown)
 hl.on("hyprland.start", function() hl.exec_cmd("~/.local/bin/console-clear") end)

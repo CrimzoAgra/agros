@@ -42,8 +42,29 @@ ShellRoot {
         onLoaded: root.wallpaperFile = text().trim()
     }
     property string wallpaperFile
+    // A screen's own wallpaper, set in Settings (screens.<its description>.wallpaper in settings.json, as Caelestia's
+    // background reads it): the previewed screen's, else the one for every screen
+    FileView {
+        path: `${root.home}/.config/dots/settings.json`
+        watchChanges: true
+        onFileChanged: reload()
+        onLoaded: {
+            try {
+                const all = JSON.parse(text());
+                root.settings = all && typeof all === "object" ? all : {};
+            } catch (e) {
+                root.settings = {};
+            }
+        }
+        onLoadFailed: root.settings = {}
+    }
+    property var settings: ({})
+    readonly property string screenWallpaper: {
+        const own = settings[`screens.${monitor?.description ?? ""}.wallpaper`];
+        return typeof own === "string" ? own : "";
+    }
     readonly property string wallpaper: {
-        const p = wallpaperFile || `${home}/.local/state/caelestia/wallpaper/current`;
+        const p = screenWallpaper || wallpaperFile || `${home}/.local/state/caelestia/wallpaper/current`;
         return `file://${p.split("/").map(encodeURIComponent).join("/")}`;
     }
 
