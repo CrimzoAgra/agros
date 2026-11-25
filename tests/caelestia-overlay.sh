@@ -190,7 +190,7 @@ grep -q 'overFullscreen: fsTransitionProg < 1 || panels.notifications.visible' "
 d=$dst/modules/drawers
 { grep -q 'PartWindow {' "$d/Drawers.qml" && [[ $(grep -c '^            part: "' "$d/Drawers.qml") == 4 ]] &&
     grep -q 'hasFullscreen ? fsTransitionProg < 1 || showsOverFullscreen' "$d/PartWindow.qml" &&
-    grep -q 'function move(x: real, y: real): void' "$d/Controller.qml" && grep -q 'controller.move(event.x, event.y)' "$d/Interactions.qml"; } ||
+    grep -q 'function move(x: real, y: real): void' "$d/Controller.qml" && grep -q 'controller.move(controller.mx(event.x), event.y)' "$d/Interactions.qml"; } ||
     fail "the shell isn't in its four windows: $(ls "$d")"
 # An external screen's brightness change shows no popup (its slider isn't there: volume alone showed); a built-in one's
 # does, once its level was read
@@ -374,6 +374,25 @@ P
 lint_new() { [[ ! -x /usr/lib/qt6/bin/qmllint ]] || python3 -I "$t/lint.py" "$1" "$2" "$(mktemp -d -p "$t")"; }
 new=$(lint_new /etc/xdg/quickshell/caelestia "$dst")
 [[ -z $new ]] || fail "the patched QML uses what Caelestia doesn't have (qmllint): $new"
+
+# The bar on the right (Settings: bar.side): the split windows' layout mirrored (drawers/: barRight), the border's zones
+# swapped, the bar's content and its popouts against its inner edge, the wallpaper's frame and the clock's and the
+# visualiser's margins on the other side; with it on the left (the run above), none of that
+printf '#!/bin/sh\necho "{\\"bar.side\\": \\"right\\"}"\n' >"$t/bin/dots-settings-right"; chmod +x "$t/bin/dots-settings-right"
+right=$t/right-dst
+cp -as /etc/xdg/quickshell/caelestia "$right"
+out=$(HOME=$t DOTS_SETTINGS=$t/bin/dots-settings-right python3 "$t/.local/share/caelestia-overlay/patch.py" /etc/xdg/quickshell/caelestia "$right" 2>&1) ||
+    fail "the overlay with the bar on the right failed: $(tail -3 <<<"$out")"
+grep -q "WARNING.*bar on the right" <<<"$out" && fail "the bar on the right doesn't fit: $(grep 'bar on the right' <<<"$out")"
+{ grep -q 'readonly property bool barRight: true // bar_side' "$right/modules/drawers/Drawers.qml" &&
+    grep -q 'anchors.right: true // caelestia-overlay: the bar on the right' "$right/modules/drawers/Exclusions.qml" &&
+    grep -q 'anchors.left: parent.left // caelestia-overlay: the bar on the right' "$right/modules/bar/BarWrapper.qml" &&
+    grep -q 'anchors.right: parent.right // caelestia-overlay: out of the bar on the right' "$right/modules/bar/popouts/ClipWrapper.qml" &&
+    grep -q 'anchors.rightMargin: bar?.exclusiveZone ?? 0 // caelestia-overlay: the bar on the right' "$right/modules/background/Background.qml" &&
+    grep -q 'Behavior on anchors.rightMargin' "$right/modules/background/Visualiser.qml"; } || fail "the bar on the right not laid out for it"
+grep -q 'readonly property bool barRight: false // bar_side' "$dst/modules/drawers/Drawers.qml" || fail "the bar on the right with Settings saying left"
+new=$(lint_new /etc/xdg/quickshell/caelestia "$right")
+[[ -z $new ]] || fail "the patched QML, the bar on the right, uses what Caelestia doesn't have (qmllint): $new"
 
 # The lock screen says how many notifications came, not what they say (a one-time code read off a locked screen):
 # AgrOS's shell.json turns on Caelestia's lock.hideNotifs, and its notification list there still goes by it

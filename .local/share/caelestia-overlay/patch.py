@@ -2688,6 +2688,77 @@ def split_windows():
             if n.endswith(".qml")}
 
 
+def bar_side():
+    # The bar on the right, when the Settings app says so (bar.side): the shell as with it on the left, mirrored. The
+    # split windows' layout does most of it (drawers/: barRight, set here); Caelestia's own files that place things by
+    # the bar's side: the bar's content against its window's inner edge (it slides in from the screen's edge), the
+    # popouts beside it (and sliding out of it), the border's exclusive zones (the bar's on the right, a border's on the
+    # left), the wallpaper's frame (wallpaper_in_borders: its margins, and its growth as the bar comes in), the music
+    # visualiser's and the desktop clock's margin. The panels on the right edge move to the left one (drawers/
+    # PanelsRight.qml). Left (the default), nothing changes
+    if setting_values().get("bar.side") != "right":
+        return {}
+    out = {}
+    d = "modules/drawers/Drawers.qml"
+    out[d] = swap(read(d), "        readonly property bool barRight: false // bar_side\n",
+                  "        readonly property bool barRight: true // bar_side\n", "the drawers' bar side")
+    ex = "modules/drawers/Exclusions.qml"
+    t = swap(read(ex), """    ExclusionZone {
+        anchors.left: true
+        exclusiveZone: root.bar.exclusiveZone""", """    ExclusionZone {
+        anchors.right: true // caelestia-overlay: the bar on the right (bar_side)
+        exclusiveZone: root.bar.exclusiveZone""", "the bar's exclusive zone")
+    out[ex] = swap(t, """    ExclusionZone {
+        anchors.right: true
+    }""", """    ExclusionZone {
+        anchors.left: true // caelestia-overlay: the border's, on the left (bar_side)
+    }""", "the border's exclusive zone")
+    bw = "modules/bar/BarWrapper.qml"
+    out[bw] = swap(read(bw), """        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        anchors.right: parent.right
+
+        active: root.shouldBeVisible""", """        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        anchors.left: parent.left // caelestia-overlay: the bar on the right, sliding in from that edge (bar_side)
+
+        active: root.shouldBeVisible""", "the bar's content")
+    cw = "modules/bar/popouts/ClipWrapper.qml"
+    t = swap(read(cw), "    property real offsetScale: x > 0 || content.hasCurrent ? 0 : 1\n",
+             "    property real offsetScale: content.isDetached || content.hasCurrent ? 0 : 1 // caelestia-overlay: bar_side\n",
+             "the popouts' open")
+    t = swap(t, "    x: content.isDetached ? (parent.width - content.nonAnimWidth) / 2 : 0\n",
+             "    x: content.isDetached ? (parent.width - content.nonAnimWidth) / 2 : parent.width - width // caelestia-overlay: beside the bar on the right (bar_side)\n",
+             "the popouts' place")
+    out[cw] = swap(t, """        anchors.verticalCenter: parent.verticalCenter
+        anchors.left: parent.left
+        anchors.leftMargin: (-implicitWidth - 5) * root.offsetScale""", """        anchors.verticalCenter: parent.verticalCenter
+        anchors.right: parent.right // caelestia-overlay: out of the bar on the right (bar_side)
+        anchors.rightMargin: (-implicitWidth - 5) * root.offsetScale""", "the popouts' slide")
+    bg = "modules/background/Background.qml"
+    t = read(bg)
+    # (the wallpaper in the frame: wallpaper_in_borders's, when it's on)
+    if "anchors.leftMargin: bar?.exclusiveZone ?? 0\n" in t:
+        t = swap(t, """                anchors.leftMargin: bar?.exclusiveZone ?? 0
+                anchors.topMargin: frame
+                anchors.rightMargin: frame""", """                anchors.leftMargin: frame
+                anchors.topMargin: frame
+                anchors.rightMargin: bar?.exclusiveZone ?? 0 // caelestia-overlay: the bar on the right (bar_side)""",
+                 "the wallpaper's frame")
+        t = swap(t, "                        x: wallpaper.edge - wallpaper.anchors.leftMargin\n",
+                 "                        x: 0 // (the bar on the right: grown from its left edge, bar_side)\n", "the wallpaper's growth")
+    t = swap(t, "            anchors.leftMargin: Tokens.padding.extraLargeIncreased + Tokens.sizes.bar.innerWidth + Math.max(Tokens.padding.small, Config.border.thickness)\n",
+             "            anchors.rightMargin: Tokens.padding.extraLargeIncreased + Tokens.sizes.bar.innerWidth + Math.max(Tokens.padding.small, Config.border.thickness) // caelestia-overlay: bar_side\n",
+             "the desktop clock's margin")
+    out[bg] = t
+    vi = "modules/background/Visualiser.qml"
+    t = swap(read(vi), "                    anchors.leftMargin: (ShellState.componentsFor(root.screen)?.bar?.exclusiveZone ?? 0) + Tokens.spacing.small * Config.background.visualiser.spacing\n",
+             "                    anchors.rightMargin: (ShellState.componentsFor(root.screen)?.bar?.exclusiveZone ?? 0) + Tokens.spacing.small * Config.background.visualiser.spacing // caelestia-overlay: bar_side\n",
+             "the visualiser's margin")
+    out[vi] = swap(t, "                    Behavior on anchors.leftMargin {\n", "                    Behavior on anchors.rightMargin {\n", "the visualiser's margin's animation")
+    return out
+
+
 # What split_windows is made from: the features that change the drawers files, and those files' fingerprint after them
 SPLIT_NEEDS = (bar_menu, bar_space_refit, edge_triggers, launcher_fullscreen, safe_triangle, sidebar_alone,
                sidebar_from_top, sidebar_not_over_popups, sidebar_shape, sidebar_with_utilities, snap_preview,
@@ -2757,27 +2828,38 @@ FEATURES = (
     ("lock screen on the main screen only", lock_main_screen),
     ("the bar's popout kept across the gaps between its entries", bar_gaps),
     ("the shell in four windows, each redrawn on its own (less GPU)", split_windows),
+    ("the bar on the right, when Settings puts it there", bar_side),
 )
 
 
+_values = None
+
+
+def setting_values():
+    """The Settings app's values (dots-settings values), read once; none when it can't be read. By the account's home,
+    not $HOME: run as you from root (sudo, su), it may be root's"""
+    global _values
+    if _values is None:
+        # (DOTS_SETTINGS: another settings command, for tests/caelestia-overlay.sh)
+        cli = os.environ.get("DOTS_SETTINGS") or f"{pwd.getpwuid(os.getuid()).pw_dir}/.local/bin/dots-settings"
+        try:
+            _values = json.loads(subprocess.run([cli, "values"], capture_output=True, text=True).stdout)
+        except (OSError, ValueError):
+            _values = {}
+        if not isinstance(_values, dict):
+            _values = {}
+    return _values
+
+
 def turned_off():
-    """The features turned off in the Settings app (dots-settings, setting caelestia.<function name>). By the account's
-    home, not $HOME: run as you from root (sudo, su), it may be root's"""
-    # (DOTS_SETTINGS: another settings command, for tests/caelestia-overlay.sh)
-    cli = os.environ.get("DOTS_SETTINGS") or f"{pwd.getpwuid(os.getuid()).pw_dir}/.local/bin/dots-settings"
-    try:
-        values = json.loads(subprocess.run([cli, "values"], capture_output=True, text=True).stdout)
-    except (OSError, ValueError):
-        return set()
-    if not isinstance(values, dict):
-        return set()
-    return {f.__name__ for _, f in FEATURES if values.get(f"caelestia.{f.__name__}") is False}
+    """The features turned off in the Settings app (dots-settings, setting caelestia.<function name>)"""
+    return {f.__name__ for _, f in FEATURES if setting_values().get(f"caelestia.{f.__name__}") is False}
 
 
 # Features that build on another's version of a file (or, the utilities sidebar, on its trigger's geometry; the sidebar's
 # shape on the utilities panel's height, known while closed only with sidebar_notifs_only) and don't fit without it: off when that one is off or skipped. Several: it needs one of them (window peek: the dock's or the
 # workspace preview's popout, the previews it works on), off when all are
-NEEDS = {"nexus_snappy": ("nexus_pages",), "settings_open_at": ("nexus_pages",), "nexus_history": ("nexus_snappy",), "sidebar_shape": ("sidebar_notifs_only",), "settings_button": ("updates_button",), "top_edge_one_panel": ("sidebar_from_top",), "sidebar_from_top": ("sidebar_shape",),
+NEEDS = {"bar_side": ("split_windows",), "nexus_snappy": ("nexus_pages",), "settings_open_at": ("nexus_pages",), "nexus_history": ("nexus_snappy",), "sidebar_shape": ("sidebar_notifs_only",), "settings_button": ("updates_button",), "top_edge_one_panel": ("sidebar_from_top",), "sidebar_from_top": ("sidebar_shape",),
          "sidebar_with_utilities": ("sidebar_from_top",),
          "window_peek": ("dock", "workspace_preview")}
 # ...and features that need every one of a list: off when any of them is off or skipped

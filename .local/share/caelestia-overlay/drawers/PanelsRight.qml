@@ -21,6 +21,9 @@ Item {
     required property ScreenState screenState
     required property Bar.BarWrapper bar
     required property real borderThickness
+    // The bar on the right (Drawers.qml): these panels against the left edge instead, each placed (and slid in) as its
+    // mirror image (LayoutMirroring on each one's own anchors, not inherited: what's inside a panel isn't mirrored)
+    property bool barRight
     // The bar's popouts (the left window's), for the utilities panel
     required property var popouts
 
@@ -35,11 +38,13 @@ Item {
 
     anchors.fill: parent
     anchors.margins: borderThickness
-    anchors.leftMargin: bar.implicitWidth
+    anchors.leftMargin: barRight ? borderThickness : bar.implicitWidth
+    anchors.rightMargin: barRight ? bar.implicitWidth : borderThickness
 
     Item {
         id: osdWrapper
 
+        LayoutMirroring.enabled: root.barRight
         anchors.verticalCenter: parent.verticalCenter
         anchors.right: parent.right
         anchors.rightMargin: sessionWrapper.anchors.rightMargin + session.width * (1 - session.offsetScale)
@@ -51,6 +56,7 @@ Item {
         Osd.Wrapper {
             id: osd
 
+            LayoutMirroring.enabled: root.barRight
             screen: root.screen
             screenState: root.screenState
             sidebarOrSessionVisible: sidebar.visible || session.visible
@@ -63,6 +69,7 @@ Item {
     Notifications.Wrapper {
         id: notifications
 
+        LayoutMirroring.enabled: root.barRight
         screenState: root.screenState
         sidebarPanel: sidebar
         osdPanel: osdWrapper
@@ -76,6 +83,7 @@ Item {
     Item {
         id: sessionWrapper
 
+        LayoutMirroring.enabled: root.barRight
         anchors.verticalCenter: parent.verticalCenter
         anchors.right: parent.right
         anchors.rightMargin: sidebar.width * (1 - sidebar.offsetScale)
@@ -87,6 +95,7 @@ Item {
         Session.Wrapper {
             id: session
 
+            LayoutMirroring.enabled: root.barRight
             screenState: root.screenState
             sidebarVisible: sidebar.visible
 
@@ -98,6 +107,7 @@ Item {
     Utilities.Wrapper {
         id: utilities
 
+        LayoutMirroring.enabled: root.barRight
         screenState: root.screenState
         sidebar: sidebar
         popouts: root.popouts
@@ -109,6 +119,7 @@ Item {
     Toasts.Toasts {
         id: toasts
 
+        LayoutMirroring.enabled: root.barRight
         anchors.bottom: sidebar.visible ? parent.bottom : utilities.top
         anchors.right: sidebar.left
         anchors.margins: Tokens.padding.medium
@@ -117,6 +128,7 @@ Item {
     Sidebar.Wrapper {
         id: sidebar
 
+        LayoutMirroring.enabled: root.barRight
         screenState: root.screenState
 
         anchors.top: notifications.bottom

@@ -23,8 +23,10 @@ import qs.modules.bar as Bar
 StyledWindow {
     id: root
 
-    // left, right, top or bottom
+    // left, right, top or bottom (with the bar on the right, "left" is the bar's window, on the right: Drawers.qml)
     required property string part
+    // The bar on the right (Drawers.qml's barRight): the border's side and the inner area mirrored
+    property bool barRight
     // This window on the screen (logical pixels): room for its panels, kept (a window resized as a panel opened or
     // closed showed its old picture at the new size for a frame, a flicker)
     required property rect area
@@ -76,6 +78,8 @@ StyledWindow {
     readonly property real shadowOpacity: 0.7 * (1 - fsTransitionProg)
     readonly property real borderLayoutThickness: shellHidden ? 0 : contentItem.Config.border.thickness
     readonly property real barWidth: bar?.implicitWidth ?? 0
+    // Where the screen's inner area (less the bar and border) starts: after the bar, or after the left border
+    readonly property real innerLeft: barRight ? borderThickness : barWidth
 
     property color surfaceColour: Colours.tPalette.m3surface
 
@@ -147,7 +151,7 @@ StyledWindow {
         height: root.own.height
 
         Region {
-            x: root.bar.clampedWidth + root.dragMaskPadding - root.area.x
+            x: (root.barRight ? root.contentItem.Config.border.clampedThickness : root.bar.clampedWidth) + root.dragMaskPadding - root.area.x
             y: root.contentItem.Config.border.clampedThickness + root.dragMaskPadding - root.area.y
             width: root.screen.width - root.bar.clampedWidth - root.contentItem.Config.border.clampedThickness - root.dragMaskPadding * 2
             height: root.screen.height - root.contentItem.Config.border.clampedThickness * 2 - root.dragMaskPadding * 2
@@ -206,8 +210,8 @@ StyledWindow {
                     anchors.margins: -50 // Make border thicker to smooth out bulge from closed drawers
                     group: blobGroup
                     radius: root.borderRounding
-                    borderLeft: root.barWidth - anchors.margins - root.sdfBorderOffset
-                    borderRight: root.borderThickness - anchors.margins - root.sdfBorderOffset
+                    borderLeft: (root.barRight ? root.borderThickness : root.barWidth) - anchors.margins - root.sdfBorderOffset
+                    borderRight: (root.barRight ? root.barWidth : root.borderThickness) - anchors.margins - root.sdfBorderOffset
                     borderTop: root.borderThickness - anchors.margins - root.sdfBorderOffset
                     borderBottom: root.borderThickness - anchors.margins - root.sdfBorderOffset
                 }

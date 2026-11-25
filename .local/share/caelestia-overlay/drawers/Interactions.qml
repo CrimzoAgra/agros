@@ -20,8 +20,9 @@ CustomMouseArea {
     hoverEnabled: true
 
     onPressedChanged: controller.pressed = pressed
-    onPressed: event => controller.press(event.x, event.y, event.button)
+    // (x as the controller sees it: mirrored with the bar on the right)
+    onPressed: event => controller.press(controller.mx(event.x), event.y, event.button)
     onContainsMouseChanged: controller.setInside(root, containsMouse)
-    onPositionChanged: event => controller.move(event.x, event.y)
+    onPositionChanged: event => controller.move(controller.mx(event.x), event.y)
     Component.onDestruction: controller.setInside(root, false)
 }

@@ -511,9 +511,21 @@
           "title": "Bar",
           "settings": [
             {
+              "key": "bar.side",
+              "label": "Position",
+              "description": "The side of the screen it's on. On the right, the volume pop-up, quick settings and power menu move to the left edge. The shell restarts to move it.",
+              "type": "choice",
+              "default": "left",
+              "options": [
+                {"value": "left", "label": "Left"},
+                {"value": "right", "label": "Right"}
+              ],
+              "apply": "caelestia"
+            },
+            {
               "key": "caelestia-shell.bar.persistent",
               "label": "Always shown",
-              "description": "Off: it hides, and shows when the pointer reaches the screen's left edge."
+              "description": "Off: it hides, and shows when the pointer reaches the screen's edge it's on."
             },
             {
               "key": "caelestia-shell.bar.showOnHover",

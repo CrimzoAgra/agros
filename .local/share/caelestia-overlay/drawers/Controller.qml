@@ -26,6 +26,19 @@ Scope {
     // The left window's (its border's layout thickness, fullscreen: shellHidden)
     property real borderThickness
     property bool fullscreen
+    // The bar on the right (Drawers.qml): this works in the screen seen in a mirror, as if the bar were on the left
+    // (the pointer's x mirrored as it comes in, Interactions.qml's mx; the panels' through vx), so all below is as is
+    property bool barRight
+
+    // (the pointer's x as it'd be with the bar on the left)
+    function mx(x: real): real {
+        return barRight ? width - x : x;
+    }
+
+    // (a panel's x in its inner area, as it'd be with the bar on the left)
+    function vx(p: Item): real {
+        return barRight ? width - bar.implicitWidth - borderThickness - p.x - p.width : p.x;
+    }
 
     // The pointer: where it last was (screen coordinates), whether a button is held, whether it's over the shell
     property real mouseX
@@ -84,6 +97,9 @@ Scope {
     // ...another screen beyond that side of this one (side by side, or one above the other)
     function sideShared(side: string): bool {
         const s = root.screen;
+        // (left and right as the mirror has them)
+        if (root.barRight && (side === "left" || side === "right"))
+            side = side === "left" ? "right" : "left";
         for (const o of Quickshell.screens) {
             if (o === s)
                 continue;
@@ -118,7 +134,7 @@ Scope {
         const a = aimAnchor;
         const w = panels.popoutsWrapper;
         if (popouts.hasCurrent && w.width > 0 && w.height > 0 && a.x >= 0) {
-            const px = bar.implicitWidth + w.x;
+            const px = bar.implicitWidth + vx(w);
             const top = borderThickness + w.y;
             // Only the part of the popout within a 2:1 slope of the anchor (~63° up or down): with a tall popout,
             // a triangle to its far corners would swallow moves along the bar to the next buttons
@@ -151,16 +167,16 @@ Scope {
     }
 
     function withinPanelWidth(panel: Item, x: real, y: real): bool {
-        const panelX = bar.implicitWidth + panel.x;
+        const panelX = bar.implicitWidth + vx(panel);
         return x >= panelX - config.border.rounding && x <= panelX + panel.width + config.border.rounding;
     }
 
     function inLeftPanel(panel: Item, x: real, y: real): bool {
-        return x < bar.implicitWidth + panel.x + panel.width && withinPanelHeight(panel, x, y);
+        return x < bar.implicitWidth + vx(panel) + panel.width && withinPanelHeight(panel, x, y);
     }
 
     function inRightPanel(panel: Item, x: real, y: real): bool {
-        return x > Math.min(width - config.border.minThickness, bar.implicitWidth + panel.x) && withinPanelHeight(panel, x, y);
+        return x > Math.min(width - config.border.minThickness, bar.implicitWidth + vx(panel)) && withinPanelHeight(panel, x, y);
     }
 
     function inTopPanel(panel: Item, x: real, y: real): bool {
@@ -176,7 +192,7 @@ Scope {
     function wheel(event: WheelEvent): void {
         if (fullscreen)
             return;
-        if (event.x < bar.implicitWidth) {
+        if (mx(event.x) < bar.implicitWidth) {
             bar.handleWheel(event.y, event.angleDelta);
         }
     }
@@ -261,7 +277,7 @@ Scope {
                 root.panels.osd.hovered = true;
             }
 
-            const showSidebar = pressed && dragStart.x > Math.min(width - config.border.minThickness, bar.implicitWidth + panels.sidebar.x);
+            const showSidebar = pressed && dragStart.x > Math.min(width - config.border.minThickness, bar.implicitWidth + vx(panels.sidebar));
 
             // Show sidebar on hover (top-right corner, bounded by notification panel height)
             if (config.sidebar.showOnHover && !screenState.session) {

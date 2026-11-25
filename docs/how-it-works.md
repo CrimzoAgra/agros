@@ -368,6 +368,11 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
   longer fits a new Caelestia version is skipped, not broken; one that still fits but whose QML no longer loads (a
   renamed Caelestia component) is reported by `agros-check`
   - Bar:
+    - On the left or the right (Settings › Panels › Bar › Position, `bar.side`; `bar_side` in `patch.py`, the shell
+      rebuilt): on the right, the split windows' layout (`drawers/`, `barRight`) is the left one mirrored: the bar and
+      its popouts on the right, the volume pop-up, quick settings, power menu and notification sidebar against the left
+      edge, the pointer's rules worked out as with the bar on the left (`Controller.qml`'s `mx`/`vx`); the wallpaper's
+      frame, the border's exclusive zones and the clock's and visualiser's margins follow it. Top and bottom: not yet
     - A dock (`Dock.qml`, `DockMenu.qml`): pinned apps and open windows, Force quit; minimised windows dimmed; a
       click on a window or its preview brings it to the front. Turned off, its place is kept (the workspaces, tray and
       clock stay put)

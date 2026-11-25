@@ -12,7 +12,7 @@ BlobRect {
     property real deformAmount: 0.15
 
     group: win.blobGroup
-    x: (panel?.x ?? 0) + win.barWidth
+    x: (panel?.x ?? 0) + win.innerLeft
     y: (panel?.y ?? 0) + win.borderThickness
     implicitWidth: panel?.width ?? 0
     implicitHeight: panel?.height ?? 0

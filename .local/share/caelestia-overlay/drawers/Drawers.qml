@@ -31,6 +31,23 @@ Variants {
         readonly property real screenW: modelData?.width ?? 0
         readonly property real screenH: modelData?.height ?? 0
         readonly property real border: config?.border.thickness ?? 0
+        // The bar on the right (bar_side in patch.py sets this, by the Settings app's bar.side): everything laid out as
+        // with it on the left, then mirrored. Sizes and parts are worked out as for a left bar (in "virtual" x, the
+        // screen seen in a mirror); each window's place, and anything placed by x in screen coordinates, mirrored back
+        readonly property bool barRight: false // bar_side
+        // (a rect, mirrored across the screen when the bar is on the right)
+        function mr(r: rect): rect {
+            return barRight ? Qt.rect(screenW - r.x - r.width, r.y, r.width, r.height) : r;
+        }
+        // (a panel's x in its inner area (the screen less the bar and border), as it'd be with the bar on the left)
+        function vx(p: Item): real {
+            return barRight ? screenW - barWrapper.implicitWidth - border - p.x - p.width : p.x;
+        }
+        // (the x, in a window, of something width wide against the screen's edge away from the bar: the right one with
+        // the bar on the left)
+        function edgeX(width: real, win: PartWindow): real {
+            return (barRight ? 0 : screenW - width) - win.area.x;
+        }
 
         // How thick a window is with nothing of it open: the border, its rounded inner corners and the shadow, and the
         // band Caelestia takes the pointer in to drag panels out on an empty workspace
@@ -67,6 +84,7 @@ Variants {
             panels: shared
             config: scope.config
             bar: barWrapper
+            barRight: scope.barRight
             borderThickness: left.borderLayoutThickness
             fullscreen: left.shellHidden
         }
@@ -102,14 +120,14 @@ Variants {
             let x = screenW;
             for (const p of [shared.dashboard, shared.launcher])
                 if (p?.visible)
-                    x = Math.min(x, barWrapper.implicitWidth + p.x - 64);
+                    x = Math.min(x, barWrapper.implicitWidth + vx(p) - 64);
             return x;
         }
         readonly property real centerRight: {
             let x = 0;
             for (const p of [shared.dashboard, shared.launcher])
                 if (p?.visible)
-                    x = Math.max(x, barWrapper.implicitWidth + p.x + p.width + 64);
+                    x = Math.max(x, barWrapper.implicitWidth + vx(p) + p.width + 64);
             return x;
         }
         readonly property real ownRight: Math.max(rightNeeded, Math.min(rightArea.width, screenW - centerRight))
@@ -156,10 +174,11 @@ Variants {
             id: left
 
             part: "left"
+            barRight: scope.barRight
             screen: scope.modelData
             monitor: scope.monitor
-            area: scope.leftArea
-            own: scope.leftOwn
+            area: scope.mr(scope.leftArea)
+            own: scope.mr(scope.leftOwn)
             controller: ctl
             bar: barWrapper
             grabActive: focusGrab.active
@@ -182,7 +201,7 @@ Variants {
                     win: left
                     panel: leftPanels.popoutsWrapper
                     deformAmount: leftPanels.popouts.isDetached ? 0.05 : leftPanels.popouts.hasCurrent ? 0.15 : 0.1
-                    x: (leftPanels.popoutsWrapper?.x ?? 0) + (leftPanels.popouts?.x ?? 0) + left.barWidth - (leftPanels.popouts?.width ?? 0) * extraWidth
+                    x: (leftPanels.popoutsWrapper?.x ?? 0) + (leftPanels.popouts?.x ?? 0) + left.innerLeft - (scope.barRight ? 0 : (leftPanels.popouts?.width ?? 0) * extraWidth)
                     implicitWidth: (leftPanels.popouts?.width ?? 0) * (1 + extraWidth)
 
                     Behavior on extraWidth {
@@ -195,6 +214,7 @@ Variants {
                 id: leftPanels
 
                 part: "left"
+                barRight: scope.barRight
                 screen: scope.modelData
                 screenState: scope.screenState
                 bar: barWrapper
@@ -209,6 +229,7 @@ Variants {
 
                 anchors.top: parent.top
                 anchors.bottom: parent.bottom
+                x: scope.barRight ? parent.width - width : 0
 
                 screen: scope.modelData
                 screenState: scope.screenState
@@ -223,10 +244,11 @@ Variants {
             id: right
 
             part: "right"
+            barRight: scope.barRight
             screen: scope.modelData
             monitor: scope.monitor
-            area: scope.rightArea
-            own: scope.rightOwn
+            area: scope.mr(scope.rightArea)
+            own: scope.mr(scope.rightOwn)
             controller: ctl
             bar: barWrapper
             grabActive: focusGrab.active
@@ -240,7 +262,7 @@ Variants {
 
                     win: right
                     panel: rightPanels.sessionWrapper
-                    x: scope.screenW - width - right.area.x
+                    x: scope.edgeX(width, right)
                     width: panel.width * (1 - rightPanels.session.offsetScale) + scope.border + sidebarRegion.width
                 },
                 PartRegion {
@@ -248,13 +270,13 @@ Variants {
 
                     win: right
                     panel: rightPanels.sidebar
-                    x: scope.screenW - width - right.area.x
+                    x: scope.edgeX(width, right)
                     width: panel.width * (1 - rightPanels.sidebar.offsetScale) + scope.border
                 },
                 PartRegion {
                     win: right
                     panel: rightPanels.osdWrapper
-                    x: scope.screenW - width - right.area.x
+                    x: scope.edgeX(width, right)
                     width: panel.width * (1 - rightPanels.osd.offsetScale) + scope.border + sessionRegion.width
                 },
                 PartRegion {
@@ -274,13 +296,13 @@ Variants {
             // Fullscreen: the notifications and the volume popup take the pointer (Caelestia's emptyRegion)
             hiddenRegions: [
                 Region {
-                    x: rightPanels.notifications.x + right.barWidth - right.area.x
+                    x: rightPanels.notifications.x + right.innerLeft - right.area.x
                     y: rightPanels.notifications.y + right.borderThickness - right.area.y
                     width: rightPanels.notifications.width
                     height: rightPanels.notifications.height
                 },
                 Region {
-                    x: scope.screenW - width - right.area.x
+                    x: scope.edgeX(width, right)
                     y: rightPanels.osdWrapper.y + right.borderThickness - right.area.y
                     width: rightPanels.osdWrapper.width * (1 - rightPanels.osd.offsetScale) + right.borderThickness
                     height: rightPanels.osd.height
@@ -294,7 +316,7 @@ Variants {
                     win: right
                     panel: rightPanels.sessionWrapper
                     deformAmount: 0.2
-                    x: rightPanels.sessionWrapper.x + rightPanels.session.x + right.barWidth
+                    x: rightPanels.sessionWrapper.x + rightPanels.session.x + right.innerLeft
                     implicitWidth: rightPanels.session.width
                     implicitHeight: rightPanels.session.offsetScale < 1 ? rightPanels.sessionWrapper.height : 0
                 },
@@ -314,7 +336,7 @@ Variants {
                     win: right
                     panel: rightPanels.osdWrapper
                     deformAmount: 0.25
-                    x: rightPanels.osdWrapper.x + rightPanels.osd.x + right.barWidth
+                    x: rightPanels.osdWrapper.x + rightPanels.osd.x + right.innerLeft
                     implicitWidth: rightPanels.osd.width
                     implicitHeight: rightPanels.osd.offsetScale < 1 && rightPanels.sidebar.offsetScale === 1 ? rightPanels.osdWrapper.height : 0
                 },
@@ -338,6 +360,7 @@ Variants {
             PanelsRight {
                 id: rightPanels
 
+                barRight: scope.barRight
                 screen: scope.modelData
                 screenState: scope.screenState
                 bar: barWrapper
@@ -370,10 +393,11 @@ Variants {
             id: top
 
             part: "top"
+            barRight: scope.barRight
             screen: scope.modelData
             monitor: scope.monitor
-            area: scope.topArea
-            own: scope.topOwn
+            area: scope.mr(scope.topArea)
+            own: scope.mr(scope.topOwn)
             controller: ctl
             bar: barWrapper
             grabActive: focusGrab.active
@@ -401,6 +425,7 @@ Variants {
                 id: topPanels
 
                 part: "top"
+                barRight: scope.barRight
                 screen: scope.modelData
                 screenState: scope.screenState
                 bar: barWrapper
@@ -416,10 +441,11 @@ Variants {
             id: bottom
 
             part: "bottom"
+            barRight: scope.barRight
             screen: scope.modelData
             monitor: scope.monitor
-            area: scope.bottomArea
-            own: scope.bottomOwn
+            area: scope.mr(scope.bottomArea)
+            own: scope.mr(scope.bottomOwn)
             controller: ctl
             bar: barWrapper
             grabActive: focusGrab.active
@@ -448,6 +474,7 @@ Variants {
                 id: bottomPanels
 
                 part: "bottom"
+                barRight: scope.barRight
                 screen: scope.modelData
                 screenState: scope.screenState
                 bar: barWrapper

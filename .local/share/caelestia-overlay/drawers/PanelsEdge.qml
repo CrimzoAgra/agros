@@ -18,6 +18,9 @@ Item {
     required property ScreenState screenState
     required property Bar.BarWrapper bar
     required property real borderThickness
+    // The bar on the right (Drawers.qml): the inner area after the left border, before the bar (the popouts beside the
+    // bar there: bar_side's change to their wrapper)
+    property bool barRight
     // The screen's panels (Drawers.qml), for the launcher
     required property var panels
     // The deformation of its blob background (the window's PanelBg), the panel drawn with it
@@ -32,7 +35,8 @@ Item {
 
     anchors.fill: parent
     anchors.margins: borderThickness
-    anchors.leftMargin: bar.implicitWidth
+    anchors.leftMargin: barRight ? borderThickness : bar.implicitWidth
+    anchors.rightMargin: barRight ? bar.implicitWidth : borderThickness
 
     // (in a Loader filling this, so each panel's anchors are on this item, as in Caelestia's)
     Loader {
