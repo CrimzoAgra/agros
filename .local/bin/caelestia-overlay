@@ -87,8 +87,9 @@ if [[ -n $lint ]]; then
         broken+=" ${f#"$tmp"/}"
     done < <(sed -n 's/^[A-Za-z]*: \(.*\.qml\):[0-9]*:[0-9]*: .*\[syntax\]$/\1/p' <<<"$found" | sort -u)
 fi
-# Failed with no patch to blame (patch.py itself broken), or broken QML: Caelestia as it comes, none of my changes.
-# Not the old folder: after a Caelestia update its copies are of the old version, next to links to the new one
+# Failed with no patch to blame (patch.py itself broken: any exit but 0 or its 3, some skipped, even after a skip; or
+# killed: the features after that point never applied, unsaid), or broken QML: Caelestia as it comes, none of my
+# changes. Not the old folder: after a Caelestia update its copies are of the old version, next to links to the new one
 failed=false
 if [[ -n $plain ]]; then
     failed=true
@@ -97,7 +98,7 @@ elif [[ -n $broken ]]; then
     failed=true
     echo "The overlay left broken QML (${broken# }), Caelestia runs without your changes" >"$skipped"
     rm -rf "$tmp" && cp -as "$src" "$tmp"
-elif ((rc != 0)) && [[ ! -s $skipped ]]; then
+elif ((rc != 0 && rc != 3)); then
     failed=true
     echo "The overlay failed, Caelestia runs without your changes: $(tail -1 <<<"$out")" >"$skipped"
     rm -rf "$tmp" && cp -as "$src" "$tmp"

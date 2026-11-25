@@ -3,7 +3,7 @@
 # Each feature is all-or-nothing: if any anchor is missing (new Caelestia version), that feature
 # is skipped and the original files stay linked.
 #   usage: patch.py <installed caelestia dir> <overlay dir>   "Patched:", "Off:" or "WARNING: ... skipped" per feature
-#                                                             (exit 1 when one was skipped: caelestia-overlay keeps the
+#                                                             (exit 3 when one was skipped: caelestia-overlay keeps the
 #                                                             WARNING lines for agros-check)
 #          patch.py --list   the features as JSON (the Settings app's Features page, settings caelestia.<id>)
 import hashlib
@@ -3553,4 +3553,5 @@ for name, feature in FEATURES:
         skipped.add(feature.__name__)
         failed[feature.__name__] = f"{type(e).__name__}: {e}"
         print(f"WARNING: {name} skipped, it failed ({failed[feature.__name__]})")
-sys.exit(0 if ok else 1)
+# (3, not 1: Python's own exit on a crash, which caelestia-overlay must not take for a run that got to the end)
+sys.exit(0 if ok else 3)

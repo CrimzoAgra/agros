@@ -488,7 +488,8 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
   from the shell's stop to its new start, so a rebuild waiting on one finds the shell up and hands over too. A game
   open: the restart waits until it closes (`after-games`, in the background); a session that ends first loses it, and
   the next login's `caelestia-start` makes it. Skipped patches go to `~/.local/state/caelestia-overlay-skipped`
-  (reported by `agros-check`)
+  (reported by `agros-check`). `patch.py` that didn't get to its end (a crash, a kill: any exit but 0 or its 3, some
+  skipped), or QML that doesn't parse: Caelestia as it comes, said, not marked built
 - **`.local/bin/caelestia-start`**: starts Caelestia at login (Caelestia's `execs.lua` runs it, so set by
   `agros-hyprland-settings`), running `caelestia-overlay` first (at every login: it rebuilds only what's out of date,
   so one an update left waiting for a game is made then; Caelestia's CLI failing, a Python update it isn't rebuilt for
@@ -1515,7 +1516,8 @@ main branches, hyprland-plugins' main: a change there that breaks one of AgrOS's
 that doesn't fit, or couldn't be fetched, is said on the test's last line (`ahead` in `tests/lib.sh`: "ok
 caelestia-overlay (AHEAD: ...)"), never a failure. Neither the published `[agros]` nor an older Arch undoes a change on
 main, so it read as AgrOS's own code and nothing went out; the release, once it comes, is checked as installed like any
-other.
+other (Caelestia's: the build its main gives, what doesn't fit left out, still linted, as a machine would get it once
+it's out).
 
 ### Keeping itself up
 

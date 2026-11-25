@@ -5,6 +5,26 @@
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
+# What a feature needs (NEEDS, NEEDS_ALL) is a feature, and comes before it in FEATURES: patch.py decides on the ones
+# before it only (one after it, skipped, left this one patched on top of what it never made; a name that isn't one
+# crashed patch.py half-way)
+bad=$(python3 -I - "$here/.local/share/caelestia-overlay/patch.py" <<'P'
+import sys
+code = open(sys.argv[1], encoding="utf-8").read()
+g = {"__file__": sys.argv[1]}
+exec(compile(code[:code.index('if sys.argv[1:] == ["--list"]')], sys.argv[1], "exec"), g)
+order = [f.__name__ for _, f in g["FEATURES"]]
+for table in ("NEEDS", "NEEDS_ALL"):
+    for k, needs in g[table].items():
+        for n in (k, *needs):
+            if n not in order:
+                print(f"{table}: {n} isn't a feature")
+        for n in needs:
+            if n in order and k in order and order.index(n) > order.index(k):
+                print(f"{table}: {k} needs {n}, which comes after it")
+P
+)
+[[ -z $bad ]] || fail "patch.py's dependencies: $bad"
 [[ -d /etc/xdg/quickshell/caelestia ]] || { echo "skip caelestia-overlay (Caelestia not installed)"; exit 0; }
 run() { HOME=$t XDG_STATE_HOME=$t/state PATH=$t/bin:$PATH DOTS_SETTINGS=$t/bin/dots-settings "$here/.local/bin/caelestia-overlay" 2>&1; }
 mkdir -p "$t/.local/share" "$t/bin"
@@ -467,7 +487,7 @@ gone=$(python3 -I - /etc/xdg/quickshell/caelestia "$here/.local/share/caelestia-
 import glob, os, re, sys
 src, overlay = sys.argv[1:]
 used = {}
-for f in glob.glob(overlay + "/*.qml") + [overlay + "/patch.py"]:
+for f in glob.glob(overlay + "/*.qml") + glob.glob(overlay + "/drawers/*.qml") + [overlay + "/patch.py"]:
     code = re.sub(r"//.*|^\s*#.*", "", open(f, encoding="utf-8").read(), flags=re.M)  # (not comments)
     for m in re.finditer(r"\b([A-Z]\w*)\.([a-z]\w*)\b", code):
         used.setdefault(m.group(1), set()).add(m.group(2))
@@ -584,13 +604,20 @@ grep -q '^Off:' <<<"$out" && fail "what needs a skipped patch said as turned off
 # patch.py itself broken (failing once it has patched: its copies left in the new folder): Caelestia as it comes (links
 # only, no patched copies, old or new), and said so
 cp "$t/patch.orig" "$p"; run >/dev/null
-sed -i 's/^sys\.exit(0 if ok else 1)$/raise RuntimeError("broken")/' "$p"; touch "$dst/marker"
+sed -i 's/^sys\.exit(0 if ok else 3)$/raise RuntimeError("broken")/' "$p"; touch "$dst/marker"
 grep -q 'RuntimeError("broken")' "$p" || fail "test setup: patch.py's last line not found"
 if run >/dev/null; then fail "a broken patch.py reported success"; fi
 [[ -e $dst/marker ]] && fail "a broken patch.py kept the old patched folder"
 [[ -z $(find "$dst" -type f) ]] || fail "a broken patch.py left patched files: $(find "$dst" -type f | head -3)"
 [[ -L $dst/shell.qml ]] || fail "a broken patch.py left no shell"
 grep -q "without your changes" "$skipped" || fail "a broken patch.py wasn't reported"
+# ...also after a patch that didn't fit (its WARNING already out): not taken for a run that got to the end, the features
+# after the crash never applied and marked built
+cp "$t/patch.orig" "$p"; run >/dev/null
+sed -i 's/^def sidebar_shape(/def sidebar_shape(*a):\n    raise LookupError("gone")\n\n\ndef _unused_sidebar_shape(/; s/^sys\.exit(0 if ok else 3)$/raise RuntimeError("broken")/' "$p"
+if run >/dev/null; then fail "a patch.py broken after a skipped patch reported success"; fi
+[[ -z $(find "$dst" -type f) && ! -e $dst/.agros-built ]] || fail "a patch.py broken after a skipped patch: its half-patched folder kept"
+grep -q "without your changes" "$skipped" || fail "a patch.py broken after a skipped patch wasn't reported: $(cat "$skipped")"
 
 # --without-changes (caelestia-restart's, with the shell stopped: its config never loaded on them): Caelestia as it
 # comes, why written down, not marked built (the next build puts the changes back), done as asked (exit 0)
@@ -626,8 +653,11 @@ on_main() {
     mkdir "$t/head-src"
     for d in $dirs shell.qml; do cp -r "$t/head-git/$d" "$t/head-src/"; done
     cp -as "$t/head-src" "$t/head-dst"
+    # (what doesn't fit said, and the rest checked all the same: that build is what a machine gets once main is out,
+    # the features that need a skipped one off with it, and it must still load)
     out=$(DOTS_SETTINGS=$t/bin/dots-settings python3 "$here/.local/share/caelestia-overlay/patch.py" "$t/head-src" "$t/head-dst" 2>&1) ||
-        { ahead "patches no longer fit Caelestia's main: $(grep '^WARNING\|Traceback' <<<"$out" | paste -sd' ')"; return 0; }
+        ahead "patches no longer fit Caelestia's main: $(grep '^WARNING\|Traceback' <<<"$out" | paste -sd' ')"
+    grep -q '^Traceback' <<<"$out" && return 0
     # ...and where it has a feature of its own the overlay steps aside: the sidebar's shortcut mode is its, not added twice
     grep -q 'property bool sidebarShortcutActive' "$t/head-src/modules/drawers/Interactions.qml" &&
         [[ $(grep -c 'property bool sidebarShortcutActive' "$t/head-dst/modules/drawers/Interactions.qml") == 1 ]] ||
