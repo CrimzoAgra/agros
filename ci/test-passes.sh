@@ -59,7 +59,8 @@ pacman -Syyuu --noconfirm >/dev/null || stopped "!! the published [agros] didn't
 echo "- All again with the published [agros]:" >>"$report"
 tests
 ((${#failed[@]})) || { echo "    passed: this run's new AUR builds broke them" >>"$report"; result hold-agros; }
-[[ $day =~ ^[0-9]{4}/[0-9]{2}/[0-9]{2}$ ]] || { echo "    (no day Arch last passed on: not tried on an older Arch)" >>"$report"; result fail 1; }
+# (none: agros-arch-ok not published yet, or not read, CI's test job's fetch failing)
+[[ $day =~ ^[0-9]{4}/[0-9]{2}/[0-9]{2}$ ]] || stopped "!! no day Arch last passed on (agros-arch-ok), not tried on an older Arch"
 # shellcheck disable=SC2016  # (pacman's own variables)
 printf 'Server = https://archive.archlinux.org/repos/%s/$repo/os/$arch\n' "$day" >"${MIRRORLIST:-/etc/pacman.d/mirrorlist}"
 pacman -Syyuu --noconfirm >/dev/null || stopped "!! Arch as of $day didn't install"

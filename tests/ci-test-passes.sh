@@ -49,6 +49,7 @@ grep -q 'FAIL lutris' "$t/report" || fail "the report doesn't say what failed: $
 grep -qx 'Server = https://archive.archlinux.org/repos/2026/11/14/$repo/os/$arch' "$t/mirrorlist" || fail "not on Arch's snapshot of that day: $(cat "$t/mirrorlist")"
 [[ $(go "hypr-api@today hypr-api@always" 2026/11/14) == "result=fail | all|all|all" ]] || fail "AgrOS's own break not a failure"
 [[ $(go "hypr-api@today") == "result=fail | all|all" ]] || fail "no last good day: not a failure"
+grep -q '^    !! no day Arch last passed on .*: not known which side' "$t/report" || fail "no last good day not said: $(cat "$t/report")"
 # (run.sh failing with no test named (runuser refused, run.sh cut off): not "all passed", which approves Hyprland)
 [[ $(go crash) == "result=fail | all" ]] || fail "the tests not run read as all passed: $(go crash)"
 # (upstream's next release not fitting: no failure, said in the report once, after what failed, whatever the result)
