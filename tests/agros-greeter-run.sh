@@ -80,6 +80,10 @@ UID0=1 "$t/login-reset"
     'command = "agreety --cmd hyprland-session"' 'user = "greeter"')" && ! -e $t/etc/greetd/config.toml.new ]] ||
     fail "login-reset's text login: $(cat "$t/etc/greetd/config.toml")"
 grep -qx 'systemctl restart greetd' "$t/calls" || fail "greetd not restarted: $(cat "$t/calls")"
+# (another argument, a typo of --back: nothing changed, greetd not restarted)
+rm -f "$t/calls"; echo 'mine' >"$t/etc/greetd/config.toml"
+UID0=1 "$t/login-reset" --bak 2>/dev/null && fail "login-reset --bak ran"
+[[ $(cat "$t/etc/greetd/config.toml") == mine && ! -e $t/calls ]] || fail "login-reset --bak changed the login"
 UID0=1 "$t/login-reset" --back
 cmp -s "$t/etc/greetd/config.toml" "$here/packages/agros-greeter/config.toml" || fail "--back: $(cat "$t/etc/greetd/config.toml")"
 # (the text login's command is agros-greeter's, installed as /usr/bin/hyprland-session: uwsm's Hyprland)

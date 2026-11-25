@@ -2,6 +2,8 @@
 # Puts back greetd's text login (the Caelestia login screen not used), and restarts the login service.
 #   login-reset --back   the Caelestia login screen again (as agros-greeter's install sets it; reinstalling the package
 #                        doesn't: pacman runs it as an upgrade, which leaves greetd's config alone)
+# (anything else, a typo of --back, a --help: said, not the text login and a greetd restart that ends your session)
+case ${1:-} in '' | --back) ;; *) echo "usage: login-reset [--back]" >&2; exit 2 ;; esac
 [ "$(id -u)" -eq 0 ] || { echo "Run: sudo login-reset${1:+ $1}"; exit 1; }
 if [ "${1:-}" = --back ]; then
     install -m644 /etc/greetd/caelestia-greeter/greetd-config.toml /etc/greetd/config.toml.new
