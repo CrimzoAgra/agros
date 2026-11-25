@@ -1,0 +1,33 @@
+# agros-system: the upstream gate's guard (soname-guard), before anything is installed. A run that takes away a library
+# file an installed gated package loads (Arch's glslang with a new soname, beside Hyprland's rebuild, which the gate
+# holds back from a manual pacman -Syu) is refused, said, unless that package is updated in the same run. Run only when
+# a library file goes (in none of the run's new packages: the first trigger; a same-soname update doesn't run it), or a
+# gated package is updated (the second, which only names those: agros-gate.conf's list, kept the same,
+# tests/soname-guard.sh); it reads the gated packages' own files only when a library goes. 00-: before snap-pac's
+# snapshot of a run it refuses
+[Trigger]
+Operation = Remove
+Type = Path
+Target = usr/lib/*.so.*
+
+[Trigger]
+Operation = Upgrade
+Operation = Remove
+Type = Package
+Target = hyprland
+Target = aquamarine
+Target = hyprutils
+Target = hyprlang
+Target = hyprcursor
+Target = hyprgraphics
+Target = hyprwire
+Target = hyprtoolkit
+Target = hyprland-guiutils
+Target = xdg-desktop-portal-hyprland
+
+[Action]
+Description = Checking that no library a held Hyprland package loads goes (soname-guard)...
+When = PreTransaction
+Exec = /usr/lib/agros/bin/soname-guard
+NeedsTargets
+AbortOnFail

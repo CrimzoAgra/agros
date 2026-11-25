@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# The upstream gate's guard on every pacman run (agros-system's 00-agros-soname-guard.hook, before anything is
+# installed), a manual pacman -Syu or paru -Syu too: those hold the gated packages back (agros-gate.conf's IgnorePkg)
+# but not the libraries they load. Hyprland loads libglslang.so.16 and needs glslang by name alone, which names no
+# soname of its own: glslang's update with a new soname comes from Arch with Hyprland's rebuild, held, and Hyprland no
+# longer started. A run that takes away a library (usr/lib/*.so.*, in none of its new packages) an installed gated
+# package loads, that package not in the run too, is refused, said. AgrOS's own update holds that library with it
+# (update-gate, soname-hold --held)
+# stdin (pacman's NeedsTargets): the library files the run takes away, and the gated packages it updates or removes
+set -uo pipefail
+gate=${AGROS_GATE:-/etc/pacman.d/agros-gate.conf}
+declare -A gone=() inrun=()
+while read -r x; do
+    if [[ $x == */* ]]; then gone[$x]=1; elif [[ -n $x ]]; then inrun[$x]=1; fi
+done
+((${#gone[@]})) || exit 0
+read -ra gated < <(sed -n 's/^[[:space:]]*IgnorePkg[[:space:]]*=[[:space:]]*//p' "$gate" 2>/dev/null | tr '\n' ' ')
+bad=0
+for p in "${gated[@]}"; do
+    [[ -z ${inrun[$p]:-} ]] || continue
+    # (its files' ELF NEEDED entries, as soname-hold reads them)
+    while read -r lib; do
+        [[ -n ${gone[usr/lib/$lib]:-} ]] || continue
+        owner=$(LC_ALL=C pacman -Qoq "/usr/lib/$lib" 2>/dev/null) || owner="its package"
+        echo "AgrOS: $owner's update takes away $lib, which $p loads, and $p isn't updated with it (held by AgrOS's upstream gate until AgrOS has checked its update): $p wouldn't start. Nothing installed: update from Settings' Updates page (it holds $owner back with $p), or wait for $p's update" >&2
+        bad=1
+    done < <(LC_ALL=C pacman -Qlq -- "$p" 2>/dev/null | grep -E '/usr/(lib|bin)/' | while read -r f; do
+        [[ -f $f && ! -L $f ]] && readelf -d -- "$f" 2>/dev/null
+    done | sed -n 's/.*(NEEDED).*\[\(.*\)\]$/\1/p' | sort -u)
+done
+exit "$bad"

@@ -100,7 +100,7 @@ of yours for the mirror counts, not added again), and its removal takes them out
 | `agros-desktop` | The meta package: every package the desktop is made of (Hyprland, Caelestia, the apps, PipeWire with its JACK, gvfs for Thunar's drives, USB sticks and Trash, fonts, themes). Hardware apps are optional |
 | `agros-hyprland-settings` | The settings every new account gets (`/etc/skel`): Caelestia's own configs (its dots, pinned), AgrOS's over them (everything in `.config`), launcher entries, LibreWolf settings, the wallpaper, and every version each of these has had (`/usr/share/agros/skel-versions`, from the repo's and Caelestia's git history); fonts and icons system-wide |
 | `agros-scripts` | The programs in `.local/bin` and the data they use, in `/usr/lib/agros`, linked into each home (by links in `/etc/skel` for new accounts; `agros-links` adds new ones at every login, before the desktop starts, and for each user right after an update of `agros-scripts` or `agros-hyprland-settings` (a pacman hook), and copies in once each config file, launcher entry, LibreWolf setting and wallpaper an update added to `/etc/skel` (or an account not made from it lacks), and updates the settings you never edited; `agros-drives` mounts the games drives and adds their Steam libraries at every login) |
-| `agros-system` | The update at every boot (downloaded and AUR apps built at boot, installed at shutdown with firmware), pacman hooks that bring AgrOS's new settings to each user and rebuild each user's Caelestia overlay and hyprbars and check the Hyprland config, Bluetooth and the screens back on after sleep, the ananicy rule, the keyring, the night light's and time zone's permissions (geoclue, polkit), an admin mounting an internal drive without the password (polkit, for `agros-drives`), folder icons that follow the colour scheme (a sudoers rule for `papirus-folders` alone), mDNS from Avahi alone (resolved's off: the two clashed over the computer's name), UFW's logging off (once), the upstream gate (Hyprland's updates held until AgrOS's CI has checked them), the files never unpacked (NoExtract), the packages AgrOS dropped removed after an update, AgrOS's name in `/etc/os-release`, a VMware VM's screen following its window (VMware's tools) |
+| `agros-system` | The update at every boot (downloaded and AUR apps built at boot, installed at shutdown with firmware), pacman hooks that bring AgrOS's new settings to each user and rebuild each user's Caelestia overlay and hyprbars and check the Hyprland config, Bluetooth and the screens back on after sleep, the ananicy rule, the keyring, the night light's and time zone's permissions (geoclue, polkit), an admin mounting an internal drive without the password (polkit, for `agros-drives`), folder icons that follow the colour scheme (a sudoers rule for `papirus-folders` alone), mDNS from Avahi alone (resolved's off: the two clashed over the computer's name), UFW's logging off (once), the upstream gate (Hyprland's updates held until AgrOS's CI has checked them, and a pacman run refused that would take away a library a held one loads), the files never unpacked (NoExtract), the packages AgrOS dropped removed after an update, AgrOS's name in `/etc/os-release`, a VMware VM's screen following its window (VMware's tools) |
 | `agros-greeter` | The Caelestia-style login screen for greetd, its PAM service following the system's, `login-reset` |
 | `agros-boot` | The hidden boot menu in AgrOS's GRUB theme (`grub-theme/`, its pictures and fonts made by `make.sh`), the faster splash with shutdown titles, no text at boot or shutdown (behind the splash), screens in their best mode from boot |
 | `agros-hyprbars` | The title bar plugin, hyprbars, with AgrOS's patch, built in CI for the Hyprland there (one CI's tests hold back: its last build, for the approved one, kept), in place of the AUR's plain one: the live USB's, and an installed system's until its account's own build is made |
@@ -1123,7 +1123,14 @@ brings each change; nothing to run by hand).
     built for the last Hyprland series): it waits for that one's rebuild, rather than the whole update failing); and any
     library whose update takes away one an installed `[agros]` package loads, with no newer build of that package in the
     same update (`.local/bin/soname-hold`: sndio 1.11 dropped `libsndio.so.7`, `libcava` built against it, and Caelestia
-    didn't start), until `[agros]` has the rebuild: said, "waits for AgrOS's rebuild of <package>". Held,
+    didn't start), until `[agros]` has the rebuild: said, "waits for AgrOS's rebuild of <package>". The set held, a
+    library whose update takes away one a gated package loads, though Hyprland needs it by name alone and it names no
+    soname (glslang, lua, muparser: Arch ships the new soname beside a rebuild of Hyprland, held in the set, and
+    Hyprland no longer started), held with them (`soname-hold --held`: the library looked for in its new package's own
+    files, pacman's download or the mirror's, read once per build; a same-soname update, mesa's, isn't held), and what
+    in the update needs it by name (it may be built for the new soname): said, "waits for hyprland's update". A
+    rebuild of a gated package's same version goes through unchecked (that's how Arch's soname rebuilds of Hyprland
+    come, and the library with it); held only when the set is. Held,
     it's held by the gate's Include even when `pacman.conf` lost its own (a merged `.pacnew`). Every place that works
     out what to update goes through it, on the lists it uses: the boot's download and AUR builds (one needing a held
     package, or a newer version of one, isn't built: said; one `pacman.conf` itself holds back, `IgnorePkg`, isn't built
@@ -1148,6 +1155,12 @@ brings each change; nothing to run by hand).
   - The ISO build (agros-iso's `check_gate`) stops when its Hyprland isn't approved, keeping the published ISO; the
     ISO keeps a copy of that approved set, and a new install gets it rather than the newest unchecked one (agros-iso's
     `agros-gate-install`, an installer step)
+  - A manual pacman or paru run, which the gate holds Hyprland back from but not its libraries, is refused before it
+    installs anything when it would take away a library file an installed gated package loads, that package not
+    updated in the same run (`packages/agros-system/00-agros-soname-guard.hook`, PreTransaction, AbortOnFail;
+    `.local/bin/soname-guard`): said, with Settings' Updates page to update from (it holds the library) or to wait.
+    Run only when a library file goes from a package (pacman's Path trigger) or a gated package updates; its package
+    trigger is `agros-gate.conf`'s list, kept the same (`tests/soname-guard.sh`)
   - The Include comes and goes with the file (`agros-system`'s install adds it, and each upgrade where it's missing: a
     machine from before the gate, a merged `pacman.conf.pacnew`; its removal takes it out): pacman can't read a config
     including a missing file, and the ISO's `pacman.conf` for the installed system is in place before anything is

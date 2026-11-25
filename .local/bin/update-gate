@@ -8,8 +8,9 @@
 #   update-gate <pacman.conf> <out> [--dbpath <dir>] [--offline]
 # <out>: the pacman.conf to update with: <pacman.conf> without the gate's Include when every gated package it would
 # update goes to an approved version (or only to a rebuild), else <pacman.conf> as it is (all of them held together:
-# they're built against each other; and a library whose update would break one held, with it: held by the gate's
-# Include, added to <out> if <pacman.conf> lacks it). Says on stdout what waits ("name installed -> new" lines, "name
+# they're built against each other; and a library whose update would break one held, with it, even one Hyprland names
+# without a version (glslang's new soname, its Hyprland rebuild held in the set): held by the gate's Include, added to
+# <out> if <pacman.conf> lacks it). Says on stdout what waits ("name installed -> new" lines, "name
 # (held with ...)"). The list fetched each run, kept for when the repo can't be reached; never fetched, nothing new let
 # through. The list is taken only with a good signature by AgrOS's key beside it (agros-approved.sig, checked with gpgv
 # against agros-keyring's key alone): none, or a bad one (a mirror or a network in between that changed it), and it's
@@ -36,11 +37,19 @@ read -ra gated < <(sed -n 's/^[[:space:]]*IgnorePkg[[:space:]]*=[[:space:]]*//p'
 # A library whose update would take away one an installed [agros] package loads, with no newer build of that package
 # in the same update (soname-hold: sndio 1.11's libsndio.so.9 for .so.7, libcava and with it Caelestia not starting):
 # held in <out> until [agros] has the rebuild, said. Before the dry run below, which then holds what needs its new version
+# With --held <the gated packages> (held: the gate's Include stays): a library whose update takes away one they load
+# (Arch's new soname of glslang, its Hyprland rebuild in the set held), held with them, and what needs it by name
 hold_sonames() {
-    local holds lib by so
-    holds=$("$(dirname "$(readlink -f "$0")")/soname-hold" "$out" "${db[@]}") || return 0
+    local holds lib by so with
+    local opts=("${db[@]}")
+    ((offline == 0)) || opts+=(--offline)
+    holds=$("$(dirname "$(readlink -f "$0")")/soname-hold" "$out" "${opts[@]}" "$@") || return 0
     [[ -n $holds ]] || return 0
-    while read -r lib by so; do echo "$lib (waits for AgrOS's rebuild of $by: its update takes away $so, which $by loads)"; done <<<"$holds"
+    while read -r lib by so with; do
+        if [[ -n $with ]]; then echo "$lib (waits with $with for $by's update: it needs $with, and may be built for its new version)"
+        elif (($#)); then echo "$lib (waits for $by's update: its update takes away $so, which $by loads)"
+        else echo "$lib (waits for AgrOS's rebuild of $by: its update takes away $so, which $by loads)"; fi
+    done <<<"$holds"
     sed -i "/^\\[options\\]/a IgnorePkg = $(cut -d' ' -f1 <<<"$holds" | sort -u | paste -sd' ')" "$out"
 }
 ((${#gated[@]})) || { hold_sonames; exit 0; }
@@ -79,7 +88,9 @@ for name in "${gated[@]}"; do
     new=$(LC_ALL=C pacman -Si --config "$base" "${db[@]}" -- "$name" 2>/dev/null)
     new=$(sed -n '/^Version *: /{s///p;q;}' <<<"$new")
     [[ -n $new && $new != "$have" ]] || continue
-    [[ ${new%-*} == "${have%-*}" ]] && continue  # (a rebuild of the same version)
+    # (a rebuild of the same version: as Arch's for a library's new soname, which comes with it. Let through unchecked,
+    # but held with the set when another of it waits, and the library then with it: hold_sonames --held)
+    [[ ${new%-*} == "${have%-*}" ]] && continue
     (($(vercmp "$new" "$have") > 0)) || continue  # (older in the repo, rolled back: pacman -Su keeps the newer one)
     grep -qxF -- "$name ${new%-*}" "$cache" 2>/dev/null || waits+=("$name $have -> $new")
 done
@@ -96,6 +107,7 @@ fi
 # <out>, until the next lists (a few tries: one held can hold another). Found by pacman's own dry run, as the update
 # it's for would fail on it whole
 hold_sonames
+((${#waits[@]} == 0)) || hold_sonames --held "${gated[@]}"
 for try in 1 2 3 4 5 6; do
     ((try < 6)) || { echo "update-gate: the update still can't be worked out (pacman says why as it runs)" >&2; break; }
     dry=$(LC_ALL=C pacman -Sup --config "$out" "${db[@]}" --print-format '%n' 2>&1) && break
@@ -118,7 +130,7 @@ for try in 1 2 3 4 5 6; do
     [[ -z $needs ]] || while read -r pkg; do echo "$pkg (held: its update needs something not to be had yet)"; done <<<"$needs"
     if [[ -n $waiting ]]; then
         grep -qE "^[[:space:]]*Include[[:space:]]*=[[:space:]]*${gate//./\\.}[[:space:]]*(#.*)?\$" "$out" ||
-            sed -i "/^\\[options\\]/a $inc" "$out"
+            { sed -i "/^\\[options\\]/a $inc" "$out"; hold_sonames --held "${gated[@]}"; }
     fi
     ign=$({ cut -d' ' -f1 <<<"$held"; echo "$needs"; } | grep . | sort -u | paste -sd' ')
     [[ -z $ign ]] || sed -i "/^\\[options\\]/a IgnorePkg = $ign" "$out"

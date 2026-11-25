@@ -5,39 +5,97 @@
 # boot, on every AgrOS machine that updated before [agros] had libcava's rebuild. Held, that library waits for it (CI
 # rebuilds and publishes it under a new release, ci/build-repo.sh): the next update takes both together. Run by
 # update-gate, whose pacman dry run then holds what needs the held library's new version
-#   soname-hold <pacman.conf> [--dbpath <dir>]
+#   soname-hold <pacman.conf> [--dbpath <dir>] [--offline] [--held <package>...]
 # Prints "<package> <the [agros] package> <its library>" for each one to hold. A library's package is held only when
 # its new version names its libraries (provides "libfoo.so=<soname>-64", as Arch's packages do) and that one isn't among
-# them: one that names none isn't held on a guess
+# them: one that names none isn't held on a guess.
+# --held: those packages instead (the upstream gate's, held: update-gate), whose update this one doesn't take. Arch's
+# library that names none (glslang, lua, muparser: Hyprland loads libglslang.so.16, and needs glslang by name alone)
+# comes with a new soname beside Hyprland's rebuild, which the gate holds: Hyprland didn't start. For these, a library
+# that names none is looked for in its new package's own files (pacman's download, else the mirror's, read once per
+# build); held, what in the update needs it by name is held with it ("<package> <held one> <library> <its package>"
+# lines: its new build may be for the new soname, which pacman can't tell). --offline: pacman's download only (the
+# shutdown's install: no mirror waited on)
 set -uo pipefail
-usage="usage: soname-hold <pacman.conf> [--dbpath <dir>]"
+usage="usage: soname-hold <pacman.conf> [--dbpath <dir>] [--offline] [--held <package>...]"
 conf=${1:?$usage}
 shift
-db=()
-[[ ${1:-} == --dbpath ]] && db=(--dbpath "${2:?$usage}")
+db=() held=() offline=0
+while (($#)); do
+    case $1 in
+        --dbpath) db=(--dbpath "${2:?$usage}"); shift 2 ;;
+        --offline) offline=1; shift ;;
+        --held) shift; held=("$@"); break ;;
+        *) echo "$usage" >&2; exit 2 ;;
+    esac
+done
 libdir=${SONAME_HOLD_LIBDIR:-/usr/lib}
-# ([agros]'s installed packages, and what this update would update)
-mapfile -t mine < <(LC_ALL=C pacman -Sl --config "$conf" "${db[@]}" agros 2>/dev/null | awk '$4 ~ /^\[installed/ { print $2 }')
+if [[ $EUID -eq 0 ]]; then files=${SONAME_HOLD_CACHE:-/var/lib/agros/soname-files}; else files=${SONAME_HOLD_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/agros-soname-files}; fi
+# ([agros]'s installed packages, or those held; and what this update would update)
+if ((${#held[@]})); then
+    mine=("${held[@]}")
+else
+    mapfile -t mine < <(LC_ALL=C pacman -Sl --config "$conf" "${db[@]}" agros 2>/dev/null | awk '$4 ~ /^\[installed/ { print $2 }')
+fi
 ((${#mine[@]})) || exit 0
-declare -A pending=()
+declare -A pending=() isheld=()
 while read -r p _; do [[ -n $p ]] && pending[$p]=1; done < <(LC_ALL=C pacman -Qu --config "$conf" "${db[@]}" 2>/dev/null)
 ((${#pending[@]})) || exit 0
+for p in "${held[@]}"; do isheld[$p]=1; done
+# The libraries a package's new version has (usr/lib/*.so.*), from the package itself: pacman's download (as root, it
+# downloads it: checked as every package it downloads, and the update's own), else the mirror's, unpacked by none.
+# Kept by its file name: read once per build. Fails when it can't be had
+where() { LC_ALL=C pacman -Sddp --noconfirm --config "$conf" "${db[@]}" --print-format %l -- "$1" 2>/dev/null | tail -1; }
+newlibs() {
+    local loc kept
+    loc=$(where "$1")
+    [[ $loc == *.pkg.tar* ]] || return 1
+    kept=$files/${loc##*/}.libs
+    [[ -e $kept ]] && { cat "$kept"; return; }
+    [[ $loc == file://* ]] || ((offline == 0)) || return 1
+    if [[ $loc != file://* && $EUID -eq 0 ]]; then
+        LC_ALL=C pacman -Sddw --noconfirm --config "$conf" "${db[@]}" -- "$1" >/dev/null 2>&1 || return 1
+        loc=$(where "$1")
+    fi
+    mkdir -p "$files" && find "$files" -name '*.libs' -mtime +30 -delete 2>/dev/null
+    case $loc in
+        file://*) bsdtar -tf "${loc#file://}" ;;
+        *) curl -fsSL --connect-timeout 10 -m 600 -- "$loc" | bsdtar -tf - ;;
+    esac 2>/dev/null | grep '^usr/lib/[^/]*\.so\.' >"$kept.$$"
+    # (an archive read whole, none of them in it, is an answer too: grep's 1)
+    ((PIPESTATUS[0] == 0)) || { rm -f "$kept.$$"; return 1; }
+    mv -f "$kept.$$" "$kept" && cat "$kept"
+}
 declare -A said=()
 for p in "${mine[@]}"; do
-    [[ -n ${pending[$p]:-} ]] && continue  # (its own newer build comes in the same update: [agros]'s rebuild)
+    # (its own newer build comes in the same update: [agros]'s rebuild. One held doesn't)
+    [[ -z ${isheld[$p]:-} && -n ${pending[$p]:-} ]] && continue
     # The libraries its programs load (its own files' ELF NEEDED entries)
     while read -r lib; do
         [[ $lib == *.so.* && -e $libdir/$lib ]] || continue
         owner=$(LC_ALL=C pacman -Qoq "$libdir/$lib" 2>/dev/null) || continue
-        [[ -n ${pending[$owner]:-} && -z ${said[$owner $p $lib]:-} ]] || continue
+        [[ -n ${pending[$owner]:-} && -z ${isheld[$owner]:-} && -z ${said[$owner $p $lib]:-} ]] || continue
         name=${lib%%.so.*}.so soname=${lib#*.so.}
         provides=$(LC_ALL=C pacman -Si --config "$conf" "${db[@]}" -- "$owner" 2>/dev/null |
             awk '/^Provides *:/ { on = 1; sub(/^Provides *: */, "") } /^[A-Z][a-zA-Z ]* *:/ && !/^Provides/ { on = 0 } on')
-        # (its new version names this library's sonames, and not this one: the library this package loads goes)
-        grep -qE "(^|[[:space:]])${name//./\\.}=" <<<"$provides" || continue
-        grep -qE "(^|[[:space:]])${name//./\\.}=${soname//./\\.}-" <<<"$provides" && continue
+        named=0
+        if grep -qE "(^|[[:space:]])${name//./\\.}=" <<<"$provides"; then
+            # (its new version names this library's sonames, and not this one: the library this package loads goes)
+            grep -qE "(^|[[:space:]])${name//./\\.}=${soname//./\\.}-" <<<"$provides" && continue
+            named=1
+        else
+            ((${#held[@]})) && libs=$(newlibs "$owner") || continue
+            grep -qxF "usr/lib/$lib" <<<"$libs" && continue
+        fi
         said[$owner $p $lib]=1
         echo "$owner $p $lib"
+        ((${#held[@]} && !named)) || continue
+        # (what in the update needs it by name: its new build may be for that new soname, and needs it by name alone)
+        for d in $(LC_ALL=C pacman -Qi -- "$owner" 2>/dev/null | sed -n 's/^Required By *: //p'); do
+            [[ -n ${pending[$d]:-} && -z ${isheld[$d]:-} && -z ${said[$d]:-} ]] || continue
+            said[$d]=1
+            echo "$d $p $lib $owner"
+        done
     done < <(LC_ALL=C pacman -Qlq -- "$p" 2>/dev/null | grep -E '/usr/(lib|bin)/' | while read -r f; do
         [[ -f $f && ! -L $f ]] && readelf -d -- "$f" 2>/dev/null
     done | sed -n 's/.*(NEEDED).*\[\(.*\)\]$/\1/p' | sort -u)
