@@ -1526,6 +1526,36 @@ out=$(cd "$t" && HOME=$t/home XDG_RUNTIME_DIR=$t/run HYPRLAND_INSTANCE_SIGNATURE
 grep -q '^loaded false .*user.workspaces.*renamed API' <<<"$out" || fail "a broken user module wasn't reported: $(head -3 <<<"$out")"
 grep -qx "bind SHIFT + Space" <<<"$out" || fail "a broken user module took the ones after it down: $(head -5 <<<"$out")"
 cp "$t/workspaces.lua.bak" "$t/home/.config/caelestia/user/workspaces.lua"
+# A game's splash (its first window, small) holds its other windows back; a first window filling a scaled screen (a
+# window's size is in the screen's units, its mode over its scale) isn't one: its next window shown, not held
+cat >"$t/splash.lua" <<'L'
+local home = os.getenv("HOME")
+package.path = home .. "/.config/caelestia/?.lua;" .. home .. "/.config/hypr/?.lua;" .. package.path
+dofile(arg[1])
+local vars = require("variables")
+for k, v in pairs(require("hypr-vars")) do vars[k] = v end
+require("hypr-user")
+local m = { name = "DP-1", x = 0, y = 0, width = 3840, height = 2160, scale = 2, transform = 0, active_workspace = ws(1),
+            reserved = { top = 0, bottom = 0, left = 0, right = 0 } }
+SCREENS, FOCUS = { m }, 1
+local function game(address, w, h)
+    return { address = address, class = "steam_app_1", title = "Game", floating = true, fullscreen = 0, pid = 4242,
+             tags = { "game*" }, workspace = ws(1), monitor = m, at = { x = 0, y = 0 }, size = { x = w, y = h } }
+end
+local function open(w)
+    WINDOWS[#WINDOWS + 1] = w
+    for _, fn in ipairs(handlers["window.open"] or {}) do fn(w) end
+end
+for _, size in ipairs({ { 1920, 1080, "full" }, { 600, 300, "small" } }) do
+    WINDOWS = {}
+    open(game("0xa" .. size[3], size[1], size[2])); local next = game("0xb" .. size[3], 1920, 1080); open(next)
+    io.write(size[3], " first window: the next ", next.workspace.name, "\n")
+    dots.splash_release(4242)
+end
+L
+out=$(cd "$t" && HOME=$t/home XDG_RUNTIME_DIR=$t/run HYPRLAND_INSTANCE_SIGNATURE=test lua splash.lua stub.lua 2>&1) || fail "splash: $out"
+grep -qx "full first window: the next 1" <<<"$out" || fail "a game's first window filling a scaled screen taken for a splash: $out"
+grep -qx "small first window: the next special:splash" <<<"$out" || fail "a game's small first window not taken for a splash: $out"
 
 # Focus on a click (floating mode's default): a closed window's focus goes to the one used before it (focus_on_close 2,
 # "mru"), not to the one under the pointer (Caelestia's 1: none over the desktop, and Super+Q then did nothing); on

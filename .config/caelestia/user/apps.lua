@@ -174,9 +174,10 @@ end)
 -- splash closes, then shown where it was. At most 30 s (a small first window that isn't a splash never hides the game
 -- for long). By the game's process: its windows, and the splash's own workspace to come back to
 local splash = {}  -- pid -> { address = splash's, workspace = its id, held = { addresses } }
+-- (the window's size is in the screen's units: its mode over its scale)
 local function small(win)
     local m = win.monitor or hl.get_active_monitor()
-    return m and win.size and win.fullscreen == 0 and win.size.x * win.size.y < 0.5 * m.width * m.height
+    return m and win.size and win.fullscreen == 0 and win.size.x * win.size.y < 0.5 * m.width * m.height / (m.scale or 1) ^ 2
 end
 function dots.splash_release(pid)
     local s = splash[tonumber(pid)]
