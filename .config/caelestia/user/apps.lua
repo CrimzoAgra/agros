@@ -12,11 +12,10 @@ end
 -- Steam's own notification toasts ("friend started playing...") are windows: tag them like its menus, so the dock
 -- doesn't show them
 hl.window_rule({ match = { class = "steam", title = "notificationtoasts_.*" }, tag = "+xwl_popup" })
--- The Updates and Desktop Settings apps and the live ISO's installer splash (named after their launcher entries:
--- QS_APP_ID, ~/.local/bin/updates, agros-iso's calamares-online.sh): the float and opaque Caelestia gives Quickshell
--- windows (org.quickshell, its rules.lua). Set as such, not as its "float" and "opaque" tags: a tag only takes effect
--- from rules made before Caelestia's rule for it, which come before this file
-hl.window_rule({ match = { class = "^(updates|desktop-settings|agros-install)$" }, float = true, opaque = true, tag = "+dots_opaque" })
+-- The live ISO's installer splash (named after its launcher entry: QS_APP_ID, agros-iso's calamares-online.sh): the
+-- float and opaque Caelestia gives Quickshell windows (org.quickshell, its rules.lua). Set as such, not as its "float"
+-- and "opaque" tags: a tag only takes effect from rules made before Caelestia's rule for it, which come before this file
+hl.window_rule({ match = { class = "^agros-install$" }, float = true, opaque = true, tag = "+dots_opaque" })
 -- LibreWolf opaque too (Caelestia's opacity for every other window left web pages see-through)
 -- (both tagged dots_opaque too: window peek, user/windows.lua, fades them back to whole, as they are)
 hl.window_rule({ match = { class = "^(librewolf)$" }, opaque = true, tag = "+dots_opaque" })

@@ -2,7 +2,7 @@
 -- middle at one standard size, minimise and maximise (keys, the title bar buttons of titlebars.lua, apps' own), and
 -- the clicked or picked window to the front.
 -- Called from outside this file through hyprctl eval 'dots.<name>(...)': focus_window (Alt+Tab switcher, dock,
--- game-focus), focus_app (a click on a notification, the Updates launcher run again), minimise_window and
+-- game-focus), focus_app (a click on a notification), minimise_window and
 -- maximise_window (title bar buttons),
 -- toggle_window_mode (bar menu, the Settings app's window mode), refit_placed_soon (Caelestia's bar, its space changed:
 -- the overlay's bar_space_refit), peek_screen and peek_end (window peek: the overlay's WindowPeek.qml),

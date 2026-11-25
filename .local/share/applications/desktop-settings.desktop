@@ -1,9 +1,9 @@
 [Desktop Entry]
 Type=Application
-Name=Desktop Settings
-Comment=Look, screens, windows, sound, network, startup apps, shortcuts and updates
-Exec=desktop-settings
+Name=Settings
+Comment=Wallpaper and style, screens, windows, sound, network, startup apps, shortcuts and updates
+Exec=qs -c caelestia ipc call nexus open
 Icon=preferences-desktop
 Terminal=false
-Categories=System;Settings;
-Keywords=settings;preferences;dotfiles;windows;startup;shortcuts;keybinds;
+Categories=Settings;
+Keywords=preferences;control;dotfiles;windows;display;wallpaper;startup;shortcuts;keybinds;updates;upgrade;

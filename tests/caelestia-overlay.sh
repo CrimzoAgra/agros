@@ -228,14 +228,15 @@ w=$dst/modules/launcher/Content.qml
 # that doesn't resolve stops the whole shell from loading, which qmllint here doesn't catch)
 n=$dst/modules/nexus
 pages=$(awk '/readonly property list<var> pages/,/^    \]/' "$n/PageRegistry.qml" | grep -cE '^ {8}\{$')
-comps=$(awk '/readonly property list<Component> pageComps/,/^    \]/' "$n/PageCompRegistry.qml" | grep -cE '^ {8}Component \{$')
+complist=$(awk '/readonly property list<Component> pageComps/,/^    \]/' "$n/PageCompRegistry.qml")
+comps=$(grep -cE '^ {8}Component \{$' <<<"$complist")
 { [[ $pages == "$comps" ]] && grep -q 'pageId: "windows"' "$n/PageCompRegistry.qml" && grep -q 'label: "Windows", // caelestia-overlay' "$n/PageRegistry.qml" &&
     [[ -f $dst/services/AgrosSettings.qml && -f $n/common/AgrosRow.qml && -f $n/pages/AgrosPage.qml ]]; } ||
     fail "AgrOS's pages not in Nexus, or its lists out of step ($pages pages, $comps components)"
 # Nexus opens on AgrOS's Home; Display where Nexus's TODO was, Updates in its placeholder, Shortcuts; the bar's popout
 # still opens its pages (Wallpaper & style...) where they went; the shortcut recorder over Nexus, and the shell's restart
 # a change needs held until Nexus closes; dots-settings's other pages folded into Nexus's own, without what Nexus sets
-{ awk '/readonly property list<Component> pageComps/,/^    \]/' "$n/PageCompRegistry.qml" | grep -m1 -q 'AgrosHome {}' &&
+{ grep -q 'AgrosHome {}' <<<"$complist" &&
     [[ $(awk '/readonly property list<var> pages/,/^    \]/' "$n/PageRegistry.qml" | grep -m1 -oE 'label: [^,]+') == 'label: "Home"' ]] &&
     grep -q 'AgrosDisplay {}' "$n/PageCompRegistry.qml" && grep -q 'AgrosUpdates {}' "$n/PageCompRegistry.qml" &&
     grep -q 'pageId: "keys"' "$n/PageCompRegistry.qml" &&
@@ -252,8 +253,9 @@ grep -qE 'readonly property var covered: \[.*"bar\.persistent".*\]' "$n/common/A
 icons=$(awk '/readonly property list<var> pages/,/^    \]/' "$n/PageRegistry.qml" | grep -oE '^ {12}icon: "[a-z_]+"' | sed -E 's/.*"(.*)"/\1/' | tr '\n' ' ')
 [[ $icons == "home palette select_window dock_to_bottom monitor volume_up mouse devices_other wifi apps rocket_launch keyboard update auto_awesome build globe tune info " ]] ||
     fail "Nexus's pages not in AgrOS's groups: $icons"
-{ awk '/readonly property list<Component> pageComps/,/^    \]/' "$n/PageCompRegistry.qml" | grep -E 'AgrosHome \{\}|WallpaperAndStyle \{\}|pageId: "windows"|PanelsPage \{\}|AgrosDisplay \{\}|pageId: "caelestia"' | tr -d ' ' | tr '\n' ' ' |
-    grep -qx 'AgrosHome{} WallpaperAndStyle{} pageId:"windows" PanelsPage{} AgrosDisplay{} pageId:"caelestia" '; } || fail "Nexus's page components not moved with their pages"
+want='AgrosHome{} WallpaperAndStyle{} pageId:"windows" PanelsPage{} AgrosDisplay{} pageId:"caelestia" '
+[[ $(grep -E 'AgrosHome \{\}|WallpaperAndStyle \{\}|pageId: "windows"|PanelsPage \{\}|AgrosDisplay \{\}|pageId: "caelestia"' <<<"$complist" | tr -d ' ' | tr '\n' ' ') == "$want" ]] ||
+    fail "Nexus's page components not moved with their pages"
 { grep -qF 'readonly property var titles: {"look": "Look & feel", "devices": "Devices", "apps": "Apps & shortcuts", "system": "System"}' "$n/PageRegistry.qml" &&
     grep -q 'text: item.groupTitle' "$n/navpane/NavLocations.qml" && grep -q 'AgrosSettings.matches(p, nState.searchText)' "$n/navpane/NavLocations.qml" && grep -qF 'j > index && root.shown[j]' "$n/navpane/NavLocations.qml" &&
     grep -q 'property: "searchText"' "$n/NavPane.qml"; } || fail "the nav list's group titles or search missing"
@@ -266,9 +268,18 @@ grep -q '360); // caelestia-overlay: no taller than 360' "$n/pages/WallpaperAndS
 # frame later; the long lists' button the menus' split button
 { grep -q "AgrosScreenWalls {" "$n/pages/wallandstyle/WallpaperSelect.qml" && grep -q "visible: !screenWalls.visible" "$n/pages/WallpaperAndStyle.qml" && [ -f "$n/common/AgrosScreenWalls.qml" ] &&
     ! grep -q 'onlyGroups: \["Wallpaper"\]' "$n/pages/AgrosDisplay.qml" &&
-    grep -q 'AgrosSkeleton {' "$n/Pages.qml" && grep -q 'onTriggered: root.buildPage(root.pendingIdx)' "$n/Pages.qml" &&
+    grep -q 'AgrosSkeleton {' "$n/Pages.qml" && grep -q 'onTriggered: root.buildPage(root.pendingIdx)' "$n/Pages.qml" && grep -q 'if (idx === pendingIdx)' "$n/Pages.qml" && grep -q 'if (idx !== pendingIdx)' "$n/Pages.qml" &&
     grep -q 'stateLayer.onClicked: root.listOpen = !root.listOpen' "$n/common/AgrosRow.qml"; } ||
     fail "screens' wallpapers not with the wallpapers, no page skeleton, or the lists' button not the split one"
+# The wallpaper in Caelestia's frame, pushed in by the bar as it grows when the shell starts (its window the whole
+# screen: kept clear of the frame's zones, a black band showed where the bar would be until it was there)
+bgq=$dst/modules/background/Background.qml
+{ grep -q 'readonly property real edge: bar?.width ?? 0' "$bgq" && grep -q 'anchors.leftMargin: bar?.exclusiveZone ?? 0' "$bgq" &&
+    ! grep -q 'ExclusionMode.Normal' "$bgq"; } || fail "the wallpaper not in the frame, or not pushed in by the bar as the shell starts"
+# Settings opened at a page (nexus openPage update: the Updates launcher), and at Updates from a check's notification
+{ grep -qR 'function openPage(icon: string): void' "$dst/modules/Shortcuts.qml" "$dst/daemons/Shortcuts.qml" 2>/dev/null &&
+    grep -q 'p.icon === AgrosSettings.openAt' "$n/Nexus.qml" && grep -q 'listFile = AgrosSettings.updatesList;' "$n/pages/AgrosUpdates.qml"; } ||
+    fail "Settings can't be opened at a page (Updates from its notifications)"
 # Back and forward (buttons by the title, the mouse's), no close button in Nexus's own window
 { grep -q 'function back(): void' "$n/NexusState.qml" && grep -q 'remember(); // caelestia-overlay' "$n/NexusState.qml" &&
     grep -q 'acceptedButtons: Qt.BackButton | Qt.ForwardButton' "$n/Nexus.qml" && grep -q 'visible: !root.nState.isWindow' "$n/Nexus.qml" && grep -q 'implicitWidth: root.nState.isWindow ? 0 :' "$n/Nexus.qml" &&

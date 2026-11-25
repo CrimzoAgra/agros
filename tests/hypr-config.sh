@@ -880,8 +880,8 @@ for _, d in ipairs(sent) do
 end
 check("notification click: the most recent window", focused, "0xe3")
 sent = {}
--- The Updates launcher run again (~/.local/bin/updates): the open window, by its class, to the front; none open, nothing
--- (qs then opens it), never the app launched from here
+-- An app named alone (no launcher entry, launch false: a notification of a Quickshell app named by its class): the open
+-- window, by its class, to the front; none open, nothing, never the app launched from here
 local upd = app_win("0xe4", 2)
 upd.class, upd.title = "updates", "Updates"
 WINDOWS = { app_win("0xe1", 1), upd }

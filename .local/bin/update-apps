@@ -7,11 +7,12 @@
 #   update-apps --list    what's waiting, one per line: kind<TAB>name<TAB>old<TAB>new (update-kinds --list: system,
 #                         aur, firmware, flatpak, appimage, capri, proton or dev; offline when the package servers
 #                         can't be reached)
-#   update-apps --check   if updates are waiting, a notification whose "Update now" opens the Updates app and starts
-#                         (update-check.timer); the same updates aren't announced twice
-#   update-apps --check-now   check and always say the result in a notification; clicking it opens the Updates app.
+#   update-apps --check   if updates are waiting, a notification whose "Update now" opens Settings' Updates page and
+#                         starts (update-check.timer); the same updates aren't announced twice
+#   update-apps --check-now   check and always say the result in a notification; clicking it opens Settings' Updates.
 #                         Returns as soon as the check is done (the Super menu's button spins until then)
-#   (both checks hand the app what they found, UPDATES_LIST: it shows that list at once, not checking again)
+#   (both checks hand the page what they found, a file: it shows that list at once, not checking again; Caelestia's
+#   "nexus updates <start> <file>", caelestia-overlay's settings_open_at)
 #   update-apps --qt-mark / --qt-rebuild   this run's own steps around its pacman -Syu, alone (tests/update-apps.sh):
 #                         the Qt Quickshell and Caelestia were built for written down (when it isn't yet), then what's
 #                         built on it rebuilt if Qt changed since
@@ -153,8 +154,8 @@ snapshot() { [[ $(findmnt -no FSTYPE / 2>/dev/null) == overlay ]]; }
 # An admin's (wheel) alone: another account can't sudo (the boot's update installs them all the same)
 admin() { [[ " $(id -nG 2>/dev/null) " == *" wheel "* ]]; }
 
-# found <list>: what a check found, in a file of yours (RAM) the Updates app opened from its notification shows at once
-# (UPDATES_LIST; it checks again when it's older than 15 minutes, and removes it)
+# found <list>: what a check found, in a file of yours (RAM) Settings' Updates opened from its notification shows at once
+# (it checks again when it's older than 15 minutes, and removes it; not opened, removed here)
 found() { local f; f=$(mktemp "${XDG_RUNTIME_DIR:-/tmp}/update-apps-list.XXXXXX") && printf '%s\n' "$1" >"$f" && echo "$f"; }
 
 if [[ ${1:-} == --check-now ]]; then
@@ -173,7 +174,7 @@ if [[ ${1:-} == --check-now ]]; then
     # The notification waits on its own, so this returns now (sh's own $1/$2/$3, not this script's)
     # shellcheck disable=SC2016
     setsid sh -c 'a=$(timeout 1h "$3/notify-wait" -a Updates -i system-software-update -A "default=Open Updates" "$1" "$2")
-        [ "$a" = default ] && exec "$3/app-launch" env UPDATES_LIST="$4" "$3/updates"; rm -f "$4"' \
+        [ "$a" = default ] && qs -c caelestia ipc call nexus updates false "$4" && exit; rm -f "$4"' \
         sh "$title" "$names" "$helpers" "$listed" >/dev/null 2>&1 &
     exit 0
 fi
@@ -196,8 +197,8 @@ if [[ ${1:-} == --check ]]; then
     action=$(timeout 5h50m "$helpers/notify-wait" -a "Updates" -i system-software-update -A "default=Update now" "$title" "$names")
     rc=$?
     ((rc == 0 || rc == 124)) && printf '%s\n' "$list" >"$seen"
-    # In a unit of its own, as from the launcher: closing the window (this service ending) doesn't stop the update
-    [[ $action == default ]] && exec "$helpers/app-launch" env UPDATES_START=1 UPDATES_LIST="$listed" "$helpers/updates"
+    # (Settings' Updates runs the update in a unit of its own: this service ending doesn't stop it)
+    [[ $action == default ]] && qs -c caelestia ipc call nexus updates true "$listed" && exit 0
     rm -f "$listed"
     exit 0
 fi

@@ -1,4 +1,0 @@
-#!/bin/sh
-# Opens the settings: Caelestia's own (Nexus), AgrOS's pages in it (caelestia-overlay's nexus_pages: Home, Display,
-# Windows, Shortcuts, Updates...). Its launcher entry runs this, and the Super menu's settings button opens the same
-exec qs -c caelestia ipc call nexus open

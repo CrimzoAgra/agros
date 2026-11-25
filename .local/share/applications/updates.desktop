@@ -1,9 +1,8 @@
 [Desktop Entry]
 Type=Application
 Name=Updates
-Comment=Update the system and all apps
-Exec=updates
+Comment=Retired: Updates is a page of Settings now (desktop-settings.desktop). Kept, hidden, so the copy in a home from before is replaced by this one and leaves the Super menu
+Exec=qs -c caelestia ipc call nexus openPage update
 Icon=system-software-update
-Terminal=false
-Categories=System;Settings;
-Keywords=update;upgrade;software;packages;
+NoDisplay=true
+Hidden=true

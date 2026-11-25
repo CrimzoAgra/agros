@@ -53,7 +53,7 @@ manager (the one it replaced is noted, and turned back on by its removal).
 More people: each account made with `useradd -m` (uid 1000 and up, a login shell) gets `/etc/skel` and is one of
 AgrOS's users (`agros-each-user --list`): the pacman hooks and the boot's update serve each, the login screen lists
 them, and its first login runs `agros-welcome`. Only `wheel` members are offered the system's part (`agros-welcome
---system`, the Updates app's "Update now"): another account can't sudo.
+--system`, Settings' Updates page's "Update now"): another account can't sudo.
 
 ### How it's packaged
 
@@ -223,7 +223,7 @@ The default wallpaper is Caelestia's own (`assets/wallpaper.webp` in its shell).
 | `aur/packages.txt`, `ci/` | The AUR packages built into `[agros]`, and the script that builds the repo |
 | `system/` | Files the system packages install (Bluetooth after sleep, the screens on after sleep, the boot video mode, the ananicy rule, the night light's location (geoclue), the time zone's and internal drives' permissions (polkit), resolved's settings, the `papirus-folders` sudoers rule, File Roller's first window wide enough for its file names, a gschema override) |
 | `.config/caelestia/` | Hyprland settings (`hypr-user.lua`, `hypr-vars.lua`, `user/`) and Caelestia settings (`shell.json`; `cli.json`: its command's, the screen recorder's) |
-| `.config/quickshell/` | The switcher, desktop widgets, Updates and Desktop Settings apps, their shared colours (`common/`), and the dock's pins |
+| `.config/quickshell/` | The switcher, desktop widgets, their shared colours (`common/`), and the dock's pins |
 | `.local/share/caelestia-overlay/` | My changes to Caelestia's own code, patched in by `caelestia-overlay` |
 | `.local/share/caelestia-greeter/` | The login screen |
 | `.local/bin/` | Scripts (on user services' `PATH` through `.config/environment.d/10-local-bin.conf`, on the desktop's through `.config/uwsm/env.d/local-bin.sh`) |
@@ -235,7 +235,7 @@ The default wallpaper is Caelestia's own (`assets/wallpaper.webp` in its shell).
 ## Settings
 
 Caelestia's own settings window (Nexus), with AgrOS's settings in it, in its style (Super menu: the gear left of the
-updates button, or "Desktop Settings"). It opens on Home: the settings most looked for on four cards (Look, Screens,
+updates button, or "Settings": `desktop-settings.desktop`, which runs Nexus itself). It opens on Home: the settings most looked for on four cards (Look, Screens,
 Windows, Sound & network), each with a button to its whole page.
 - **`.local/share/caelestia-overlay/`**'s `nexus_pages` (in `patch.py`) puts AgrOS's pages among Nexus's own: Home
   (`AgrosHome.qml`), Display (`AgrosDisplay.qml`: the screens dragged into place, each one snapping to a side of
@@ -405,8 +405,9 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
       a word starting with the text ("files": a File Manager) first, so Enter opens foot, not Micro (its keyword
       "terminal")
     - A "check for updates" button next to the search bar: its icon spins while checking, then a notification says
-      the result (also if the menu was closed meanwhile) and opens the Updates app with that list, not checking again
-      (`UPDATES_LIST`, as the 6-hourly check's "Update now"; a list older than 15 minutes is checked anew)
+      the result (also if the menu was closed meanwhile) and opens Settings' Updates with that list, not checking
+      again (`qs -c caelestia ipc call nexus updates false <file>`, as the 6-hourly check's "Update now" with `true`;
+      a list older than 15 minutes is checked anew)
     - Opens over fullscreen games and videos too (`general.showOverFullscreen` in `shell.json`; notifications and
       toasts stay off fullscreen windows), with the whole shell (bar, border) while it's open, hidden again as it
       closes (with the dashboard, power menu and popouts opened from it)
@@ -451,7 +452,7 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
   pacman hook after every `caelestia-shell` or `agros-scripts` update. Nothing it's built from changed since the last
   build (Caelestia's files, the script, the patches, the Settings app's `caelestia.*` switches: one checksum, kept in
   the folder's `.agros-built`): left as it is, the shell not restarted. With a Caelestia running from the overlay (an
-  update from the Updates app, inside the session) it hands over to `caelestia-restart --rebuild`, which stops the
+  update from Settings' Updates page, inside the session) it hands over to `caelestia-restart --rebuild`, which stops the
   shell, rebuilds and starts it again: swapped under a running shell, the folder got it dropped by Hyprland. It checks
   under the overlay's lock (`~/.config/quickshell/caelestia.lock`), which `caelestia-restart` and `caelestia-start` hold
   from the shell's stop to its new start, so a rebuild waiting on one finds the shell up and hands over too. A game
@@ -852,7 +853,7 @@ helper a package update just brought works before `agros-links` has linked it), 
   (`auto-update`, after the install or one with nothing to install, as root: `pacman -S`) and Updates'
   (`update-apps`, after its `paru -Su`, through paru's sudo) reinstall what it names; that failing never fails the
   update (said, tried again after the next one)
-- **`.local/bin/update-kinds`**: the kinds of update, how each is listed (`--list`, what the Updates app shows: system,
+- **`.local/bin/update-kinds`**: the kinds of update, how each is listed (`--list`, what Settings' Updates page shows: system,
   aur, firmware, flatpak, appimage, capri, proton, dev) and run (`update-kinds <kind>...`), and the Qt installed
   (`--qt-now`): `update-apps` and the boot's `auto-update` (as each user, `--boot`) both run it, its updates never as
   root (its queries, `--qt-now` and the runtimes' below, also from root's `auto-update`), one run at a time per user
@@ -1004,8 +1005,8 @@ helper a package update just brought works before `agros-links` has linked it), 
   it's that commit's own. Without Rust (`cargo`, `rustc`: the `rust` package, or `rustup` with a toolchain chosen)
   it's said, and tried again next time. One run at a time (a `--check` meanwhile says nothing). The fork is private:
   with no GitHub login (`gh auth login`) its last copy is used, never a login prompt (`$CAPRI_FORK` fetches it from
-  elsewhere for one run, e.g. a bundle of it). It runs from the Updates app (as AUR apps: the code is built and
-  checked, not unseen at boot); `--check` is what the Updates app lists and what the boot runs. Exit 2: it failed and
+  elsewhere for one run, e.g. a bundle of it). It runs from Settings' Updates page (as AUR apps: the code is built and
+  checked, not unseen at boot); `--check` is what Settings' Updates page lists and what the boot runs. Exit 2: it failed and
   said so in a notification itself.
   **`.local/bin/capri`** starts her build's binary (Super menu entry and icon made by `capri-update`; log
   `~/.cache/capri.log`, moved aside past 5 MB): native on Wayland, a layer-shell surface that lets the clicks around
@@ -1029,8 +1030,10 @@ helper a package update just brought works before `agros-links` has linked it), 
 The `system/` files are the parts outside your home: `agros-system` and `agros-boot` install them (a pacman update
 brings each change; nothing to run by hand).
 
-- **Updates app** (`.config/quickshell/updates/`, in the Super menu; opened through `.local/bin/updates`, which brings
-  its window to the front when it's open already):
+- **Updates** (a page of Settings, Nexus: the overlay's `AgrosUpdates.qml`; the Super menu's "Update apps" opens it
+  through `.local/bin/updates`, `nexus openPage update`, the overlay's `settings_open_at`; it replaced the Updates app,
+  a window of its own, whose launcher entry `updates.desktop` stays as a hidden one so a copy in a home from before is
+  replaced by it and leaves the Super menu):
   - Lists what's waiting, by app with its icon and old → new version (one too long for its column shown whole while
     its row is hovered): system and AUR apps, firmware, Flatpaks, AppImages, Capri, Proton builds, developer tools
   - A list that couldn't be made (`update-apps --list` failed, or hung for 10 minutes) says so, not "Everything is up
@@ -1039,8 +1042,8 @@ brings each change; nothing to run by hand).
     these updates", and no "Update all"
   - "Update all" runs `update-apps`, showing its progress; shown only while something is waiting, and taking no click
     for a second after it appears (where "Check again" was, under the pointer: a double-click there isn't an install).
-    Closed with the title bar; an update already running carries on (its log: `$XDG_RUNTIME_DIR/update-apps.log`), and
-    opening it again and pressing "Update all" follows it
+    The update runs in a systemd unit of its own (`agros-update-apps`): Settings closed, or Caelestia restarted, it
+    carries on (its log: `$XDG_RUNTIME_DIR/update-apps.log`), and the page opened again follows it
   - Its log's errors in red, but not pacman's "failed retrieving file ... from <mirror>" (that mirror lacked it, the
     next one is tried); "failed to retrieve some files" and a failed run stay red
 - **Files never unpacked** (`packages/agros-system/agros-noextract.conf` at `/etc/pacman.d/agros-noextract.conf`,
@@ -1062,7 +1065,7 @@ brings each change; nothing to run by hand).
 - **The upstream gate** (`packages/agros-system/agros-gate.conf` at `/etc/pacman.d/agros-gate.conf`, which
   `agros-system`'s install adds to `pacman.conf`'s Include lines, with the file; `.local/bin/update-gate`): Hyprland and
   its libraries (the packages AgrOS's config, title bar plugin and shell patches are written against) are held back from
-  every pacman run, a manual one too, and updated by AgrOS's own updates (the boot's, the Updates app) only to versions
+  every pacman run, a manual one too, and updated by AgrOS's own updates (the boot's, Settings' Updates page) only to versions
   AgrOS's CI has checked:
   - CI's test job runs every test against the newest Hyprland from Arch (the real one loading the whole config,
     `tests/hypr-api.sh`; against Hyprland's own Lua stubs, in handlers too: every Hyprland name and event AgrOS uses,
@@ -1087,9 +1090,9 @@ brings each change; nothing to run by hand).
     out what to update goes through it, on the lists it uses: the boot's download and AUR builds (one needing a held
     package, or a newer version of one, isn't built: said; one `pacman.conf` itself holds back, `IgnorePkg`, isn't built
     either, nor the others of its build, and isn't counted as waiting; one a new Qt needs rebuilt holds that Qt back,
-    said as any rebuild that can't be done), the shutdown's install (deciding again, the Updates app may have synced
+    said as any rebuild that can't be done), the shutdown's install (deciding again, Settings' Updates page may have synced
     newer lists since, but from the approved list kept at the boot, `--offline`: nothing let through that the boot
-    didn't download), the Updates app's list and its update. A held update isn't listed in the Updates app; the update
+    didn't download), Settings' Updates page's list and its update. A held update isn't listed in Settings' Updates page; the update
     log says what waits ("waits for AgrOS's check"). A version older in the repo than installed (a rollback) doesn't
     count: pacman keeps the newer one. The list is fetched from each of `[agros]`'s servers in turn (Pages, then the
     mirror) and kept for when none can be reached; never fetched, nothing new. It's taken only with a good signature by
@@ -1113,8 +1116,8 @@ brings each change; nothing to run by hand).
     installed
 - **`.local/bin/update-apps`**: updates everything (system and AUR apps with `paru` through the upstream gate, then each
   kind `update-kinds` runs: firmware with fwupd, Flatpaks, AppImages, Capri, Proton builds, developer tools), like at
-  boot. `--list` is what the Updates app shows (`update-kinds --list`); every 6 hours (`update-check.timer`) it checks,
-  and when updates are waiting a notification's "Update now" opens the Updates app and starts (an admin's, in `wheel`:
+  boot. `--list` is what Settings' Updates page shows (`update-kinds --list`); every 6 hours (`update-check.timer`) it checks,
+  and when updates are waiting a notification's "Update now" opens Settings' Updates page and starts (an admin's, in `wheel`:
   an account that can't sudo isn't offered it, nor `agros-welcome`'s system part, and `update-apps` itself refuses it;
   the boot's update covers it). Not on a snapshot booted from the menu, nor the live USB (said; the check offers
   nothing there). Not on a battery nearly empty (`battery-low`, the boot update's check too: below 15%,
@@ -1127,7 +1130,7 @@ brings each change; nothing to run by hand).
   (`systemd-inhibit --what=sleep:shutdown:handle-lid-switch`: logind suspends on the lid whatever sleep lock is held,
   `LidSwitchIgnoreInhibited=yes`; where polkit refuses the lid's lock, power off and sleep alone). Run in a
   terminal, it shows each AUR package's build-script changes for review first, and ends on "Done." or, a step having
-  failed, "Finished, with problems" (as the Updates app says it); the Updates app's "Update all" builds
+  failed, "Finished, with problems" (as Settings' Updates page says it); Settings' Updates page's "Update all" builds
   them without that review (it lists which ones first, in its log), leaving out those the boot's builds hold for review
   (`aur-maintainer-changed`'s bases, a signed repository's package now foreign: paru's `--ignore`, said with "run
   update-apps in a terminal"; built unreviewed there, the next boot took the new maintainers as reviewed), and sudo asks
@@ -1164,7 +1167,7 @@ brings each change; nothing to run by hand).
   - **AUR apps** (`packages/agros-system/auto-update-aur`, after the download; an app whose AUR maintainer
     or co-maintainers changed since its last build (a co-maintainer can push its build files too), or one its repo
     dropped (signed, now foreign), isn't built: left for `update-apps` in a terminal, where paru shows its build files
-    for review (the Updates app leaves it out), and said by `agros-check`): those with a newer AUR version (not in
+    for review (Settings' Updates page leaves it out), and said by `agros-check`): those with a newer AUR version (not in
     a repo: `paru -Qua`'s), and, when the download brings a new version of a runtime that breaks what's built on it,
     those built on it (from the AUR or `[agros]`, not a `-bin`, not rebuilt by their repo in the same download). The
     runtimes are one list, `update-kinds`' (`runtimes`, which `update-apps` uses too): Qt (`qt6-base`,
@@ -1309,7 +1312,7 @@ brings each change; nothing to run by hand).
   has pacman's lists put back, and its lock removed, at the next boot or install. The boot's run (download, Flatpaks,
   AUR builds and all, everything it started: nothing it runs as a user leaves its unit) stops after 4 h; a Flatpak from
   a file isn't reinstalled with less than 35 min of that left (cut off between its removal and install, the app would be
-  gone). The Updates app waits only for its downloads. The install has 60 min (shutdown's own limit is made 75 min for
+  gone). Settings' Updates page waits only for its downloads. The install has 60 min (shutdown's own limit is made 75 min for
   it); `paccache.timer` keeps pacman's cache from growing for good
 - **`agros-boot`**: hidden boot menu (GRUB only): straight into the system, Esc in the first second shows
   the menu (Windows and snapshots listed). No motherboard wait before the boot loader (`efibootmgr -t 0`; F11 still
@@ -1401,7 +1404,7 @@ Functions other programs call through `hyprctl eval 'dots.<name>(...)'`, kept in
 |---|---|---|
 | `focus_window(address, switcher)` | `user/windows.lua` | dock, switcher (which minimises a fullscreen window it leaves), game-focus |
 | `task_manager()` | `user/keys.lua` | bar menu |
-| `focus_app(entry, name, launch)` | `user/windows.lua` | notification clicks (overlay), `.local/bin/updates` |
+| `focus_app(entry, name, launch)` | `user/windows.lua` | notification clicks (overlay) |
 | `minimise_window()`, `maximise_window()`, `refit_maximised()` | `user/windows.lua` | title bar buttons; a screen change |
 | `refit_placed_soon()` | `user/windows.lua` | the overlay's `bar_space_refit` (Caelestia's bar's space changed); its own events |
 | `refit_window(win)` | `user/windows.lua` | `refit_maximised` (each window), a minimised window's restore |
@@ -1616,7 +1619,7 @@ breaks something holds back that one piece, never the rest (`.github/workflows/c
 - **Caelestia's Hyprland config has an update** (a low-urgency note from `agros-check`, once per new version): run
   `caelestia-hypr-refresh`. It refreshes `~/.config/hypr` alone (files you haven't edited replaced, Caelestia's new
   version written beside the ones you have as `.new`) and checks the config. Not `caelestia update`: its own system
-  update skips the Qt rebuild (the boot update's and the Updates app's), and a new Qt leaves the shell unable to start
+  update skips the Qt rebuild (the boot update's and Settings' Updates page's), and a new Qt leaves the shell unable to start
 - **An update broke the system**: boot the snapshot from before it (Esc at start-up; it runs in RAM, above), then Btrfs
   Assistant's Snapper, Browse/Restore, to keep it (the manual's
   [If an update goes wrong](../manual/12-updates.md#if-an-update-goes-wrong))

@@ -21,6 +21,11 @@ Singleton {
     property var byKey: ({})
     // (the keys on dots-settings's pages but "caelestia", which lists every Caelestia option again)
     property var listed: ({})
+    // (Settings opened at a page, by its icon: Caelestia's "nexus openPage" IPC, read once by Nexus.qml; at Updates, with
+    // a check's list and started or not: "nexus updates", read once by AgrosUpdates.qml)
+    property string openAt
+    property bool updatesStart
+    property string updatesList
     property bool loaded
     property var queue: []
     property bool again

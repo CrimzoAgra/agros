@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# The Updates app's list (its command, from updates/shell.qml, run as the app runs it): its last line says whether the
-# list could be made, and a list that couldn't (update-apps missing, or broken) shows as that, not as "Nothing to
-# update" with nothing listed
+# Settings' Updates page's list (its command, from caelestia-overlay's AgrosUpdates.qml, run as the page runs it): its
+# last line says whether the list could be made, and a list that couldn't (update-apps missing, or broken) shows as
+# that, not as "Nothing to update" with nothing listed
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
-qml=$here/.config/quickshell/updates/shell.qml
+qml=$here/.local/share/caelestia-overlay/AgrosUpdates.qml
 cmd=$(sed -n "s/^ *command: \[\"sh\", \"-c\", '\(.*\)', root.script, root.listFile\]\$/\1/p" "$qml" | grep -- --list) ||
     fail "the Updates app's list command not found"
 printf '#!/bin/sh\nprintf "system\tfoo\t1\t2\n"\n' >"$t/list" && chmod +x "$t/list"

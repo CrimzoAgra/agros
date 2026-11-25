@@ -1045,9 +1045,13 @@ def nexus_snappy():
             currentItem.destroy();
 
 """, """    // caelestia-overlay: the skeleton first, drawn, then the page made
-    property int pendingIdx
+    property int pendingIdx: -1
 
     function loadPage(idx: int): void {
+        // (the page there, or being made, not made again: Nexus opened at a page asked for it twice, the second
+        // copy without what the first had been handed: settings_open_at)
+        if (idx === pendingIdx)
+            return;
         if (currentItem)
             currentItem.destroy();
         currentItem = null;
@@ -1070,6 +1074,9 @@ def nexus_snappy():
         });
 
         const attach = () => {
+            // (another page chosen while this one was being made: not shown under it)
+            if (idx !== pendingIdx)
+                return incubator.object.destroy();
             incubator.object.anchors.fill = container;
             incubator.object.visible = true;
 """, "page made out of sight")
@@ -1277,6 +1284,46 @@ def nexus_history():
 
 """)
     return {"modules/nexus/NexusState.qml": state, "modules/nexus/Nexus.qml": nexus, "modules/nexus/common/PageBase.qml": base}
+
+
+def settings_open_at():
+    # Settings (Nexus) opened at one of its pages, by the page's icon: "nexus openPage update" (the Super menu's "Update
+    # apps"); and at Updates with what a check just found, starting the update or not ("nexus updates true <file>":
+    # update-apps' notifications). In place of the old Updates app, which opened so
+    rel = first("modules/Shortcuts.qml", "daemons/Shortcuts.qml")
+    ipc = swap(read(rel), """        function open(): void {
+            WindowFactory.create();
+        }
+
+        target: "nexus"
+""", """        function open(): void {
+            WindowFactory.create();
+        }
+
+        // caelestia-overlay: at a page, by its icon; at Updates with a check's list (a file; "" for none), started or not
+        function openPage(icon: string): void {
+            AgrosSettings.openAt = icon;
+            WindowFactory.create();
+        }
+
+        function updates(start: bool, list: string): void {
+            AgrosSettings.updatesStart = start;
+            AgrosSettings.updatesList = list;
+            openPage("update");
+        }
+
+        target: "nexus"
+""", "nexus ipc")
+    nexus = insert(read("modules/nexus/Nexus.qml"), "    signal close\n", """
+    // caelestia-overlay: opened at a page (nexus openPage)
+    Component.onCompleted: {
+        const i = PageRegistry.pages.findIndex(p => p.icon === AgrosSettings.openAt);
+        AgrosSettings.openAt = "";
+        if (i >= 0)
+            nState.currentPageIdx = i;
+    }
+""", before=False)
+    return {rel: ipc, "modules/nexus/Nexus.qml": nexus}
 
 
 def tray_click():
@@ -2479,14 +2526,42 @@ def screen_wallpapers():
 
 
 def wallpaper_in_borders():
-    # The wallpaper inside Caelestia's frame (the bar on the left, its border round the rest), not under it: the
-    # background window kept clear of their exclusive zones, as a window is. The desktop clock's margin then counts
-    # from the bar's edge, no longer from the screen's
+    # The wallpaper inside Caelestia's frame (the bar on the left, its border round the rest), not under it; and as the
+    # frame comes in when the shell starts, the whole screen first, pushed in by the bar as it grows (kept clear of the
+    # frame's exclusive zones, the background window left a black band where the bar would be until it was there).
+    # The picture laid out at the frame's size (read once at that size, not again on every frame of the bar's growth),
+    # drawn wider to the bar's edge while that moves. The visualiser and the desktop clock as Caelestia has them
     bg = "modules/background/Background.qml"
-    b = swap(read(bg), "        WlrLayershell.exclusionMode: ExclusionMode.Ignore\n",
-             "        WlrLayershell.exclusionMode: ExclusionMode.Normal\n", "the background's exclusion")
-    b = swap(b, "            anchors.leftMargin: Tokens.padding.extraLargeIncreased + Tokens.sizes.bar.innerWidth + Math.max(Tokens.padding.small, Config.border.thickness)\n",
-             "", "the desktop clock's left margin")
+    b = swap(read(bg), """            Loader {
+                id: wallpaper
+
+                asynchronous: true
+
+                anchors.fill: parent
+""", """            Loader {
+                id: wallpaper
+
+                // caelestia-overlay: in the frame (the bar's exclusive zone, the border's), to the bar's edge as it moves
+                readonly property var bar: ShellState.componentsFor(win.modelData)?.bar ?? null
+                readonly property real frame: bar ? Config.border.thickness : 0
+                readonly property real edge: bar?.width ?? 0
+
+                asynchronous: true
+
+                anchors.fill: parent
+                anchors.leftMargin: bar?.exclusiveZone ?? 0
+                anchors.topMargin: frame
+                anchors.rightMargin: frame
+                anchors.bottomMargin: frame
+                transform: [
+                    Scale {
+                        xScale: wallpaper.width > 0 ? (win.width - wallpaper.frame - wallpaper.edge) / wallpaper.width : 1
+                    },
+                    Translate {
+                        x: wallpaper.edge - wallpaper.anchors.leftMargin
+                    }
+                ]
+""", "the wallpaper's place")
     return {bg: b}
 
 
@@ -2564,6 +2639,7 @@ FEATURES = (
     ("AgrOS's settings in Caelestia's (Nexus)", nexus_pages),
     ("settings: quicker page changes, pages as wide as the window", nexus_snappy),
     ("settings: back and forward, no close button in its window", nexus_history),
+    ("settings opened at a page (Updates from its notifications)", settings_open_at),
     ("tray opens on click", tray_click),
     ("lock badges re-read at login", lock_refresh),
     ("notification sidebar without the utilities panel", sidebar_notifs_only),
@@ -2615,7 +2691,7 @@ def turned_off():
 # Features that build on another's version of a file (or, the utilities sidebar, on its trigger's geometry; the sidebar's
 # shape on the utilities panel's height, known while closed only with sidebar_notifs_only) and don't fit without it: off when that one is off or skipped. Several: it needs one of them (window peek: the dock's or the
 # workspace preview's popout, the previews it works on), off when all are
-NEEDS = {"nexus_snappy": ("nexus_pages",), "nexus_history": ("nexus_snappy",), "sidebar_shape": ("sidebar_notifs_only",), "settings_button": ("updates_button",), "top_edge_one_panel": ("sidebar_from_top",), "sidebar_from_top": ("sidebar_shape",),
+NEEDS = {"nexus_snappy": ("nexus_pages",), "settings_open_at": ("nexus_pages",), "nexus_history": ("nexus_snappy",), "sidebar_shape": ("sidebar_notifs_only",), "settings_button": ("updates_button",), "top_edge_one_panel": ("sidebar_from_top",), "sidebar_from_top": ("sidebar_shape",),
          "sidebar_with_utilities": ("sidebar_from_top",),
          "window_peek": ("dock", "workspace_preview")}
 

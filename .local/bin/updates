@@ -1,6 +1,5 @@
 #!/bin/sh
-# Opens the Updates app (~/.config/quickshell/updates), from its launcher entry
-# (its window named after its launcher entry, for its icon in the dock; every Quickshell window is org.quickshell otherwise)
-# Already open: its window to the front (windows.lua's focus_app, by that name), as qs -n then quits showing nothing
-hyprctl eval 'dots.focus_app(nil, "updates")' >/dev/null 2>&1
-QS_APP_ID=updates exec qs -c updates -n "$@"
+# Opens Settings at its Updates page (Caelestia's Nexus: caelestia-overlay's settings_open_at). The Super menu's "Update
+# apps" runs this (from Caelestia's shell.json, yours: copied in once, so one from before still names this). The Updates
+# app it opened before is gone, a page of Settings now
+exec qs -c caelestia ipc call nexus openPage update

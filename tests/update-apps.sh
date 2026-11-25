@@ -44,20 +44,21 @@ check
 stub notify-send 'exec sleep 30'
 check
 [[ $(cat "$seen" 2>/dev/null) == linux ]] || fail "an unclicked notification (its time ran out) not noted: announced again every check"
-# Clicked: the Updates app opened with what the check found (UPDATES_LIST, in your runtime folder), not checking again;
-# --check's "Update now" starting the update, --check-now's (the Super menu's button) only opening it
-stub uwsm 'exit 1'; stub hyprctl 'true'; stub notify-send 'echo default'
-stub qs 'echo "${UPDATES_START:-0} $(cat "$UPDATES_LIST")" >'"$t"'/opened'
+# Clicked: Settings' Updates opened (Caelestia's nexus updates) with what the check found (a file in your runtime
+# folder), not checking again; --check's "Update now" starting the update, --check-now's (the Super menu's button) only
+# opening it
+stub notify-send 'echo default'
+stub qs '[ "$*" = "-c caelestia ipc call nexus updates $7 $8" ] && echo "$7 $(cat "$8")" >'"$t"'/opened'
 mkdir -p "$t/run"; rm -f "$seen"
 XDG_RUNTIME_DIR=$t/run check
-[[ $(cat "$t/opened" 2>/dev/null) == "1 "$'system\tlinux\t6.1-1\t6.2-1' ]] ||
-    fail "\"Update now\" didn't hand the app what the check found: $(cat "$t/opened" 2>/dev/null)"
+[[ $(cat "$t/opened" 2>/dev/null) == "true "$'system\tlinux\t6.1-1\t6.2-1' ]] ||
+    fail "\"Update now\" didn't hand Settings what the check found: $(cat "$t/opened" 2>/dev/null)"
 rm -f "$t/opened" "$t/run"/*
 XDG_RUNTIME_DIR=$t/run HOME=$t/home XDG_CACHE_HOME=$t/home/.cache PATH=$t/bin:$PATH "$here/.local/bin/update-apps" --check-now
 for _ in $(seq 50); do [[ -s $t/opened ]] && break; sleep 0.1; done
-[[ $(cat "$t/opened" 2>/dev/null) == "0 "$'system\tlinux\t6.1-1\t6.2-1' ]] ||
-    fail "the Super menu's check didn't hand the app what it found: $(cat "$t/opened" 2>/dev/null)"
-rm -rf "$t/opened" "$t/run" "$t/bin/"{uwsm,hyprctl,qs}
+[[ $(cat "$t/opened" 2>/dev/null) == "false "$'system\tlinux\t6.1-1\t6.2-1' ]] ||
+    fail "the Super menu's check didn't hand Settings what it found: $(cat "$t/opened" 2>/dev/null)"
+rm -rf "$t/opened" "$t/run" "$t/bin/qs"
 # An account that can't sudo (not in wheel): no "Update now" offered (it only failed); the boot's update covers it
 rm -f "$seen"; stub id 'echo users'; stub notify-send 'echo sent >>"'"$t"'/sent"'
 check

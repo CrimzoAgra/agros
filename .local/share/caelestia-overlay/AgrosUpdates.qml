@@ -1,12 +1,14 @@
 pragma ComponentBehavior: Bound
 
-// caelestia-overlay: the Updates app (~/.config/quickshell/updates) as a page of Nexus. It lists what's waiting (system
+// caelestia-overlay: AgrOS's Updates, a page of Nexus (the Updates app it replaced was a window of its own). It lists
+// what's waiting (system
 // and AUR apps, firmware, Flatpaks, AppImages, Proton builds, developer tools), each with its app's icon and name, and
 // "Update all" runs ~/.local/bin/update-apps, its output shown as it goes. This page lives inside Caelestia, which an
 // update can restart: so the update runs in a systemd unit of its own (agros-update-apps), writing to
 // $XDG_RUNTIME_DIR/update-apps.log, which the page only follows. Closed and opened again, or Caelestia restarted, the
-// page finds the update still running and follows it again. One at a time, with the standalone app's too (the same
-// log, the same lock). An account that isn't an admin's sees the list, told so, and no "Update all"
+// page finds the update still running and follows it again. One at a time (the log's lock). Opened from update-apps'
+// notifications (nexus updates: settings_open_at in patch.py), what the check found shown at once, and "Update now"
+// started. An account that isn't an admin's sees the list, told so, and no "Update all"
 
 import QtQuick
 import QtQuick.Layouts
@@ -36,6 +38,11 @@ PageBase {
     // An admin's (wheel) alone can install them (update-apps uses sudo): another account sees the list, told so, and
     // no "Update all", which only failed (the boot's update installs them all the same)
     property bool admin: true
+    // Opened from a check's notification (nexus updates: AgrosSettings): the list that check found, shown at once (a
+    // file; checked anew when it's older than 15 minutes; used once: after an update, checked anew), and "Update now"'s
+    // start once it's read
+    property string listFile
+    property bool startWhenReady
 
     readonly property var pending: items.filter(i => i.kind !== "offline")
     readonly property bool offline: items.some(i => i.kind === "offline")
@@ -89,7 +96,13 @@ PageBase {
     title: "Updates"
 
     // (an update already running, from before the page was opened: followed; none, the list)
-    Component.onCompleted: follow(false)
+    Component.onCompleted: {
+        listFile = AgrosSettings.updatesList;
+        startWhenReady = AgrosSettings.updatesStart;
+        AgrosSettings.updatesList = "";
+        AgrosSettings.updatesStart = false;
+        follow(false);
+    }
 
     ColumnLayout {
         anchors.horizontalCenter: parent.horizontalCenter
@@ -105,9 +118,11 @@ PageBase {
             // connects but never answers: checkupdates, paru and flatpak have no time limit of their own) fails after
             // 10 minutes, with everything it started (timeout signals its whole process group). Ended with Caelestia
             // too, however it goes (setpriv's pdeathsig): else it ran on for those 10 minutes
-            command: ["sh", "-c", 'setpriv --pdeathsig TERM timeout 10m "$0" --list; echo "end $?"', root.script]
+            // A check's list (listFile) instead, when it's from the last 15 minutes; removed either way
+            command: ["sh", "-c", 'if [ -n "$1" ] && [ "$(($(date +%s) - $(stat -c %Y "$1" 2>/dev/null || echo 0)))" -lt 900 ]; then cat "$1"; echo "end 0"; else setpriv --pdeathsig TERM timeout 10m "$0" --list; echo "end $?"; fi; [ -z "$1" ] || rm -f "$1"', root.script, root.listFile]
             stdout: StdioCollector {
                 onStreamFinished: {
+                    root.listFile = "";
                     root.listFailed = !/^end 0$/m.test(text);
                     root.items = root.listFailed ? [] : text.split("\n").filter(l => l.includes("\t")).map(l => {
                         const [kind, name, old, now] = l.split("\t");
@@ -115,6 +130,11 @@ PageBase {
                     });
                     if (root.phase === "checking")
                         root.phase = "ready";
+                    if (root.startWhenReady) {
+                        root.startWhenReady = false;
+                        if (root.pending.length && root.admin)
+                            root.updateAll();
+                    }
                 }
             }
         }
@@ -136,8 +156,8 @@ PageBase {
             // The update in a systemd unit of its own (agros-update-apps), not a child of Caelestia: an update that
             // restarts Caelestia (a rebuild for a new Qt) doesn't cut itself off, nor does closing Nexus. Its output and
             // errors go to the log, which this follows from the start; its exit code is kept next to it (.status).
-            // Running: that unit active, or the lock held (the standalone Updates app's update, which takes it too; the
-            // unit waits a moment for it, then leaves that one be). A second "Update all", or the page opened again,
+            // Running: that unit active, or the lock held (the unit waits a moment for one, then leaves that one be).
+            // A second "Update all", or the page opened again,
             // follows the running one's log instead, and ends as it did. Exit 100: none running (to follow).
             // The follower ends with Caelestia (pdeathsig), its tail with it (--pid)
             command: ["setpriv", "--pdeathsig", "TERM", "sh", "-c", `running() { systemctl --user is-active -q agros-update-apps || ! flock -n "$1.lock" true; }
@@ -171,6 +191,7 @@ PageBase {
                 }
                 // update-apps' exit code says whether a step failed (a package name like libgpg-error isn't an error)
                 root.failed = code !== 0;
+                root.startWhenReady = false; // (one was running already: not another after it)
                 root.phase = "done";
                 root.items = []; // the list from before the update: not offered again while what's left is looked up
                 listProc.running = true; // what's left, if anything

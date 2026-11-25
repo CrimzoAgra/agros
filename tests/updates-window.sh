@@ -1,18 +1,24 @@
 #!/usr/bin/env bash
-# The Updates app's window (updates/shell.qml): "Update all", appearing where "Check again" was (nothing waiting before
-# the check), under the pointer, takes no click for a moment (a double-click on "Check again" started an install); a
-# version cut off shows whole while hovered; "Restart" after an update asks for a second click; the log's errors red, but not one mirror's missing file (the next mirror had it)
+# Settings' Updates page (caelestia-overlay's AgrosUpdates.qml): "Update all", appearing where "Check again" was
+# (nothing waiting before the check), under the pointer, takes no click for a moment (a double-click on "Check again"
+# started an install); a version cut off shows whole while hovered; "Restart" after an update asks for a second click;
+# the log's errors red, but not one mirror's missing file (the next mirror had it). And the launchers that open it
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
-qml=$here/.config/quickshell/updates/shell.qml
-all=$(sed -n '/^                Button {$/,/^                }$/p' "$qml" | sed -n '/label: "Update all"/,$p')
+qml=$here/.local/share/caelestia-overlay/AgrosUpdates.qml
+# (the button holding k: from its "IconTextButton {" to its closing brace)
+button() {
+    awk -v k="$1" '/^ *IconTextButton \{$/ && !on { b = ""; on = 1; d = 0 }
+        on { b = b $0 "\n"; d += gsub(/\{/, "{") - gsub(/\}/, "}"); if (d == 0) { if (index(b, k)) printf "%s", b; on = 0 } }' "$qml"
+}
+all=$(button 'text: "Update all"')
 { grep -q 'onVisibleChanged: if (visible) justShown.restart()' <<<"$all" &&
     grep -q 'onClicked: if (!justShown.running) root.updateAll()' <<<"$all" &&
     grep -q 'interval: 1000' <<<"$all"; } ||
     fail "\"Update all\" takes a click as soon as it appears, under the pointer that clicked \"Check again\""
 # "Restart", shown after an update where "Update all" was, under the pointer: reboots only on a second click
-restart=$(sed -n '/^                Button {$/,/^                }$/p' "$qml" | sed -n '/id: restart/,/^                }$/p')
+restart=$(button 'icon: "restart_alt"')
 { grep -q 'visible: root.phase === "done"' <<<"$restart" &&
     grep -q 'if (confirm.running)' <<<"$restart" && grep -q '"systemctl", "reboot"' <<<"$restart" &&
     grep -q 'confirm.restart();' <<<"$restart"; } || fail "\"Restart\" reboots on a single click, or isn't there after an update"
@@ -32,16 +38,14 @@ console.log([\"error: failed retrieving file 'glibc-2.44+r78+gfcfb867c58ab-1-x86
 else
     skipped "no node: the log's colours not checked"
 fi
-# Opened again while open (Super menu: ~/.local/bin/updates): its window brought to the front, by windows.lua's
-# focus_app (qs -n alone quit, showing nothing), before qs is started as before
-stub hyprctl 'echo "hyprctl $*" >>"$T/calls"'
-stub qs 'echo "qs $* QS_APP_ID=$QS_APP_ID" >>"$T/calls"'
+# The launchers: Updates (the Super menu's "Update apps": ~/.local/bin/updates) opens Settings at its Updates page, and
+# the Settings entry Settings (Caelestia's Nexus, AgrOS's pages in it)
+stub qs 'echo "qs $*" >>"$T/calls"'
 T=$t PATH=$t/bin:$PATH "$here/.local/bin/updates"
-[[ $(cat "$t/calls") == $'hyprctl eval dots.focus_app(nil, "updates")\nqs -c updates -n QS_APP_ID=updates' ]] ||
-    fail "the Updates launcher, run again, doesn't bring its window to the front: $(cat "$t/calls")"
-# (and the Settings launcher: Caelestia's Nexus, AgrOS's pages in it)
-: >"$t/calls"
-T=$t PATH=$t/bin:$PATH "$here/.local/bin/desktop-settings"
-[[ $(cat "$t/calls") == 'qs -c caelestia ipc call nexus open QS_APP_ID=' ]] ||
-    fail "the Settings launcher doesn't open Nexus: $(cat "$t/calls")"
+[[ $(cat "$t/calls") == 'qs -c caelestia ipc call nexus openPage update' ]] ||
+    fail "the Updates launcher doesn't open Settings at Updates: $(cat "$t/calls")"
+grep -qx 'Exec=qs -c caelestia ipc call nexus open' "$here/.local/share/applications/desktop-settings.desktop" ||
+    fail "the Settings entry doesn't open Nexus"
+# (the old Updates entry hidden: a copy in a home from before is replaced by it, agros-links, and leaves the Super menu)
+grep -qx 'Hidden=true' "$here/.local/share/applications/updates.desktop" || fail "the old Updates entry still shown"
 echo "ok updates-window"
