@@ -853,14 +853,25 @@ def nexus_pages():
         }
 """, before=False)
     nav = read("modules/nexus/navpane/NavLocations.qml")
+    nav = swap(nav, """    required property NexusState nState
+""", """    required property NexusState nState
+    // caelestia-overlay: which pages the search finds (all of them without one)
+    readonly property var shown: PageRegistry.pages.map(p => AgrosSettings.matches(p, nState.searchText))
+""", "nav shown")
+    nav = swap(nav, """                readonly property bool isCategoryStart: index === 0 || PageRegistry.pages[index - 1].category !== modelData.category
+                readonly property bool isCategoryEnd: index === list.model.length - 1 || PageRegistry.pages[index + 1].category !== modelData.category
+""", """                // caelestia-overlay: its group's first and last of those shown, rounded there while searching too
+                readonly property bool isCategoryStart: !PageRegistry.pages.some((p, j) => j < index && root.shown[j] && p.category === modelData.category)
+                readonly property bool isCategoryEnd: !PageRegistry.pages.some((p, j) => j > index && root.shown[j] && p.category === modelData.category)
+""", "nav item group ends")
     nav = swap(nav, """                readonly property bool isCurrentPage: index === root.nState.currentPageIdx
 """, """                readonly property bool isCurrentPage: index === root.nState.currentPageIdx
                 // caelestia-overlay: found by the search; the title over its group (none while searching)
-                readonly property bool found: AgrosSettings.matches(modelData, root.nState.searchText)
+                readonly property bool found: root.shown[index] ?? true
                 readonly property string groupTitle: isCategoryStart && !root.nState.searchOpen ? PageRegistry.titles[modelData.category] ?? "" : ""
 """, "nav item state")
     nav = swap(nav, """                Layout.topMargin: index !== 0 && isCategoryStart ? Tokens.spacing.medium : 0
-""", """                Layout.topMargin: (index !== 0 && isCategoryStart ? Tokens.spacing.medium : 0) + (groupTitle ? groupLabel.implicitHeight + Tokens.spacing.small : 0)
+""", """                Layout.topMargin: (index !== root.shown.indexOf(true) && isCategoryStart ? Tokens.spacing.medium : 0) + (groupTitle ? groupLabel.implicitHeight + Tokens.spacing.small : 0)
                 visible: found
 """, "nav item margin")
     nav = swap(nav, """                StateLayer {

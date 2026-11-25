@@ -255,7 +255,7 @@ icons=$(awk '/readonly property list<var> pages/,/^    \]/' "$n/PageRegistry.qml
 { awk '/readonly property list<Component> pageComps/,/^    \]/' "$n/PageCompRegistry.qml" | grep -E 'AgrosHome \{\}|WallpaperAndStyle \{\}|pageId: "windows"|PanelsPage \{\}|AgrosDisplay \{\}' | tr -d ' ' | tr '\n' ' ' |
     grep -qx 'AgrosHome{} WallpaperAndStyle{} pageId:"windows" PanelsPage{} AgrosDisplay{} '; } || fail "Nexus's page components not moved with their pages"
 { grep -qF 'readonly property var titles: {"look": "Look & feel", "devices": "Devices", "apps": "Apps & shortcuts", "system": "System"}' "$n/PageRegistry.qml" &&
-    grep -q 'text: item.groupTitle' "$n/navpane/NavLocations.qml" && grep -q 'AgrosSettings.matches(modelData, root.nState.searchText)' "$n/navpane/NavLocations.qml" &&
+    grep -q 'text: item.groupTitle' "$n/navpane/NavLocations.qml" && grep -q 'AgrosSettings.matches(p, nState.searchText)' "$n/navpane/NavLocations.qml" && grep -qF 'j > index && root.shown[j]' "$n/navpane/NavLocations.qml" &&
     grep -q 'property: "searchText"' "$n/NavPane.qml"; } || fail "the nav list's group titles or search missing"
 # Quicker page changes (no slow fades left), pages as wide as the window less a margin
 ! grep -q 'Anim.SlowEffects' "$n/Pages.qml" "$n/common/StackPage.qml" && grep -q 'Math.round(width \* 0.92)' "$n/common/PageBase.qml" ||
