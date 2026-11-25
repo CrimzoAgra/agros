@@ -859,7 +859,9 @@ helper a package update just brought works before `agros-links` has linked it), 
   (a query, a search or info, the files database, `paru -G`, what it would do printed, `-p`/`--print`/`--print-format`,
   an upgrade's too, `-Sup`, but not with `-y`/`--refresh` or `-c`/`--clean`, which take the lock) doesn't, nor one on
   another database
-  (`-b`/`--dbpath`, or another system's, `-r`/`--root`; a plain pacman is on `/var/lib/pacman`'s)
+  (`-b`/`--dbpath`, or another system's, `-r`/`--root`; a plain pacman is on `/var/lib/pacman`'s). `agros-check` says
+  none left behind while the boot's download runs (`downloading`): AgrOS's update code installed first from its lists
+  holds pacman's own lock too
 - **`.local/bin/battery-low`**: whether the computer runs on a battery nearly empty (off its charger, below 15%; the
   computer's own batteries, not a mouse's): the shutdown's install (`auto-update`) and `update-apps` install nothing
   then

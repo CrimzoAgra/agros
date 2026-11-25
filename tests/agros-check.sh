@@ -81,6 +81,13 @@ out=$(chk)
 grep -q "failed to install at shutdown (2026-11-05 22:10: error: failed to commit transaction" <<<"$out" ||
     fail "a failed install at shutdown not reported: $out"
 grep -q "pacman's lock was left behind" <<<"$out" || fail "pacman's stale lock not reported: $out"
+# ...but not while the boot's download runs: AgrOS's own update code installed first, from its lists, holds it
+touch "$t/au/downloading"
+# shellcheck disable=SC2016  # (expanded by the stand-in)
+printf '#!/bin/sh\n[ "$*" = "is-active -q auto-update" ] && exit ${AU_ACTIVE:-0}\nexit 3\n' >"$t/systemctl"; chmod +x "$t/systemctl"
+[[ $(chk) != *"pacman's lock was left behind"* ]] || fail "pacman's lock said left behind while the boot's update holds it"
+[[ $(AU_ACTIVE=3 chk) == *"pacman's lock was left behind"* ]] || fail "a lock left by a boot update no longer running not said"
+rm "$t/au/downloading" "$t/systemctl"
 echo "ok 2026-11-05 22:10 " >"$t/au/install-result"
 out=$(chk)
 grep -q "failed to install" <<<"$out" && fail "an install that went fine reported: $out"
