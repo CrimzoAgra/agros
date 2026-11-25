@@ -2,14 +2,19 @@
 # CI's iso job (.github/workflows/ci.yml): agros-iso's ISO build started once Pages serves the database with this
 # commit's packages (agros-system r<commits>.<its commit>), not before; starting it tried three times (GitHub's API
 # drops a call now and then), failing the job only when all three fail; a database that never lists this commit fails
-# it, said. Its run: script as GitHub runs it (bash -e), curl, gh and sleep stand-ins
+# it, said; not started while an Arch update breaks the tests (hold-upstream). Its run: script as GitHub runs it
+# (bash -e), curl, gh and sleep stand-ins
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 command -v bsdtar >/dev/null || command -v tar >/dev/null || { skipped "no tar"; echo "skip ci-iso-start (no tar)"; exit 0; }
 python3 - "$here/.github/workflows/ci.yml" >"$t/step" <<'PY'
 import sys, yaml
-steps = [s for s in yaml.safe_load(open(sys.argv[1]))["jobs"]["iso"]["steps"] if "gh workflow run" in s.get("run", "")]
+job = yaml.safe_load(open(sys.argv[1]))["jobs"]["iso"]
+# (not while an Arch update breaks the tests: the ISO would take that Arch, its gate holding back only Hyprland)
+assert "test" in job["needs"] and "needs.test.outputs.result != 'hold-upstream'" in job.get("if", ""), \
+    "the ISO started while an Arch update breaks the tests"
+steps = [s for s in job["steps"] if "gh workflow run" in s.get("run", "")]
 assert len(steps) == 1, "not one step that starts the ISO build"
 print(steps[0]["run"])
 PY

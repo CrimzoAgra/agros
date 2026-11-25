@@ -614,8 +614,11 @@ jobs:
       - uses: actions/deploy-pages@v5
 
   iso:
-    # A new ISO with the packages just published (agros-iso's ISO workflow; it skips when nothing changed)
-    needs: publish
+    # A new ISO with the packages just published (agros-iso's ISO workflow; it skips when nothing changed). Not while an
+    # Arch update breaks the tests (hold-upstream): the ISO takes today's Arch, and its upstream gate holds back only
+    # Hyprland's packages, so a break elsewhere (Qt, a library Caelestia needs) went onto a new ISO
+    needs: [test, publish]
+    if: needs.test.outputs.result != 'hold-upstream'
     runs-on: ubuntu-26.04
     timeout-minutes: 30
     steps:
