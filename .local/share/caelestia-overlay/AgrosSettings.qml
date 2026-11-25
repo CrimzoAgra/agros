@@ -33,6 +33,8 @@ Singleton {
     // the shell's restart, waiting for Nexus to close
     property var pendingApply: []
     property bool restartHeld
+    // Settings opened again at this page (its icon) once that restart is done: Restart now (Nexus.qml's notice)
+    property string reopenAt
     // The last change that didn't save, or didn't apply: why (shown on the page)
     property string error
 
@@ -155,10 +157,12 @@ Singleton {
     function flush(): void {
         applyTimer.stop();
         const hows = [...pendingApply.filter(h => h !== "caelestia"), ...(restartHeld || pendingApply.includes("caelestia") ? ["caelestia"] : [])];
+        const at = hows.includes("caelestia") ? reopenAt : "";
         pendingApply = [];
         restartHeld = false;
+        reopenAt = "";
         if (hows.length)
-            Quickshell.execDetached(["sh", "-c", 'for h; do "$0" apply "$h"; done', cli, ...hows]);
+            Quickshell.execDetached(["sh", "-c", 'c=$1 at=$2; shift 2; for h; do "$c" apply "$h"; done; [ -z "$at" ] || qs -c caelestia ipc call nexus openPage "$at"', "sh", cli, at, ...hows]);
     }
 
     function next(): void {

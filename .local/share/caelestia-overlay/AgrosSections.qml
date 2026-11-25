@@ -30,7 +30,6 @@ ColumnLayout {
     property int foldOver: -1
     // (a group's title as shown, by its title in the schema: "Each screen's own" for the wallpapers')
     property var retitle: ({})
-    property bool notice: true
     property bool firstHeader: true
     // (Caelestia's options, by their path in its shell.json, that Nexus's own pages set)
     readonly property var covered: []
@@ -73,38 +72,6 @@ ColumnLayout {
         visible: !AgrosSettings.loaded
         header: false
         rows: 4
-    }
-
-    // Why the last change failed; the shell's restart waiting for Settings to close
-    StyledRect {
-        Layout.fillWidth: true
-        Layout.bottomMargin: Tokens.spacing.medium
-        visible: root.notice && (AgrosSettings.error !== "" || AgrosSettings.restartHeld)
-        implicitHeight: notice.implicitHeight + Tokens.padding.medium * 2
-        radius: Tokens.rounding.large
-        color: AgrosSettings.error ? Colours.palette.m3errorContainer : Colours.palette.m3secondaryContainer
-
-        RowLayout {
-            id: notice
-
-            anchors.fill: parent
-            anchors.margins: Tokens.padding.medium
-            anchors.leftMargin: Tokens.padding.largeIncreased
-            spacing: Tokens.spacing.medium
-
-            MaterialIcon {
-                text: AgrosSettings.error ? "error" : "restart_alt"
-                color: AgrosSettings.error ? Colours.palette.m3onErrorContainer : Colours.palette.m3onSecondaryContainer
-            }
-
-            StyledText {
-                Layout.fillWidth: true
-                text: AgrosSettings.error || "The shell restarts to apply this when you close Settings"
-                color: AgrosSettings.error ? Colours.palette.m3onErrorContainer : Colours.palette.m3onSecondaryContainer
-                font: Tokens.font.body.small
-                wrapMode: Text.Wrap
-            }
-        }
     }
 
     RowLayout {

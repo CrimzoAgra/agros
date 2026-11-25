@@ -914,6 +914,7 @@ def nexus_pages():
     # Nexus: the shortcut recorder over it; closed, the changes that wait for it applied (the shell's restart)
     nexus = read("modules/nexus/Nexus.qml")
     nexus = insert(nexus, "import qs.modules.nexus\n", "import qs.modules.nexus.common\n", before=False)
+    nexus = insert(nexus, "import QtQuick\n", "import QtQuick.Layouts\n", before=False)
     nexus = insert(nexus, "    signal close\n", """    // caelestia-overlay: AgrOS's changes waiting for Nexus to close (the shell's restart), applied now
     Component.onDestruction: AgrosSettings.flush()
 
@@ -942,7 +943,54 @@ def nexus_pages():
 
         visible: !agrosSearch.visible
 """, before=False)
-    nexus = insert(nexus, "    NavPane {\n", """    // caelestia-overlay: recording a shortcut (AgrOS's Shortcuts)
+    # (on every page, Home's and Caelestia's own too: why the last change failed; a change that restarts the shell, held
+    # until Nexus closes, or now, Nexus opened again at the same page once it's back)
+    nexus = insert(nexus, "    NavPane {\n", """    // caelestia-overlay: the last change that failed; the shell's restart waiting for Nexus to close (AgrosSettings.qml)
+    StyledRect {
+        anchors.horizontalCenter: agrosPages.horizontalCenter
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: Tokens.padding.extraLarge
+        z: 5
+        visible: AgrosSettings.error !== "" || AgrosSettings.restartHeld
+        width: Math.min(agrosPages.width, held.implicitWidth + Tokens.padding.medium + Tokens.padding.largeIncreased)
+        implicitHeight: held.implicitHeight + Tokens.padding.small * 2
+        radius: Tokens.rounding.full
+        color: AgrosSettings.error ? Colours.palette.m3errorContainer : Colours.palette.m3secondaryContainer
+
+        RowLayout {
+            id: held
+
+            anchors.fill: parent
+            anchors.margins: Tokens.padding.small
+            anchors.leftMargin: Tokens.padding.largeIncreased
+            spacing: Tokens.spacing.medium
+
+            MaterialIcon {
+                text: AgrosSettings.error ? "error" : "restart_alt"
+                color: AgrosSettings.error ? Colours.palette.m3onErrorContainer : Colours.palette.m3onSecondaryContainer
+            }
+
+            StyledText {
+                Layout.fillWidth: true
+                text: AgrosSettings.error || "The shell restarts to apply this when you close Settings"
+                color: AgrosSettings.error ? Colours.palette.m3onErrorContainer : Colours.palette.m3onSecondaryContainer
+                font: Tokens.font.body.small
+                wrapMode: Text.Wrap
+            }
+
+            TextButton {
+                visible: !AgrosSettings.error && AgrosSettings.restartHeld
+                type: ButtonBase.Tonal
+                text: "Restart now"
+                onClicked: {
+                    AgrosSettings.reopenAt = PageRegistry.pages[nState.currentPageIdx]?.icon ?? "";
+                    root.close();
+                }
+            }
+        }
+    }
+
+    // caelestia-overlay: recording a shortcut (AgrOS's Shortcuts)
     AgrosKeyCapture {
         anchors.fill: parent
         z: 10
