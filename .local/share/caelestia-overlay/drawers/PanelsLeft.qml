@@ -82,13 +82,14 @@ Item {
                 LayoutMirroring.enabled: true
                 screenState: root.screenState
 
-                // PanelsRight.qml's turned over: from above the pop-ups to the top; closed, both edges as far down,
-                // out of sight below the screen; its bottom stays on the border as opening overshoots
-                readonly property real slide: (parent.height + 5) * offsetScale
-                anchors.top: parent.top
-                anchors.topMargin: slide
+                // PanelsRight.qml's turned over: above the pop-ups, as tall as what's in it, at most half the screen;
+                // closed, both edges as far down, out of sight below the screen; its bottom stays on the border as
+                // opening overshoots, its top springs
+                readonly property real fit: Math.min(fitHeight, root.screen.height / 2, parent.height - notifications.height)
+                readonly property real slide: (notifications.height + fit + 5) * offsetScale
                 anchors.bottom: notifications.top
                 anchors.bottomMargin: -notifications.anchors.bottomMargin - Math.max(0, slide)
+                height: fit - Math.min(0, slide)
                 anchors.right: parent.right
 
                 transform: Matrix4x4 {

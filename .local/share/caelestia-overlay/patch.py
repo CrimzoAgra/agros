@@ -1722,6 +1722,56 @@ def sidebar_from_top():
             "modules/drawers/Interactions.qml": inter, "modules/sidebar/Content.qml": content}
 
 
+def sidebar_fit():
+    # The notification sidebar as tall as what's in it (its notifications, or the "all up to date" picture), at most
+    # half the screen (then it scrolls), not the whole height down to the utilities panel: its height to fit
+    # (fitHeight), which the split windows' panels (drawers/PanelsRight.qml, PanelsLeft.qml) give it, capped
+    dock = read("modules/sidebar/NotifDock.qml")
+    dock = swap(dock, "    anchors.fill: parent\n    anchors.margins: Tokens.padding.medium\n", """    anchors.fill: parent
+    anchors.margins: Tokens.padding.medium
+
+    // caelestia-overlay (sidebar_fit): its height to fit, around the margins: the title, then the notifications and
+    // below them room for the clear button (no longer over the last one), or the picture; both while they cross-fade
+    readonly property real fitHeight: anchors.margins * 2 + title.anchors.margins + title.implicitHeight + clipRect.anchors.topMargin
+        + Math.max(notifCount > 0 ? notifList.implicitHeight + (clear.item?.implicitHeight ?? 0) + clear.anchors.margins : 0,
+                   empty.item?.implicitHeight ?? 0)
+""", "notif dock size")
+    dock = swap(dock, """        Loader {
+            asynchronous: true
+            anchors.centerIn: parent
+""", """        Loader {
+            id: empty
+
+            asynchronous: true
+            anchors.centerIn: parent
+""", "notif dock picture")
+    dock = swap(dock, """    Loader {
+        asynchronous: true
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+""", """    Loader {
+        id: clear
+
+        asynchronous: true
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+""", "notif dock clear button")
+    content = swap(read("modules/sidebar/Content.qml"), """            NotifDock {
+""", """            NotifDock {
+                id: dock
+
+""", "sidebar dock")
+    content = insert(content, "    required property ScreenState screenState\n", """
+    // caelestia-overlay (sidebar_fit)
+    readonly property real fitHeight: dock.fitHeight
+""", before=False)
+    wrapper = insert(read("modules/sidebar/Wrapper.qml"), "    readonly property Props props: Props {}\n", """    // caelestia-overlay (sidebar_fit): its height to fit what's in it (0 until it first opens)
+    readonly property real fitHeight: content.item ? (content.item as Content).fitHeight + content.anchors.topMargin + content.anchors.bottomMargin : 0
+""", before=False)
+    return {"modules/sidebar/NotifDock.qml": dock, "modules/sidebar/Content.qml": content,
+            "modules/sidebar/Wrapper.qml": wrapper}
+
+
 def sidebar_close_settled():
     # The notification sidebar closes without bouncing back. Every panel slides on Caelestia's expressive curve, which
     # overshoots its end and comes back: closing, past fully hidden and back to it. The sidebar's shape (drawn behind
@@ -3078,7 +3128,7 @@ def bar_across(side):
 
 # What split_windows is made from: the features that change the drawers files, and those files' fingerprint after them
 SPLIT_NEEDS = (bar_menu, bar_space_refit, edge_triggers, launcher_fullscreen, safe_triangle, sidebar_alone,
-               sidebar_from_top, sidebar_not_over_popups, sidebar_shape, sidebar_with_utilities, snap_preview,
+               sidebar_fit, sidebar_from_top, sidebar_not_over_popups, sidebar_shape, sidebar_with_utilities, snap_preview,
                top_edge_one_panel, tray_click, window_peek)
 SPLIT_READS = ("ContentWindow.qml", "Drawers.qml", "Exclusions.qml", "Interactions.qml", "Panels.qml", "PeekLayer.qml",
                "Regions.qml", "SnapPreview.qml")
@@ -3121,6 +3171,7 @@ FEATURES = (
     ("notification sidebar: not with the power menu, closes the volume slider", sidebar_alone),
     ("notification sidebar slides down from the top", sidebar_from_top),
     ("notification sidebar closes without bouncing back", sidebar_close_settled),
+    ("notification sidebar as tall as its notifications, at most half the screen", sidebar_fit),
     ("notification sidebar: not opened by hovering while a pop-up shows", sidebar_not_over_popups),
     ("Super menu over fullscreen windows", launcher_fullscreen),
     ("workspaces highlighted on hover", workspace_hover),
@@ -3176,7 +3227,7 @@ def turned_off():
 # Features that build on another's version of a file (or, the utilities sidebar, on its trigger's geometry; the sidebar's
 # shape on the utilities panel's height, known while closed only with sidebar_notifs_only) and don't fit without it: off when that one is off or skipped. Several: it needs one of them (window peek: the dock's or the
 # workspace preview's popout, the previews it works on), off when all are
-NEEDS = {"bar_side": ("split_windows",), "nexus_snappy": ("nexus_pages",), "settings_open_at": ("nexus_pages",), "nexus_history": ("nexus_snappy",), "sidebar_shape": ("sidebar_notifs_only",), "settings_button": ("updates_button",), "top_edge_one_panel": ("sidebar_from_top",), "sidebar_from_top": ("sidebar_shape",),
+NEEDS = {"bar_side": ("split_windows",), "nexus_snappy": ("nexus_pages",), "settings_open_at": ("nexus_pages",), "nexus_history": ("nexus_snappy",), "sidebar_shape": ("sidebar_notifs_only",), "settings_button": ("updates_button",), "top_edge_one_panel": ("sidebar_from_top",), "sidebar_from_top": ("sidebar_shape",), "sidebar_fit": ("sidebar_from_top",),
          "sidebar_with_utilities": ("sidebar_from_top",),
          "window_peek": ("dock", "workspace_preview")}
 # ...and features that need every one of a list: off when any of them is off or skipped

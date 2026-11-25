@@ -461,7 +461,7 @@ Variants {
                     deformAmount: 0.03
                     implicitHeight: panel.height * (1 / rawDeformMatrix.m22) + 2
                     exclude: rightPanels.sidebar.offsetScale > 0.08 || rightPanels.utilities.offsetScale > 0.08 ? [] : [utilsBg]
-                    bottomLeftRadius: Math.max(0, Math.min(1, Math.max(rightPanels.sidebar.offsetScale, rightPanels.utilities.offsetScale) / 0.3)) * radius
+                    bottomLeftRadius: rightPanels.sidebar.meetsUtilities ? Math.max(0, Math.min(1, Math.max(rightPanels.sidebar.offsetScale, rightPanels.utilities.offsetScale) / 0.3)) * radius : radius
                 },
                 PartBg {
                     id: osdBg
@@ -486,7 +486,7 @@ Variants {
                     panel: rightPanels.utilities
                     deformAmount: rightPanels.sidebar.visible ? 0.1 : 0.15
                     exclude: rightPanels.sidebar.offsetScale > 0.08 || rightPanels.utilities.offsetScale > 0.08 ? [] : [sidebarBg]
-                    topLeftRadius: Math.max(0, Math.min(1, Math.max(rightPanels.sidebar.offsetScale, rightPanels.utilities.offsetScale) / 0.3)) * radius
+                    topLeftRadius: rightPanels.sidebar.meetsUtilities ? Math.max(0, Math.min(1, Math.max(rightPanels.sidebar.offsetScale, rightPanels.utilities.offsetScale) / 0.3)) * radius : radius
                 }
             ]
 

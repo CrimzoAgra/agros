@@ -149,16 +149,19 @@ Item {
         // (the utilities panel away: to the bottom)
         readonly property real utilitiesRoom: root.away === "utilities" ? 0 : utilities.implicitHeight - (Tokens.padding.large - 2)
 
+        // As tall as what's in it, at most half the screen (sidebar_fit), and no further down than where the utilities
+        // panel's background starts (its grey card sits its inner bottom spacing above its edge): that panel's height
+        // whether open or not (sidebar_notifs_only keeps it built), less that spacing
+        readonly property real fit: Math.min(fitHeight, root.screen.height / 2, parent.height - utilitiesRoom - notifications.height)
+        // (down to it: joined to it when both are open, Super+K; Drawers.qml's corners)
+        readonly property bool meetsUtilities: fit >= parent.height - utilitiesRoom - notifications.height - 1
         anchors.top: notifications.bottom
-        anchors.bottom: parent.bottom
-        // Its grey card ends where that panel's background starts (the card sits its inner bottom spacing above this
-        // edge): that panel's height whether open or not (sidebar_notifs_only keeps it built), less that spacing
-        anchors.bottomMargin: utilitiesRoom + slide
         anchors.right: parent.right
         // Both edges move together: closed, it's its bottom edge's distance from the top (plus 5) up, out of sight
-        readonly property real slide: (parent.height - utilitiesRoom + 5) * offsetScale
+        readonly property real slide: (notifications.height + fit + 5) * offsetScale
         // ...except at the end of opening, as the curve overshoots (slide below 0): its top stays on the border (going
         // past, it came away from it for a moment, an inward notch at its top-left); its bottom springs as before
         anchors.topMargin: -notifications.anchors.topMargin - Math.max(0, slide)
+        height: fit - Math.min(0, slide)
     }
 }
