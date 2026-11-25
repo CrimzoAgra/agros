@@ -691,6 +691,20 @@ local function result()
     sent = {}
     return r
 end
+-- The settings (Nexus) open at the standard size, 60% of the screen's height, not the near full screen Nexus asks for;
+-- another Quickshell window (a pop-up) keeps its own size
+local nexus = { address = "0xn1", class = "org.quickshell", title = "Nexus — Home", floating = true, fullscreen = 0, pid = 1,
+                tags = {}, workspace = ws(1), monitor = SCREENS[1], at = { x = 60, y = 30 }, size = { x = 1800, y = 1004 } }
+WINDOWS = { nexus }
+sent = {}; fire("window.open", nexus)
+local r0 = result()
+check("settings open at the standard height", r0.h, math.floor(SCREENS[1].height * 0.6 + 0.5))
+local qpop = { address = "0xn2", class = "org.quickshell", title = "Updates", floating = true, fullscreen = 0, pid = 1,
+               tags = {}, workspace = ws(1), monitor = SCREENS[1], at = { x = 600, y = 300 }, size = { x = 700, y = 500 } }
+WINDOWS = { qpop }
+sent = {}; fire("window.open", qpop)
+check("another Quickshell window keeps its size", result().h, nil)
+WINDOWS = {}
 -- A maximised window filling the first screen inside the gaps, below its title bar
 local win = { address = "0x9", class = "org.gnome.TextEditor", title = "t", floating = true, fullscreen = 0, pid = 1,
               tags = { "maximised" }, workspace = ws(1), monitor = SCREENS[1], at = { x = 11, y = 83 },

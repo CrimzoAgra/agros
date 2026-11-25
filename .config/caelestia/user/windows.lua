@@ -951,7 +951,16 @@ end
 -- first-run Welcome came out at the standard size, behind the picture it was opened for). Its window objects don't
 -- say modal: only a rule's match does
 hl.window_rule({ match = { modal = true }, float = true })
+-- The settings (Caelestia's Nexus, a Quickshell window that floats as it opens): a main window, at the standard size
+-- and cascaded as one, not the size Nexus asks for (93% of the screen's height, nearly all of it)
+local function is_settings(win)
+    return win.class == "org.quickshell" and (win.title or ""):find("^Nexus") ~= nil
+end
 local function on_open(win, retried)
+    if win and win.floating and not retried and is_settings(win) and (win.fullscreen or 0) == 0
+        and win.workspace and (win.workspace.id or 0) >= 1 then
+        return place(win, cascaded(win, standard_box(win)))
+    end
     if win and win.floating and not retried then return fit_popup(win) end
     -- (fullscreen: 2, or 3 maximised and fullscreen, as focus_window's; 1 is only maximised)
     if not (win and win.workspace) or win.floating or (win.fullscreen or 0) >= 2 then return end
