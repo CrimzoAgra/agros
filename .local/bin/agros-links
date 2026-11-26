@@ -41,8 +41,8 @@ capri=${XDG_DATA_HOME:-$HOME/.local/share}/applications/capri.desktop
 data=${XDG_DATA_HOME:-$HOME/.local/share} conf=${XDG_CONFIG_HOME:-$HOME/.config} cache=${XDG_CACHE_HOME:-$HOME/.cache}
 capri_app() {
     local f
-    pacman -Qq 2>/dev/null | grep -qi '^capri' && return 0
-    flatpak list --app --columns=application 2>/dev/null | grep -qi capri && return 0
+    grep -qi '^capri' <<<"$(pacman -Qq 2>/dev/null)" && return 0
+    grep -qi capri <<<"$(flatpak list --app --columns=application 2>/dev/null)" && return 0
     compgen -G "$HOME/Applications/*[Cc]apri*" >/dev/null && return 0
     for f in "$data"/applications/*.desktop /usr/share/applications/*.desktop; do
         [[ ${f##*/} != capri-desktop-windows.desktop ]] && grep -qi '^Exec=.*capri' "$f" 2>/dev/null &&
