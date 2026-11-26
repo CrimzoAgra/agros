@@ -236,8 +236,19 @@ Variants {
         onRightNeededChanged: rightHeld = Math.max(rightHeld, rightNeeded)
         onTopNeededChanged: topHeld = Math.max(topHeld, topNeeded)
         onBottomNeededChanged: bottomHeld = Math.max(bottomHeld, bottomNeeded)
+        // (a bottom bar's window: room for the launcher at its fullest from the start, by what Caelestia's AppList and
+        // Content size it with (its list is made only as it opens; a little over: the search field's height, its
+        // margins). Grown as it first opened and again as its list filled, the bar in that window jolted each time)
+        readonly property real launcherFull: {
+            const t = left.contentItem?.Tokens;
+            if (!t || !config)
+                return 0;
+            const list = Math.max((t.sizes.launcher.itemHeight + t.spacing.small) * config.launcher.maxShown, t.sizes.launcher.wallpaperHeight);
+            return list + t.sizes.launcher.itemHeight + t.padding.large * 4;
+        }
         Component.onCompleted: {
-            leftHeld = Math.max(leftNeeded, Math.min(barAcross ? screenH / 2 : screenW / 3, leftNeeded + 512));
+            leftHeld = Math.max(leftNeeded, Math.min(barAcross ? screenH / 2 : screenW / 3, leftNeeded + 512),
+                barBottom ? Math.min(screenH, leftNeeded + step(launcherFull)) : 0);
             // (the sidebar's width is a setting, known while it's closed: the right window as wide as it, or the utilities
             // panel; rarer and wider, toasts beside the open sidebar, grow it once)
             rightHeld = Math.max(rightNeeded, edge + step(Math.max(shared.sidebar?.width || 448, shared.utilities?.implicitWidth ?? 0)));
