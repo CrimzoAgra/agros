@@ -111,6 +111,17 @@ pacman -Sy --noconfirm >/dev/null
 
 # No separate debug packages (Arch's makepkg makes them by default)
 sed -i 's/^\(OPTIONS=(.*\) debug/\1 !debug/' /etc/makepkg.conf
+# Built for any x86-64 machine, with Arch's flags: CachyOS's makepkg.conf (its pacman, in the container since CI took
+# CachyOS's packages) builds for the CPU it runs on (-march=native -O3, Rust's target-cpu=native), and GitHub's runners
+# have AVX-512: agros-hyprbars came out with it (26 Nov) and Hyprland died loading it on any CPU without (most Intel's)
+# (MAKEPKG_CONF_D: the tests' stand-in for /etc/makepkg.conf.d)
+conf_d=${MAKEPKG_CONF_D:-/etc/makepkg.conf.d}
+sed -i -e 's/-march=native/-march=x86-64 -mtune=generic/g' -e 's/-mtune=native//g' -e 's/ -O3 / -O2 /g' "${MAKEPKG_CONF:-/etc/makepkg.conf}"
+[[ ! -f $conf_d/rust.conf ]] || sed -i -e 's/ *-C target-cpu=native//g' -e 's/-C opt-level=3/-C opt-level=2/g' "$conf_d/rust.conf"
+if grep -sE '^[^#]*(march|mtune|target-cpu)=native' "${MAKEPKG_CONF:-/etc/makepkg.conf}" "$conf_d"/*.conf; then
+    echo "!! makepkg still builds for this machine's CPU: what it builds wouldn't run on others"
+    exit 1
+fi
 # 1. AgrOS's own packages, first: one changed with its version not raised fails the build (below) before the long
 # builds of the AUR's and Calamares. No dependencies installed to build them: they're files and settings, but for
 # agros-vmware's shim, built against libdrm, agros-thunar-usage, a Thunar plugin, and agros-hyprbars, a Hyprland plugin
@@ -221,6 +232,13 @@ keep_published() {
     fi
     for d in "$pubdb"/*/desc; do [[ $(field "$d" FILENAME) == "$f" ]] && { listed=1; break; }; done
     [[ -n $listed ]] || return 0
+    # (a published build known to be wrong, ci/republish.txt: the rebuild goes out as its next release, which machines
+    # that have it update to; once out, under its new name, the line no longer matches)
+    if [[ $f != agros-* ]] && grep -qxF "$f" "$root/ci/republish.txt" 2>/dev/null; then
+        f=$(relabel "$f" "$rel.$((k + 1))") || { echo "!! $1: couldn't be made release $rel.$((k + 1))"; exit 1; }
+        echo "-- $f: the rebuild published (ci/republish.txt: the published build was wrong)"
+        return 0
+    fi
     # Listed: read, or stopped here (Pages down, a timeout), not a rebuild published under its name
     # (--retry: a timeout or a 5xx from Pages tried again, for 2 minutes; ?t=: published.sh's stamp, the current copy)
     code=$(curl -sSL --retry 8 --retry-delay 15 --max-time 300 -o "$work/pub" -w '%{http_code}' "$AGROS_PUBLISHED/$f?t=$stamp" 2>/dev/null) ||

@@ -1,0 +1,8 @@
+# Published builds known to be wrong, one file name a line (build-repo.sh's keep_published): their rebuild goes out as
+# the next release of their version, which machines that have them update to. Once it has, a line matches no published
+# file and does nothing more: remove it then.
+# Built on 26 Nov 2026 with CachyOS's makepkg.conf, for the CI runner's CPU (-march=native: AVX-512 on GitHub's), not
+# for any x86-64 machine as AgrOS's repo has to be:
+fetch-git-2.3.0.r39.g6183b98-1-x86_64.pkg.tar.zst
+qt6-m3shapes-git-r50.8a6fe89-1.1-x86_64.pkg.tar.zst
+qtengine-0.2.4-1.1-x86_64.pkg.tar.zst

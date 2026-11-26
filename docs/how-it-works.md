@@ -74,7 +74,12 @@ release of its version instead (`1.0.0-1` to `1.0.0-1.1`, its package repacked, 
 machines that had it kept the old build, as pacman installs no version it already has. Each later build of that
 version is compared with that release and kept as it, and the AUR's next version starts plain again. Machines don't
 take a library's update that would break one of these before its rebuild is out (the upstream gate's `soname-hold`,
-below).
+below). A published build listed in `ci/republish.txt` (one known to be wrong) goes out again the same way, rebuilt.
+
+Everything is built for any x86-64 machine, with Arch's flags (`-march=x86-64 -mtune=generic -O2`): the build
+container has CachyOS's packages, and its `makepkg.conf` builds for the CPU it runs on (`-march=native`, Rust's
+`target-cpu=native`). `build-repo.sh` puts Arch's flags back and stops if a native one is left. On 26 November 2026
+the runner's AVX-512 got into `agros-hyprbars`, and Hyprland crashed loading it on CPUs without it (most of Intel's).
 
 The second server is a mirror on Cloudflare R2 (the bucket agros-iso's ISO is downloaded from, under `repo/x86_64`), so
 a GitHub Pages outage doesn't stop every machine's updates: pacman tries Pages first and the mirror only when Pages

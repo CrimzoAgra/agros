@@ -145,6 +145,30 @@ pkg "$out" "$aur" 'file = usr/lib/python3.13/thing.py a'
 o=$(keep "$aur") && [[ $o == *"python-thing-1-1.2-x86_64.pkg.tar.zst: the rebuild published"* && -f $out/python-thing-1-1.2-x86_64.pkg.tar.zst ]] ||
     fail "a release-1.1 package rebuilt against other libraries: not published as 1-1.2: $o"
 rm -f "$out"/python-thing-*
+# A published build known to be wrong (ci/republish.txt: built for CI's own CPU), built against the same libraries:
+# the rebuild goes out as the next release; once it has, the line matches no published file, so nothing more
+mkdir -p "$root/ci" && printf '# why\n%s\n' "$r1" >"$root/ci/republish.txt"
+pkg "$out" "$aur" 'file = usr/lib/python3.12/thing.py a'
+o=$(keep "$aur") && [[ $o == *"python-thing-1-1.2-x86_64.pkg.tar.zst: the rebuild published (ci/republish.txt"* && -f $out/python-thing-1-1.2-x86_64.pkg.tar.zst ]] ||
+    fail "a published build listed in ci/republish.txt: its rebuild not published as the next release: $o"
+rm -f "$out"/python-thing-* "$root/ci/republish.txt"
+
+# makepkg builds for any x86-64 machine, whatever the container's makepkg.conf: CachyOS's builds for the CPU it runs
+# on (GitHub's had AVX-512: agros-hyprbars then crashed Hyprland on CPUs without), Arch's flags put back; one it can't
+# put back stops the build
+sed -n '/^# Built for any x86-64 machine/,/^fi$/p' "$b" >"$t/flags"
+grep -q 'march=native' "$t/flags" || fail "build-repo.sh's makepkg flags block not found"
+mkdir -p "$t/mk/conf.d"
+flags() { (export MAKEPKG_CONF=$t/mk/makepkg.conf MAKEPKG_CONF_D=$t/mk/conf.d; set -euo pipefail; eval "$(cat "$t/flags")") 2>&1; }
+printf '%s\n' 'CFLAGS="-march=native -O3 -pipe -fno-plt"' 'CXXFLAGS="$CFLAGS -Wp,-D_GLIBCXX_ASSERTIONS"' '#-- -march=native in a comment' >"$t/mk/makepkg.conf"
+printf '%s\n' 'RUSTFLAGS="-C opt-level=3 -C target-cpu=native"' >"$t/mk/conf.d/rust.conf"
+o=$(flags) || fail "CachyOS's makepkg flags not made portable: $o"
+grep -qx 'CFLAGS="-march=x86-64 -mtune=generic -O2 -pipe -fno-plt"' "$t/mk/makepkg.conf" &&
+    grep -qx 'RUSTFLAGS="-C opt-level=2"' "$t/mk/conf.d/rust.conf" ||
+    fail "makepkg's flags not Arch's: $(cat "$t/mk/makepkg.conf" "$t/mk/conf.d/rust.conf")"
+printf '%s\n' 'RUSTFLAGS="-Ctarget-cpu=native"' >"$t/mk/conf.d/rust.conf"
+o=$(flags) && fail "a target-cpu=native left in makepkg's settings: the build went on"
+[[ $o == *"still builds for this machine's CPU"* ]] || fail "a native flag left: not said: $o"
 
 # The installer's checksum: build-repo.sh's own lines (its pins, the swaps it writes, the check), with the patch as it
 # is, then changed
