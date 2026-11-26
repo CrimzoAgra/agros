@@ -101,13 +101,16 @@ done
 [[ -z $tmp ]] || rm -f "$tmp" "$tmp.sig"
 # (still: those installed with no update of their own in this one)
 waits=() still=()
+# (all in one query each: every pacman run loads the repos' databases, half a second, once per name made the check slow)
+declare -A haves news
+while read -r name have; do haves[$name]=$have; done < <(pacman -Q "${db[@]}" -- "${gated[@]}" 2>/dev/null)
+# (the version pacman would install: the first repo's, in pacman.conf's order; read whole: no early reader on its pipe)
+info=$(LC_ALL=C pacman -Si --config "$base" "${db[@]}" -- "${gated[@]}" 2>/dev/null)
+while read -r name new; do news[$name]=$new; done < <(awk '/^Name *:/ { n = $3 } /^Version *:/ && !(n in seen) { seen[n]; print n, $3 }' <<<"$info")
 for name in "${gated[@]}"; do
-    have=$(pacman -Q "${db[@]}" -- "$name" 2>/dev/null | cut -d' ' -f2) || continue
+    have=${haves[$name]:-}
     [[ -n $have ]] || continue
-    # (the version pacman would install: the first repo's, in pacman.conf's order)
-    # (read whole, then its first Version line: no early reader on pacman's pipe under pipefail)
-    new=$(LC_ALL=C pacman -Si --config "$base" "${db[@]}" -- "$name" 2>/dev/null)
-    new=$(sed -n '/^Version *: /{s///p;q;}' <<<"$new")
+    new=${news[$name]:-}
     [[ -n $new && $new != "$have" ]] || { still+=("$name"); continue; }
     # (a rebuild of the same version: as Arch's for a library's new soname, which comes with it. Let through unchecked,
     # but held with the set when another of it waits, and the library then with it: hold_sonames --held)

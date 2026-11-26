@@ -28,9 +28,11 @@ args=" $* "
 name=${*: -1}
 echo "pacman $*" >>"$CALLS"
 var() { local v="$1_${name//-/_}"; echo "${!v:-}"; }
+# (-Q and -Si: every name after --, as pacman does)
+names=("$name"); [[ $args == *" -- "* ]] && read -ra names <<<"${args##* -- }"
 case $1 in
-    -Q) [[ -n $(var HAVE) ]] && echo "$name $(var HAVE)" ;;
-    -Si) [[ -n $(var NEW) ]] && echo "Version         : $(var NEW)" ;;
+    -Q) for name in "${names[@]}"; do [[ -n $(var HAVE) ]] && echo "$name $(var HAVE)"; done; true ;;
+    -Si) for name in "${names[@]}"; do [[ -n $(var NEW) ]] && printf 'Name            : %s\nVersion         : %s\n\n' "$name" "$(var NEW)"; done; true ;;
     # (what the update brings, "name old -> new" lines: $QU)
     -Qu) [[ -z ${QU:-} ]] || printf '%s\n' "$QU" ;;
     -Sup) conf=$(sed -n 's/.*--config \([^ ]*\) .*/\1/p' <<<"$args")

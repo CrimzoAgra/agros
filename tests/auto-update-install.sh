@@ -94,7 +94,8 @@ cat >"$t/bin/pacman" <<EOF
 #!/bin/sh
 case \$1 in
     -Qu) [ -z "\$QU" ] || printf '%s\n' "\$QU"; [ -z "\$QU_ERR" ] || echo "\$QU_ERR" >&2; exit \${QU_RC:-0} ;;
-    -Q) [ -n "\$Q_HAVE" ] || exit 1; echo "\$2 \$Q_HAVE" ;;
+    -Q) [ -n "\$Q_HAVE" ] || exit 1
+        case " \$* " in *" -- "*) for n in \$(echo "\$*" | sed 's/.* -- //'); do echo "\$n \$Q_HAVE"; done ;; *) echo "\$2 \$Q_HAVE" ;; esac ;;
     -Qdtq) [ -n "\$ORPHANS" ] || exit 1; printf '%s\n' \$ORPHANS ;;
     -Rns) echo "pacman \$* (SNAP_PAC_SKIP=\$SNAP_PAC_SKIP)" >>"$t/calls"; exit \${RNS_RC:-0} ;;
     -Su) echo "pacman \$* (SNAP_PAC_SKIP=\$SNAP_PAC_SKIP)" >>"$t/calls"; echo "installing foo"
@@ -116,7 +117,8 @@ case \$1 in
         [ -z "\$SY_ERR" ] || { echo "\$SY_ERR" >&2; exit 1; }; exit 0 ;;
     -Sw) echo "keyrings-download \$*" >>"$t/calls" ;;
     -S) echo "pacman \$* (SNAP_PAC_SKIP=\$SNAP_PAC_SKIP)" >>"$t/calls"; exit \${KEYRING_RC:-0} ;;
-    -Si) [ -z "\$SI_NEW" ] || echo "Version         : \$SI_NEW"; exit 0 ;;
+    # (every name after --, as pacman does)
+    -Si) [ -z "\$SI_NEW" ] || for n in \$(echo "\$*" | sed 's/.* -- //'); do printf 'Name            : %s\\nVersion         : %s\\n\\n' "\$n" "\$SI_NEW"; done; exit 0 ;;
     -Suw) echo "download \$*" >>"$t/calls"; [ -e "$t/au/downloading" ] && echo "download marked" >>"$t/calls"
         [ -z "\$SUW_ERR" ] || { echo "\$SUW_ERR" >&2; exit 1; }
         exit \${SYUW_RC:-0} ;;

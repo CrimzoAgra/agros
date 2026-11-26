@@ -349,33 +349,47 @@ if [[ ${1:-} == --list ]]; then
     # checkupdates of yours syncs the same copy, and a second one while the first synced failed on its lock, read as
     # "offline" (Updates opened while the 6-hourly check ran: "Couldn't check for updates"), its exit then taking away
     # the first's lock. The second waits for the first (seconds), 5 min at most, then goes on as before
-    lock=${XDG_STATE_HOME:-$HOME/.local/state}/agros/update-list.lock
-    { mkdir -p "${lock%/*}" && exec 7>>"$lock" && flock -w 300 7; } 2>/dev/null
-    rc=0
-    checkupdates >/dev/null 2>&1 || rc=$?
-    if ((rc == 1)); then printf 'offline\t\t\t\n'; exit 0; fi
-    copy=${CHECKUPDATES_DB:-${TMPDIR:-/tmp}/checkup-db-${UID}/}
-    gated=$(mktemp --tmpdir agros-pacman.XXXXXX.conf)
-    "$helpers/update-gate" /etc/pacman.conf "$gated" --dbpath "$copy" --runtimes-later >/dev/null 2>&1 || cp /etc/pacman.conf "$gated"
-    repo=$(LC_ALL=C pacman -Qu --config "$gated" --dbpath "$copy" 2>/dev/null | "$helpers/updates-pending")
-    rm -f "$gated"
-    exec 7>&-
-    [[ -n $repo ]] && while read -r name old _ new; do printf 'system\t%s\t%s\t%s\n' "$name" "$old" "$new"; done <<<"$repo"
-    # (in English: paru translates "[ignored]", and under another language the ignored ones were listed as waiting)
-    LC_ALL=C paru -Qua 2>/dev/null | "$helpers/updates-pending" | while read -r name old _ new _; do
-        printf 'aur\t%s\t%s\t%s\n' "$name" "$old" "$new"
+    list_repo() {
+        local lock rc=0 copy gated repo
+        lock=${XDG_STATE_HOME:-$HOME/.local/state}/agros/update-list.lock
+        { mkdir -p "${lock%/*}" && exec 7>>"$lock" && flock -w 300 7; } 2>/dev/null
+        checkupdates >/dev/null 2>&1 || rc=$?
+        if ((rc == 1)); then printf 'offline\t\t\t\n'; return; fi
+        copy=${CHECKUPDATES_DB:-${TMPDIR:-/tmp}/checkup-db-${UID}/}
+        gated=$(mktemp --tmpdir agros-pacman.XXXXXX.conf)
+        "$helpers/update-gate" /etc/pacman.conf "$gated" --dbpath "$copy" --runtimes-later >/dev/null 2>&1 || cp /etc/pacman.conf "$gated"
+        repo=$(LC_ALL=C pacman -Qu --config "$gated" --dbpath "$copy" 2>/dev/null | "$helpers/updates-pending")
+        rm -f "$gated"
+        exec 7>&-
+        [[ -n $repo ]] && while read -r name old _ new; do printf 'system\t%s\t%s\t%s\n' "$name" "$old" "$new"; done <<<"$repo"
+        true
+    }
+    list_aur() {
+        # (in English: paru translates "[ignored]", and under another language the ignored ones were listed as waiting)
+        LC_ALL=C paru -Qua 2>/dev/null | "$helpers/updates-pending" | while read -r name old _ new _; do
+            printf 'aur\t%s\t%s\t%s\n' "$name" "$old" "$new"
+        done
+    }
+    list_flatpak() {
+        flatpak remote-ls --updates --columns=application,version 2>/dev/null | while IFS=$'\t' read -r name new; do
+            old=$(LC_ALL=C flatpak info "$name" 2>/dev/null | sed -n 's/^ *Version: //p' | head -1)
+            printf 'flatpak\t%s\t%s\t%s\n' "$name" "$old" "$new"
+        done
+        # Flatpaks installed from a downloaded file (no repo): their GitHub releases
+        "$helpers/flatpak-bundle-update" --check 2>/dev/null |
+            sed -n 's/^\(.*\): update available (\(.*\) -> \(.*\))$/flatpak\t\1\t\2\t\3/p'
+    }
+    list_appimage() { "$helpers/appimage-update" --check 2>/dev/null | sed -n 's/^\(.*\): update available (\(.*\))$/appimage\t\1\t\t\2/p'; }
+    # All at once (each mostly waits on its server: one after another took 10 seconds), each into its own file, then
+    # printed in this order; offline (the repos unreachable): that line alone, as before
+    out=$(mktemp -d --tmpdir agros-list.XXXXXX)
+    i=0
+    for f in list_repo list_aur list_firmware list_flatpak list_appimage list_proton list_dev; do
+        "$f" >"$out/$i" & i=$((i + 1))
     done
-    list_firmware
-    flatpak remote-ls --updates --columns=application,version 2>/dev/null | while IFS=$'\t' read -r name new; do
-        old=$(LC_ALL=C flatpak info "$name" 2>/dev/null | sed -n 's/^ *Version: //p' | head -1)
-        printf 'flatpak\t%s\t%s\t%s\n' "$name" "$old" "$new"
-    done
-    # Flatpaks installed from a downloaded file (no repo): their GitHub releases
-    "$helpers/flatpak-bundle-update" --check 2>/dev/null |
-        sed -n 's/^\(.*\): update available (\(.*\) -> \(.*\))$/flatpak\t\1\t\2\t\3/p'
-    "$helpers/appimage-update" --check 2>/dev/null | sed -n 's/^\(.*\): update available (\(.*\))$/appimage\t\1\t\t\2/p'
-    list_proton
-    list_dev
+    wait
+    if grep -q '^offline' "$out/0"; then cat "$out/0"; else cat "$out"/{0..6}; fi
+    rm -rf "${out:?}"
     exit 0
 fi
 

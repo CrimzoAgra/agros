@@ -69,7 +69,7 @@ case " $* " in
     *" -Sl "*) ;;
     *" -Qu "*) echo "hyprland 0.57.2-1 -> $NEW [ignored]"; for p in $PENDING; do echo "$p 1-1 -> 2-1"; done ;;
     *" -Q -- hyprland "*) echo "hyprland 0.57.2-1" ;;
-    *" -Si "*" hyprland "*) echo "Version         : $NEW" ;;
+    *" -Si "*" hyprland "*) printf 'Name            : hyprland\nVersion         : %s\n' "$NEW" ;;
     *" -Si "*) printf 'Version         : 2-1\nProvides        : None\n' ;;
     *" -Sddp "*" glslang "*) echo "file://$T/pkgs/$GLSLANG" ;;
     *" -Sddp "*" mesa "*) echo "https://mirror.invalid/extra/mesa-2-1.pkg.tar.zst" ;;

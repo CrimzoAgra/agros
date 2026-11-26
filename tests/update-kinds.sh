@@ -294,7 +294,7 @@ echo 'IgnorePkg = hyprland' >"$AGROS_GATE"
 stub pacman 'args=" $* "; echo "pacman $*" >>'"$t"'/qu
 case $1 in
     -Q) [ "${@: -1}" = hyprland ] && echo "hyprland 0.57.2-1" ;;
-    -Si) echo "Version         : 0.58.0-1" ;;
+    -Si) printf "Name            : hyprland\nVersion         : 0.58.0-1\n" ;;
     -Qu) conf=$(sed -n "s/.*--config \([^ ]*\) .*/\1/p" <<<"$args")
          grep -q "Include = $AGROS_GATE" "$conf" || echo "hyprland 0.57.2-1 -> 0.58.0-1" ;;
 esac
