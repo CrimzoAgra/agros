@@ -18,7 +18,7 @@ printf 'ELF\0%s\0' 1111111111111111111111111111111111111111 >"$t/pkg/libhyprbars
 # shellcheck disable=SC2016  # (expanded by the stand-in)
 printf '#!/bin/sh\necho "$*" >>%s/login-calls\n[ "$3" = version ] && echo "{\\"commit\\":\\"$COMMIT\\",\\"version\\":\\"0.57.2\\",\\"abiHash\\":\\"${COMMIT}_aq_0.12\\"}"\n[ "$3" = plugin ] && [ "$4" = list ] && { [ -n "$LOADED" ] && grep -q "plugin load" %s/login-calls && echo "[{\\"name\\":\\"hyprbars\\",\\"version\\":\\"1.0-dotfiles\\"}]" || echo "[]"; }\nexit 0\n' \
     "$t" "$t" >"$t/lbin/hyprctl"
-printf '#!/bin/sh\nexit 0\n' >"$t/lbin/notify-send"
+printf '#!/bin/sh\necho "$*" >>%s/notified\n' "$t" >"$t/lbin/notify-send"
 chmod +x "$t/lbin/"*
 login() { HOME=$t/lhome HYPRBARS_LIVE=$t/nolive HYPRBARS_PACKAGED=$t/pkg/libhyprbars.so PATH=$t/lbin:$PATH COMMIT=$1 \
     "$here/.local/bin/hyprbars-build" --login >/dev/null 2>&1; }
@@ -46,6 +46,13 @@ LOADED=1 login 1111111111111111111111111111111111111111 || fail "--login with th
 grep -qx -- "-i 0 plugin load $t/pkg/libhyprbars.so" "$t/login-calls" || fail "--login: the packaged one, this very build, not loaded"
 [[ ! -e $t/lhome/.cache/hyprbars-build.log ]] ||
     fail "--login built again what the packaged one already is: $(cat "$t/lhome/.cache/hyprbars-build.log")"
+# ...one of an older patch (its sum another): loaded meanwhile, the build tried, and its failure said as it is: the
+# packaged title bars in use, which have the highlight (it said they had none)
+echo "1111111111111111111111111111111111111111_aq_0.12 0000" >"$t/pkg/libhyprbars.so.built-for"
+rm -f "$t/notified"
+LOADED=1 login 1111111111111111111111111111111111111111 || fail "--login with an older patch's packaged one failed"
+[[ $(cat "$t/notified" 2>/dev/null) == *"the packaged ones for now"* && $(cat "$t/notified") != *"no hover highlight"* ]] ||
+    fail "--login's failed build with the packaged one loaded not said as it is: $(cat "$t/notified" 2>/dev/null)"
 rm "$t/pkg/libhyprbars.so.built-for"
 # On the live USB: at login the packaged one is loaded (the installer's title bar), again only when it was built for
 # that Hyprland; nothing built; otherwise nothing at all
