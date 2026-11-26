@@ -219,6 +219,13 @@ d=$dst/modules/drawers
     grep -q 'hasFullscreen ? fsTransitionProg < 1 || showsOverFullscreen' "$d/PartWindow.qml" &&
     grep -q 'function move(x: real, y: real): void' "$d/Controller.qml" && grep -q 'controller.move(controller.mx(event.x), event.y)' "$d/Interactions.qml"; } ||
     fail "the shell isn't in its four windows: $(ls "$d")"
+# ...a bottom bar's window as tall as the launcher at its fullest from the start (grown as it first opened and as its
+# list filled, the bar jolted); the launcher out of a bottom bar, and the dashboard out of a top one, shown from its
+# edge, not slid in behind it
+{ grep -q 'barBottom ? Math.min(screenH, leftNeeded + step(launcherFull)) : 0' "$d/Drawers.qml" &&
+    grep -q 'config.launcher.maxShown' <<<"$(sed -n '/readonly property real launcherFull: {/,/^        }/p' "$d/Drawers.qml")" &&
+    grep -q 'clip: root.barEdge === "bottom"' "$d/PanelsEdge.qml" && grep -q 'clip: root.barEdge === "top"' "$d/PanelsEdge.qml"; } ||
+    fail "the launcher jolts a bottom bar, or shows over it"
 # An external screen's brightness change shows no popup (its slider isn't there: volume alone showed); a built-in one's
 # does, once its level was read
 w=$dst/modules/osd/Wrapper.qml

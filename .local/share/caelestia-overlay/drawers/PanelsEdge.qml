@@ -56,6 +56,9 @@ Item {
         Item {
             readonly property alias item: dashboard
 
+            // (out of a top bar: shown from its edge, not slid in behind it, its text over the bar's background)
+            clip: root.barEdge === "top"
+
             Dashboard.Wrapper {
                 id: dashboard
 
@@ -77,6 +80,9 @@ Item {
 
         Item {
             readonly property alias item: launcher
+
+            // (out of a bottom bar: shown from its edge, not slid in behind it, its text over the bar's background)
+            clip: root.barEdge === "bottom"
 
             Launcher.Wrapper {
                 id: launcher
