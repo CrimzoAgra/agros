@@ -22,7 +22,7 @@ stub pacman '[[ $1 == -Q && $2 == hyprland ]] && echo "hyprland $HV"'
 pkg() { (cd "$r/packages/agros-hyprbars" && HV=$1 PATH=$t/bin:$PATH bash -c 'startdir=$PWD; . ./PKGBUILD; pkgver; echo; printf "%s\n" "${depends[@]}"'); }
 for v in 0.57.2-1 0.57.2-1.1 0.57.0-3 0.9.3-2 0.10.0-1; do
     out=$(pkg "$v") || fail "the PKGBUILD failed with Hyprland $v: $out"
-    ver=$(head -1 <<<"$out")
+    ver=${out%%$'\n'*}
     [[ $ver =~ ^[A-Za-z0-9._+]+$ && $ver == [0-9]* ]] || fail "not a version makepkg takes, with Hyprland $v: $ver"
     s=${v%%-*}; s=${s%.*}
     want=$(printf '%s\n' "hyprland>=$s.0" "hyprland<${s%.*}.$((${s#*.} + 1)).0")
@@ -34,7 +34,8 @@ done
 # Newer for a newer Hyprland, a rebuild of it (Arch's pkgrel, CachyOS's relabel) and a point release
 prev=
 for v in 0.57.0-1 0.57.0-2 0.57.2-1 0.57.2-1.1 0.58.0-1 0.100.0-1; do
-    ver=$(pkg "$v" | head -1)
+    # (read whole: head stopping early broke pkg's pipe, a failure under pipefail)
+    ver=$(pkg "$v") && ver=${ver%%$'\n'*} || fail "the PKGBUILD failed with Hyprland $v"
     [[ -z $prev ]] || (($(vercmp "$ver" "$prev") > 0)) || fail "agros-hyprbars for Hyprland $v ($ver) isn't newer than $prev"
     prev=$ver
 done
