@@ -37,7 +37,7 @@ fi
 case ${BUILD:-}/${RESULT:-} in
     success/ok) state=ok ;;
     success/hold-agros) state="a new AUR build broke AgrOS's tests: held back (below), the published one kept" ;;
-    success/hold-upstream) state="an Arch update broke AgrOS's tests: its Hyprland not approved, the new AUR builds held back, no new ISO" ;;
+    success/hold-upstream) state="an Arch or CachyOS update broke AgrOS's tests: its Hyprland not approved, the new AUR builds held back, no new ISO" ;;
     success/fail) state="AgrOS's own code fails its tests: nothing published"
         # (a pass that couldn't run, ci/test-passes.sh's stopped: which side broke them isn't known)
         ! grep -q '^    !! ' <<<"$report" || state="the tests couldn't be run through (said below): nothing published" ;;

@@ -30,7 +30,7 @@ echo "quickshell-git: AgrOS's fix didn't build" >"$t/held"
 grep -q '^- quickshell-git: ' "$t/body" || fail "the issue doesn't say what was held: $(cat "$t/body")"
 echo 12 >"$t/open"
 printf -- '- With this run'"'"'s [agros]:\n    FAIL lutris: x\n' >"$t/report"
-[[ $(go env BUILD=success RELEASE=success RESULT=hold-upstream REPORT="$t/report") == "gh issue edit 12 --title Held back: an Arch update broke AgrOS's tests --body-file "* ]] ||
+[[ $(go env BUILD=success RELEASE=success RESULT=hold-upstream REPORT="$t/report") == "gh issue edit 12 --title Held back: an Arch or CachyOS update broke AgrOS's tests --body-file "* ]] ||
     fail "the open issue not brought up to date: $(go env BUILD=success RELEASE=success RESULT=hold-upstream REPORT="$t/report")"
 grep -q 'FAIL lutris' "$t/body" || fail "the issue doesn't say which tests failed"
 [[ $(go env BUILD=success RELEASE=failure RESULT=ok) == "gh issue edit 12 --title Held back: the release didn't go through (failure) --body-file "* ]] ||

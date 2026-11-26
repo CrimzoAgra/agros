@@ -90,6 +90,11 @@ else:
             bad.append("the install job doesn't hand on what to hold and what to say (hold, note)")
     if "secrets." in json.dumps(ins):
         bad.append("a secret in the install job (it runs the packages' install scripts as root)")
+# (built and tested on CachyOS's v3 repos above Arch's, as most machines have: Quickshell built for the Qt they run)
+for j, first in (("agros", "ci/build-repo.sh"), ("repo", "ci/build-repo.sh"), ("test", "test-passes")):
+    v3, at = idx(jobs[j]["steps"], "[cachyos-v3]"), idx(jobs[j]["steps"], first)
+    if not v3 or not at or v3[0] > at[0]:
+        bad.append(f"the {j} job doesn't set CachyOS's v3 repos up before {first}")
 if "install" not in needs("release"):
     bad.append("the release doesn't wait for the install test")
 held = [i for i, s in enumerate(rs) if s.get("env", {}).get("AGROS_HOLD_ONLY") == "${{ needs.install.outputs.hold }}"]

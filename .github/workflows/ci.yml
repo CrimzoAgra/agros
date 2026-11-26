@@ -111,6 +111,47 @@ jobs:
           fi
           [ -c /dev/net/tun ] || { mkdir -p /dev/net && mknod /dev/net/tun c 10 200; }
           chmod 666 /dev/net/tun
+      - &build-tools
+        name: CachyOS's repos above Arch's, as machines have them, and build tools (paru)
+        run: |
+          # [multilib] (Steam's 32-bit libraries), as CachyOS has it on
+          grep -q '^\[multilib\]' /etc/pacman.conf || printf '\n[multilib]\nInclude = /etc/pacman.d/mirrorlist\n' >>/etc/pacman.conf
+          sed -i 's/^#*DownloadUser.*/#DownloadUser = alpm/' /etc/pacman.conf
+          # (as in the test job: a machine id)
+          systemd-machine-id-setup >/dev/null
+          pacman-key --init
+          pacman -Sy
+          pacman -Su --noconfirm --needed $(pacman -T base-devel git sudo)
+          git config --system init.defaultBranch main
+          m=https://mirror.cachyos.org/repo/x86_64/cachyos
+          # (--retry: a timeout or a 5xx from CachyOS's mirror tried again, for 2 minutes, not the whole run failed and
+          # the held issue opened for it)
+          curl -fsSL --retry 8 --retry-delay 15 -o /tmp/keyring.pkg "$m/$(curl -fsSL --retry 8 --retry-delay 15 "$m/" | grep -o 'cachyos-keyring-[^"]*\.pkg\.tar\.zst' | sort -V | tail -1)"
+          mkdir /tmp/k && bsdtar -xf /tmp/keyring.pkg -C /tmp/k
+          pacman-key --add /tmp/k/usr/share/pacman/keyrings/cachyos.gpg
+          pacman-key --lsign-key 882DCFE48E2051D48E2562ABF3B607488DB35A47
+          # (the keyring and the mirror list then installed from [cachyos] itself, their signatures by that key required:
+          # pacman -U of a downloaded file checked none, and ran its install script as root)
+          sed -i '/^\[core\]/i [cachyos]\nServer = '"$m"'\n' /etc/pacman.conf
+          pacman -Sy --noconfirm cachyos-keyring cachyos-mirrorlist cachyos-v3-mirrorlist
+          # CachyOS's x86-64-v3 repos above [cachyos], as AgrOS's installer sets up a machine whose CPU has them (most):
+          # AgrOS's AUR builds built against them, and the tests run on them, CachyOS's rebuilds of Arch's packages (a day
+          # or more behind Arch's), Qt among them, whose private parts Quickshell is built for (Arch's own Qt, ahead,
+          # gave machines a Quickshell built for another Qt than theirs). -uu below: a package newer in Arch's than in
+          # CachyOS's rebuild taken back to CachyOS's, as machines have it. A runner without x86-64-v3: said, on Arch's
+          if /usr/lib/ld-linux-x86-64.so.2 --help | grep -q 'x86-64-v3 (supported'; then
+            sed -i -e 's/^Architecture = .*/Architecture = x86_64 x86_64_v3/' \
+              -e '/^\[cachyos\]$/i [cachyos-v3]\nInclude = /etc/pacman.d/cachyos-v3-mirrorlist\n\n[cachyos-extra-v3]\nInclude = /etc/pacman.d/cachyos-v3-mirrorlist\n\n[cachyos-core-v3]\nInclude = /etc/pacman.d/cachyos-v3-mirrorlist\n' /etc/pacman.conf
+          else
+            echo "::warning::This runner's CPU has no x86-64-v3: built and tested on Arch's packages, not CachyOS's v3 rebuilds most machines run"
+          fi
+          sed -i "s|^Server = $m\$|Include = /etc/pacman.d/cachyos-mirrorlist|" /etc/pacman.conf
+          # (tried again a minute later, five times: a mirror caught mid-sync serves a database and a signature that don't
+          # match, "signature ... is invalid", and pacman doesn't go on to the next mirror for it)
+          for i in 1 2 3 4 5; do
+            pacman -Syyuu --noconfirm && break
+            [ "$i" != 5 ] || exit 1; sleep 60
+          done
       # (no token left in .git/config: the checkout is the ci user's, and this job runs what the repo job built)
       - uses: actions/checkout@v7
         with:
@@ -236,36 +277,7 @@ jobs:
       image: archlinux:latest
     steps:
       - *container-hooks
-      - &build-tools
-        name: Build tools, and CachyOS's repo (what AgrOS installs on, and paru)
-        run: |
-          # [multilib] (Steam's 32-bit libraries), as CachyOS has it on
-          grep -q '^\[multilib\]' /etc/pacman.conf || printf '\n[multilib]\nInclude = /etc/pacman.d/mirrorlist\n' >>/etc/pacman.conf
-          sed -i 's/^#*DownloadUser.*/#DownloadUser = alpm/' /etc/pacman.conf
-          # (as in the test job: a machine id)
-          systemd-machine-id-setup >/dev/null
-          pacman-key --init
-          pacman -Sy
-          pacman -Su --noconfirm --needed $(pacman -T base-devel git sudo)
-          git config --system init.defaultBranch main
-          m=https://mirror.cachyos.org/repo/x86_64/cachyos
-          # (--retry: a timeout or a 5xx from CachyOS's mirror tried again, for 2 minutes, not the whole run failed and
-          # the held issue opened for it)
-          curl -fsSL --retry 8 --retry-delay 15 -o /tmp/keyring.pkg "$m/$(curl -fsSL --retry 8 --retry-delay 15 "$m/" | grep -o 'cachyos-keyring-[^"]*\.pkg\.tar\.zst' | sort -V | tail -1)"
-          mkdir /tmp/k && bsdtar -xf /tmp/keyring.pkg -C /tmp/k
-          pacman-key --add /tmp/k/usr/share/pacman/keyrings/cachyos.gpg
-          pacman-key --lsign-key 882DCFE48E2051D48E2562ABF3B607488DB35A47
-          # (the keyring and the mirror list then installed from [cachyos] itself, their signatures by that key required:
-          # pacman -U of a downloaded file checked none, and ran its install script as root)
-          sed -i '/^\[core\]/i [cachyos]\nServer = '"$m"'\n' /etc/pacman.conf
-          pacman -Sy --noconfirm cachyos-keyring cachyos-mirrorlist
-          sed -i "s|^Server = $m\$|Include = /etc/pacman.d/cachyos-mirrorlist|" /etc/pacman.conf
-          # (tried again a minute later, five times: a mirror caught mid-sync serves a database and a signature that don't
-          # match, "signature ... is invalid", and pacman doesn't go on to the next mirror for it)
-          for i in 1 2 3 4 5; do
-            pacman -Syy --noconfirm && break
-            [ "$i" != 5 ] || exit 1; sleep 60
-          done
+      - *build-tools
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0  # (the packages' versions count the commits)

@@ -1610,6 +1610,13 @@ breaks something holds back that one piece, never the rest (`.github/workflows/c
   to `aur/packages.txt` is taken as it is too, adding it was its review), with the last day the AUR answered (the AUR
   down: the record as it was, those held still held). Not in the held issue (nothing went wrong); the Friday status
   lists each one, until when.
+- **On CachyOS's packages** (the agros, repo and test jobs' first step): CachyOS's x86-64-v3 repos above `[cachyos]`
+  and Arch's, as the installer sets up a machine whose CPU has them (most). `[agros]`'s AUR builds are built against
+  them and the tests run on them: CachyOS rebuilds Arch's packages a day or more later, Qt among them, whose private
+  parts Quickshell is built for (built on Arch's own Qt, ahead, machines got a Quickshell for another Qt than theirs).
+  With every test passing, they run once more on Arch's own builds (the v3 repos out, `ci/test-passes.sh`): what fails
+  there is an AHEAD line in the issue (machines meet it once CachyOS catches up; nothing held), and CachyOS's are put
+  back, as the gate approves what's installed. A runner without x86-64-v3: said in the run, built and tested on Arch's.
 - **Tests that fail** (`ci/test-passes.sh`): all the tests are run again, to see which side broke them: with the
   published `[agros]` (they pass: this run's new AUR builds broke them; the new Hyprland still approved). Which one:
   each new build of a package the tests have installed (Caelestia's, Quickshell's) put alone over the published ones,
@@ -1618,7 +1625,8 @@ breaks something holds back that one piece, never the rest (`.github/workflows/c
   each new build that needs it, the issue saying which and the tests it fails, and the rest goes out. Not found (each
   passes alone, a failure that doesn't come again, the others together failing, more than 10 tries): every new AUR build
   held, as before, the issue saying why. Then on Arch as of the last day the tests passed on it (its archive's
-  snapshot; the day published as `agros-arch-ok`): they pass, an Arch update broke them (its Hyprland not approved, the
+  snapshot, CachyOS's v3 repos left out, as it keeps no dated snapshots; the day published as `agros-arch-ok`): they
+  pass, an Arch or CachyOS update broke them (its Hyprland not approved, the
   new AUR builds held, no new ISO started: it would take that Arch, its gate holding back only Hyprland; AgrOS's own
   packages still out but `agros-hyprbars`: built for that Hyprland, it would start on none the machines or the ISO have,
   so the published one, built for the approved Hyprland, is kept, `AGROS_HOLD_OWN`). Failing even then: AgrOS's own

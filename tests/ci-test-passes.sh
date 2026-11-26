@@ -67,6 +67,8 @@ if [[ $agros == built ]]; then inst=$(printf '%s\n' caelestia-cli caelestia-shel
 for n in ${*:-hypr-api lutris}; do
     br=
     case " $BROKEN " in *" $n@$agros "* | *" $n@today "*) [[ -n $arch && " $BROKEN " != *" $n@always "* ]] || br=1 ;; esac
+    # (archnew: Arch's own builds, CachyOS's v3 repos not above them)
+    [[ " $BROKEN " != *" $n@archnew "* ]] || grep -q '^\[cachyos-v3\]' @T@/pacman.conf || br=1
     for w in $BROKEN; do
         [[ $w == "$n@"* ]] || continue
         all=1
@@ -166,6 +168,26 @@ grep -q "^    !! the published \[agros\] didn't install: not known which side" "
 grep -q '^archive .*--disable-download-timeout' "$t/syncs" || fail "the archive's sync with pacman's download timeout: $(cat "$t/syncs")"
 [[ $(PACFAIL=archive go "hypr-api@today" 2026/11/14) == "result=fail | all|all" && $(grep -c '^archive ' "$t/syncs") == 3 ]] ||
     fail "Arch's archive failing each time: not tried three times, then stopped: $(cat "$t/syncs")"
+# On CachyOS's v3 repos above Arch's (as CI's build tools set them up): all passing, the tests once more on Arch's own
+# builds (the v3 repos out): what fails there an AHEAD line, still ok, CachyOS's put back after (the gate approves what's
+# installed); nothing failing there, nothing said. On Arch as of the last good day: the v3 repos out (no dated snapshots)
+cp "$t/pacman.conf" "$t/pacman.conf.plain"
+v3conf() {
+    { printf '%s\n' '[options]' 'Architecture = x86_64 x86_64_v3' '[cachyos-v3]' 'Include = v3' '[cachyos-core-v3]' 'Include = v3'
+        cat "$t/pacman.conf.plain"; } >"$t/pacman.conf"
+}
+v3conf
+[[ $(go "lutris@archnew") == "result=ok | all|all" ]] || fail "failing on Arch's own builds only: not ok, or not tried there: $(go "lutris@archnew")"
+grep -qx "    AHEAD lutris: fails on Arch's own builds, ahead of CachyOS's v3 rebuilds of them: broken" "$t/report" ||
+    fail "failing on Arch's own builds not said: $(cat "$t/report")"
+grep -qx '\[cachyos-v3\]' "$t/pacman.conf" && grep -qx 'Architecture = x86_64 x86_64_v3' "$t/pacman.conf" && [[ $(tail -n1 "$t/syncs") == *-Syyuu* ]] ||
+    fail "CachyOS's v3 repos not put back after: $(cat "$t/pacman.conf") $(cat "$t/syncs")"
+v3conf
+[[ $(go "") == "result=ok | all|all" ]] && ! grep -q AHEAD "$t/report" || fail "nothing failing on Arch's own builds, yet said: $(cat "$t/report")"
+v3conf
+[[ $(go "hypr-api@today" 2026/11/14) == "result=hold-upstream | all|all|all" ]] && ! grep -q 'cachyos-v3' "$t/pacman.conf" &&
+    grep -qx 'Architecture = auto' "$t/pacman.conf" || fail "Arch as of the last good day with CachyOS's v3 repos still above: $(cat "$t/pacman.conf")"
+cp "$t/pacman.conf.plain" "$t/pacman.conf"
 # (not in a background job, which starts with Ctrl+C ignored: dotfiles-sync-edge's Ctrl+C then never reached the sync)
 [[ ! -s $t/int ]] || fail "the tests ran with Ctrl+C ignored: $(sort -u "$t/int")"
 echo "ok ci-test-passes"
