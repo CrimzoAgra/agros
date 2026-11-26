@@ -512,7 +512,6 @@ out=$(DOTS_SETTINGS=$t/bin/dots-settings python3 "$here/.local/share/caelestia-o
     grep -qE '^auth\s.*pam_unix\.so\s+nullok nodelay$' "$t/main-dst/assets/pam.d/passwd" &&
     grep -qE '^auth\s.*pam_faillock\.so\s+preauth nodelay$' "$t/main-dst/assets/pam.d/passwd"; } ||
     fail "the lock's PAM change doesn't fit Caelestia's main: $(grep 'wrong password' <<<"$out")"
-
 # Every member of Caelestia's services (Hypr.focusWorkspace, Colours.palette...) the overlay's code uses is still there:
 # a renamed one patches in fine and reads as undefined without an error (with Hypr.usingLua gone, as Caelestia plans,
 # the dock's clicks went down a branch for the old config language)
@@ -535,10 +534,20 @@ P
 )
 [[ -z $gone ]] || fail "the overlay uses what Caelestia no longer has: $gone"
 
-# Each feature off alone: the others still fit (one that needs it goes off with it, saying so)
+# Each feature off alone: the others still fit (one that needs it goes off with it, saying so), with the bar on the left
+# and on the bottom, AgrOS's default (with the dock, the Scroll Lock icon or the clock's digits off, the bar went back
+# to the left, a change that "no longer fits")
 src=/etc/xdg/quickshell/caelestia
+cat >"$t/bin/dots-settings-bottom" <<S
+#!/bin/sh
+echo "{\"bar.side\": \"bottom\", \"caelestia.\$(cat "$t/off")\": false}"
+S
+chmod +x "$t/bin/dots-settings-bottom"
 for f in $(python3 "$here/.local/share/caelestia-overlay/patch.py" --list | python3 -c 'import json, sys; print(*(f["id"] for f in json.load(sys.stdin)))'); do
     echo "$f" >"$t/off"; rm -rf "$t/one"; cp -as "$src" "$t/one"
+    out=$(DOTS_SETTINGS=$t/bin/dots-settings-bottom python3 "$here/.local/share/caelestia-overlay/patch.py" "$src" "$t/one" 2>&1) ||
+        fail "with $f off, the bar on the bottom: $(grep '^WARNING' <<<"$out")"
+    rm -rf "$t/one"; cp -as "$src" "$t/one"
     out=$(DOTS_SETTINGS=$t/bin/dots-settings python3 "$here/.local/share/caelestia-overlay/patch.py" "$src" "$t/one" 2>&1) ||
         fail "with $f off: $(grep '^WARNING' <<<"$out")"
     # The dock off: the rest of the bar as it was (its place kept as space, Caelestia's own entries all there)

@@ -3248,8 +3248,19 @@ def bar_across(side):
 """, "the clock's dashboard")
     out[bar] = t
 
-    # The icons and texts
+    # The icons and texts. Those of a feature turned off in Settings (or skipped) as Caelestia has them: the bar on its
+    # edge all the same, not back on the left (clock_digits' Digits, scroll_lock's LockStatus.qml, the dock)
     comps = "modules/bar/components/"
+    digits = "    component Digits: Row {\n" in read(comps + "Clock.qml")
+    clock = ("    component Digits: Row {\n        id: digits\n",) if digits else (
+        "        StyledText {\n            Layout.alignment: Qt.AlignHCenter\n            text: Time.hourStr\n",
+        "        StyledText {\n            Layout.topMargin: -parent.spacing - 4\n            Layout.alignment: Qt.AlignHCenter\n"
+        "            text: Time.minuteStr\n",
+        "            sourceComponent: StyledText {\n                text: Time.format(\"ss\")\n")
+    locks = ("        MaterialIcon {\n            id: lockIcon\n",)
+    if "            id: lockIcon\n" not in read(comps + "status/LockStatus.qml"):
+        locks = ("        MaterialIcon {\n            id: capslockIcon\n", "        MaterialIcon {\n            id: numlockIcon\n")
+    dock = os.path.lexists(os.path.join(dst, comps + "Dock.qml"))
     for rel, openings in (
         ("workspaces/Workspace.qml", ("        StyledText {\n            animate: true\n",
                                       "        MaterialIcon {\n            fill: 1\n            grade: 25\n",
@@ -3257,10 +3268,9 @@ def bar_across(side):
                                       # (the focused workspace's random shape: an oval lay on its side)
                                       "        MaterialShape {\n            implicitSize: Tokens.sizes.bar.innerWidth - Tokens.padding.small\n")),
         ("TrayItem.qml", ("    ColouredIcon {\n        id: icon\n",)),
-        ("Clock.qml", ("    component Digits: Row {\n        id: digits\n",
-                       "            sourceComponent: MaterialIcon {\n                text: \"calendar_month\"\n",
-                       "            sourceComponent: ColumnLayout {\n                spacing: layout.spacing - 4\n",
-                       "            sourceComponent: StyledText {\n                text: Time.amPmStr.toLowerCase()\n")),
+        ("Clock.qml", clock + ("            sourceComponent: MaterialIcon {\n                text: \"calendar_month\"\n",
+                               "            sourceComponent: ColumnLayout {\n                spacing: layout.spacing - 4\n",
+                               "            sourceComponent: StyledText {\n                text: Time.amPmStr.toLowerCase()\n")),
         ("StatusIcons.qml", tuple(f"""                        {kind} {{
                             animate: true
                             text: {what}""" for kind, what in (("MaterialIcon", "Icons.getVolumeIcon"),
@@ -3270,28 +3280,22 @@ def bar_across(side):
         ("status/BatteryStatus.qml", ("MaterialIcon {\n    required property color colour\n",)),
         ("status/BluetoothStatus.qml", ("        MaterialIcon {\n            animate: true\n            text: {\n",
                                         "            MaterialIcon {\n                id: device\n")),
-        ("status/LockStatus.qml", ("        MaterialIcon {\n            id: lockIcon\n",)),
+        ("status/LockStatus.qml", locks),
         ("ActiveWindow.qml", ("    MaterialIcon {\n        id: icon\n",)),
-        ("Dock.qml", ("                    IconImage {\n                        // Visual size every icon is scaled to",)),
-    ):
+    ) + ((("Dock.qml", ("                    IconImage {\n                        // Visual size every icon is scaled to",)),)
+         if dock else ()):
         t = read(comps + rel)
         for o in openings:
             t = upright(t, o, f"{rel}'s {o.split()[0].removeprefix('delegate:')}")
         out[comps + rel] = t
     # The dock's open apps on the right of its pinned ones, where a turned column would put them on the left
-    out[comps + "Dock.qml"] = swap(out[comps + "Dock.qml"], "    readonly property bool pinsFirst: false\n",
-                                   "    readonly property bool pinsFirst: true\n", "the dock's order")
-    # (the clock's hours and minutes side by side now: a colon between them)
-    out[comps + "Clock.qml"] = swap(out[comps + "Clock.qml"], """        Digits {
-            Layout.alignment: Qt.AlignHCenter
-            text: Time.hourStr
-        }
-""", f"""        Digits {{
-            Layout.alignment: Qt.AlignHCenter
-            text: Time.hourStr
-        }}
-
-        // caelestia-overlay: the hours and minutes side by side, the bar along an edge: a colon between (bar_side)
+    if dock:
+        out[comps + "Dock.qml"] = swap(out[comps + "Dock.qml"], "    readonly property bool pinsFirst: false\n",
+                                       "    readonly property bool pinsFirst: true\n", "the dock's order")
+    # (the clock's hours and minutes side by side now: a colon between them, before the minutes)
+    minutes = ("        Digits {\n" if digits else f"        StyledText {{\n            {UPRIGHT}\n") + \
+        "            Layout.topMargin: -parent.spacing - 4\n            Layout.alignment: Qt.AlignHCenter\n            text: Time.minuteStr\n"
+    out[comps + "Clock.qml"] = insert(out[comps + "Clock.qml"], minutes, f"""        // caelestia-overlay: the hours and minutes side by side, the bar along an edge: a colon between (bar_side)
         StyledText {{
             {UPRIGHT}
             Layout.topMargin: -parent.spacing - 4
@@ -3300,7 +3304,8 @@ def bar_across(side):
             font: root.font.build()
             color: root.colour
         }}
-""", "the clock's hours")
+
+""")
 
     cw = "modules/bar/popouts/ClipWrapper.qml"
     t = swap(read(cw), "    property real offsetScale: x > 0 || content.hasCurrent ? 0 : 1\n",
