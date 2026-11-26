@@ -391,7 +391,8 @@ def lint(root, rel):
             if l.startswith("Warning: ") and l.endswith(tuple(f"[{k}]" for k in kinds))}
 # The types a module passes on from another (its qmldir's "import <module>"): Qt 6.12.1's qmllint no longer follows
 # those, so one a file does import that way (Quickshell.Hyprland's HyprlandWorkspace, from Quickshell.Hyprland._Ipc)
-# came out unresolved; a misspelt type, or one whose module the file doesn't import, still does
+# came out unresolved; a misspelt type, or one whose module the file doesn't import, still does. The module's own too:
+# one its submodule's type uses (Quickshell's margins, PanelWindow's in Quickshell._Window) came out unresolved as well
 qml = "/usr/lib/qt6/qml"
 def passed_on(module):
     try:
@@ -399,23 +400,36 @@ def passed_on(module):
     except OSError:
         return set()
     names = set()
-    for sub in (l.split()[1] for l in lines if l.startswith("import ") and len(l.split()) > 1):
+    for sub in [module] + [l.split()[1] for l in lines if l.startswith("import ") and len(l.split()) > 1]:
         d = os.path.join(qml, *sub.split("."))
         for f in (os.listdir(d) if os.path.isdir(d) else []):
             if f.endswith(".qmltypes"):
                 names |= set(re.findall(r'"%s/(\w+) [\d.]+"' % re.escape(sub), open(os.path.join(d, f), encoding="utf-8").read()))
     return names
+# (the type: named in an unresolved one; a missing one's, its property's as the file declares it)
 def blind(path, w):
-    ty = re.search(r'"(\w+)"', w)
-    if not (w.endswith("[unresolved-type]") and ty):
-        return False
-    mods = re.findall(r"^import ([\w.]+)\s*$", open(path, encoding="utf-8").read(), re.M)
-    return any(ty[1] in passed_on(m) for m in mods)
+    text = open(path, encoding="utf-8").read()
+    ty = re.search(r'^Type (\w+) is used|"(\w+)"', w) if w.endswith("[unresolved-type]") else None
+    prop = re.search(r'^No type found for property "(\w+)"', w) if w.endswith("[missing-type]") else None
+    name = ty and (ty[1] or ty[2]) or prop and (re.search(r"\bproperty ([\w.]+) %s\b" % prop[1], text) or [None, None])[1]
+    mods = re.findall(r"^import ([\w.]+)\s*$", text, re.M)
+    return bool(name) and any(name in passed_on(m) for m in mods)
+if src == "--blind":  # (--blind <file> <finding>: the check alone, for the self-check below)
+    sys.exit(0 if blind(dst, work) else 1)
+# A file nothing else in the shell makes never loads, so it can't fail: the split shell leaves Caelestia's
+# ContentWindow.qml unmade (its Interactions now AgrOS's, so it wouldn't load). A cast to it doesn't make one: Menu.qml's
+# "win as ContentWindow" is null, as for any other window, even for a type that doesn't load (Qt 6.12's qml tool)
+# (named outside a comment, and not only in a cast: PartBg.qml's comment says it's from ContentWindow.qml)
+texts = {os.path.join(d, f): re.sub(r"(?m)^\s*//.*|\s//.*", "", open(os.path.join(d, f), encoding="utf-8").read())
+         for d, _, files in os.walk(dst) for f in files if f.endswith(".qml")}
+def used(path):
+    name = os.path.basename(path)[:-4]
+    return not name[0].isupper() or any(re.search(r"(?<!\bas )\b%s\b" % name, t) for p, t in texts.items() if p != path)
 tree(src, f"{work}/src"); tree(dst, f"{work}/dst")
 for d, _, files in os.walk(dst):
     for f in files:
         full = os.path.join(d, f)
-        if f.endswith(".qml") and not os.path.islink(full):
+        if f.endswith(".qml") and not os.path.islink(full) and used(full):
             rel = os.path.relpath(full, dst)
             for w in sorted(lint(f"{work}/dst", rel) - lint(f"{work}/src", rel)):
                 if not blind(full, w):
@@ -431,10 +445,25 @@ mkdir -p "$t/lp/src" "$t/lp/dst"
 printf '%s\n' 'import QtQuick' 'import Quickshell.Hyprland' 'QtObject {' '    property HyprlandWorkspace a' \
     '    function f(m: HyprlandMonitor): void {}' '    function g(w: HyprlandWorkspce): void {}' '}' >"$t/lp/dst/Probe.qml"
 printf '%s\n' 'import QtQuick' 'QtObject {' '    function h(c: HyprlandToplevel): void {}' '}' >"$t/lp/dst/NoImport.qml"
+# (both made by the shell; a file nothing makes, only cast to, never loaded: not reported)
+printf '%s\n' 'import QtQuick' 'Item {' '    Probe {}' '    NoImport {}' '    function k(o: QtObject): bool { return (o as Unused) !== null; }' \
+    '}' >"$t/lp/dst/shell.qml"
+printf '%s\n' 'import QtQuick' 'QtObject {' '    function u(c: HyprlandWorkspce): void {}' '}' >"$t/lp/dst/Unused.qml"
 probe=$(lint_new "$t/lp/src" "$t/lp/dst")
 [[ ! -x /usr/lib/qt6/bin/qmllint ]] || { [[ $probe == *'"HyprlandWorkspce"'* && $probe == *'"HyprlandToplevel"'* &&
-    $probe != *'"HyprlandWorkspace"'* && $probe != *'"HyprlandMonitor"'* ]] ||
+    $probe != *'"HyprlandWorkspace"'* && $probe != *'"HyprlandMonitor"'* && $probe != *Unused.qml* ]] ||
     fail "the qmllint check misjudges Quickshell's passed-on types: $probe"; }
+# (Qt 6.12.1's other two forms of it, whatever this Qt's qmllint says: a property of a passed-on type, and Quickshell's
+# own margins on its PanelWindow, not reported; a property of a type no import has, and margins without Quickshell, are)
+printf '%s\n' 'import QtQuick' 'import Quickshell' 'import Quickshell.Hyprland' 'PanelWindow {' \
+    '    required property HyprlandMonitor monitor' '    property Foo foo' '    margins.left: 1' '}' >"$t/lp/Win.qml"
+blind() { python3 -I "$t/lint.py" --blind "$t/lp/$1" "$2"; }
+missing='This may be due to a missing import statement or incomplete qmltypes files. [missing-type]'
+[[ ! -d /usr/lib/qt6/qml/Quickshell/Hyprland ]] || {
+    blind Win.qml "No type found for property \"monitor\". $missing" && ! blind Win.qml "No type found for property \"foo\". $missing" &&
+    blind Win.qml 'Type margins is used but it is not resolved [unresolved-type]' &&
+    ! blind dst/NoImport.qml 'Type margins is used but it is not resolved [unresolved-type]'; } ||
+    fail "the qmllint check misjudges Qt 6.12.1's missing types and Quickshell's margins"
 
 # The bar on the right (Settings: bar.side): the split windows' layout mirrored (drawers/: barEdge), the border's zones
 # swapped, the bar's content and its popouts against its inner edge, the wallpaper's frame and the clock's and the
