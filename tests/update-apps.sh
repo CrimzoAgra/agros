@@ -33,7 +33,8 @@ stub checkupdates 'exit 2'; stub paru 'true'; stub flatpak 'true'; : >"$t/qu"
 # --check: a notification left unclicked until the next check (its timeout) still counts as announced; one the
 # notification server dropped (Caelestia restarted under it) doesn't
 stub checkupdates 'exit 0'; echo "linux 6.1-1 -> 6.2-1" >"$t/qu"
-stub timeout 'shift; exec /usr/bin/timeout 1 "$@"'  # (5h50m: a second here)
+# (its time a second here, but one the real timeout takes: "5h50m" it refused, and nothing was ever offered)
+stub timeout 'd=$1; shift; /usr/bin/timeout "$d" true || exit 125; exec /usr/bin/timeout 1 "$@"'
 mkdir -p "$t/home/.local/bin" "$t/home/.cache"
 seen=$t/home/.cache/update-apps-notified
 check() { HOME=$t/home XDG_CACHE_HOME=$t/home/.cache PATH=$t/bin:$PATH "$here/.local/bin/update-apps" --check; }

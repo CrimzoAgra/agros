@@ -201,7 +201,8 @@ if [[ ${1:-} == --check ]]; then
     # Until the next check at most: a notification no one clicks never says it's gone, and this check would wait (its
     # unit "starting") through the ones after it, so updates that came since went unannounced
     # (124: that time ran out, the notification there all along: not offered again for the same updates)
-    action=$(timeout 5h50m "$helpers/notify-wait" -a "Updates" -i system-software-update -A "default=Update now" "$title" "$names")
+    # (5h50m in seconds: timeout takes one number and unit, "5h50m" failed at once, and no update was ever offered)
+    action=$(timeout 21000 "$helpers/notify-wait" -a "Updates" -i system-software-update -A "default=Update now" "$title" "$names")
     rc=$?
     ((rc == 0 || rc == 124)) && printf '%s\n' "$list" >"$seen"
     # (Settings' Updates runs the update in a unit of its own: this service ending doesn't stop it)

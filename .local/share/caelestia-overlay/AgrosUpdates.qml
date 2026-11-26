@@ -32,6 +32,15 @@ PageBase {
     property string phase: "checking"
     property var items: [] // { kind, name, old, new }
     property var log: []
+    property var logPending: []
+    // (a property, not a child: a page has one child, its content)
+    readonly property Timer logFlush: Timer {
+        interval: 250
+        onTriggered: {
+            root.log = [...root.log, ...root.logPending].slice(-400);
+            root.logPending = [];
+        }
+    }
     property string step: "" // the part being updated now ("System and AUR apps"...)
     property bool failed: false
     property bool listFailed: false // the list couldn't be made (update-apps missing or broken): not "nothing to update"
@@ -68,6 +77,7 @@ PageBase {
 
     function updateAll(): void {
         log = [];
+        logPending = [];
         step = "";
         failed = false;
         phase = "updating";
@@ -187,7 +197,11 @@ PageBase {
                     if (clean.startsWith("== "))
                         root.step = clean.slice(3);
                     root.phase = "updating";
-                    root.log = [...root.log.slice(-400), clean];
+                    // (gathered, shown at most 4 times a second: the whole list made anew for each line, a build's
+                    // hundreds a second (Quickshell's for a new Qt) froze the shell)
+                    root.logPending.push(clean);
+                    if (!root.logFlush.running)
+                        root.logFlush.start();
                 }
             }
             onExited: code => {
@@ -297,10 +311,12 @@ PageBase {
                         icon: root.phase === "done" && root.log.length ? "list" : "refresh"
                         disabled: root.phase !== "ready" && root.phase !== "done"
                         onClicked: {
-                            if (root.phase === "done" && root.log.length)
+                            if (root.phase === "done" && root.log.length) {
                                 root.log = [];
-                            else
+                                root.logPending = [];
+                            } else {
                                 root.check();
+                            }
                         }
                     }
 
