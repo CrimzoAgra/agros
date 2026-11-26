@@ -451,6 +451,9 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
       the result (also if the menu was closed meanwhile) and opens Settings' Updates with that list, not checking
       again (`qs -c caelestia ipc call nexus updates false <file>`, as the 6-hourly check's "Update now" with `true`;
       a list older than 15 minutes is checked anew)
+    - The keyboard back to your window as it (or the power menu) closes: open, they take it (typing, the arrows, Esc),
+      and Hyprland, the window still its active one, didn't give it back (typing went nowhere until Alt+Tab): the
+      active window focused again a moment after (`Drawers.qml`'s `keyboardBack`)
     - Opens over fullscreen games and videos too (`general.showOverFullscreen` in `shell.json`; notifications and
       toasts stay off fullscreen windows), with the whole shell (bar, border) while it's open, hidden again as it
       closes; so do the other panels, from their keys (dashboard, power menu, sidebar, utilities, Super+K) or from the
@@ -1454,7 +1457,9 @@ brings each change; nothing to run by hand).
   the boot image where the install left it out (`/etc/mkinitcpio.conf.d/90-agros-plymouth.conf`: before an `encrypt`
   hook, else last, an older `HOOKS="..."` string split into words first; in the images from the next time they're made),
   so the splash is up from the start. The shutdown's own steps already say nothing on screen: the update install
-  (`auto-update --install`) writes to the journal, its progress on the splash (`plymouth display-message`), and the
+  (`auto-update --install`) writes to the journal, its progress on the splash (`plymouth display-message`: "Updates
+  are underway (N%)", pacman's packages, of those its dry run counts, the first 85, its hooks the rest, 100 once
+  done), and the
   shutdown splash is Plymouth's own (`plymouth-poweroff`/`-reboot`)
 - **`agros-boot`** also: no "no video" between the login screen and the desktop. `system/boot-video-mode` at every boot
   gives the kernel console each connected screen's best mode as a `video=` boot option, and only

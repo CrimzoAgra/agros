@@ -804,6 +804,24 @@ Variants {
             }
         }
 
+        // The keyboard back to your window as the Super or power menu closes: open, they take it (typing, the arrows, Esc),
+        // and Hyprland, the window still its active one, didn't give it back (typing went nowhere until Alt+Tab). A moment
+        // after, once the shell has let go of it; the window you clicked to close it is the active one by then
+        readonly property bool takesKeyboard: screenState.launcher || screenState.session
+        onTakesKeyboardChanged: if (!takesKeyboard)
+            keyboardBack.restart()
+
+        Timer {
+            id: keyboardBack
+
+            interval: 50
+            onTriggered: {
+                const w = Hyprland.activeToplevel;
+                if (w?.address)
+                    Hypr.dispatch(Hypr.usingLua ? `hl.dsp.focus({ window = "address:0x${w.address}" })` : `focuswindow address:0x${w.address}`);
+            }
+        }
+
         // A window going fullscreen closes what's open; the whole shell hidden closes what was opened from the Super menu
         Connections {
             function onHasFullscreenChanged(): void {

@@ -164,6 +164,29 @@ if [[ ${1:-} == --install ]]; then
     result() { printf '%s %s %s\n' "$1" "$(date '+%F %H:%M')" "$(plain <<<"${2:-}")" >"$au/install-result"; rm -f "$au/skipped"; }
     # Said on the splash, where its theme shows messages (the plain one looked stuck for the minutes a kernel takes)
     say() { command -v plymouth >/dev/null && plymouth --ping 2>/dev/null && plymouth display-message --text="$1" 2>/dev/null; true; }
+    # progress <packages>: pacman's output passed on as it is, the splash saying how far it's got: "Updates are underway
+    # (N%)", its packages (each "installing x...", "upgrading x"..., of the <packages> its dry run counted) the first 85,
+    # its hooks after them ("(i/n) ...") the rest; never back, and 100 only once it's done (below)
+    progress() {
+        local total=${1:-0} n=0 hooks=0 pct last=-1 line
+        while IFS= read -r line; do
+            printf '%s\n' "$line"
+            if [[ $line == ":: Running post-transaction hooks"* ]]; then
+                hooks=1
+                continue
+            elif ((hooks)) && [[ $line =~ ^\(\ *([0-9]+)/([0-9]+)\)\  ]]; then
+                pct=$((85 + 15 * BASH_REMATCH[1] / BASH_REMATCH[2]))
+            elif ((!hooks && total > 0)) && [[ $line =~ ^(installing|upgrading|reinstalling|downgrading|removing)\ [^\ ]+(\.\.\.)?$ ]]; then
+                pct=$((85 * ++n / total))
+            else
+                continue
+            fi
+            ((pct < 100)) || pct=99
+            ((pct > last)) || continue
+            last=$pct
+            say "Updates are underway ($pct%)"
+        done
+    }
     # skip <why>: nothing installed this shutdown, counted ("<shutdowns> <since> <why>", agros-check says it 3 in a row)
     skip() {
         echo "$1: nothing installed"
@@ -331,7 +354,7 @@ if [[ ${1:-} == --install ]]; then
     if [[ -s $db/keyrings ]]; then
         mapfile -t keys <"$db/keyrings"
         echo "the keyrings first: ${keys[*]}"
-        say "Installing updates, don't turn the computer off..."
+        say "Updates are underway (0%)"
         if SNAP_PAC_SKIP=y LC_ALL='' LC_MESSAGES=C pacman -S --needed --noconfirm --config "$gated" -- "${keys[@]}"; then
             keyed=": the keyrings installed first, ${keys[*]}"
         else
@@ -416,7 +439,7 @@ if [[ ${1:-} == --install ]]; then
     fi
     # Every package is here (the download finished); the network is still up all the same (ordered after it): pacman
     # hooks may use it (hyprbars' fetches its source). Its output into the log as it goes (cut off: what it got to)
-    say "Installing updates, don't turn the computer off..."
+    say "Updates are underway (0%)"
     result failed "cut off before it finished"  # (until it says otherwise: shutdown's time limit, a power cut)
     # (the AUR builds' repo for this one install: pacman's config with it last, its list in pacman's own)
     conf=$gated
@@ -429,7 +452,13 @@ if [[ ${1:-} == --install ]]; then
     # (SNAP_PAC_SKIP: snap-pac's own snapshots, over DBus, fail at shutdown like snapper's did; the one above covers it)
     # (its messages in English: pacman's "error:" is what the reason below is found by; translated, "erro:" or
     # "Fehler:", it was lost. Messages only: the hooks it runs keep the system's locale)
-    pacman_su() { SNAP_PAC_SKIP=y LC_ALL='' LC_MESSAGES=C pacman -Su --noconfirm --config "$conf" "$@" 2>&1 | tee "$prev/out"; return "${PIPESTATUS[0]}"; }
+    # (its packages counted first, for the splash's percentage: pacman's dry run of the same install)
+    pacman_su() {
+        local total
+        total=$(LC_ALL=C pacman -Sup --config "$conf" --print-format '%n' "$@" 2>/dev/null | grep -c .)
+        SNAP_PAC_SKIP=y LC_ALL='' LC_MESSAGES=C pacman -Su --noconfirm --config "$conf" "$@" 2>&1 | tee "$prev/out" | progress "$total"
+        return "${PIPESTATUS[0]}"
+    }
     args=("${targets[@]}")
     pacman_su "${args[@]}"
     rc=$?
@@ -501,6 +530,7 @@ if [[ ${1:-} == --install ]]; then
         exit 1
     fi
     result ok
+    say "Updates are underway (100%)"
     # (the Qt the shells were rebuilt for, or needed no rebuild for: Updates' update-apps doesn't rebuild them again)
     [[ $target != *qt6-* ]] || /usr/lib/agros/bin/update-kinds --qt-now >"$au/qt-built"
     settled

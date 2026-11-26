@@ -108,6 +108,8 @@ case \$1 in
             echo ":: \$CONFLICT-2-1 and bar-1-1 are in conflict. Remove bar? [y/N] error: unresolvable package conflicts detected"
             echo "error: failed to prepare transaction (conflicting dependencies)"; echo; echo ":: \$CONFLICT-2-1 and bar-1-1 are in conflict"; exit 1
         fi
+        # (\$SU_HOOKS: its hooks after the packages, as pacman numbers them)
+        [ -z "\$SU_HOOKS" ] || printf ':: Running post-transaction hooks...\\n( 1/2) a\\n( 2/2) b\\n'
         [ "\${PACMAN_RC:-0}" = 0 ] || echo "error: boom"; exit \${PACMAN_RC:-0} ;;
     -Sy) echo "sync \$*" >>"$t/syncs"
         case " \$* " in *" --config "*) ;; *) [ -z "\$SY_ERR_FIRST" ] || { echo "\$SY_ERR_FIRST" >&2; exit 1; } ;; esac
@@ -199,6 +201,16 @@ grep -q "^pacman -Su .*(SNAP_PAC_SKIP=y)" "$t/calls" || fail "snap-pac's snapsho
 [[ $(res) == "ok "* ]] || fail "the install's result not written down: $(res)"
 [[ ! -e $t/au/installing && ! -e $t/au/prev ]] || fail "an install that went fine left its marks"
 grep -q "^installing foo" "$t/log" || fail "pacman's output not in the log"
+# The splash says how far it's got: "Updates are underway (N%)", its packages (of those its dry run counted) then its
+# hooks, never back, 100% once done (plymouth: the messages it's given)
+printf '#!/bin/sh\ncase "$1" in --ping) exit 0 ;; display-message) echo "${2#--text=}" >>"%s/splash" ;; esac\n' "$t" >"$t/bin/plymouth"
+chmod +x "$t/bin/plymouth"
+lists; : >"$t/splash"
+SU_HOOKS=1 "$t/auto-update" --install >/dev/null || fail "the install with its hooks failed: $(cat "$t/log")"
+[[ $(sed 's/Updates are underway (\(.*\))/\1/' "$t/splash" | paste -sd' ') == "0% 85% 92% 99% 100%" ]] ||
+    fail "the splash not told how far the install is: $(cat "$t/splash")"
+grep -q "^( 2/2) b" "$t/log" || fail "pacman's output not passed on whole past the splash's count"
+rm "$t/bin/plymouth"
 # The snapshot into the boot menu's list right after it (grub-btrfsd, which would, is stopped at shutdown): by
 # grub-btrfs's own script
 printf '#!/bin/sh\necho "grub-btrfs $*" >>%s/calls\n' "$t" >"$t/grub-btrfs"
