@@ -3096,7 +3096,7 @@ def lock_main_screen():
     # The lock screen's card (clock, password, its buttons: lock_power's too) on the main screen only: the Settings
     # app's (screens.main), else the one focused when it locked; the others show the blurred background alone. Typed
     # there, the password still goes in (the one shared with the main screen's field, its dots shown there): Hyprland
-    # gives the keyboard to the lock surface of the screen the pointer is on
+    # gives the keyboard to the lock surface of the screen the pointer is on. Each screen's background its own wallpaper
     rel = "modules/lock/LockSurface.qml"
     s = read(rel)
     if s.count("        visible: Config.lock.enabled\n") < 1:
@@ -3137,6 +3137,28 @@ def lock_main_screen():
         }
     }
 """, "the main screen's card")
+    # (and each screen its own wallpaper, as the desktop's: screen_wallpapers. Caelestia's CachingImage { path: }, its
+    # main's Visual { source: }: whichever it is, its Wallpapers.current)
+    head = "        id: wallpaperBackground\n"
+    if s.count(head) != 1:
+        raise LookupError("the lock's wallpaper")
+    start = s.index(head)
+    end = s.index("\n    }\n", start)
+    if s.count("Wallpapers.current", start, end) != 1:
+        raise LookupError("the lock's wallpaper")
+    s = s[:start] + s[start:end].replace("Wallpapers.current", "root.screenWallpaper") + s[end:]
+    s = swap(s, "    FileView {\n        id: dotsSettings\n", """    // (this screen's own wallpaper, if the Settings app has one for it: as the desktop's)
+    readonly property string screenWallpaper: {
+        let own = "";
+        try {
+            own = JSON.parse(dotsSettings.text())[`screens.${Hyprland.monitorFor(screen)?.description ?? ""}.wallpaper`] ?? "";
+        } catch (e) {}
+        return typeof own === "string" && own ? own : Wallpapers.current;
+    }
+
+    FileView {
+        id: dotsSettings
+""", "the lock's wallpaper")
     return {rel: s}
 
 
