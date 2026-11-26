@@ -479,7 +479,7 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
     - One neutral colour whatever their urgency
     - A click (pop-up or in the sidebar) runs the notification's action, like its button, and brings the app that
       sent it to the front
-  - Lock screen: like the login screen (blurred, dimmed wallpaper, a text cursor, its elements coming down onto the
+  - Lock screen: like the login screen (blurred, dimmed wallpaper, each screen's own, a text cursor, its elements coming down onto the
     screen from in front of it, out of focus and sharpening, from the centre outward); a wrong password said at once
     (its own PAM config, `assets/pam.d/passwd`, with nodelay on pam_unix and pam_faillock; pam_faillock still counts
     and locks out); sleep, restart and power off buttons, bottom right like the login screen's; notifications only
@@ -719,7 +719,7 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
     as Hyprland starts (`--login`): after a Hyprland update or a patch change it rebuilds in the background, with the
     packaged build meanwhile (`agros-hyprbars`: the same patch, built by `hyprbars-build` in CI for the Hyprland
     there, in place of the AUR's plain one; loaded only when built for the running Hyprland, its commit in it and its
-    ABI hash in the stamp beside it, `/usr/lib/libhyprbars.so.built-for`: on any other, a point release or the same one
+    ABI hash in the stamp beside it, `/usr/lib/libhyprbars.built-for`: on any other, a point release or the same one
     rebuilt against other libraries too, the plugin's own check refuses it with a red "Version mismatch" error on
     screen), and a notification if the build fails. No build at all when the packaged one is that very build (its
     stamp has this Hyprland's ABI hash and this patch's sum): a new account's first login, and the update's build for
@@ -929,7 +929,8 @@ helper a package update just brought works before `agros-links` has linked it), 
   (`update-apps`, after its `paru -Su`, through paru's sudo) reinstall what it names; that failing never fails the
   update (said, tried again after the next one)
 - **`.local/bin/update-kinds`**: the kinds of update, how each is listed (`--list`, what Settings' Updates page shows: system,
-  aur, firmware, flatpak, appimage, proton, dev) and run (`update-kinds <kind>...`), and the Qt installed
+  aur, firmware, flatpak, appimage, proton, dev; each kind's check at the same time, mostly waiting on its server, the
+  list in that order: 4 seconds, not 13) and run (`update-kinds <kind>...`), and the Qt installed
   (`--qt-now`): `update-apps` and the boot's `auto-update` (as each user, `--boot`) both run it, its updates never as
   root (its queries, `--qt-now` and the runtimes' below, also from root's `auto-update`), one run at a time per user
   (a lock in `~/.local/state/agros`: the boot's and Updates' worked on the same Proton folders at once), and one list
@@ -1494,6 +1495,12 @@ brings each change; nothing to run by hand).
   systemd thaws the user sessions it froze (without NVIDIA's `SYSTEMD_SLEEP_FREEZE_USER_SESSIONS=0`, a VM's case), when
   Hyprland can't answer. Caelestia's idle still counts you idle until you touch something, so it doesn't switch them
   off again until then
+- **Screens asleep together** (`desktop.lua`): a DisplayPort screen switched off disconnects (the MSI, seconds after
+  `dpms off`), and Hyprland switches on any screen that connects, whatever the others are, so one lit up alone while
+  the rest slept; one that connects while every other screen sleeps is switched off with them (a key or the mouse
+  wakes them all). A screen gone, the pointer is moved to where it is: Hyprland hands the lock screen's keyboard to the
+  screen under the pointer only as the pointer moves, so with the one that had it gone, typing went nowhere till a
+  click (`tests/screens-sleep.sh`)
 - **`agros-system`** also: AgrOS's name in `/etc/os-release` and `/etc/lsb-release` (`agros-branding`, a pacman hook
   run after CachyOS's own, `zz-agros-os-release.hook`; `ID_LIKE` keeps cachyos and arch; its removal puts the old
   name back), and, in a VMware VM, `/etc/vmware-tools/tools.conf` with `resolutionKMS` on, so VMware's tools pass a
