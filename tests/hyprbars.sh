@@ -31,18 +31,24 @@ grep -qx -- "-i 0 plugin load $t/pkg/libhyprbars.so" "$t/login-calls" || fail "-
 login 2222222222222222222222222222222222222222 || fail "--login on another Hyprland failed"
 grep -q 'plugin load' "$t/login-calls" && fail "--login: the packaged one loaded on a Hyprland it wasn't built for: $(cat "$t/login-calls")"
 # ...nor on the same commit rebuilt against other libraries (its ABI hash, which the package's stamp beside it has)
-echo "1111111111111111111111111111111111111111_aq_0.11 x" >"$t/pkg/libhyprbars.so.built-for"
+echo "1111111111111111111111111111111111111111_aq_0.11 x" >"$t/pkg/libhyprbars.built-for"
 : >"$t/login-calls"
 login 1111111111111111111111111111111111111111 || fail "--login on a rebuilt Hyprland failed"
 grep -q 'plugin load' "$t/login-calls" && fail "--login: the packaged one loaded on a Hyprland rebuilt against other libraries"
-echo "1111111111111111111111111111111111111111_aq_0.12 x" >"$t/pkg/libhyprbars.so.built-for"
+# (a package from before the stamp's new name: its libhyprbars.so.built-for read)
+mv "$t/pkg/libhyprbars.built-for" "$t/pkg/libhyprbars.so.built-for"
+: >"$t/login-calls"
+login 1111111111111111111111111111111111111111 || fail "--login with the old stamp failed"
+grep -q 'plugin load' "$t/login-calls" && fail "--login: the old-named stamp not read"
+rm "$t/pkg/libhyprbars.so.built-for"
+echo "1111111111111111111111111111111111111111_aq_0.12 x" >"$t/pkg/libhyprbars.built-for"
 : >"$t/login-calls"
 login 1111111111111111111111111111111111111111 || fail "--login with the packaged stamp failed"
 grep -qx -- "-i 0 plugin load $t/pkg/libhyprbars.so" "$t/login-calls" || fail "--login: the packaged one, its stamp this Hyprland's, not loaded"
 # The packaged one this very build (its stamp: this Hyprland's ABI hash and this patch): loaded, and nothing built (a
 # new account's first login compiled the same plugin again, and offline said its bars had no highlight)
 echo "1111111111111111111111111111111111111111_aq_0.12 $(sha256sum "$t/lhome/.local/share/hyprbars/hyprbars.patch" | cut -d' ' -f1)" \
-    >"$t/pkg/libhyprbars.so.built-for"
+    >"$t/pkg/libhyprbars.built-for"
 : >"$t/login-calls"
 rm -f "$t/lhome/.cache/hyprbars-build.log"
 LOADED=1 login 1111111111111111111111111111111111111111 || fail "--login with the packaged one this very build failed"
@@ -51,12 +57,12 @@ grep -qx -- "-i 0 plugin load $t/pkg/libhyprbars.so" "$t/login-calls" || fail "-
     fail "--login built again what the packaged one already is: $(cat "$t/lhome/.cache/hyprbars-build.log")"
 # ...one of an older patch (its sum another): loaded meanwhile, the build tried, and its failure said as it is: the
 # packaged title bars in use, which have the highlight (it said they had none)
-echo "1111111111111111111111111111111111111111_aq_0.12 0000" >"$t/pkg/libhyprbars.so.built-for"
+echo "1111111111111111111111111111111111111111_aq_0.12 0000" >"$t/pkg/libhyprbars.built-for"
 rm -f "$t/notified"
 LOADED=1 login 1111111111111111111111111111111111111111 || fail "--login with an older patch's packaged one failed"
 [[ $(cat "$t/notified" 2>/dev/null) == *"the packaged ones for now"* && $(cat "$t/notified") != *"no hover highlight"* ]] ||
     fail "--login's failed build with the packaged one loaded not said as it is: $(cat "$t/notified" 2>/dev/null)"
-rm "$t/pkg/libhyprbars.so.built-for"
+rm "$t/pkg/libhyprbars.built-for"
 # On the live USB: at login the packaged one is loaded (the installer's title bar), again only when it was built for
 # that Hyprland; nothing built; otherwise nothing at all
 mkdir -p "$t/live"
@@ -91,7 +97,7 @@ rm "$t/ph/.local/lib/hyprbars/libhyprbars.so" "$t/ph/.local/lib/hyprbars/built-f
 mkdir -p "$t/phpkg" "$t/phbin"
 : >"$t/phpkg/libhyprbars.so"
 echo "abc_aq_0.1_hu_0.1_hg_0.1_hc_0.1 $(sha256sum "$here/.local/share/hyprbars/hyprbars.patch" | cut -d' ' -f1)" \
-    >"$t/phpkg/libhyprbars.so.built-for"
+    >"$t/phpkg/libhyprbars.built-for"
 printf '#!/bin/sh\necho "git $*" >>%s/ph-git\nexit 1\n' "$t" >"$t/phbin/git"
 chmod +x "$t/phbin/git"
 out=$(HOME=$t/ph HYPRBARS_LIVE=$t/nolive HYPRBARS_VERSION_H=$t/ph.h HYPRBARS_PACKAGED=$t/phpkg/libhyprbars.so \
