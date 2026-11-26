@@ -171,13 +171,15 @@ function dots.without_warps(fn)
 end
 apply_mode_settings(window_mode())
 
--- Windows resize by dragging their edges, as on Windows: from just outside the 1-px border, 15 px out (Hyprland's
--- extend_border_grab_area: it spans the gaps), and the rounded corners. Floating and tiled windows alike, not
--- fullscreen ones (nor a tiled one Hyprland maximised); a maximised one stops being maximised (dots.window_drag_start).
+-- Windows resize by dragging their edges, as on Windows: from just outside the 1-px border, 6 px out (Hyprland's
+-- extend_border_grab_area: from both sides it spans the 10-px gap between tiled windows. Its own 15 covered half the
+-- title bar of a window cascaded 32 px behind another, a press there resizing the front one), and the rounded
+-- corners. Floating and tiled windows alike, not fullscreen ones (nor a tiled one Hyprland maximised); a maximised one
+-- stops being maximised (dots.window_drag_start).
 -- With the title bar plugin (my patch), an edge moves only that edge (Hyprland's own moves the nearest corner), and a
 -- window with a bar resizes upwards from the bar's top. Hyprland has it off by default, and Caelestia doesn't set it.
 -- Off while a game is open (apps.lua: its border band reached the next screen and the screen's corners)
-hl.config({ general = { resize_on_border = true } })
+hl.config({ general = { resize_on_border = true, extend_border_grab_area = 6 } })
 
 -- Raising -------------------------------------------------------------------------------------------------------------
 
