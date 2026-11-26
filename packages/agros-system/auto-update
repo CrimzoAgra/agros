@@ -572,7 +572,39 @@ gated=$au/pacman.conf
 # (download-failed), for the shutdown's note that agros-check says: an expired key, a dependency that can't be had.
 # In English: "error:" is what's looked for)
 err=$au/download-err
+# rotated <pacman.conf> <out>: it with each mirror list it includes taken with its first mirror last (copies beside
+# it). pacman doesn't go on to the next mirror for a database or a package whose signature fails (a mirror caught
+# mid-sync, or serving a bad file): the same first one failed every boot's download
+rotated() {
+    local inc
+    cp "$1" "$2"
+    while read -r inc; do
+        [[ -r $inc ]] || continue
+        awk '/^[[:space:]]*Server[[:space:]]*=/ && first == "" { first = $0; next } { print } END { if (first != "") print first }' \
+            "$inc" >"$au/${inc##*/}.rotated"
+        sed -i "s|^\\([[:space:]]*Include[[:space:]]*=[[:space:]]*\\)${inc}[[:space:]]*\$|\\1$au/${inc##*/}.rotated|" "$2"
+    done < <(sed -n 's/^[[:space:]]*Include[[:space:]]*=[[:space:]]*\([^[:space:]]*mirrorlist[^[:space:]]*\).*/\1/p' "$1" | sort -u)
+}
+# (the lists synced; failing, once more with each mirror list's next mirror first. Still failing for a repo whose list
+# a sync before left (its server down: Pages and R2 both, or a mirror's): the others' updates go on, Arch's and
+# CachyOS's security fixes among them, that repo's from its list from before, said. An error naming no repo's list
+# (pacman's lock, a full disk): nothing downloaded, as before)
+synced=0
 if LC_ALL='' LC_MESSAGES=C pacman -Sy --noconfirm --dbpath "$db" --logfile /dev/null 2>"$err"; then
+    synced=1
+else
+    echo "the lists' sync failed: tried again with each mirror list's next mirror first"
+    rotated /etc/pacman.conf "$au/rotated.conf"
+    if LC_ALL='' LC_MESSAGES=C pacman -Sy --noconfirm --config "$au/rotated.conf" --dbpath "$db" --logfile /dev/null 2>"$err"; then
+        synced=1
+    else
+        mapfile -t stale < <(sed -nE "s/^error: failed retrieving file '([^']+)\\.db'.*/\\1/p; s/^error: failed to update ([^ ]+) .*/\\1/p" "$err" | sort -u)
+        synced=${#stale[@]}
+        for r in "${stale[@]}"; do [[ -s $db/sync/$r.db ]] || synced=0; done
+        ((synced)) && echo "!! the lists of ${stale[*]} couldn't be synced: the others' updates go on, theirs from the lists from before"
+    fi
+fi
+if ((synced)); then
     # AgrOS's own update code first, from these lists (as the shutdown's install: update-first), so this download's
     # decisions (the upstream gate's, the AUR builds') are the new code's: installed alone, under pacman's own lock too
     # (made as pacman makes it, the file created only where there's none: these lists' lock is their own, and the
@@ -607,8 +639,12 @@ if LC_ALL='' LC_MESSAGES=C pacman -Sy --noconfirm --dbpath "$db" --logfile /dev/
         LC_ALL='' LC_MESSAGES=C pacman -Sw --noconfirm --config "$gated" --dbpath "$db" --logfile /dev/null -- "${keys[@]}" 2>>"$err"; then
         printf '%s\n' "${keys[@]}" >"$db/keyrings"
     fi
-    LC_ALL='' LC_MESSAGES=C pacman -Suw --noconfirm --config "$gated" --dbpath "$db" --logfile /dev/null 2>>"$err" &&
+    # (failing, once more with each mirror list's next mirror first: a bad package from the first one)
+    if LC_ALL='' LC_MESSAGES=C pacman -Suw --noconfirm --config "$gated" --dbpath "$db" --logfile /dev/null 2>>"$err" || {
+        rotated "$gated" "$au/rotated.conf" && echo "the download failed: tried again with each mirror list's next mirror first" &&
+            LC_ALL='' LC_MESSAGES=C pacman -Suw --noconfirm --config "$au/rotated.conf" --dbpath "$db" --logfile /dev/null 2>>"$err"; }; then
         touch "$db/complete"
+    fi
 else
     cp /etc/pacman.conf "$gated"
 fi

@@ -109,7 +109,9 @@ case \$1 in
             echo "error: failed to prepare transaction (conflicting dependencies)"; echo; echo ":: \$CONFLICT-2-1 and bar-1-1 are in conflict"; exit 1
         fi
         [ "\${PACMAN_RC:-0}" = 0 ] || echo "error: boom"; exit \${PACMAN_RC:-0} ;;
-    -Sy) [ -z "\$SY_ERR" ] || { echo "\$SY_ERR" >&2; exit 1; }; exit 0 ;;
+    -Sy) echo "sync \$*" >>"$t/syncs"
+        case " \$* " in *" --config "*) ;; *) [ -z "\$SY_ERR_FIRST" ] || { echo "\$SY_ERR_FIRST" >&2; exit 1; } ;; esac
+        [ -z "\$SY_ERR" ] || { echo "\$SY_ERR" >&2; exit 1; }; exit 0 ;;
     -Sw) echo "keyrings-download \$*" >>"$t/calls" ;;
     -S) echo "pacman \$* (SNAP_PAC_SKIP=\$SNAP_PAC_SKIP)" >>"$t/calls"; exit \${KEYRING_RC:-0} ;;
     -Si) [ -z "\$SI_NEW" ] || echo "Version         : \$SI_NEW"; exit 0 ;;
@@ -406,7 +408,8 @@ sig="error: failed to commit transaction (invalid or corrupted package (PGP sign
 QU=$'archlinux-keyring 20261001-1 -> 20261115-1
 cachyos-keyring 1-1 -> 2-1 [ignored]
 foo 1-1 -> 2-1' SUW_ERR=$sig     "$t/auto-update" || fail "the boot with the download failing on a key failed"
-[[ $(grep -E '^(keyrings-)?download -S' "$t/calls" | cut -d' ' -f1 | paste -sd' ') == "keyrings-download download" ]] &&
+[[ $(grep -E '^(keyrings-)?download -S' "$t/calls" | cut -d' ' -f1 | paste -sd' ') == "keyrings-download download download" ]] &&
+    grep -q "^download -Suw .*--config $t/au/rotated.conf " "$t/calls" &&
     grep -qE '^keyrings-download -Sw .* -- archlinux-keyring$' "$t/calls" ||
     fail "the keyrings not downloaded alone before the rest (nor only the one not held back): $(cat "$t/calls")"
 [[ $(cat "$t/au/db/keyrings" 2>/dev/null) == archlinux-keyring && ! -e $t/au/db/complete &&
@@ -433,6 +436,33 @@ lists; rm "$t/au/db/complete"; : >"$t/calls"
 "$t/auto-update" --install || fail "the install after a failed sync failed"
 [[ ! -s $t/calls && $(cut -d' ' -f3- "$t/au/skipped") == "the boot's download didn't finish (error: failed to synchronize all databases)" ]] ||
     fail "installed after a failed sync, or not said with its error: $(cat "$t/calls") $(cat "$t/au/skipped")"
+# The lists' sync failing (a mirror mid-sync, a bad signature): once more with each mirror list's next mirror first
+: >"$t/syncs"
+SY_ERR_FIRST="error: core: signature from \"x\" is invalid" "$t/auto-update" >/dev/null || fail "the boot whose first sync failed failed"
+[[ -e $t/au/db/complete && $(grep -c '^sync ' "$t/syncs") == 2 ]] && grep -q "^sync -Sy .*--config $t/au/rotated.conf " "$t/syncs" ||
+    fail "a failed sync not tried again with the next mirrors first: $(cat "$t/syncs")"
+# (that copy of this machine's pacman.conf: its mirror lists, as Arch's and CachyOS's have them, the rotated ones)
+! grep -q '^Include *= */etc/pacman.d/.*mirrorlist' /etc/pacman.conf || grep -q "^Include *= *$t/au/.*mirrorlist.rotated$" "$t/au/rotated.conf" ||
+    fail "the sync tried again with the same mirrors: $(grep Include "$t/au/rotated.conf")"
+# (rotated, auto-update's own: each mirror list the copy includes with its first mirror last, the rest as it was)
+eval "$(sed -n '/^rotated() {$/,/^}$/p' "$au/auto-update")"
+printf '%s\n' 'Server = a' 'Server = b' '# c' 'Server = c' >"$t/my-mirrorlist"
+printf '%s\n' '[options]' "Include = $t/agros-gate.conf" '[core]' "Include = $t/my-mirrorlist" >"$t/rc"
+(au=$t/au; rotated "$t/rc" "$t/rc.out")
+grep -qx "Include = $t/au/my-mirrorlist.rotated" "$t/rc.out" && grep -qx "Include = $t/agros-gate.conf" "$t/rc.out" &&
+    [[ $(grep '^Server' "$t/au/my-mirrorlist.rotated" | paste -sd,) == "Server = b,Server = c,Server = a" ]] ||
+    fail "the mirror lists not rotated: $(cat "$t/rc.out" "$t/au/my-mirrorlist.rotated" 2>&1)"
+# Still failing for one repo's list only, a list from before there: the others' updates go on, said; none from before:
+# nothing downloaded, as for an error naming no repo (above)
+echo old >"$t/au/db/sync/agros.db"
+SY_ERR="error: failed retrieving file 'agros.db' from agros.invalid : The requested URL returned error: 503
+error: failed to synchronize all databases (unexpected error)" "$t/auto-update" || fail "the boot with [agros] unreachable failed"
+[[ -e $t/au/db/complete ]] && grep -q "^!! the lists of agros couldn't be synced: the others' updates go on" "$t/log" ||
+    fail "one repo's list failing stopped the whole download: $(tail -5 "$t/log")"
+rm "$t/au/db/sync/agros.db"
+SY_ERR="error: failed retrieving file 'agros.db' from agros.invalid : The requested URL returned error: 503
+error: failed to synchronize all databases (unexpected error)" "$t/auto-update" || fail "the boot with [agros] unreachable, no list, failed"
+[[ ! -e $t/au/db/complete ]] || fail "downloaded with a repo that has never had a list"
 # ...and a download that finished: its error and keyrings gone
 "$t/auto-update" || fail "the boot's download failed"
 [[ -e $t/au/db/complete && ! -e $t/au/download-failed && ! -e $t/au/db/keyrings ]] || fail "a finished download kept the last one's error or keyrings"

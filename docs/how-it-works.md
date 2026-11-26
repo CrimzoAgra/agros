@@ -1199,7 +1199,11 @@ brings each change; nothing to run by hand).
   shutdown, after a Snapper snapshot (installed under the running session, a new NVIDIA driver or kernel broke games and
   USB devices until a reboot): the system, kernel and CachyOS gaming packages, the AUR apps, and firmware. The keyrings
   (Arch's, CachyOS's, AgrOS's) are downloaded alone first and installed first: a key expired on the machine doesn't stop
-  the rest's download for good.
+  the rest's download for good. A sync or a download that fails is tried once more with each mirror list's next mirror
+  first (`rotated`: pacman doesn't go on to the next mirror for a file whose signature fails, and the same first one
+  failed every boot). Still failing for a repo whose list a sync before left (its server down: `[agros]`'s Pages and R2
+  both): the others' updates go on, Arch's and CachyOS's security fixes among them, that repo's from its list from
+  before, said; an error that names no repo's list stops the download, as before.
   - Not on a snapshot booted from the menu (the root an overlay in RAM): nothing downloaded or installed, said in the
     log
   - **AgrOS's own update code first** (`update-first`): at shutdown, once the boot's lists are in pacman's place and
