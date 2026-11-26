@@ -27,7 +27,9 @@ conflicts=('hyprland-plugin-hyprbars')
 replaces=('hyprland-plugin-hyprbars')
 
 pkgver() {
-    cd "$_root" && printf '%s.r%s.%s' "${_hypr//-/_}" "$(git rev-list --count HEAD -- "${_inputs[@]}")" \
+    # (an epoch's ':' as a '_' too: no pkgver has one, and its number first keeps it newer than any without, as pacman has
+    # Hyprland's)
+    cd "$_root" && printf '%s.r%s.%s' "${_hypr//[:-]/_}" "$(git rev-list --count HEAD -- "${_inputs[@]}")" \
         "$(git log -1 --format=%h -- "${_inputs[@]}")"
 }
 
