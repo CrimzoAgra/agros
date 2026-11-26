@@ -11,8 +11,9 @@ sed "s|@T@|$t|g" >"$t/bin/gh" <<'GH'
 echo "gh $*" >>@T@/gh.log
 case "$1 $2" in
   "issue list") [[ -e @T@/listfail ]] && exit 1; cat @T@/open 2>/dev/null; true ;;
-  "issue create"|"issue edit"|"issue close")
-    [[ -e @T@/writefail ]] && exit 1
+  "issue view") [[ -e @T@/listfail ]] && exit 1; cat @T@/title 2>/dev/null; true ;;
+  "issue create"|"issue edit"|"issue close"|"issue comment")
+    [[ -e @T@/writefail || ( -e @T@/commentfail && $2 == comment ) ]] && exit 1
     b=; for a; do [[ $p == --body-file ]] && { cp "$a" @T@/body; b=$a; }; p=$a; done
     # (as GitHub: a body over 65536 characters refused)
     [[ -z $b || $(wc -m <"$b") -le 65536 ]] ;;
@@ -21,7 +22,7 @@ GH
 chmod +x "$t/bin/gh"
 # (the held list and the tests' report empty files unless a case gives its own, as the report job downloads them)
 : >"$t/none"
-go() { rm -f "$t/gh.log"; PATH=$t/bin:$PATH RUN_URL=https://run AGROS_RETRY_WAIT=0 HELD=$t/none REPORT=$t/none "$@" "$here/ci/report.sh" >/dev/null; grep -v '^gh issue list\|^gh label' "$t/gh.log" || true; }
+go() { rm -f "$t/gh.log"; PATH=$t/bin:$PATH RUN_URL=https://run AGROS_RETRY_WAIT=0 HELD=$t/none REPORT=$t/none "$@" "$here/ci/report.sh" >/dev/null; grep -v '^gh issue list\|^gh issue view\|^gh label' "$t/gh.log" || true; }
 said() { local rc=0; rm -f "$t/gh.log"; PATH=$t/bin:$PATH RUN_URL=https://run AGROS_RETRY_WAIT=0 HELD=$t/none REPORT=$t/none "$@" "$here/ci/report.sh" >/dev/null 2>&1 || rc=$?; return "$rc"; }
 echo "quickshell-git: AgrOS's fix didn't build" >"$t/held"
 [[ $(go env BUILD=success RELEASE=success RESULT=ok HELD="$t/held") == "gh issue create --label held --title Held back: built and tested, but some packages were held back (below) --body-file "* ]] ||
@@ -129,4 +130,20 @@ out=$(go env BUILD=success RELEASE=success RESULT=ok HELD="$t/held")
     fail "a second open issue not closed: $out"
 out=$(go env BUILD=success RELEASE=success RESULT=ok)
 [[ $out == "gh issue close 12 "*$'\n'"gh issue close 14 "* ]] || fail "not every open issue closed once all went out: $out"
+# The open one brought up to date with a new state: said in a comment too (an edit notifies no one: a Heads-up turned
+# into nothing published went unseen until Friday's status); the same state again, or its title not read: as said
+rm -f "$t/title"; echo 12 >"$t/open"
+echo "Heads-up: upstream's next release no longer fits AgrOS's changes" >"$t/title"
+out=$(go env BUILD=success RESULT=fail REPORT="$t/report")
+[[ $out == "gh issue edit 12 --title Held back: AgrOS's own code fails its tests --body-file "*$'\n'"gh issue comment 12 --body Now **AgrOS's own code fails its tests: nothing published**: https://run" ]] ||
+    fail "a new state of the open issue not said in a comment: $out"
+echo "Held back: AgrOS's own code fails its tests" >"$t/title"
+out=$(go env BUILD=success RESULT=fail REPORT="$t/report")
+[[ $out == "gh issue edit 12 "* && $out != *"issue comment"* ]] || fail "the same state commented on again: $out"
+rm "$t/title"
+[[ $(go env BUILD=success RESULT=fail REPORT="$t/report") == *"gh issue comment 12 "* ]] || fail "a title not read: no comment"
+echo "Heads-up: x" >"$t/title"; touch "$t/commentfail"
+! said env BUILD=success RESULT=fail REPORT="$t/report" || fail "the comment couldn't be written, and the report job passed"
+[[ $(grep -c '^gh issue comment' "$t/gh.log") == 3 ]] || fail "the comment not tried three times: $(cat "$t/gh.log")"
+rm -f "$t/commentfail" "$t/title" "$t/open"
 echo "ok ci-report"

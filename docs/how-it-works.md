@@ -1634,7 +1634,8 @@ breaks something holds back that one piece, never the rest (`.github/workflows/c
   is, nothing is signed or put out (no ISO either) and the report job says nothing.
 - **One issue** (`ci/report.sh`, label `held`) says what was held back or why nothing went out (or, as "Heads-up", what
   of upstream's next release doesn't fit), brought up to date by each run and closed by itself once one puts everything
-  out again with none of these. GitHub notifies of it. (GitHub's API failing: each call tried three times, then the
+  out again with none of these. GitHub notifies of it, and of a new state of the open one, said in a comment too (an
+  edit notifies no one). (GitHub's API failing: each call tried three times, then the
   report job fails, so the run and the Friday status show it; never a second issue, and one that turns up anyway is
   closed beside the first. So does a release that went through whose held list or test report the report job couldn't
   download: read as nothing held, it closed the issue as all out. A test report too long for an issue, GitHub's 65536 characters, is cut short, said: the

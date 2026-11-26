@@ -2,7 +2,8 @@
 # CI's word on a run, as one GitHub issue (label "held"): opened, or brought up to date, when something was held back
 # or nothing went out, or upstream's next release no longer fits AgrOS's changes (the report's AHEAD lines: nothing held,
 # but a change to make before that release); closed, said why, once a run puts everything out with none of these. GitHub
-# notifies of each (the repo's watchers: its owner), and the Friday status lists it while it's open. From the report
+# notifies of each (the repo's watchers: its owner; a new state of the open one in a comment, as an edit notifies no
+# one), and the Friday status lists it while it's open. From the report
 # job, gh with GH_TOKEN (issues: write). Environment:
 #   RESULT   the tests' (ci/test-passes.sh): ok, hold-agros, hold-upstream, fail; empty: they didn't run
 #   BUILD    the build job's result (success, failure...); RELEASE the release job's, the sign job's after it, or
@@ -103,7 +104,11 @@ gh label create held --color D93F0B --description "CI held something back" --for
 title="$title: ${state%%:*}"
 rc=0
 if [[ -n $first ]]; then
+    # (an edit notifies no one: a new state, a Heads-up turned into nothing published, also said in a comment, which
+    # GitHub notifies of. Its title not read: said, as a new one)
+    was=$(gh issue view "$first" --json title -q .title 2>/dev/null) || was=
     again gh issue edit "$first" --title "$title" --body-file "$body" || rc=1
+    ((rc)) || [[ $was == "$title" ]] || again gh issue comment "$first" --body "Now **$state**: $RUN_URL" || rc=1
     for n in $others; do again gh issue close "$n" --comment "A second copy of #$first: said there" || rc=1; done
 else
     again gh issue create --label held --title "$title" --body-file "$body" || rc=1
