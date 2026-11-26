@@ -81,9 +81,9 @@ else
 fi
 # Quickshell uses Qt's private parts: a Qt version it wasn't rebuilt for can stop the shells from starting (the Qt it
 # was built for: written down by update-apps, which rebuilds it)
-# (update-apps compares them, as it writes them)
+# (update-apps compares them, as it writes them; and asks Quickshell's own check)
 "$helpers/update-apps" --qt-stale &&
-    problems+=("Qt was updated after Quickshell: $run_updates (it rebuilds Quickshell and Caelestia for it)")
+    problems+=("Quickshell isn't built for the Qt installed: $run_updates (it rebuilds Quickshell and Caelestia for it; one AgrOS rebuilt is rebuilt at the next boot)")
 # (both folders named by the tests only)
 au=${AUTO_UPDATE_DIR:-/var/lib/auto-update}
 pacdb=${PACMAN_DB_DIR:-/var/lib/pacman}

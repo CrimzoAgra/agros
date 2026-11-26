@@ -173,6 +173,10 @@ printf '#!/bin/sh\n[ "$1" != list-jobs ] || { [ -z "$JOBS_FAIL" ] || exit 1; pri
 export JOBS="  41 poweroff.target start waiting"
 chmod +x "$t/bin/"* "$t/auto-update" "$t/auto-update-aur"
 export PATH=$t/bin:$PATH QU="foo 1-1 -> 2-1"
+# (Quickshell built for the Qt here, whatever this machine's own says: update-kinds --qt-mismatch)
+printf '#!/bin/sh
+exit 0
+' >"$t/bin/quickshell"; chmod +x "$t/bin/quickshell"
 # pacman's list the one an earlier install put there (copied before cp -p: its time the copy's, now), the download's
 # newer but with the mirror's time, earlier: still taken (by content, it's this one's own copy)
 lists() {
@@ -644,6 +648,20 @@ lists; built; echo "equibop: its build failed" >"$aurdir/failed"; : >"$t/calls"
 QU=$newqt Q_HAVE=0.3-1 "$t/auto-update" --install >/dev/null
 [[ $(res) == "ok "* ]] && grep -q '^pacman -Su .* agros-aur/quickshell-git' "$t/calls" ||
     fail "a new Qt held back for an unrelated AUR app's failed build: $(res) $(cat "$t/calls")"
+# Quickshell's own check failing for the Qt already here (no new Qt: update-kinds --qt-mismatch): the boot's rebuild
+# for it installed with the rest; one that failed holds nothing back (the shell runs on that Qt already)
+printf '#!/bin/sh\nexit 1\n' >"$t/bin/quickshell"; chmod +x "$t/bin/quickshell"
+lists; built; echo "qt6-base 0.3-1 qt6-declarative 0.3-1 " >"$aurdir/runtime-target"; : >"$t/calls"
+Q_HAVE=0.3-1 "$t/auto-update" --install >/dev/null || fail "the install with a rebuild for the Qt here failed: $(tail -5 "$t/log")"
+[[ $(res) == "ok "* ]] && grep -q '^pacman -Su .* agros-aur/quickshell-git' "$t/calls" ||
+    fail "Quickshell's rebuild for the Qt here not installed: $(res) $(cat "$t/calls")"
+lists; built; rm "$aurdir/built"; echo "quickshell-git: its build failed" >"$aurdir/failed"; : >"$t/calls"
+Q_HAVE=0.3-1 "$t/auto-update" --install >/dev/null || fail "the install with a failed rebuild for the Qt here failed"
+[[ $(res) == "ok "* ]] && grep -q '^pacman -Su' "$t/calls" ||
+    fail "the update held back for a failed rebuild for the Qt already here: $(res) $(cat "$t/calls")"
+printf '#!/bin/sh
+exit 0
+' >"$t/bin/quickshell"
 # AUR apps pacman can't install (a file conflict): the rest installed without them, said; not when a new runtime needs
 # them (failed, the lists back)
 lists; built; : >"$aurdir/rebuild"; : >"$t/calls"

@@ -1219,8 +1219,12 @@ brings each change; nothing to run by hand).
     runtimes are one list, `update-kinds`' (`runtimes`, which `update-apps` uses too): Qt (`qt6-base`,
     `qt6-declarative`: any new version; what needs them, Quickshell, Caelestia, qtengine, qt6-m3shapes..., uses Qt's
     private parts and won't start on another Qt) and Python (a new minor version, 3.13 to 3.14: the packages with files
-    in the old `/usr/lib/python3.13`, which the new one doesn't look in). Built in their dependency order (their
-    `.SRCINFO`'s `depends`/`makedepends` on each other's packages or `provides`: quickshell-git before caelestia-shell),
+    in the old `/usr/lib/python3.13`, which the new one doesn't look in). Qt also when Quickshell's own check
+    (`quickshell --private-check-compat`, `update-kinds --qt-mismatch`) says it wasn't built for the Qt installed and
+    the download brings none (`[agros]`'s build, made on CI's Qt, on a machine whose Qt differs: Arch's own on a CPU
+    without x86-64-v3, or one a day apart): the Qt there taken as new, those built on it rebuilt for it, and a rebuild
+    that fails holds nothing back (the shell runs on that Qt already); `agros-check` says it too. Built in their
+    dependency order (their `.SRCINFO`'s `depends`/`makedepends` on each other's packages or `provides`: quickshell-git before caelestia-shell),
     else by name. One of `[agros]`'s rebuilt for a runtime is rebuilt at the version installed (CI's, tested), not the
     AUR's newest: a git package's source pinned to the commit in its version, another's AUR files at the commit with
     that version; one not found isn't built, and the runtime waits, as on a failed build. Their

@@ -12,6 +12,8 @@ stub() { printf '#!/bin/sh\n%s\n' "$2" >"$t/bin/$1"; chmod +x "$t/bin/$1"; }
 stub checkupdates 'exit 0'
 # (the system booted as itself: CI's container root is an overlay, which reads as a booted snapshot)
 stub findmnt 'echo btrfs'
+# (Quickshell built for the Qt here, whatever this machine's own says: update-kinds --qt-mismatch)
+stub quickshell 'exit 0'
 stub pacman '[ "$1" = -Qu ] && cat '"$t"'/qu 2>/dev/null; true'
 echo "linux 6.1-1 -> 6.2-1" >"$t/qu"
 # (paru translates its "[ignored]": in Portuguese it's "[ignorado]")
@@ -217,6 +219,10 @@ qt x --qt-mark
 [[ $(cat "$t/state/quickshell-qt") == "qt6-base 6.13.0 qt6-declarative 6.13.0 " ]] ||
     fail "a stamp from before Qt was installed not written anew: $(cat "$t/state/quickshell-qt")"
 qt x --qt-stale && fail "Qt installed with Quickshell taken for a new Qt"
+# (Quickshell's own check saying it wasn't built for the Qt here, the stamp agreeing all the same: stale too)
+stub quickshell '[ "$1" = --private-check-compat ] && exit 1; exit 0'
+qt x --qt-stale || fail "--qt-stale doesn't take Quickshell's own check failing"
+stub quickshell 'exit 0'
 echo "qt6-base 6.9.0 qt6-declarative 6.9.0 " >"$t/state/quickshell-qt"
 qt x --qt-mark
 [[ $(cat "$t/state/quickshell-qt") == "qt6-base 6.9.0 qt6-declarative 6.9.0 " ]] || fail "--qt-mark overwrote a full stamp"

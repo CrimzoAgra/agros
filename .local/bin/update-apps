@@ -119,7 +119,7 @@ rebuild_agros() {
         rel=$(cd "$tmp/$base" && bash -c '. ./PKGBUILD >/dev/null 2>&1; echo "$pkgrel"')
         dots=${have##*-} dots=${dots//[^.]/} built=${rel//[^.]/}
         if ((${#dots} > ${#built})); then
-            echo "!! $p: its version installed, $have, is AgrOS's own rebuild: left for AgrOS's next one"
+            echo "!! $p: its version installed, $have, is AgrOS's own rebuild: left for the next boot's rebuild, or AgrOS's next one"
             rc=1; continue
         fi
         # (its sources already fetched and checked there: not again)
@@ -131,8 +131,9 @@ rebuild_agros() {
 case ${1:-} in
     # (never failing: no stamp written, the next run writes it)
     --qt-mark) qt_mark || echo "!! The Qt Quickshell was built for couldn't be written down ($qt_stamp)"; exit 0 ;;
-    # agros-check's: Qt changed since Quickshell and Caelestia were built (exit 0), else 1
-    --qt-stale) [[ -s $qt_stamp && $(cat "$qt_stamp") != "$(qt_now)" ]] && ! qt_built; exit ;;
+    # agros-check's: Qt changed since Quickshell and Caelestia were built, or Quickshell's own check says it wasn't built
+    # for the Qt here (update-kinds --qt-mismatch) (exit 0), else 1
+    --qt-stale) { [[ -s $qt_stamp && $(cat "$qt_stamp") != "$(qt_now)" ]] && ! qt_built; } || "$helpers/update-kinds" --qt-mismatch; exit ;;
     --qt-rebuild) qt_rebuild; exit ;;
 esac
 

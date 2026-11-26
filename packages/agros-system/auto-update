@@ -345,8 +345,12 @@ if [[ ${1:-} == --install ]]; then
             elif [[ -n $have ]] && (($(vercmp "$ver" "$have") < 0)); then older+=" $name"; fi
         done <"$aur/rebuild"
     fi
-    if [[ -n $target ]] && ! [[ -e $aur/planned && $(cat "$aur/runtime-target" 2>/dev/null) == "$target" && -z $older$missing ]]; then
-        awk -v t="$target" 'BEGIN { k = split(t, a, " "); for (i = 1; i <= k; i += 2) n[a[i]] } $1 in n' <<<"$pending" | tee "$au/held"
+    # (the runtime itself in this update: held with its rebuilds. Not when it's only Quickshell's own check failing for
+    # the Qt already here, update-kinds --qt-mismatch: what was rebuilt for it goes in, a rebuild that failed holds
+    # nothing back, the shell runs on that Qt already)
+    new_rt=$(awk -v t="$target" 'BEGIN { k = split(t, a, " "); for (i = 1; i <= k; i += 2) n[a[i]] } $1 in n' <<<"$pending")
+    if [[ -n $new_rt ]] && ! [[ -e $aur/planned && $(cat "$aur/runtime-target" 2>/dev/null) == "$target" && -z $older$missing ]]; then
+        tee "$au/held" <<<"$new_rt"
         why="a new $(awk '{ for (i = 1; i <= NF; i += 2) printf "%s%s", (i > 1 ? ", " : ""), $i }' <<<"$target"), and the boot's rebuild for it $(
             if [[ -n $older ]]; then echo "came out older than what's installed:$older"
             elif [[ -n $missing ]]; then echo "failed:$missing ($(paste -sd';' "$aur/failed" 2>/dev/null | sed 's/;/; /g'))"

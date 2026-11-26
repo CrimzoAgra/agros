@@ -13,6 +13,10 @@ printf '======== Config parsing result:\n\nconfig ok\n'
 H
 chmod +x "$t/Hyprland"
 printf '#!/bin/sh\nprintf "  Config path: %%s\\n" "$HOME/.config/quickshell/caelestia/shell.qml" "$HOME/.config/quickshell/widgets/shell.qml"\n' >"$t/qs"; chmod +x "$t/qs"
+# (Quickshell built for the Qt here, whatever this machine's own says: update-kinds --qt-mismatch)
+printf '#!/bin/sh
+exit 0
+' >"$t/quickshell"; chmod +x "$t/quickshell"
 out=$(PATH=$t:$PATH "$here/.local/bin/agros-check" 2>&1)
 grep -q "Not running: qs -c switcher" <<<"$out" || fail "a missing shell wasn't reported: $out"
 grep -q "Not running: qs -c caelestia\|Not running: qs -c widgets" <<<"$out" && fail "a running shell reported missing: $out"
@@ -77,6 +81,14 @@ printf '#!/bin/sh\nexit 1\n' >"$t/pgrep"; chmod +x "$t/pgrep"
 # shellcheck disable=SC2016  # (expanded by the stand-in)
 printf '#!/bin/sh\n[ "$1" = -nG ] && exec echo "${ID_GROUPS-users wheel}"\nexec /usr/bin/id "$@"\n' >"$t/id"; chmod +x "$t/id"
 chk() { HOME=$h AUTO_UPDATE_DIR=$t/au PACMAN_DB_DIR=$t/pacdb PATH=$t:$PATH "$here/.local/bin/agros-check" 2>&1; }
+# (Quickshell's own check saying it wasn't built for the Qt here: said, with what sets it right)
+printf '#!/bin/sh
+exit 1
+' >"$t/quickshell"
+[[ $(chk) == *"Quickshell isn't built for the Qt installed: run Updates"* ]] || fail "Quickshell's own Qt check failing not said: $(chk)"
+printf '#!/bin/sh
+exit 0
+' >"$t/quickshell"
 out=$(chk)
 grep -q "failed to install at shutdown (2026-11-05 22:10: error: failed to commit transaction" <<<"$out" ||
     fail "a failed install at shutdown not reported: $out"

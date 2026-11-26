@@ -22,6 +22,10 @@ stub makepkg 'case " $* " in
     *" --verifysource "*) bash -c '"'"'. ./PKGBUILD; echo "verify ${PWD##*/} $pkgver-$pkgrel ${source[*]}"'"'"' >>'"$t"'/calls ;;
 esac'
 export PATH=$t/bin:$PATH HOME=$t/home
+# (Quickshell built for the Qt here, whatever this machine's own says: update-kinds --qt-mismatch)
+printf '#!/bin/sh
+exit 0
+' >"$t/bin/quickshell"; chmod +x "$t/bin/quickshell"
 # The AUR's address, its fake's: git's own clone of the repos below (their files as written: no CRLF)
 export GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0="url.file://$t/aur/.insteadOf" GIT_CONFIG_VALUE_0=https://aur.archlinux.org/ \
     GIT_CONFIG_KEY_1=core.autocrlf GIT_CONFIG_VALUE_1=false

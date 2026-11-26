@@ -12,6 +12,8 @@
 #                                    One run at a time per user (the boot's and Updates'): the second waits
 #   update-kinds --qt-now            the Qt installed ("qt6-base <ver> qt6-declarative <ver> ", "none" for one missing):
 #                                    what Quickshell and Caelestia must be built for (update-apps, auto-update)
+#   update-kinds --qt-mismatch       exit 0 when Quickshell's own check says it wasn't built for the Qt installed;
+#                                    --runtime-target and --built-on then take that Qt as new (rebuilt for it)
 #   update-kinds --runtime-target    the runtimes (below) a "name old -> new" list on stdin changes: "<name> <new> ..."
 #                                    (nothing when the part of its version that counts doesn't change)
 #   update-kinds --built-on [<dbpath>]   what's built on the runtimes a "name old -> new" list on stdin changes, one per
@@ -50,12 +52,34 @@ changed() {
         done < <(runtimes)
     done
 }
+# qt_mismatch: Quickshell's own check that the Qt here is the one it was built for fails (exit 1: [agros]'s build is
+# made on CI's Qt, CachyOS's v3 rebuild, and a machine can run another: Arch's own on a CPU without x86-64-v3, or one a
+# day apart). Any other exit isn't one (an older Quickshell without the check: 109, an unknown option)
+qt_mismatch() {
+    command -v quickshell >/dev/null 2>&1 || return 1
+    quickshell --private-check-compat >/dev/null 2>&1
+    [[ $? == 1 ]]
+}
+# with_mismatch: the "name old -> new" list (stdin), and when it changes no Qt but Quickshell's check fails, the Qt
+# installed as changed from what Quickshell was built for ("mismatched"): what's built on it rebuilt for the Qt here
+with_mismatch() {
+    local in p v
+    in=$(cat)
+    [[ -z $in ]] || printf '%s\n' "$in"
+    grep -qE '^qt6-(base|declarative) ' <<<"$in" && return 0
+    qt_mismatch || return 0
+    for p in qt6-base qt6-declarative; do
+        v=$(pacman -Q "$p" 2>/dev/null | cut -d' ' -f2)
+        [[ -z $v ]] || echo "$p mismatched -> $v"
+    done
+}
 case ${1:-} in
-    --runtime-target) changed | while read -r name _ new _; do printf '%s %s ' "$name" "$new"; done; exit 0 ;;
+    --qt-mismatch) qt_mismatch; exit ;;
+    --runtime-target) with_mismatch | changed | while read -r name _ new _; do printf '%s %s ' "$name" "$new"; done; exit 0 ;;
     --built-on)
         db=()
         [[ -n ${2:-} ]] && db=(--dbpath "$2")
-        changed | while read -r name old _ parts on; do
+        with_mismatch | changed | while read -r name old _ parts on; do
             if [[ $on == required ]]; then
                 LC_ALL=C pacman -Qi "${db[@]}" "$name" 2>/dev/null |
                     awk '/^Required By/ { on = 1; sub(/^[^:]*:/, "") } /^[A-Z][^:]*:/ && !/^Required By/ { on = 0 } on'

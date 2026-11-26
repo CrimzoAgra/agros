@@ -116,6 +116,10 @@ echo "built $b ${SANDBOXED:+(sandboxed)}" >>'"$t"'/calls'
 # shellcheck disable=SC2016
 stub repo-add 'shift; : >"$1"; ln -sf "${1##*/}" "${1%.tar.gz}"'
 export PATH=$t/bin:$PATH
+# (Quickshell built for the Qt here, whatever this machine's own says: update-kinds --qt-mismatch)
+printf '#!/bin/sh
+exit 0
+' >"$t/bin/quickshell"; chmod +x "$t/bin/quickshell"
 aur=$t/au/aur
 build=$t/au/aur-build
 

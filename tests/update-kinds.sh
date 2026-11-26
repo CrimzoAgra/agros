@@ -320,4 +320,25 @@ wait "$l1" "$l2"
 ! grep -q '^offline' "$t/list1" "$t/list2" ||
     fail "two lists at once: one said offline (checkupdates' lock): $(cat "$t/list1" "$t/list2")"
 flock -n "$t/home/.local/state/agros/update-list.lock" true || fail "the list's lock held past the list (paru's job)"
+
+# Quickshell's own check failing for the Qt here, no Qt update pending: that Qt taken as new (what's built on it rebuilt
+# for it); an older Quickshell's other exit status (no such option), or none installed, isn't one; a pending Qt update
+# is as it was, not doubled
+# shellcheck disable=SC2016  # (expanded by the stand-in)
+stub pacman 'case "$1 $2" in "-Q qt6-base" | "-Q qt6-declarative") echo "$2 6.12.1-1" ;;
+    "-Qi qt6-base") printf "Name            : qt6-base\nRequired By     : quickshell-git  qt6-tools\nOptional For    : None\n" ;; *) exit 1 ;; esac'
+stub quickshell '[ "$1" = --private-check-compat ] && exit 1; exit 0'
+run --qt-mismatch || fail "Quickshell's check failing not taken for a mismatch"
+[[ $(run --runtime-target </dev/null) == "qt6-base 6.12.1-1 qt6-declarative 6.12.1-1 " ]] ||
+    fail "the Qt here not taken as new for a mismatch: $(run --runtime-target </dev/null)"
+[[ $(run --built-on </dev/null | paste -sd' ') == "qt6-tools quickshell-git" ]] ||
+    fail "what's built on Qt not listed for a mismatch: $(run --built-on </dev/null)"
+[[ $(run --runtime-target <<<"qt6-base 6.12.0-1 -> 6.12.1-1") == "qt6-base 6.12.1-1 " ]] ||
+    fail "a pending Qt update changed by a mismatch: $(run --runtime-target <<<"qt6-base 6.12.0-1 -> 6.12.1-1")"
+for s in 'exit 109' 'exit 0'; do
+    stub quickshell "$s"
+    ! run --qt-mismatch && [[ -z $(run --runtime-target </dev/null) ]] || fail "Quickshell's '$s' taken for a mismatch"
+done
+rm "$t/bin/quickshell"
+! run --qt-mismatch && [[ -z $(run --runtime-target </dev/null) ]] || fail "no Quickshell taken for a mismatch"
 echo "ok update-kinds"
