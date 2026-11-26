@@ -1288,7 +1288,9 @@ brings each change; nothing to run by hand).
     addresses (`fe80::`, `169.254/16`: not routed through pasta), and routes in tables other than the main one (a
     VPN's policy routing). One that can't be closed off stops the step (nothing runs open). DNS goes to an address of
     each family of its own (its own `resolv.conf`: `169.254.0.53` and `fd53:a6e4:2c3a::53`) that pasta sends to the
-    host's resolver of that family, so an IPv6-only `resolv.conf` resolves too. Each base is fetched, checked and built
+    host's resolver of that family, so an IPv6-only `resolv.conf` resolves too. pasta needs `/dev/net/tun`:
+    `auto-update` loads the `tun` module first thing, while the running kernel's modules are still there (an update that
+    replaced the kernel took them away, and every fetch failed). Each base is fetched, checked and built
     on its own, its sources in a folder of its own (two bases' same-named files don't collide). Writable: only that
     run's build folder (`/var/lib/auto-update/aur-build`, `agros-aur`'s alone, made anew each run and removed after: no
     git config, cache or anything else a build wrote reaches the next run, nor a step outside the sandbox). Root opens

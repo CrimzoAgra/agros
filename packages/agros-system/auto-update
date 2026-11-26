@@ -127,6 +127,11 @@ if [[ ${1:-} == --firmware-note ]]; then
     exit 0
 fi
 
+# The tun module loaded first, while the running kernel's modules are still there: the AUR builds' sandbox reaches the
+# internet through pasta, which needs /dev/net/tun, and an update that replaced the kernel took its modules away (26 Nov
+# 2026: every build's fetch failed, "Failed to open() /dev/net/tun", nothing rebuilt for the new Qt)
+modprobe -q tun 2>/dev/null || true
+
 if [[ ${1:-} == --install ]]; then
     # How a real install went, for agros-check (this runs at shutdown: its log alone was never seen): ok, held or
     # failed, when, and why. Shutdowns with nothing installed (skip, below) counted beside it, not over it: a held or
