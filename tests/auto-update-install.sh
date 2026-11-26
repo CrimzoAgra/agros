@@ -584,6 +584,21 @@ kill $opener
 [[ -e $t/pac/db.lck && ! -s $t/calls && $out == *"something has pacman's lock open"* ]] ||
     fail "pacman's lock taken out (or installed) while something had it open: $out / $(cat "$t/calls")"
 rm -f "$t/pac/db.lck"
+# ...and at boot: a stale one taken out then, not left all session (every install, Updates' too, failing on it); one
+# something has open, or with a pacman on pacman's lists running, left
+: >"$t/pac/db.lck"; : >"$t/log"
+"$t/auto-update" || fail "the boot with a stale pacman lock failed"
+[[ ! -e $t/pac/db.lck ]] && grep -q "removing a stale lock" "$t/log" || fail "a stale pacman lock left at boot: $(cat "$t/log")"
+: >"$t/pac/db.lck"; : >"$t/log"
+sleep 300 3<"$t/pac/db.lck" 2>/dev/null & opener=$!
+disown "$opener"
+"$t/auto-update" || fail "the boot with pacman's lock open failed"
+kill $opener
+[[ -e $t/pac/db.lck ]] && ! grep -q "stale lock" "$t/log" || fail "pacman's lock taken out at boot while something had it open"
+: >"$t/log"
+HOLDER_RUNS=1 "$t/auto-update" || fail "the boot with pacman running failed"
+[[ -e $t/pac/db.lck ]] && ! grep -q "stale lock" "$t/log" || fail "pacman's lock taken out at boot while a pacman ran"
+rm -f "$t/pac/db.lck"
 
 # The boot's AUR builds (auto-update-aur's, in $t/au/aur): installed in the same pacman transaction as the repo's, from
 # their own repo (agros-aur, its list put in pacman's for the install alone), each rebuilt for the new Qt
@@ -838,9 +853,13 @@ steps=$(grep -oE '^first .*|^new auto-update .*|^download -Suw' "$t/calls" | sed
 [[ $steps == "first -S --needed --noconfirm --dbpath $t/au/db -- agros/agros-scripts (lists $have, locked),new auto-update :1:<time>,download -Suw" ]] ||
     fail "the boot's download not run by AgrOS's newer update code, installed first from its lists: $(cat "$t/calls")"
 [[ ! -e $t/pac/db.lck && -e $t/au/db/complete ]] || fail "the boot's install left pacman's lock, or its download not done"
-# (pacman's lock taken: not installed then, said; the lock left as it was)
+# (pacman's lock taken: not installed then, said; the lock left as it was. Held open, as pacman holds it: a lock
+# nothing has open is stale, taken out first)
 touch "$t/pac/db.lck"
+sleep 300 3<"$t/pac/db.lck" 2>/dev/null & opener=$!
+disown "$opener"
 QU=$newer first
+kill $opener
 { ! grep -qE '^(first|new) ' "$t/calls" && grep -q '^download' "$t/calls" && [[ -e $t/pac/db.lck ]] &&
     grep -q "not updated first (agros-scripts): pacman's lock is taken" "$t/log"; } ||
     fail "the update code installed under another's lock at boot, or not said: $(cat "$t/calls") / $(cat "$t/log")"

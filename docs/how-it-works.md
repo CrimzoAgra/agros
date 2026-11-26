@@ -1364,7 +1364,9 @@ brings each change; nothing to run by hand).
   closed to it, is told to ask an administrator to run Updates. One that failed for a conflict isn't sent to Updates,
   which can't settle it either: "settle the conflict in a terminal (Updates can't): sudo pacman -Syu asks what to do"
   (another account: to ask an administrator to). An install cut off
-  has pacman's lists put back, and its lock removed, at the next boot or install. The boot's run (download, Flatpaks,
+  has pacman's lists put back, and its lock removed, at the next boot or install; a lock another pacman left (an
+  Updates run cut off by a power cut), with nothing running that takes it and nothing having it open, is taken out at
+  the next boot too, not left for the session's installs to fail on. The boot's run (download, Flatpaks,
   AUR builds and all, everything it started: nothing it runs as a user leaves its unit) stops after 4 h; a Flatpak from
   a file isn't reinstalled with less than 35 min of that left (cut off between its removal and install, the app would be
   gone). Settings' Updates page waits only for its downloads. The install has 60 min (shutdown's own limit is made 75 min for

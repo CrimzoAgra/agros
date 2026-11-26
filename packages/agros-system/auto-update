@@ -45,6 +45,15 @@ au=/var/lib/auto-update
 # too): pacman's lists aren't changed under any of them
 pacdb=/var/lib/pacman
 lock_holder() { /usr/lib/agros/bin/pacman-lock-holder "$pacdb"; }
+# lock_open: what has pacman's lock open, "/proc/<pid>" (pacman keeps it open while it holds it; one cut off leaves the
+# file with nothing having it open: stale)
+lock_open() {
+    local fd
+    for fd in /proc/[0-9]*/fd/*; do
+        [[ $(readlink "$fd" 2>/dev/null) != "$pacdb/db.lck" ]] || { echo "${fd%/fd/*}"; return 0; }
+    done
+    return 1
+}
 prev=$au/prev
 restore() {
     local f
@@ -225,9 +234,7 @@ if [[ ${1:-} == --install ]]; then
     # leaves it on anything but Ctrl+C), with nothing having it open now (the sessions are all stopped): stale, else
     # every install after it failed on it. Something still having it open: left, nothing installed
     if [[ -e $pacdb/db.lck && ! -e $au/installing ]]; then
-        for fd in /proc/[0-9]*/fd/*; do
-            [[ $(readlink "$fd" 2>/dev/null) != "$pacdb/db.lck" ]] || skip "something has pacman's lock open (${fd%/fd/*})"
-        done
+        ! opener=$(lock_open) || skip "something has pacman's lock open ($opener)"
         echo "removing a stale lock (a pacman cut off, nothing has it open): $pacdb/db.lck"
         rm -f "$pacdb/db.lck"
     fi
@@ -481,6 +488,13 @@ if [[ -e $au/installing ]] && holder=$(held); then
     echo "the last install was cut off, but something using pacman runs ($holder): recovered later"
 else
     recover
+fi
+# A lock another pacman cut off left (an Updates run's, a power cut mid-install; this run's own install of AgrOS's update
+# code, stopped by a shutdown), nothing running that takes it and nothing having it open: taken out now. Left, every
+# install and update failed on it all session (agros-check asked for a sudo rm), until the shutdown's install took it out
+if [[ -e $pacdb/db.lck && ! -e $au/installing ]] && ! lock_holder >/dev/null && ! lock_open >/dev/null; then
+    echo "removing a stale lock (a pacman cut off, nothing has it open): $pacdb/db.lck"
+    rm -f "$pacdb/db.lck"
 fi
 
 # pacman.conf's AgrOS lines put back where they're gone (a pacman.conf.pacnew merged whole): the upstream gate's Include
