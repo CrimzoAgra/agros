@@ -1848,8 +1848,8 @@ def sidebar_fit():
     // caelestia-overlay (sidebar_fit): its height to fit, around the margins: the title, then the notifications and
     // below them room for the clear button (no longer over the last one), or the picture; both while they cross-fade
     readonly property real fitHeight: anchors.margins * 2 + title.anchors.margins + title.implicitHeight + clipRect.anchors.topMargin
-        + Math.max(notifCount > 0 ? notifList.implicitHeight + (clear.item?.implicitHeight ?? 0) + clear.anchors.margins : 0,
-                   empty.item?.implicitHeight ?? 0)
+        + Math.max(notifCount > 0 ? notifList.implicitHeight + ((clear.item as Item)?.implicitHeight ?? 0) + clear.anchors.margins : 0,
+                   (empty.item as Item)?.implicitHeight ?? 0)
 """, "notif dock size")
     dock = swap(dock, """        Loader {
             asynchronous: true
