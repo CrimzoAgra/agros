@@ -226,4 +226,20 @@ touch -d '-2 days' "$c/nvidia/GLCache/unused/$g/z.bin"
 sed -i 's/^620.73.04-1$/620.73.04-2/' "$t/pacman/nvidia-utils-620.73.04-1/desc"
 run >/dev/null
 [[ -e $c/nvidia/GLCache/unused ]] || fail "shaders deleted on a same-version reinstall of the driver"
+# Capri's Super menu entry as AgrOS's capri-update wrote it: gone once ~/.local/bin/capri (AgrOS's link) is, as it
+# then started nothing; one of her own app's (another Exec), or with a capri of yours there, kept
+a=$t/home/.local/share/applications
+printf '#!/bin/sh\n' >"$t/lib/bin/capri"; chmod +x "$t/lib/bin/capri"
+run >/dev/null
+printf '[Desktop Entry]\nName=Capri\nExec="%s"\n' "$t/home/.local/bin/capri" >"$a/capri.desktop"
+printf '[Desktop Entry]\nName=Capri\nExec=capri\nNoDisplay=true\n' >"$a/capri-desktop-windows.desktop"
+run >/dev/null
+[[ -e $a/capri.desktop ]] || fail "Capri's menu entry removed while AgrOS's capri was still there"
+rm "$t/lib/bin/capri"; run >/dev/null
+[[ ! -e $t/home/.local/bin/capri && ! -L $t/home/.local/bin/capri ]] || fail "AgrOS's capri link, its program gone, kept"
+[[ ! -e $a/capri.desktop ]] || fail "Capri's menu entry from capri-update left, starting nothing"
+[[ -e $a/capri-desktop-windows.desktop ]] || fail "her own app's entry removed"
+printf '[Desktop Entry]\nName=Capri\nExec="%s"\n' "$t/home/.local/bin/capri" >"$a/capri.desktop"
+printf '#!/bin/sh\n' >"$t/home/.local/bin/capri"; run >/dev/null
+[[ -e $a/capri.desktop ]] || fail "Capri's menu entry removed with a capri of the user's own there"
 echo "ok agros-links"

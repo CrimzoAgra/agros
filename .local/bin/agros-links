@@ -27,6 +27,12 @@ for d in "$lib"/share/*/; do d=${d%/}; [[ -e $d ]] && link "$d" "$HOME/.local/sh
 for l in "$HOME"/.local/bin/* "$HOME"/.local/share/*; do
     [[ -L $l && $(readlink "$l") == "$lib"/* && ! -e $l ]] && rm -f "$l"
 done
+# Capri's Super menu entry as AgrOS's capri-update wrote it (until 2026-11-26: she's an app of her own now): it starts
+# ~/.local/bin/capri, a link into AgrOS taken away just above, so it did nothing. Gone while that's all it starts and
+# nothing is there; her own app's entries, her build and her data are left
+capri=${XDG_DATA_HOME:-$HOME/.local/share}/applications/capri.desktop
+[[ ! -e $HOME/.local/bin/capri && ! -L $HOME/.local/bin/capri ]] &&
+    grep -qxF "Exec=\"$HOME/.local/bin/capri\"" "$capri" 2>/dev/null && rm -f "$capri"
 # Files a package update brought into /etc/skel/.config (fetch's, LibreWolf's overrides inside a folder you already
 # have), its launcher entries (/etc/skel/.local/share/applications), LibreWolf's settings (.local/share/firefox, which
 # agros-welcome applies) and Caelestia's wallpaper in Pictures/Wallpapers: copied in once, right after the update or at
