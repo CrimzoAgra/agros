@@ -1578,8 +1578,10 @@ def sidebar_notifs_only():
     # screen recording, quick toggles). That panel opens on its own (bottom-right corner, Super+K), with the sidebar or not
     rel = "modules/utilities/Wrapper.qml"
     s = read(rel)
-    old = "    readonly property bool shouldBeActive: screenState.sidebar || (screenState.utilities"
-    s = swap(s, old, "    readonly property bool shouldBeActive: (screenState.utilities", "utilities shouldBeActive")
+    # (Caelestia's main names the utilities' own part first, showUtils)
+    s = swap_one_of(s, ("    readonly property bool shouldBeActive: screenState.sidebar || (screenState.utilities",
+                        "    readonly property bool shouldBeActive: screenState.sidebar || showUtils\n"),
+                    lambda old: old.replace("screenState.sidebar || ", ""), "utilities shouldBeActive")
     # Its contents stay built while it's hidden, so its height is known before it ever opens: the sidebar ends where
     # its top is (sidebar_shape), on any screen
     old = "        active: root.shouldBeActive || root.visible\n"

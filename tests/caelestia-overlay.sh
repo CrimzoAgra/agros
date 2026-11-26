@@ -512,6 +512,18 @@ out=$(DOTS_SETTINGS=$t/bin/dots-settings python3 "$here/.local/share/caelestia-o
     grep -qE '^auth\s.*pam_unix\.so\s+nullok nodelay$' "$t/main-dst/assets/pam.d/passwd" &&
     grep -qE '^auth\s.*pam_faillock\.so\s+preauth nodelay$' "$t/main-dst/assets/pam.d/passwd"; } ||
     fail "the lock's PAM change doesn't fit Caelestia's main: $(grep 'wrong password' <<<"$out")"
+# ...its utilities panel's shouldBeActive (main names its own part showUtils, as of 2026-11: the sidebar's whole chain,
+# the four windows and the bar's side were skipped with it): a copy of the installed file made as main has it
+m=$t/main2 mu=modules/utilities/Wrapper.qml
+mkdir -p "$m/src/${mu%/*}"
+sed 's/^    readonly property bool shouldBeActive: screenState.sidebar || (\(screenState.utilities.*\))$/    readonly property bool showUtils: \1\n    readonly property bool shouldBeActive: screenState.sidebar || showUtils/' \
+    "/etc/xdg/quickshell/caelestia/$mu" >"$m/src/$mu"
+grep -q 'shouldBeActive: screenState.sidebar || showUtils$' "$m/src/$mu" || fail "test setup: the utilities panel's shouldBeActive not found"
+cp -as "$m/src" "$m/dst"
+out=$(DOTS_SETTINGS=$t/bin/dots-settings python3 "$here/.local/share/caelestia-overlay/patch.py" "$m/src" "$m/dst" 2>&1) || true
+{ grep -q '^Patched: notification sidebar without the utilities panel$' <<<"$out" &&
+    grep -q '^    readonly property bool shouldBeActive: showUtils$' "$m/dst/$mu"; } ||
+    fail "the utilities panel's change doesn't fit Caelestia's main: $(grep 'without the utilities' <<<"$out")"
 # Every member of Caelestia's services (Hypr.focusWorkspace, Colours.palette...) the overlay's code uses is still there:
 # a renamed one patches in fine and reads as undefined without an error (with Hypr.usingLua gone, as Caelestia plans,
 # the dock's clicks went down a branch for the old config language)
