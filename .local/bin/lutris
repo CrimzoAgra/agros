@@ -6,7 +6,7 @@
 #   - the store launchers (lutris-library's Launchers category) only in the sidebar, not among the games, and
 #     lutris-library's changes shown without a restart (a library-refresh action)
 #   - Steam games launched while Steam is closed start it in the tray, not its window (steam-start)
-#   - with LUTRIS_START_HIDDEN=1 (at login, user/apps.lua) it starts in its tray only
+#   - with LUTRIS_START_HIDDEN=1 (at login: Startup's quiet start, dots-settings' LOGIN_EXEC) it starts in its tray only
 #   - games with no proper cover get one from SteamGridDB (lutris-covers)
 # First on the PATH, so the launcher, menu entries and lutris: links all start this. The patched copy is built into
 # ~/.cache/lutris-overlay (links to the installed files, the changed ones copied) the first time after Lutris or the

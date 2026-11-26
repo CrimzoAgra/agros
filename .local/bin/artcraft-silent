@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""ArtCraft Launcher at login, in the tray only (user/apps.lua; Settings app: startup.artcraft).
+"""ArtCraft Launcher at login, in the tray only (Settings app, Startup: dots-settings' LOGIN_EXEC).
 
 It starts with --hidden, but when it updates itself (often right at login) it restarts without it and shows its
 window. So for the first two minutes, any ArtCraft window that opens is closed, which sends it to the tray (its

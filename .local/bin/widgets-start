@@ -6,5 +6,5 @@ for _ in $(seq 120); do
     qs -c caelestia ipc call lock isLocked >/dev/null 2>&1 && break
     sleep 0.25
 done
-unset QS_APP_ID  # (not Desktop Settings' name, if started from it: ~/.local/bin/desktop-settings)
+unset QS_APP_ID  # (not the name of a Quickshell app that started it, if one did)
 exec qs -c widgets -d
