@@ -291,6 +291,8 @@ grep -q "something using pacman still ran ($holder /bin/sh $t/holder --dbpath $t
 # agros-check says it, and the failed install still
 mkdir -p "$t/h"
 for s in hyprctl Hyprland qs; do printf '#!/bin/sh\nexit 0\n' >"$t/bin/$s"; chmod +x "$t/bin/$s"; done
+# (an administrator's account, as on a desktop: CI runs as root, not in wheel, and agros-check words its advice by it)
+printf '#!/bin/sh\n[ "$1" = -nG ] && exec echo users wheel\nexec /usr/bin/id "$@"\n' >"$t/bin/id"; chmod +x "$t/bin/id"
 out=$(HOME=$t/h AUTO_UPDATE_DIR=$t/au PACMAN_DB_DIR=$t/pac "$here/.local/bin/agros-check" 2>&1) || true  # (problems: exit 1)
 [[ $out == *"hasn't installed for 3 shutdowns in a row"*"the last: something using pacman still ran"* &&
     $out == *"failed to install at shutdown"* && $out == *"held back"* ]] ||
