@@ -504,7 +504,7 @@ if scr=$(command -v script); then
     rm -f "$t/bin/timeout"  # (the real one: its time limits as they are)
     # (in a terminal of its own, script's, a key pressed every second: the one it waits for at the end)
     term() {
-        while sleep 1; do printf x; done |
+        while sleep 1; do printf x 2>/dev/null || break; done |  # (stops as it ends: SIGPIPE can be ignored)
             /usr/bin/timeout -s KILL 60 env HOME="$t/home" XDG_STATE_HOME="$t/state" XDG_CACHE_HOME="$t/home/.cache" \
                 PATH="$t/bin:$PATH" SHELL=/bin/bash "$scr" -qec "$here/.local/bin/update-apps" /dev/null 2>&1
         return "${PIPESTATUS[1]}"  # (update-apps', through script: not the keys', cut off as it ends)
