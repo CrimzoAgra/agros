@@ -51,6 +51,12 @@ capri_app() {
     return 1
 }
 if [[ -e $data/capri/current || -L $data/capri/current || -d $data/capri/src ]]; then
+    # (her build still running first, 5 s to close, else ended: left running, she stayed on screen until logout and
+    # wrote her data back as she went)
+    if pkill -u "$UID" -f "^$data/capri/" 2>/dev/null; then
+        for _ in {1..20}; do pgrep -u "$UID" -f "^$data/capri/" >/dev/null || break; sleep 0.25; done
+        pkill -KILL -u "$UID" -f "^$data/capri/" 2>/dev/null
+    fi
     for f in "$data/applications/capri.desktop" "$conf/autostart/capri.desktop"; do
         grep -qF "$HOME/.local/bin/capri" "$f" 2>/dev/null && rm -f "$f"
     done

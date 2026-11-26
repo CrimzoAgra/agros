@@ -263,7 +263,12 @@ oldcapri() {
 }
 rm -f "$t/home/.local/bin/capri"
 oldcapri
+# (her build running, as at login: ended first, not left on screen writing her data back)
+mkdir -p "$t/home/.local/share/capri/7cda5b2" && cp "$(command -v sleep)" "$t/home/.local/share/capri/7cda5b2/capri"
+( "$t/home/.local/share/capri/current/capri" 60 & )
+pgrep -f "^$t/home/.local/share/capri/" >/dev/null || fail "the test's running Capri didn't start"
 out=$(run)
+! pgrep -f "^$t/home/.local/share/capri/" >/dev/null || { pkill -KILL -f "^$t/home/.local/share/capri/"; fail "Capri left running from her build taken away"; }
 [[ ! -e $t/home/.local/share/capri && ! -e $t/home/.config/autostart/capri.desktop && ! -e $a/capri.desktop &&
     ! -e $t/home/.cache/capri.log && ! -e $t/home/.local/state/capri-update.lock ]] ||
     fail "Capri as AgrOS installed her not all taken away: $(ls -a "$t/home/.local/share" "$t/home/.config/autostart" "$a")"
