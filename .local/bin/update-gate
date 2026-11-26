@@ -94,6 +94,21 @@ for name in "${gated[@]}"; do
     (($(vercmp "$new" "$have") > 0)) || continue  # (older in the repo, rolled back: pacman -Su keeps the newer one)
     grep -qxF -- "$name ${new%-*}" "$cache" 2>/dev/null || waits+=("$name $have -> $new")
 done
+# The set waiting AGROS_GATE_DAYS (14) for AgrOS's check (CI no longer approving: broken, or not run): let through
+# unchecked, said, rather than held, and with it every update that needs it, for good. Each one's since when, "<name>
+# <epoch>" lines beside the list (one no longer waiting forgotten); held together as ever while one is newer than that
+now=$(date +%s) since=() young=0
+for w in "${waits[@]}"; do
+    s=$(awk -v n="${w%% *}" '$1 == n { print $2; exit }' "$cache.waiting" 2>/dev/null)
+    [[ $s =~ ^[0-9]+$ ]] || s=$now
+    since+=("${w%% *} $s")
+    ((now - s >= ${AGROS_GATE_DAYS:-14} * 86400)) || young=1
+done
+{ ((${#since[@]} == 0)) || printf '%s\n' "${since[@]}"; } >"$cache.waiting" 2>/dev/null
+if ((${#waits[@]} && !young)); then
+    printf "update-gate: let through unchecked, after ${AGROS_GATE_DAYS:-14} days or more waiting for AgrOS's check: %s\n" "${waits[@]}" >&2
+    waits=()
+fi
 inc="Include = $gate"
 if ((${#waits[@]})); then
     printf '%s\n' "${waits[@]}"

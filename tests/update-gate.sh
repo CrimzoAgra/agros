@@ -159,4 +159,20 @@ for case in DOWN SIG_AT; do
     [[ -z $out ]] && open && grep -qx 'hyprland 0.58.0' "$AGROS_GATE_CACHE" ||
         fail "the approved list not taken from [agros]'s next server with the first's $case: $out"
 done
+# Waiting AGROS_GATE_DAYS (14) for AgrOS's check (CI no longer approving): the set let through unchecked, said; one of
+# it waiting less long holds the set as ever; since when each waits kept beside the list, one approved forgotten
+rm -f "$AGROS_GATE_CACHE.waiting"
+out=$(HAVE_hyprland=0.57.2-1 NEW_hyprland=0.59.0-1 APPROVED='hyprland 0.58.0' gate 2>/dev/null)
+[[ -n $out ]] && ! open && grep -qE '^hyprland [0-9]+$' "$AGROS_GATE_CACHE.waiting" ||
+    fail "a first wait not held, or not written down: $out / $(cat "$AGROS_GATE_CACHE.waiting" 2>/dev/null)"
+old=$(($(date +%s) - 15 * 86400))
+echo "hyprland $old" >"$AGROS_GATE_CACHE.waiting"
+out=$(HAVE_hyprland=0.57.2-1 NEW_hyprland=0.59.0-1 APPROVED='hyprland 0.58.0' gate 2>"$t/err")
+[[ -z $out ]] && open && grep -q "let through unchecked, after 14 days or more waiting for AgrOS's check: hyprland 0.57.2-1 -> 0.59.0-1" "$t/err" ||
+    fail "a Hyprland waiting 15 days not let through, or not said: $out / $(cat "$t/err")"
+[[ $(cat "$AGROS_GATE_CACHE.waiting") == "hyprland $old" ]] || fail "since when it waits lost: $(cat "$AGROS_GATE_CACHE.waiting")"
+out=$(HAVE_hyprland=0.57.2-1 NEW_hyprland=0.59.0-1 HAVE_hyprutils=0.10-1 NEW_hyprutils=0.11-1 APPROVED='hyprland 0.58.0' gate 2>/dev/null)
+[[ $out == *"hyprutils 0.10-1 -> 0.11-1"* ]] && ! open || fail "the set let through with one of it waiting a day: $out"
+out=$(HAVE_hyprland=0.57.2-1 NEW_hyprland=0.59.0-1 APPROVED='hyprland 0.59.0' gate)
+[[ -z $out ]] && open && [[ ! -s $AGROS_GATE_CACHE.waiting ]] || fail "an approved one's wait not forgotten: $(cat "$AGROS_GATE_CACHE.waiting")"
 echo "ok update-gate"
