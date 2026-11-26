@@ -389,6 +389,28 @@ def lint(root, rel):
     # (the finding without its place: a line number moved by a patch isn't a new one)
     return {re.sub(r"^\S+:\d+:\d+: ", "", l.split(": ", 1)[1]) for l in out.splitlines()
             if l.startswith("Warning: ") and l.endswith(tuple(f"[{k}]" for k in kinds))}
+# The types a module passes on from another (its qmldir's "import <module>"): Qt 6.12.1's qmllint no longer follows
+# those, so one a file does import that way (Quickshell.Hyprland's HyprlandWorkspace, from Quickshell.Hyprland._Ipc)
+# came out unresolved; a misspelt type, or one whose module the file doesn't import, still does
+qml = "/usr/lib/qt6/qml"
+def passed_on(module):
+    try:
+        lines = open(os.path.join(qml, *module.split("."), "qmldir"), encoding="utf-8").read().splitlines()
+    except OSError:
+        return set()
+    names = set()
+    for sub in (l.split()[1] for l in lines if l.startswith("import ") and len(l.split()) > 1):
+        d = os.path.join(qml, *sub.split("."))
+        for f in (os.listdir(d) if os.path.isdir(d) else []):
+            if f.endswith(".qmltypes"):
+                names |= set(re.findall(r'"%s/(\w+) [\d.]+"' % re.escape(sub), open(os.path.join(d, f), encoding="utf-8").read()))
+    return names
+def blind(path, w):
+    ty = re.search(r'"(\w+)"', w)
+    if not (w.endswith("[unresolved-type]") and ty):
+        return False
+    mods = re.findall(r"^import ([\w.]+)\s*$", open(path, encoding="utf-8").read(), re.M)
+    return any(ty[1] in passed_on(m) for m in mods)
 tree(src, f"{work}/src"); tree(dst, f"{work}/dst")
 for d, _, files in os.walk(dst):
     for f in files:
@@ -396,12 +418,23 @@ for d, _, files in os.walk(dst):
         if f.endswith(".qml") and not os.path.islink(full):
             rel = os.path.relpath(full, dst)
             for w in sorted(lint(f"{work}/dst", rel) - lint(f"{work}/src", rel)):
-                print(f"{rel}: {w}")
+                if not blind(full, w):
+                    print(f"{rel}: {w}")
 P
 # lint_new <Caelestia> <patched copy>: those findings, one a line (none: qmllint not installed)
 lint_new() { [[ ! -x /usr/lib/qt6/bin/qmllint ]] || python3 -I "$t/lint.py" "$1" "$2" "$(mktemp -d -p "$t")"; }
 new=$(lint_new /etc/xdg/quickshell/caelestia "$dst")
 [[ -z $new ]] || fail "the patched QML uses what Caelestia doesn't have (qmllint): $new"
+# (on any Qt: a Hyprland type imported as Quickshell passes it on not reported, a misspelt one and one used without
+# its import still are)
+mkdir -p "$t/lp/src" "$t/lp/dst"
+printf '%s\n' 'import QtQuick' 'import Quickshell.Hyprland' 'QtObject {' '    property HyprlandWorkspace a' \
+    '    function f(m: HyprlandMonitor): void {}' '    function g(w: HyprlandWorkspce): void {}' '}' >"$t/lp/dst/Probe.qml"
+printf '%s\n' 'import QtQuick' 'QtObject {' '    function h(c: HyprlandToplevel): void {}' '}' >"$t/lp/dst/NoImport.qml"
+probe=$(lint_new "$t/lp/src" "$t/lp/dst")
+[[ ! -x /usr/lib/qt6/bin/qmllint ]] || { [[ $probe == *'"HyprlandWorkspce"'* && $probe == *'"HyprlandToplevel"'* &&
+    $probe != *'"HyprlandWorkspace"'* && $probe != *'"HyprlandMonitor"'* ]] ||
+    fail "the qmllint check misjudges Quickshell's passed-on types: $probe"; }
 
 # The bar on the right (Settings: bar.side): the split windows' layout mirrored (drawers/: barEdge), the border's zones
 # swapped, the bar's content and its popouts against its inner edge, the wallpaper's frame and the clock's and the
