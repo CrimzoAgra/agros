@@ -143,7 +143,7 @@ if [[ ${1:-} == --firmware-note ]]; then
     # (one the EFI partition has no room for, the shutdown found: said once, as that)
     cmp -s "$au/firmware" "$au/firmware-noroom" && title="Firmware update can't be installed" \
         text="$names: the boot partition (EFI) is too small for it. It isn't tried again until a newer one comes"
-    if "$each_user" --notify-wait -a Updates -i system-software-update "$title" "$text"; then
+    if "$each_user" --notify-wait -a Updates -i preferences-desktop "$title" "$text"; then
         cp "$au/firmware" "$au/firmware-told"
         echo "firmware update said: $names"
     fi

@@ -232,14 +232,14 @@ if ((${#notes[@]})); then
     seen="${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles-check-hypr-notified"
     # (only with an update of it to say: another note alone sent this too, for a version said before)
     if [[ ${1:-} == --notify && -n $hypr_new && $(cat "$seen" 2>/dev/null) != "$hypr_new" ]]; then
-        "$helpers/notify-when-up" -u low -a Dotfiles -i system-software-update "Caelestia's Hyprland config has an update" \
+        "$helpers/notify-when-up" -u low -a Dotfiles -i preferences-desktop "Caelestia's Hyprland config has an update" \
             "Run caelestia-hypr-refresh: those files only (no system update); one you've edited is kept, its new version beside it as .new" &&
             { mkdir -p "${seen%/*}"; echo "$hypr_new" >"$seen"; }
     fi
     etc_seen="${XDG_STATE_HOME:-$HOME/.local/state}/agros/etc-noted"
     etc_keys=$(printf '%s\n' "$pacnew" "$(cat "$au/pacman-conf-repaired" 2>/dev/null)" | sed '/^$/d')
     if [[ ${1:-} == --notify && -n $etc_keys ]] && grep -qvxF -f <(cat "$etc_seen" 2>/dev/null) <<<"$etc_keys"; then
-        "$helpers/notify-when-up" -u low -a Updates -i system-software-update "Config files to look at after an update" \
+        "$helpers/notify-when-up" -u low -a Updates -i preferences-desktop "Config files to look at after an update" \
             "$(printf '%s\n' "${etc_notes[@]}")" &&
             { mkdir -p "${etc_seen%/*}"; printf '%s\n' "$etc_keys" >"$etc_seen"; }
     fi

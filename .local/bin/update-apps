@@ -178,7 +178,7 @@ if [[ ${1:-} == --check-now ]]; then
     fi
     # The notification waits on its own, so this returns now (sh's own $1/$2/$3, not this script's)
     # shellcheck disable=SC2016
-    setsid sh -c 'a=$(timeout 1h "$3/notify-wait" -a Updates -i system-software-update -A "default=Open Updates" "$1" "$2")
+    setsid sh -c 'a=$(timeout 1h "$3/notify-wait" -a Updates -i preferences-desktop -A "default=Open Updates" "$1" "$2")
         [ "$a" = default ] && qs -c caelestia ipc call nexus updates false "$4" && exit; rm -f "$4"' \
         sh "$title" "$names" "$helpers" "$listed" >/dev/null 2>&1 &
     exit 0
@@ -202,7 +202,7 @@ if [[ ${1:-} == --check ]]; then
     # unit "starting") through the ones after it, so updates that came since went unannounced
     # (124: that time ran out, the notification there all along: not offered again for the same updates)
     # (5h50m in seconds: timeout takes one number and unit, "5h50m" failed at once, and no update was ever offered)
-    action=$(timeout 21000 "$helpers/notify-wait" -a "Updates" -i system-software-update -A "default=Update now" "$title" "$names")
+    action=$(timeout 21000 "$helpers/notify-wait" -a "Updates" -i preferences-desktop -A "default=Update now" "$title" "$names")
     rc=$?
     ((rc == 0 || rc == 124)) && printf '%s\n' "$list" >"$seen"
     # (Settings' Updates runs the update in a unit of its own: this service ending doesn't stop it)
