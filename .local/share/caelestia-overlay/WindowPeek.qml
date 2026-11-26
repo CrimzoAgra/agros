@@ -56,7 +56,8 @@ Singleton {
     }
 
     // The workspace on its screen, or its special workspace being shown
-    function onScreen(ws: HyprlandWorkspace): bool {
+    // (ws untyped: Qt 6.12.1's qmllint no longer finds Quickshell's HyprlandWorkspace in a signature)
+    function onScreen(ws): bool {
         const mon = ws?.monitor;
         if (!mon)
             return false;
