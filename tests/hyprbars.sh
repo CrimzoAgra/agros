@@ -12,6 +12,9 @@ set -euo pipefail
 # own check, with a red "Version mismatch" error on screen at every login. (The build after it fails at once here: the
 # headers aren't the running Hyprland's)
 mkdir -p "$t/pkg" "$t/lbin" "$t/lhome/.local/share/hyprbars" "$t/lhome/.cache"
+# (never this machine's own packaged plugin, /usr/lib/libhyprbars.so: once one built for its Hyprland was installed, the
+# runs below that must build found nothing to do; the parts about the packaged one give their own)
+export HYPRBARS_PACKAGED=$t/none/libhyprbars.so
 cp "$here/.local/share/hyprbars/hyprbars.patch" "$t/lhome/.local/share/hyprbars/"
 printf 'ELF\0%s\0' 1111111111111111111111111111111111111111 >"$t/pkg/libhyprbars.so"
 # ($LOADED: a plugin loaded is listed after it, as Hyprland lists it)
