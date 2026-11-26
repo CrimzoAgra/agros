@@ -292,6 +292,7 @@ if [[ -z ${AGROS_SKIP_AUR:-} ]]; then
     # The AUR packages CI holds, unbuilt (AGROS_AUR_HELD, ci/aur-maintainers.sh: their AUR maintainers changed days ago,
     # or the AUR no longer has them): their build files fenced off, each kept as published (keep_held, published.sh)
     aur_fence
+    fetch_why="its AUR build files couldn't be fetched, three tries a minute apart (the AUR down?)"
     # ninja's status lines for steps with no description (blank) left out
     # (and makepkg's note that it builds in the sources it unpacked: paru unpacks, then builds, always)
     aur_build() {
@@ -302,17 +303,20 @@ if [[ -z ${AGROS_SKIP_AUR:-} ]]; then
     # the repo: caelestia-shell's quickshell-git taken from it, by its name (CachyOS's noctalia-qs only claims it), not
     # built from the AUR without the fix. Its build files or the patch no longer fitting: the published one held. Nothing
     # it's built from changed: the published one kept, not built (reused, published.sh: 7 minutes)
-    keep_held quickshell-git || { asb git clone -q https://aur.archlinux.org/quickshell-git.git "$work/quickshell-git" &&
+    # (its build files not fetched, the AUR down: said as that, not as the fix)
+    why="AgrOS's fix (packages/agros-system/aur-patches) didn't build: has Quickshell fixed it itself?"
+    keep_held quickshell-git || {
+        { aur_clone quickshell-git "$work/quickshell-git" || { why=$fetch_why; false; }; } &&
         asb "$work/agros/packages/agros-system/aur-agros-patch" "$work/quickshell-git" quickshell-git &&
         { reused "$work/quickshell-git" ||
             (cd "$work/quickshell-git" && asb env PKGDEST="$out" makepkg -s --noconfirm); }; } ||
-        hold quickshell-git "AgrOS's fix (packages/agros-system/aur-patches) didn't build: has Quickshell fixed it itself?"
+        hold quickshell-git "$why"
     asb repo-add -q "$out/agros.db.tar.gz" "$out"/quickshell-git-*.pkg.tar.zst
     pacman -Sy --noconfirm >/dev/null
     # caelestia-shell apart from the others, after them (4 minutes: kept when unchanged, as Quickshell), its AUR
     # dependencies (those no repo has) built with the others
     mapfile -t aur < <(printf '%s\n' "${aur[@]}" | grep -vx caelestia-shell)
-    if [[ -z ${aur_held[caelestia-shell]:-} ]] && asb git clone -q https://aur.archlinux.org/caelestia-shell.git "$work/caelestia-shell"; then
+    if [[ -z ${aur_held[caelestia-shell]:-} ]] && aur_clone caelestia-shell "$work/caelestia-shell"; then
         for d in $(cd "$work/caelestia-shell" && asb makepkg --printsrcinfo | sed -n 's/^\t\(depends\|makedepends\) = \([^<>=]*\).*/\2/p'); do
             pacman -Sp "$d" >/dev/null 2>&1 || [[ " ${aur[*]} " == *" $d "* ]] || aur+=("$d")
         done
@@ -325,9 +329,11 @@ if [[ -z ${AGROS_SKIP_AUR:-} ]]; then
     # One that still didn't build: the published one held, with what it needs
     aur_build || aur_build || true
     pacman -Sy --noconfirm >/dev/null
+    why="it didn't build from the AUR (the build's log above)"
+    [[ -d $work/caelestia-shell ]] || why=$fetch_why
     keep_held caelestia-shell || { [[ -d $work/caelestia-shell ]] && { reused "$work/caelestia-shell" ||
         (cd "$work/caelestia-shell" && asb env PKGDEST="$out" makepkg -s --noconfirm); }; } ||
-        hold caelestia-shell "it didn't build from the AUR (the build's log above)"
+        hold caelestia-shell "$why"
     for p in "${aur[@]}"; do
         out_has "${p#*/}" || hold "${p#*/}" "it didn't build from the AUR (the build's log above)"
     done

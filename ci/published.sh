@@ -12,6 +12,18 @@ verify_sig() { gpgv --keyring "$keyring" "$1" "$2" >/dev/null 2>&1; }
 # database, or a 404 from before a file was published; the query asks for the current one, as mirror.sh's fetch)
 stamp=$(date +%s)
 hold() { held+=("$1: $2"); echo "!! $1: $2: the published one kept"; carry_over "$1" || exit 1; }
+# aur_clone <base> <dir>: its AUR build files, tried again a minute later, three times (the AUR answers a 5xx now and
+# then): one that still fails said as that, not held as its build or AgrOS's patch failing ("has Quickshell fixed it?")
+aur_clone() {
+    local i
+    for i in 1 2 3; do
+        asb git clone -q "https://aur.archlinux.org/$1.git" "$2" && return 0
+        rm -rf "$2"
+        ((i == 3)) || sleep "${AGROS_RETRY_WAIT:-60}"
+    done
+    echo "!! $1: its AUR build files couldn't be fetched, three tries"
+    return 1
+}
 # The published database, read once; field <desc> <NAME>: a field of a package's entry in it
 pubdb=$work/pubdb
 field() { awk -v f="%$2%" '$0 == f { on = 1; next } /^%/ { on = 0 } on && NF' "$1"; }

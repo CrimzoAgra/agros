@@ -187,8 +187,31 @@ e=$(HOME=$t/home GIT_TERMINAL_PROMPT=0 git ls-remote https://aur.archlinux.org/a
 held_run keep_held libx >/dev/null && fail "a package not held kept unbuilt"
 [[ ! -e $out/libx-2-1-x86_64.pkg.tar.zst ]] || fail "a package not held carried over"
 held_run keep_held nosuch >/dev/null 2>&1 && fail "a held package with none published to keep didn't stop the build"
-for l in 'aur_fence' 'keep_held quickshell-git || { asb git clone' 'keep_held caelestia-shell || {' \
-    'for p in "${aur[@]}"; do keep_held "$p" || left+=("$p"); done' '[[ -z ${aur_held[caelestia-shell]:-} ]] && asb git clone'; do
+for l in 'aur_fence' 'keep_held quickshell-git || {' 'keep_held caelestia-shell || {' \
+    'for p in "${aur[@]}"; do keep_held "$p" || left+=("$p"); done' '[[ -z ${aur_held[caelestia-shell]:-} ]] && aur_clone'; do
     grep -qF -- "$l" "$here/ci/build-repo.sh" || fail "build-repo.sh doesn't hold the AUR packages CI holds: no $l"
 done
+# aur_clone: an AUR clone that fails tried again, three times (the AUR's 5xx now and then held Quickshell as "AgrOS's
+# fix didn't build"); still failing, said as that, and the hold then says so. build-repo.sh clones Quickshell and
+# Caelestia with it (git's stand-in fails while $t/clonefails has lines left, one taken a try)
+clone_run() {
+    (
+        asb() { echo "$*" >>"$t/calls"; [[ ! -s $t/clonefails ]] || { sed -i 1d "$t/clonefails"; return 1; }; mkdir -p "${*: -1}"; }
+        AGROS_RETRY_WAIT=0 aur_clone "$@"
+    )
+}
+rm -rf "$t/calls" "$t/qs"; printf 'x\nx\n' >"$t/clonefails"
+clone_run quickshell-git "$t/qs" >/dev/null && [[ -d $t/qs ]] || fail "an AUR clone that failed twice not tried a third time"
+[[ $(grep -cxF "git clone -q https://aur.archlinux.org/quickshell-git.git $t/qs" "$t/calls") == 3 ]] ||
+    fail "not the AUR's address cloned, three times: $(cat "$t/calls")"
+rm -rf "$t/calls" "$t/qs"; printf 'x\nx\nx\nx\n' >"$t/clonefails"
+o=$(clone_run quickshell-git "$t/qs") && fail "an AUR clone that always failed read as fetched"
+[[ $o == *"quickshell-git: its AUR build files couldn't be fetched"* && $(wc -l <"$t/calls") == 3 ]] ||
+    fail "an AUR clone that always failed not said, or not tried three times: $o / $(cat "$t/calls")"
+for l in 'aur_clone quickshell-git "$work/quickshell-git" || { why=$fetch_why; false; }' 'hold quickshell-git "$why"' \
+    '[[ -d $work/caelestia-shell ]] || why=$fetch_why' 'hold caelestia-shell "$why"'; do
+    grep -qF -- "$l" "$here/ci/build-repo.sh" || fail "build-repo.sh's hold doesn't say its AUR build files couldn't be fetched: no $l"
+done
+! grep -n 'asb git clone -q https://aur.archlinux.org/\(quickshell-git\|caelestia-shell\)' "$here/ci/build-repo.sh" ||
+    fail "an AUR clone in build-repo.sh not tried again (aur_clone)"
 echo "ok build-repo-hold"

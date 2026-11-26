@@ -1581,10 +1581,11 @@ breaks something holds back that one piece, never the rest (`.github/workflows/c
   `agros-keyring`'s `pkgver`, let machines update, then replace the secret; signing with a key `ci/agros.asc` lacks
   fails the release, before anything goes out.
 - **A package that doesn't build** (an AUR change, AgrOS's Quickshell patch or Calamares changes no longer fitting,
-  Calamares built without a module its settings name, a download that failed): the published one is kept, its
-  signature checked, with the packages of the repo it needs (`ci/published.sh`); the rest goes out. None published yet:
-  the build fails. The AUR packages and CachyOS's installer are built without compiler warnings (theirs, not AgrOS's);
-  AgrOS's own packages keep them.
+  Calamares built without a module its settings name, a download that failed; Quickshell's and Caelestia's AUR build
+  files are fetched three times a minute apart, and still failing the issue says so, not that the patch no longer fits):
+  the published one is kept, its signature checked, with the packages of the repo it needs (`ci/published.sh`); the
+  rest goes out. None published yet: the build fails. The AUR packages and CachyOS's installer are built without
+  compiler warnings (theirs, not AgrOS's); AgrOS's own packages keep them.
 - **An AUR package whose maintainers changed** (an orphan adopted, a co-maintainer added: either can push its build
   files, which CI builds unreviewed and AgrOS's key signs for every machine): held by CI itself, no one asked
   (`ci/aur-maintainers.sh`, in the `agros` job, where no AUR code runs). Its last build stays, as published, for 14
