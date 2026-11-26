@@ -1505,7 +1505,8 @@ the `pkgver` of a package that has a fixed one: see [How it's packaged](#how-its
 
 `tests/run.sh` runs them all (`tests/run.sh lutris-overlay` just one), each in a throwaway home, so nothing of yours is
 touched. Several run at once (one per CPU; `AGROS_TEST_JOBS=1`, one at a time), and one that fails among them runs again
-alone: only a failure there counts (one that passed only alone is said, as flaky). Each test has 10 minutes. A pass ends
+alone: only a failure there counts (one that passed only alone is said, as flaky; one that fails has its line, the
+first of its why, and its last 40 lines of output on stderr, CI's log). Each test has 10 minutes. A pass ends
 on the test's own `ok <test>` line, so one that stops early with exit 0 fails. Run it after changing a script, and after
 Caelestia, Lutris or Hyprland updates: they check that the Caelestia and Lutris changes and the hyprbars patch still
 fit, besides the boot update (its AUR builds, firmware, Proton and developer tools too), the account restore, the
@@ -1609,8 +1610,8 @@ breaks something holds back that one piece, never the rest (`.github/workflows/c
   new AUR builds held, no new ISO started: it would take that Arch, its gate holding back only Hyprland; AgrOS's own
   packages still out but `agros-hyprbars`: built for that Hyprland, it would start on none the machines or the ISO have,
   so the published one, built for the approved Hyprland, is kept, `AGROS_HOLD_OWN`). Failing even then: AgrOS's own
-  code, and nothing goes out (so too when a pass can't install, a download failed: the issue says that pass, not AgrOS's
-  code).
+  code, and nothing goes out (so too when a pass can't install, a download that still failed on its third try a minute
+  apart, the archive's without pacman's download timeout: the issue says that pass, not AgrOS's code).
 - **A new install that fails** (`ci/install-test.sh`, the `install` job, between the tests and the release): the
   release, as the release job makes it (the hold above, the database), installed for real into an empty root (base and
   every `agros-*` package, pacstrap's mounts, `[cachyos]` above Arch's as machines have it, `[agros]` last, nothing
