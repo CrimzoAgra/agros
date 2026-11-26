@@ -810,8 +810,11 @@ def schema(live=True, lists=True):
                                                 text=True).stdout)
         except ValueError:
             changes = []
+        # (what turning one off turns off too, said on its switch: patch.py's also_off)
         group["settings"] = [{"key": f"{name}.{c['id']}", "label": c["label"][:1].upper() + c["label"][1:],
-                              "type": "bool", "default": True, "apply": name} for c in changes]
+                              "type": "bool", "default": True, "apply": name,
+                              **({"description": "Turning it off also turns off: " + "; ".join(c["also_off"])}
+                                 if c.get("also_off") else {})} for c in changes]
     binds = [g for page in pages["pages"] for g in page["groups"] if g.get("from") == "binds"]
     if binds and live and lists:
         rows = binds_group(all_settings(pages), stored())

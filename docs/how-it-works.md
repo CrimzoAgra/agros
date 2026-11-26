@@ -294,7 +294,9 @@ Windows, Sound & network), each with a button to its whole page.
     the picture, as Hyprland allows no tearing with the graphics card's cursor layer showing one: `user/apps.lua`), each
     of game-focus's four behaviours, store launchers starting minimised, each Lutris change, and
     each change to Caelestia (listed from `caelestia-overlay`'s and the Lutris overlay's `patch.py --list`, so new ones
-    show up by themselves). A Caelestia change turned off is left out of the rebuild (`Off:`, not a warning)
+    show up by themselves). A Caelestia change turned off is left out of the rebuild (`Off:`, not a warning); one that
+    others need says on its switch what turning it off turns off too (`--list`'s `also_off`: 15 of them take the shell
+    in four windows, and with it the bar's place on the right, top or bottom, which falls back to the left)
   - **Startup**: your apps started at login (`~/.config/autostart`; not the system's own, `/etc/xdg/autostart`: the
     keyring, accessibility, the print queue applet), none preset, each with its icon, **Minimised** or **Open
     normally**, and a button that removes it; below them a dashed "Add an app" row opens the list of installed apps (not

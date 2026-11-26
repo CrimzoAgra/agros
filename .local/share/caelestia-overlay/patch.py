@@ -3514,8 +3514,23 @@ NEEDS = {"bar_side": ("split_windows",), "nexus_snappy": ("nexus_pages",), "sett
 # ...and features that need every one of a list: off when any of them is off or skipped
 NEEDS_ALL = {"split_windows": tuple(f.__name__ for f in SPLIT_NEEDS), "tray_over_dock": ("tray_click", "bar_menu")}
 
+def off_with(fid):
+    """What turning one off turns off too (those needing it, NEEDS_ALL's or NEEDS' alone, and so on): the Settings app
+    says it on its switch (16 of them took the bar's place from the bottom back to the left, unsaid)"""
+    found, todo = [], [fid]
+    while todo:
+        x = todo.pop(0)
+        for y, ns in [*NEEDS_ALL.items(), *((k, v) for k, v in NEEDS.items() if len(v) == 1)]:
+            if x in ns and y not in found:
+                found.append(y)
+                todo.append(y)
+    return found
+
+
 if sys.argv[1:] == ["--list"]:
-    print(json.dumps([{"id": f.__name__, "label": name} for name, f in FEATURES]))
+    names = {f.__name__: name for name, f in FEATURES}
+    print(json.dumps([{"id": f.__name__, "label": name, **({"also_off": [names[y] for y in off_with(f.__name__)]}
+                                                            if off_with(f.__name__) else {})} for name, f in FEATURES]))
     sys.exit(0)
 src, dst = sys.argv[1], sys.argv[2]
 off = turned_off()

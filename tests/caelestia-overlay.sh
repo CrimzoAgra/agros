@@ -564,6 +564,14 @@ cat >"$t/bin/dots-settings-bottom" <<S
 echo "{\"bar.side\": \"bottom\", \"caelestia.\$(cat "$t/off")\": false}"
 S
 chmod +x "$t/bin/dots-settings-bottom"
+# The Settings app's switches say what turning one off turns off too (--list's also_off): one the four windows need
+# takes them and the bar's place with it; the bar's place, nothing
+python3 "$here/.local/share/caelestia-overlay/patch.py" --list | python3 -c '
+import json, sys
+a = {f["id"]: f.get("also_off", []) for f in json.load(sys.stdin)}
+assert any("four windows" in x for x in a["bar_menu"]) and any("bar on the right" in x for x in a["bar_menu"]), a["bar_menu"]
+assert any("bar on the right" in x for x in a["split_windows"]) and not a["bar_side"], (a["split_windows"], a["bar_side"])
+' || fail "the Settings app not told what a switch turns off with it (patch.py --list's also_off)"
 for f in $(python3 "$here/.local/share/caelestia-overlay/patch.py" --list | python3 -c 'import json, sys; print(*(f["id"] for f in json.load(sys.stdin)))'); do
     echo "$f" >"$t/off"; rm -rf "$t/one"; cp -as "$src" "$t/one"
     out=$(DOTS_SETTINGS=$t/bin/dots-settings-bottom python3 "$here/.local/share/caelestia-overlay/patch.py" "$src" "$t/one" 2>&1) ||
