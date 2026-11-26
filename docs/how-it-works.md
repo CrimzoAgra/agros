@@ -302,11 +302,12 @@ Windows, Sound & network), each with a button to its whole page.
     Minimised: Lutris, Proton VPN, Solaar and ArtCraft start in their tray (`dots-settings`' `LOGIN_EXEC`),
     once the tray is up (`gdbus wait` for `org.kde.StatusNotifierWatcher`: Proton VPN looks for it once, and started
     before it, showed its window and quit when closed); any other app gets `AGROS_START_MINIMISED=1`, and
-    `user/apps.lua` minimises its windows of the first minute to the dock. Removed: one added here is deleted, any other
-    (an app's own entry) hidden with `Hidden=true`. `dots-settings migrate` (`agros-links`, at login) gives minimised
-    entries added with an older quiet start the current one, and gave accounts from before this page's rework their old
-    switches (`startup.<app>`) as entries, once; an entry from before the choice counts as minimised when AgrOS had a
-    quiet start for it
+    `user/apps.lua` minimises its windows of its first minute to the dock (counted from the start of the app the login
+    started: what it starts later, a game from Steam, inherits the variable but isn't minimised). Removed: one added
+    here is deleted, any other (an app's own entry) hidden with `Hidden=true`. `dots-settings migrate` (`agros-links`,
+    at login) gives minimised entries added with an older quiet start the current one, and gave accounts from before
+    this page's rework their old switches (`startup.<app>`) as entries, once; an entry from before the choice counts as
+    minimised when AgrOS had a quiet start for it
   - **Shortcuts**: my shortcuts (`dots.bind` in `user/keys.lua`, `user/windows.lua` and `user/apps.lua`; defaults in the
     schema), Caelestia's (its `kb*` variables, by its sections, minus the ones `hypr-vars.lua` turns off; your changes
     go back through `hypr-vars.lua`), and the fixed ones neither can change (Caelestia's arrows, media keys...:

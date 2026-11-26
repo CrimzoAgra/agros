@@ -357,11 +357,25 @@ end
 -- An app you start at login minimised (Settings app, Startup: dots-settings writes its entry's command with
 -- AGROS_START_MINIMISED=1): its windows of the first minute go to the dock as they open. Lutris, Proton VPN...
 -- start in their tray by their own options instead
+-- The first minute is the app's as the login started it: the age of the topmost process with the mark, not the
+-- window's own. Whatever it starts inherits the mark: a game from Steam started so, a link Discord opened in a browser
+-- not running yet, had their windows minimised as they opened
+local function start_minimised(pid)
+    local env = proc(pid, "environ")
+    return env ~= nil and ("\0" .. env):find("%zAGROS_START_MINIMISED=1%z") ~= nil
+end
+local function started_minimised_age(pid)
+    for _ = 1, 64 do
+        -- (its parent: the field after its state, after the last ")", as process_age reads them)
+        local parent = tonumber((proc(pid, "stat") or ""):match("^.*%) %S+ (%d+)"))
+        if not (parent and parent > 1 and start_minimised(parent)) then break end
+        pid = parent
+    end
+    return process_age(pid)
+end
 hl.on("window.open", function(win)
-    if not (win and win.pid and win.pid > 0) then return end
-    local env = proc(win.pid, "environ")
-    if not (env and ("\0" .. env):find("%zAGROS_START_MINIMISED=1%z")) then return end
-    local age = process_age(win.pid)
+    if not (win and win.pid and win.pid > 0 and start_minimised(win.pid)) then return end
+    local age = started_minimised_age(win.pid)
     if not age or age > 60 then return end
     -- (once it's on a workspace, as the launchers above)
     hl.exec_cmd("sh -c 'sleep 0.3; exec hyprctl eval \"dots.minimise_launcher([[" .. win.address .. "]])\"'")
