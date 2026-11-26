@@ -1333,7 +1333,9 @@ brings each change; nothing to run by hand).
     (`/var/lib/auto-update/conflicts`) for `agros-check` until it's installed. Still not worked out (or a new runtime
     or its rebuild among what it held): the whole update waits, said, as a failure
     A Qt the shells were rebuilt for is written down (`/var/lib/auto-update/qt-built`), so Updates doesn't rebuild
-    them again
+    them again. Updates' own rebuild skips one whose installed version is `[agros]`'s current rebuild (CI's, for this
+    Qt) without counting it as left out: counted, the Qt was never written down, and `agros-check` said at every login
+    that Quickshell wasn't built for it
   - **Firmware** (fwupd): its metadata refreshed (LVFS, signed) and checked at boot (nothing said when offline or
     none). Any waiting is said on each user's desktop ("Firmware update ready... installed when you shut down or
     restart", once someone's logged in to a desktop: `agros-each-user --notify-wait`) and installed at the next shutdown

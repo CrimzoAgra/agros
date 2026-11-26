@@ -195,6 +195,15 @@ sed -i 's/0.2.1.r5.gabc1234-1.2"/0.2.1.r5.gabc1234-1.2.1"/' "$t/bin/pacman"
 out=$(qt 6.9.0 --qt-mark && qt 6.10.0 --qt-rebuild 2>&1) && fail "a relabelled rebuild left out reported success"
 [[ $out == *"quickshell-git: its version installed, 0.2.1.r5.gabc1234-1.2.1, is AgrOS's own rebuild"* ]] &&
     ! grep -q -- "-Ui .* in quickshell-git$" "$t/paru" || fail "CI's relabelled Quickshell rebuilt at an older release: $out"
+# ...but the one [agros] has now (its rebuild for this Qt): nothing to do, not left out, the Qt written down (counted as
+# left out, agros-check said at every login that Quickshell wasn't built for the Qt installed)
+rm -f "$t/paru" "$t/state/quickshell-qt"
+sed -i 's/"-Slq agros") echo quickshell-git ;;/"-Slq agros") echo quickshell-git ;; "-Sl agros") echo "agros quickshell-git 0.2.1.r5.gabc1234-1.2.1 [installed]" ;;/' "$t/bin/pacman"
+grep -q '"-Sl agros")' "$t/bin/pacman" || fail "the test's pacman stub not given [agros]'s list"
+out=$(qt 6.9.0 --qt-mark && qt 6.10.0 --qt-rebuild 2>&1) || fail "[agros]'s own rebuild installed, for this Qt: reported as left out: $out"
+grep -q 'qt6-base 6.10.0' "$t/state/quickshell-qt" && ! grep -q -- "-Ui .* in quickshell-git$" "$t/paru" 2>/dev/null ||
+    fail "[agros]'s own rebuild installed: the Qt not written down, or rebuilt: $(cat "$t/state/quickshell-qt" 2>/dev/null)"
+sed -i 's/ "-Sl agros") echo "agros quickshell-git 0.2.1.r5.gabc1234-1.2.1 \[installed\]" ;;//' "$t/bin/pacman"
 sed -i 's/0.2.1.r5.gabc1234-1.2.1"/0.2.1.r5.gabc1234-1.2"/' "$t/bin/pacman"
 unset AUTO_UPDATE_AUR; rm "$t/bin/curl"
 # Part of Qt not installed (an edition without qt6-declarative): --qt-mark doesn't fail, the stamp names each one

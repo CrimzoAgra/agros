@@ -119,6 +119,9 @@ rebuild_agros() {
         rel=$(cd "$tmp/$base" && bash -c '. ./PKGBUILD >/dev/null 2>&1; echo "$pkgrel"')
         dots=${have##*-} dots=${dots//[^.]/} built=${rel//[^.]/}
         if ((${#dots} > ${#built})); then
+            # (the one [agros] has now: CI's rebuild for the Qt it publishes with, nothing to do. Counted as left out, the
+            # Qt was never written down, and agros-check said at every login that Quickshell wasn't built for it)
+            [[ $(pacman -Sl agros 2>/dev/null | awk -v p="$p" '$2 == p { print $3 }') == "$have" ]] && continue
             echo "!! $p: its version installed, $have, is AgrOS's own rebuild: left for the next boot's rebuild, or AgrOS's next one"
             rc=1; continue
         fi
