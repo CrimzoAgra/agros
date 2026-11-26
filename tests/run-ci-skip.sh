@@ -59,4 +59,14 @@ out=$(AGROS_TEST_TIMEOUT=1 bash "$t/tests/run.sh" hang) && fail "a test that hun
 out=$(AGROS_TEST_TIMEOUT=1 AGROS_TEST_JOBS=3 bash "$t/tests/run.sh" plain hang) && fail "a test that hung among others passed: $out"
 [[ $out == $'ok plain\nFAIL hang: stopped at its time limit'* ]] || fail "a hung test among others not said in order: $out"
 ((SECONDS - start < 30)) || fail "a hung test, or what it started, kept run.sh waiting: $((SECONDS - start))s"
+# A failure whose why runs over several lines (fail "...: $out"): its line has the first, the rest of what it printed
+# goes to stderr (CI's log), alone and among others (one of CI's failures said only "...for a conflict:", nothing more)
+printf '#!/bin/sh\necho "checking"\nprintf "FAIL: it said:\\nline two\\nline three\\n"\nexit 1\n' >"$t/tests/long.sh"
+chmod +x "$t/tests/long.sh"
+for j in 1 3; do
+    out=$(AGROS_TEST_JOBS=$j bash "$t/tests/run.sh" plain long 2>"$t/err") && fail "a failing test passed: $out"
+    [[ $out == $'ok plain\nFAIL long: it said:' ]] || fail "a multi-line failure's line not its first ($j at once): $out"
+    grep -xF '!!   line two' "$t/err" >/dev/null && grep -xF '!!   line three' "$t/err" >/dev/null ||
+        fail "a multi-line failure's rest not on stderr ($j at once): $(cat "$t/err")"
+done
 echo "ok run-ci-skip"

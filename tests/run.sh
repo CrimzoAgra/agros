@@ -41,15 +41,16 @@ one() {
     if [[ -n ${CI:-} && ( $last == skip\ * || $last == *SKIPPED* ) ]]; then
         out="FAIL $t: skipped on CI, where a pass approves Hyprland: ${last}"
     fi
-    # (a failure's whole output kept beside its line, when run among the others: said if it then passes alone)
+    # (a failure's whole output kept beside its line: said if it then passes alone, its last lines if it fails)
     [[ $out != "FAIL $t: "* || -z ${ONE_LOGS:-} ]] || printf '%s\n' "$raw" >"$ONE_LOGS/$t.log"
     echo "$out" | tail -1
 }
 jobs=${AGROS_TEST_JOBS:-$(nproc 2>/dev/null || echo 1)}
 limit=${AGROS_TEST_TIMEOUT:-600}
 res=$(mktemp -d) && trap 'rm -rf "$res"' EXIT
+export ONE_LOGS=$res
 if ((jobs > 1 && ${#tests[@]} > 1)); then
-    export -f one && export here limit ONE_LOGS=$res
+    export -f one && export here limit
     # shellcheck disable=SC2016  # (expanded by that bash)
     printf '%s\0' "${tests[@]}" | xargs -0 -P "$jobs" -I{} bash -c 'one "$1" >"$2/$1"' _ {} "$res"
 fi
@@ -65,5 +66,11 @@ for t in "${tests[@]}"; do
     fi
     [[ $line != FAIL\ * ]] || failed=1
     echo "$line"
+    # (and a failure's last lines of output on stderr, CI's log: its line has only the first line of a why that runs on
+    # (fail "...: $out"), and the rest was nowhere)
+    if [[ $line == FAIL\ * && -s $res/$t.log ]]; then
+        echo "!! $t's output, its last ${AGROS_FAIL_LINES:-40} lines:" >&2
+        tail -n "${AGROS_FAIL_LINES:-40}" "$res/$t.log" | sed 's/^/!!   /' >&2
+    fi
 done
 exit $failed
