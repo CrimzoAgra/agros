@@ -32,8 +32,9 @@ out=$(CI=1 AGROS_TEST_JOBS=3 bash "$t/tests/run.sh" clash-a plain clash-b) && [[
 printf '#!/bin/sh\nif [ ! -e %q/once ]; then touch %q/once; echo "FAIL: first time"; exit 1; fi\necho "ok flaky"\n' \
     "$t" "$t" >"$t/tests/flaky.sh"
 chmod +x "$t/tests/flaky.sh"
-out=$(AGROS_TEST_JOBS=3 bash "$t/tests/run.sh" plain flaky 2>"$t/err") && [[ $out == $'ok plain\nok flaky' ]] ||
+out=$(AGROS_FLAKY=$t/flaky-names AGROS_TEST_JOBS=3 bash "$t/tests/run.sh" plain flaky 2>"$t/err") && [[ $out == $'ok plain\nok flaky' ]] ||
     fail "a test that passed alone didn't pass: $out"
+[[ $(cat "$t/flaky-names" 2>/dev/null) == flaky ]] || fail "a flaky test not named in AGROS_FLAKY: $(cat "$t/flaky-names" 2>/dev/null)"
 grep -xF '!! flaky failed among the others, passed alone: first time' "$t/err" >/dev/null ||
     fail "a test that failed among the others not said: $(cat "$t/err")"
 out=$(CI=1 AGROS_TEST_JOBS=3 bash "$t/tests/run.sh" plain whole) && fail "a real failure among others passed: $out"

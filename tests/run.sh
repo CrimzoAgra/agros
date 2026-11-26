@@ -62,6 +62,8 @@ for t in "${tests[@]}"; do
     # (with the last of what it printed then: its line alone gave no why, "lutris-library failed")
     if [[ $first == FAIL\ * && $line != FAIL\ * ]]; then
         echo "!! $t failed among the others, passed alone: ${first#"FAIL $t: "}" >&2
+        # (and its name in $AGROS_FLAKY: CI's record of them, the Friday status's, which counts them over the week)
+        [[ -z ${AGROS_FLAKY:-} ]] || echo "$t" >>"$AGROS_FLAKY"
         [[ ! -s $res/$t.log ]] || tail -n 15 "$res/$t.log" | sed 's/^/!!   /' >&2
     fi
     [[ $line != FAIL\ * ]] || failed=1

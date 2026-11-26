@@ -201,6 +201,8 @@ result() {
         echo "- Upstream's next release (its main branch, or Arch's builds CachyOS hasn't rebuilt yet) no longer fits AgrOS's changes: nothing held, adapt them before it's released:"
         echo "$ahead"
     fi >>"$report"
+    # (the tests that failed among the others and passed alone, tests/run.sh's AGROS_FLAKY: CI's record of them)
+    [[ -z ${AGROS_FLAKY:-} ]] || echo "flaky=$(sort -u "$AGROS_FLAKY" 2>/dev/null | paste -sd' ')" >>"$out"
     echo "result=$1" >>"$out"; echo "Tests: $1"; exit "${2:-0}"
 }
 agros_at "$built"

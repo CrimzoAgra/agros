@@ -50,6 +50,8 @@ jobs:
       # (the new build that broke the tests, and what needs it: "<name>: <why>" lines, ci/test-passes.sh. None with
       # hold-agros: which one wasn't found, every new AUR build held)
       hold: ${{ steps.tests.outputs.hold }}
+      # (the tests that failed among the others and passed alone: the sign job's record of them, agros-flaky)
+      flaky: ${{ steps.tests.outputs.flaky }}
       gated: ${{ steps.gated.outputs.gated }}
       approved: ${{ steps.approved.outputs.approved }}
     runs-on: ubuntu-26.04
@@ -230,7 +232,9 @@ jobs:
             # one, not a copy Pages' CDN keeps up to 10 minutes after a deploy)
             site=https://crimzoagra.github.io/agros/x86_64
             day=$(curl -fsS --retry 3 "$site/agros-arch-ok?t=$(date +%s)" 2>/dev/null) || day=
-            ci/test-passes.sh file:///tmp/built/x86_64 "$site" "$day"
+            # (the ci user writes the flaky tests' names there: tests/run.sh)
+            install -m 666 /dev/null /tmp/flaky
+            AGROS_FLAKY=/tmp/flaky ci/test-passes.sh file:///tmp/built/x86_64 "$site" "$day"
           else
             runuser -u ci -- env DOTS_BUILD_TESTS=1 tests/run.sh
           fi
@@ -371,6 +375,8 @@ jobs:
     outputs:
       newer: ${{ steps.newer.outputs.newer }}
       sums: ${{ steps.sums.outputs.sums }}
+      # (the test job's, for the sign job's record of them)
+      flaky: ${{ needs.test.outputs.flaky }}
     runs-on: ubuntu-26.04
     timeout-minutes: 45
     container:
@@ -650,6 +656,18 @@ jobs:
           curl -fsS --retry 3 -o /tmp/cpu-before "$site/agros-cpu-repos?t=$(date +%s)" 2>/dev/null || : >/tmp/cpu-before
           AGROS_CPU_BEFORE=/tmp/cpu-before AGROS_CPU_STATE=out/x86_64/agros-cpu-repos ci/cpu-repos.sh v3 znver4 ||
             echo "::warning::agros-desktop doesn't resolve with CachyOS's CPU repos above (their lag behind Arch's; this step's log says what): published anyway"
+      # The tests that failed among the others and passed alone (tests/run.sh: a flake), a record across runs for the
+      # Friday status, which says one seen on 2 days of its week (agros-flaky, beside the repo: unsigned, read only by
+      # it): "<day> <test>" lines, the last 14 days' (the one published read back; not readable: started afresh)
+      - name: Flaky tests' record
+        env:
+          FLAKY: ${{ needs.release.outputs.flaky }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          site=https://$OWNER.github.io/${GITHUB_REPOSITORY#*/}/x86_64
+          from=$(date -u -d '-14 days' +%F)
+          { curl -fsS --retry 3 "$site/agros-flaky?t=$(date +%s)" 2>/dev/null | awk -v from="$from" '$1 >= from && NF == 2' || :
+            for n in $FLAKY; do echo "$(date -u +%F) $n"; done; } >out/x86_64/agros-flaky
       - uses: actions/upload-pages-artifact@v5
         with:
           path: out

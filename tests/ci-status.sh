@@ -118,6 +118,10 @@ case "$*" in
     echo "# checked 2026-11-20"
     [[ $STATE != *cpu-new* ]] || printf '2026-11-19\tv3 unresolved\tagros-desktop does not resolve on v3 (x)\n'
     [[ $STATE != *cpu-old* ]] || printf '2026-11-16\tznver4 skew libplacebo\tznver4 machines: libplacebo (y)\n' ;;
+  # (CI's record of flaky tests: with flaky, tray-menu on 2 days of the last 7, once on 1, old 2 weeks before)
+  *agros-flaky*)
+    [[ $STATE == *flaky* ]] || exit 22
+    printf '%s\n' '2026-11-06 old' '2026-11-07 old' '2026-11-18 tray-menu' '2026-11-19 once' '2026-11-20 tray-menu' '2026-11-20 tray-menu' ;;
   *agros-aur-maintainers*)
     [[ $STATE == *aur-down* ]] && exit 22
     [[ $STATE == *aur-stale* ]] && echo "# checked 2026-11-16" || echo "# checked 2026-11-20"
@@ -279,6 +283,12 @@ grep -qxF -- "- CI hasn't read the AUR since 2026-11-16: whether [agros]'s AUR p
 go "aur-down"
 grep -qxF -- "- CI's record of [agros]'s AUR packages' maintainers couldn't be read (https://crimzoagra.github.io/agros/x86_64/agros-aur-maintainers): whether any changed not checked" "$t/body" ||
     fail "the record unreadable not said: $(cat "$t/body")"
+# (flaky tests: one on 2 days of the record's last 7 said, one on a day, or 2 weeks before, not)
+go "flaky"
+grep -qxF -- "- Tests that failed among the others and passed alone, on 2 days or more this week: tray-menu (2 days) (CI's logs say how: likely timing; the fix makes one wait on what it checks, not on time)" "$t/body" ||
+    fail "a test flaky on 2 days of the week not said, or others said: $(grep -i 'passed alone' "$t/body")"
+go ""
+! grep -q 'passed alone' "$t/body" || fail "flaky tests said with no record: $(grep 'passed alone' "$t/body")"
 # (CachyOS's CPU repos: something there for a day is their routine lag, only in the table; the same thing 3 days or
 # more, from first seen to the last check, needs a look; the record unreadable: the table says so, nothing asked)
 go ""

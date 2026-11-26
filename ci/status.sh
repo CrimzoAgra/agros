@@ -218,6 +218,17 @@ if c=$(curl -fsS --retry 3 "$site/agros-cpu-repos" 2>/dev/null); then
 else
     cpu_cell="CI's record couldn't be read"
 fi
+# Flaky tests (CI's record, agros-flaky: "<day> <test>" lines, a test that failed among the others and passed alone,
+# tests/run.sh): one on 2 days or more of the record's last 7 said (a flake every night was only in CI's logs). The
+# record not there, or empty: nothing said
+if f=$(curl -fsS --retry 3 "$site/agros-flaky" 2>/dev/null) && [[ -n $f ]]; then
+    last=$(awk 'NF == 2 { print $1 }' <<<"$f" | sort | tail -n1)
+    from=$(date -u -d "$last -6 days" +%F 2>/dev/null) || from=$last
+    flaky=$(awk -v from="$from" '$1 >= from && NF == 2' <<<"$f" | sort -u |
+        awk '{ c[$2]++ } END { for (n in c) if (c[n] >= 2) print n " (" c[n] " days)" }' | sort | paste -sd';' | sed 's/;/, /g')
+    [[ -z $flaky ]] ||
+        problems+=("Tests that failed among the others and passed alone, on 2 days or more this week: $flaky (CI's logs say how: likely timing; the fix makes one wait on what it checks, not on time)")
+fi
 # The size watch: each thing it found needs a look; it not having run, too, with its log (or the next week's finds
 # nothing to compare with: last week's baseline kept then). (Its table says it ran, not its baseline: a first week
 # whose sets pacman couldn't work out has none, and what pacman said goes in the issue)
