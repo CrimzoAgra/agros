@@ -405,6 +405,10 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
       Dark theme switch; `look.mode` sets the hidden `look.amoled`, `amoled`; on by default): in dark mode the scheme's backgrounds pure black, the bar, its border and the panels, the surfaces on them darkened
       to match; read live from `settings.json`, and with the scheme before the shell's first frame (it started in
       Caelestia's default dark for a moment)
+    - Nothing redrawn while a panel just sits open: a text field's cursor stops blinking 10 s after the last key,
+      click or focus, solid till the next (`cursor_blink_rest`: each blink redrew the open Super menu's window ~13
+      times, and the shell's other windows once), and the dashboard's gauges jump changes under 5 points
+      (`gauges_settle`: each reading glided into the next, the open dashboard never still)
     - A window's icon found by one lookup for the bar, the dock and Alt+Tab (`.config/quickshell/common/WindowApps.qml`:
       Quickshell's, else `.local/bin/app-for-window`: the class's last part, a Flatpak's id, the window's program)
     - Right-clicking the empty bar between the workspaces and the tray (not on the dock) opens a menu (`BarMenu.qml`)

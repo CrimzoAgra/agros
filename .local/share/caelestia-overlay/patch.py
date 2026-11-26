@@ -1678,6 +1678,68 @@ def amoled():
     return {rel: c}
 
 
+def cursor_blink_rest():
+    # A text field's cursor stops blinking 10 s after the last key, click or focus in it, solid till the next (GTK's
+    # way): each blink redrew its window (the Super menu's, the bar's with a bottom bar) about 13 times, and the shell's
+    # other windows once, so an open Super menu kept the graphics card busy for as long as it stayed open
+    rel = "components/controls/TextFieldBase.qml"
+    s = swap(read(rel), """                    enableBlink.restart();
+                }
+            }
+""", """                    enableBlink.restart();
+                    blinking.restart(); // caelestia-overlay (cursor_blink_rest)
+                }
+            }
+
+            // caelestia-overlay (cursor_blink_rest): blinking again as it's focused
+            function onActiveFocusChanged(): void {
+                if (root.activeFocus)
+                    blinking.restart();
+            }
+""", "the cursor's moves")
+    s = swap(s, """            interval: 500
+            onTriggered: cursor.disableBlink = false
+        }
+""", """            interval: 500
+            onTriggered: cursor.disableBlink = false
+        }
+
+        // caelestia-overlay (cursor_blink_rest): how long it blinks after the last key, click or focus; then solid
+        Timer {
+            id: blinking
+
+            interval: 10000
+            onTriggered: cursor.opacity = 1
+        }
+""", "the cursor's blink start")
+    s = swap(s, "            running: root.activeFocus && root.cursorVisible && !cursor.disableBlink\n",
+             "            running: root.activeFocus && root.cursorVisible && !cursor.disableBlink && blinking.running\n",
+             "the cursor's blink")
+    return {rel: s}
+
+
+def gauges_settle():
+    # The dashboard's gauges (CPU, memory, storage; the Performance tab's too): a change under 5 points straight there,
+    # larger ones glide as before. Each reading (every second or so) glided, one into the next, so an open dashboard
+    # never stopped redrawing
+    glide = re.compile(r"^( *)Behavior on clampedVal \{\n\1    Anim \{\}\n\1\}\n", re.M)
+    out, n = {}, 0
+    for rel in ("modules/dashboard/dash/Resources.qml", "modules/dashboard/performance/HeroCard.qml",
+                "modules/dashboard/performance/MemoryCard.qml", "modules/dashboard/performance/StorageCard.qml"):
+        def settled(m):
+            nonlocal n
+            n += 1
+            i, g = m[1], f"glide{n}"
+            return (f"{i}Behavior on clampedVal {{\n{i}    id: {g}\n\n"
+                    f"{i}    // caelestia-overlay (gauges_settle): under 5 points, straight there\n"
+                    f"{i}    Anim {{\n{i}        duration: Math.abs({g}.targetValue - ({g}.targetProperty.object as CircularProgress).clampedVal) < 0.05 ? 0 : Tokens.anim.durations.expressiveDefaultSpatial\n{i}    }}\n{i}}}\n")
+        s, k = glide.subn(settled, read(rel))
+        if not k:
+            raise LookupError(f"the gauge's animation in {rel}")
+        out[rel] = s
+    return out
+
+
 def notifs_neutral():
     # Notification icons, badges and counts in one neutral colour (Caelestia uses the error colour for critical ones
     # and the theme's secondary, pink here, for normal ones): every urgency gets the low-urgency colours. The same in
@@ -3485,6 +3547,8 @@ FEATURES = (
     ("notification sidebar with Super+K, merged with the utilities panel", sidebar_with_utilities),
     ("bar right-click menu: Task Manager, floating/tiling", bar_menu),
     ("dashboard calendar and weather in the system language", dashboard_language),
+    ("dashboard gauges: small changes not animated (less GPU)", gauges_settle),
+    ("text cursor stops blinking 10 s after typing (less GPU)", cursor_blink_rest),
     ("lock screen comes in like the login screen", lock_intro),
     ("no volume popup at start or on a device change", osd_quiet_start),
     ("no warnings about a missing account picture", face_quiet),

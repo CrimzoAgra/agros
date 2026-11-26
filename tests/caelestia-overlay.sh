@@ -479,6 +479,15 @@ on_start=$(sed -n '/^    Component.onCompleted: {$/,/^    }$/p' "$c")
 { [[ $(grep -c '^        blockLoading: true' "$c") == 2 ]] && grep -q 'root.amoledFrom(amoledSettings.text());' <<<"$on_start" &&
     grep -q 'root.load(scheme, false);' <<<"$on_start" && grep -q 'const scheme = schemeFile.text();' <<<"$on_start"; } ||
     fail "the shell's first frame not in the scheme's colours: $on_start"
+# What kept an open panel redrawing: a text field's cursor blinks for 10 s after the last key or focus, then stays
+# (an open Super menu redrew its window for as long as it was open); the dashboard's gauges jump small changes (each
+# reading glided into the next, an open dashboard never still)
+f=$dst/components/controls/TextFieldBase.qml
+{ grep -q '&& !cursor.disableBlink && blinking.running$' "$f" && grep -q '^            interval: 10000$' "$f" &&
+    [[ $(grep -c 'blinking.restart();' "$f") == 2 ]]; } || fail "the text cursor blinks on for good: $(grep -n 'blink' "$f")"
+for f in dash/Resources.qml performance/HeroCard.qml performance/MemoryCard.qml performance/StorageCard.qml; do
+    grep -q 'targetProperty.object as CircularProgress).clampedVal) < 0.05 ? 0 :' "$dst/modules/dashboard/$f" || fail "the gauges of $f glide every change"
+done
 
 # The bar on the right (Settings: bar.side): the split windows' layout mirrored (drawers/: barEdge), the border's zones
 # swapped, the bar's content and its popouts against its inner edge, the wallpaper's frame and the clock's and the
