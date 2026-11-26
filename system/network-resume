@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# systemd sleep hook (installed by agros-system to /usr/lib/systemd/system-sleep/agros-network-resume).
+# NetworkManager goes to sleep with the system and wakes on logind's "resumed" signal. A logind that never sent it
+# (killed by its watchdog as the clock jumped on waking: a VMware guest, 2026-11-26) left the network off until
+# NetworkManager was restarted by hand. After waking: 20 s later, by a timer of its own (what this hook leaves running
+# is stopped with the sleep's service, and logind's signal comes after this hook), NetworkManager still asleep is
+# woken, said in the journal; awake, left alone
+case ${1:-} in
+post)
+    systemd-run --quiet --collect --on-active="${NET_WAKE_DELAY:-20}" --unit=agros-network-resume "$0" wake 2>/dev/null || true
+    ;;
+wake)
+    nm=(org.freedesktop.NetworkManager /org/freedesktop/NetworkManager org.freedesktop.NetworkManager)
+    # (NM_STATE_ASLEEP: 10)
+    [[ $(busctl get-property "${nm[@]}" State 2>/dev/null) == "u 10" ]] || exit 0
+    busctl call "${nm[@]}" Sleep b false &&
+        logger -t network-resume "NetworkManager still asleep after waking (logind's signal lost): woken"
+    ;;
+esac
+exit 0

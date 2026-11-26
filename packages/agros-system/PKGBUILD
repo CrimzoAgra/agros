@@ -49,6 +49,7 @@ package() {
     install -Dm644 agros-retired "$pkgdir/usr/share/agros/retired"
     install -Dm755 "$_root/system/bluetooth-resume" "$pkgdir/usr/lib/systemd/system-sleep/agros-bluetooth-resume"
     install -Dm755 "$_root/system/screens-resume" "$pkgdir/usr/lib/systemd/system-sleep/agros-screens-resume"
+    install -Dm755 "$_root/system/network-resume" "$pkgdir/usr/lib/systemd/system-sleep/agros-network-resume"
     install -Dm644 "$_root/system/ananicy/dotfiles.rules" "$pkgdir/etc/ananicy.d/99-agros/agros.rules"
     install -Dm644 "$_root/system/geoclue/agros.conf" "$pkgdir/etc/geoclue/conf.d/90-agros.conf"
     install -Dm644 "$_root/system/polkit/agros-timezone.rules" "$pkgdir/usr/share/polkit-1/rules.d/50-agros-timezone.rules"

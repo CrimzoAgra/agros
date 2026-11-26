@@ -1441,6 +1441,10 @@ brings each change; nothing to run by hand).
   from Proton VPN, Equibop...)
 - **`agros-system`**: Bluetooth on at boot and after sleep (`system/bluetooth-resume`,
   a systemd sleep hook: waking resets the adapter, which comes back off)
+- **`agros-system`** also: the network back after waking (`system/network-resume`, a systemd sleep hook).
+  NetworkManager sleeps with the system and wakes on logind's "resumed" signal; a logind killed by its watchdog as the
+  clock jumped on waking (a VMware guest) never sent it, and the network stayed off. 20 s after waking, by a timer of
+  its own (`systemd-run --on-active`), NetworkManager still asleep is woken (`Sleep false`), said in the journal.
 - **`agros-system`** also: the screens on after waking, with no key press (`system/screens-resume`, a systemd sleep
   hook). Caelestia's idle switches the screens off (`dpms off`, 10 min) before its idle sleep (30 min), and on again
   only at the next input (its `returnAction`), so the PC woke to black screens. After waking the hook runs
