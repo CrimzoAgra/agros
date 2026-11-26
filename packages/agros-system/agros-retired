@@ -2,3 +2,9 @@
 # the Updates app's), only where it came in as a dependency and nothing needs it any more. One you installed yourself
 # is kept
 qview
+# (Capri's build tools, from when AgrOS built her: she's an app of her own now. Lutris keeps webkit2gtk-4.1, gThumb
+# gst-plugins-good, needing them)
+rust
+gtk-layer-shell
+webkit2gtk-4.1
+gst-plugins-good

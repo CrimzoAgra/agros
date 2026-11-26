@@ -14,8 +14,17 @@ echo mine >"$h/foot/foot.ini"
 # (| cat: waits for its notification in the background too, which writes to the same output. Run from $t/lib/bin: its
 # dots-warn is the one beside it)
 cp "$here/.local/bin/agros-links" "$t/lib/bin/"
+# (pacman -Qq: the packages in $PKGS; flatpak: none. Capri's own app looked for)
+mkdir -p "$t/stub"
+cat >"$t/stub/pacman" <<'S'
+#!/bin/sh
+[ "$1" = -Qq ] && { printf '%s\n' $PKGS; exit 0; }
+exec /usr/bin/pacman "$@"
+S
+printf '#!/bin/sh\nexit 0\n' >"$t/stub/flatpak"
+chmod +x "$t/stub/"*
 run() {
-    HOME=$t/home XDG_STATE_HOME=$t/home/.local/state XDG_CACHE_HOME=$t/home/.cache AGROS_PACMAN_DB=$t/pacman \
+    PATH=$t/stub:$PATH HOME=$t/home XDG_STATE_HOME=$t/home/.local/state XDG_CACHE_HOME=$t/home/.cache AGROS_PACMAN_DB=$t/pacman \
         AGROS_LIB=$t/lib AGROS_SKEL=$t/skel AGROS_SKEL_VERSIONS=$t/versions "$t/lib/bin/agros-links" | cat
 }
 
@@ -242,4 +251,27 @@ rm "$t/lib/bin/capri"; run >/dev/null
 printf '[Desktop Entry]\nName=Capri\nExec="%s"\n' "$t/home/.local/bin/capri" >"$a/capri.desktop"
 printf '#!/bin/sh\n' >"$t/home/.local/bin/capri"; run >/dev/null
 [[ -e $a/capri.desktop ]] || fail "Capri's menu entry removed with a capri of the user's own there"
+# All the rest of Capri as AgrOS installed her, once, where that install is: her clone and builds, her menu and Startup
+# entries starting AgrOS's capri, her log and state; her data too, unless her own app is installed (a package here)
+oldcapri() {
+    mkdir -p "$t/home/.local/share/capri/src" "$t/home/.local/share/capri-data/capri_chat" "$t/home/.config/capri" \
+        "$t/home/.cache/capri" "$t/home/.config/autostart" "$t/home/.local/state"
+    ln -sfn 7cda5b2 "$t/home/.local/share/capri/current"
+    printf '%s\n' '[Desktop Entry]' "Exec=\"$t/home/.local/bin/capri\" --hidden" >"$t/home/.config/autostart/capri.desktop"
+    printf '%s\n' '[Desktop Entry]' 'Name=Capri' "Exec=\"$t/home/.local/bin/capri\"" >"$a/capri.desktop"
+    echo log >"$t/home/.cache/capri.log"; : >"$t/home/.local/state/capri-update.lock"
+}
+rm -f "$t/home/.local/bin/capri"
+oldcapri
+out=$(run)
+[[ ! -e $t/home/.local/share/capri && ! -e $t/home/.config/autostart/capri.desktop && ! -e $a/capri.desktop &&
+    ! -e $t/home/.cache/capri.log && ! -e $t/home/.local/state/capri-update.lock ]] ||
+    fail "Capri as AgrOS installed her not all taken away: $(ls -a "$t/home/.local/share" "$t/home/.config/autostart" "$a")"
+[[ ! -e $t/home/.local/share/capri-data && ! -e $t/home/.config/capri && ! -e $t/home/.cache/capri &&
+    ! -e $a/capri-desktop-windows.desktop ]] || fail "Capri's data kept with no app of hers installed"
+[[ $out == *"Capri as AgrOS installed her taken away"* ]] || fail "Capri's removal not said: $out"
+oldcapri
+PKGS=capri-desktop run >/dev/null
+[[ ! -e $t/home/.local/share/capri && -d $t/home/.local/share/capri-data && -d $t/home/.config/capri && -d $t/home/.cache/capri ]] ||
+    fail "Capri's data taken with her own app installed, or her old build kept"
 echo "ok agros-links"

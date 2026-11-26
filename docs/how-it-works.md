@@ -147,6 +147,11 @@ still one AgrOS shipped, byte for byte (one you never edited); one you edited is
 as `<file>.agros-new` (as pacman's `.pacnew`), and a notification says so once (gone once yours is updated after all,
 or is AgrOS's current one: merged by hand). A program an update took away goes from each home too (its link in
 `~/.local/bin`), and with Capri's (an app of her own since 2026-11-26) the Super menu entry `capri-update` made for it.
+All the rest of Capri as AgrOS installed her goes too, once, where that install is (`~/.local/share/capri`'s `current`
+link or clone): her clone and builds (1.8 GB), her Super menu and Startup entries that start AgrOS's old `capri`, her
+log and its state; her data (chat and voice, her memory, her cache, WebKit's) too, unless her own app is installed (a
+package, a Flatpak, an AppImage, or a menu entry of hers that isn't AgrOS's old one), which uses it. Her build tools
+(rust, gtk-layer-shell, webkit2gtk-4.1, gst-plugins-good) are in `agros-retired`: removed where nothing needs them.
 The settings that are yours to change, mostly through the apps that write them, are never updated, only copied in when
 missing: Caelestia's `shell.json` (its settings, the weather location), the dock's pins, `mimeapps.list`,
 `~/.config/autostart` (Settings > Startup), VSCodium's, Legion Control's, and `user/hosts/` (one machine's screens). A

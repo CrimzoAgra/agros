@@ -33,6 +33,32 @@ done
 capri=${XDG_DATA_HOME:-$HOME/.local/share}/applications/capri.desktop
 [[ ! -e $HOME/.local/bin/capri && ! -L $HOME/.local/bin/capri ]] &&
     grep -qxF "Exec=\"$HOME/.local/bin/capri\"" "$capri" 2>/dev/null && rm -f "$capri"
+# ...and all the rest of Capri as AgrOS installed her (capri-update: her clone and builds in ~/.local/share/capri, 1.8
+# GB; her Super menu and Startup entries starting ~/.local/bin/capri; her log and its state), once, where that install
+# is (its current link or clone). Her data (chat and voice, her memory, her cache, WebKit's, her windows' entry and her
+# icon) too, unless her own app is installed (a package, a Flatpak, an AppImage, or a menu entry of hers that isn't
+# AgrOS's old one), which uses it
+data=${XDG_DATA_HOME:-$HOME/.local/share} conf=${XDG_CONFIG_HOME:-$HOME/.config} cache=${XDG_CACHE_HOME:-$HOME/.cache}
+capri_app() {
+    local f
+    pacman -Qq 2>/dev/null | grep -qi '^capri' && return 0
+    flatpak list --app --columns=application 2>/dev/null | grep -qi capri && return 0
+    compgen -G "$HOME/Applications/*[Cc]apri*" >/dev/null && return 0
+    for f in "$data"/applications/*.desktop /usr/share/applications/*.desktop; do
+        [[ ${f##*/} != capri-desktop-windows.desktop ]] && grep -qi '^Exec=.*capri' "$f" 2>/dev/null &&
+            ! grep -qF "$HOME/.local/bin/capri" "$f" && return 0
+    done
+    return 1
+}
+if [[ -e $data/capri/current || -L $data/capri/current || -d $data/capri/src ]]; then
+    for f in "$data/applications/capri.desktop" "$conf/autostart/capri.desktop"; do
+        grep -qF "$HOME/.local/bin/capri" "$f" 2>/dev/null && rm -f "$f"
+    done
+    capri_app || rm -rf "$data/capri-data" "$data/dev.cybercompanion.capri" "$conf/capri" "$cache/capri" \
+        "$data/applications/capri-desktop-windows.desktop" "$data/icons/hicolor/256x256/apps/capri.png"
+    rm -rf "$data/capri" "$cache/capri.log" "$cache/capri.log.1" "${XDG_STATE_HOME:-$HOME/.local/state}"/capri-update{-failed,.lock}
+    echo "agros-links: Capri as AgrOS installed her taken away (she's an app of her own now)"
+fi
 # Files a package update brought into /etc/skel/.config (fetch's, LibreWolf's overrides inside a folder you already
 # have), its launcher entries (/etc/skel/.local/share/applications), LibreWolf's settings (.local/share/firefox, which
 # agros-welcome applies) and Caelestia's wallpaper in Pictures/Wallpapers: copied in once, right after the update or at
