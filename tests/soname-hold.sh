@@ -9,7 +9,7 @@ set -euo pipefail
 mkdir -p "$t/bin" "$t/usr/lib"
 : >"$t/usr/lib/libcava.so.1" && : >"$t/usr/lib/libsndio.so.7"
 export SONAME_HOLD_LIBDIR=$t/usr/lib T=$t
-# pacman: [agros]'s installed packages, the update ($PENDING: "name" lines), libcava's files, who owns a library, and
+# pacman: [agros]'s installed packages, the update ($PENDING: "name" lines), libcava's files, the update's packages' files, and
 # sndio's new version's provides ($PROVIDES); readelf: libcava's library loads libsndio.so.7
 # shellcheck disable=SC2016  # (expanded by the stand-ins)
 cat >"$t/bin/pacman" <<'P'
@@ -18,12 +18,12 @@ case " $* " in
     *" -Sl "*) printf '%s\n' 'agros libcava 1.0.0-1 [installed]' 'agros notmine 1-1' ;;
     *" -Qu "*) for p in $PENDING; do echo "$p 1-1 -> 2-1"; done ;;
     *" -Qlq "*) [[ ${*: -1} == libcava ]] && printf '%s\n' "$T/usr/lib/" "$T/usr/lib/libcava.so.1" ;;
-    *" -Qoq "*) [[ ${*: -1} == "$T/usr/lib/libsndio.so.7" ]] && echo sndio ;;
+    *" -Ql -- "*) [[ " $* " == *" sndio "* ]] && echo "sndio $T/usr/lib/libsndio.so.7" ;;
     *" -Si "*) [[ ${*: -1} == sndio ]] && printf 'Version         : 2-1\nProvides        : %s\nDepends On      : glibc\n' "$PROVIDES" ;;
 esac
 exit 0
 P
-printf '#!/bin/sh\n[ "${3##*/}" = libcava.so.1 ] && echo " 0x0000000000000001 (NEEDED)             Shared library: [libsndio.so.7]"\nexit 0\n' >"$t/bin/readelf"
+printf '#!/bin/sh\nfor f; do [ "${f##*/}" = libcava.so.1 ] && echo " 0x0000000000000001 (NEEDED)             Shared library: [libsndio.so.7]"; done\nexit 0\n' >"$t/bin/readelf"
 chmod +x "$t/bin/pacman" "$t/bin/readelf"
 export PATH=$t/bin:$PATH
 hold() { "$here/.local/bin/soname-hold" "$t/pacman.conf"; }
@@ -75,12 +75,12 @@ case " $* " in
     *" -Sddp "*" mesa "*) echo "https://mirror.invalid/extra/mesa-2-1.pkg.tar.zst" ;;
     *" -Qi -- glslang "*) echo "Required By     : hyprland libplacebo shaderc" ;;
     *" -Qlq -- hyprland "*) echo "$T/usr/bin/Hyprland" ;;
-    *" -Qoq "*libglslang.so.16*) echo glslang ;;
-    *" -Qoq "*libgbm.so.1*) echo mesa ;;
+    *" -Ql -- "*) [[ " $* " == *" glslang "* ]] && echo "glslang $T/usr/lib/libglslang.so.16"
+                  [[ " $* " == *" mesa "* ]] && echo "mesa $T/usr/lib/libgbm.so.1" ;;
 esac
 exit 0
 P
-printf '#!/bin/sh\n[ "${3##*/}" = Hyprland ] && printf " 0x1 (NEEDED) Shared library: [%%s]\\n" libglslang.so.16 libgbm.so.1\nexit 0\n' >"$t/bin/readelf"
+printf '#!/bin/sh\nfor f; do [ "${f##*/}" = Hyprland ] && printf " 0x1 (NEEDED) Shared library: [%%s]\\n" libglslang.so.16 libgbm.so.1; done\nexit 0\n' >"$t/bin/readelf"
 # shellcheck disable=SC2016
 printf '#!/bin/bash\necho "curl $*" >>"$T/calls"\n[[ ${*: -1} == https://mirror.invalid/extra/mesa-2-1.pkg.tar.zst && -z $MIRRORDOWN ]] || exit 7\ncat "$T/pkgs/mesa-2-1.pkg.tar.zst"\n' >"$t/bin/curl"
 chmod +x "$t/bin/"*

@@ -42,6 +42,10 @@ declare -A pending=() isheld=()
 while read -r p _; do [[ -n $p ]] && pending[$p]=1; done < <(LC_ALL=C pacman -Qu --config "$conf" "${db[@]}" 2>/dev/null)
 ((${#pending[@]})) || exit 0
 for p in "${held[@]}"; do isheld[$p]=1; done
+# Who owns each library the update's packages have now (one query for all: a pacman -Qo per library, each a search of
+# every installed package's files, took 11 seconds of the update check)
+declare -A owner_of=()
+while read -r o f; do [[ $f == "$libdir"/* ]] && owner_of[$f]=$o; done < <(LC_ALL=C pacman -Ql -- "${!pending[@]}" 2>/dev/null)
 # The libraries a package's new version has (usr/lib/*.so.*), from the package itself: pacman's download (as root, it
 # downloads it: checked as every package it downloads, and the update's own), else the mirror's, unpacked by none.
 # Kept by its file name: read once per build. Fails when it can't be had
@@ -73,7 +77,8 @@ for p in "${mine[@]}"; do
     # The libraries its programs load (its own files' ELF NEEDED entries)
     while read -r lib; do
         [[ $lib == *.so.* && -e $libdir/$lib ]] || continue
-        owner=$(LC_ALL=C pacman -Qoq "$libdir/$lib" 2>/dev/null) || continue
+        owner=${owner_of[$libdir/$lib]:-}
+        [[ -n $owner ]] || continue
         [[ -n ${pending[$owner]:-} && -z ${isheld[$owner]:-} && -z ${said[$owner $p $lib]:-} ]] || continue
         name=${lib%%.so.*}.so soname=${lib#*.so.}
         provides=$(LC_ALL=C pacman -Si --config "$conf" "${db[@]}" -- "$owner" 2>/dev/null |
@@ -96,8 +101,9 @@ for p in "${mine[@]}"; do
             said[$d]=1
             echo "$d $p $lib $owner"
         done
+    # (read in batches on every core: one readelf a file, one after another, was 3 seconds of the update check)
     done < <(LC_ALL=C pacman -Qlq -- "$p" 2>/dev/null | grep -E '/usr/(lib|bin)/' | while read -r f; do
-        [[ -f $f && ! -L $f ]] && readelf -d -- "$f" 2>/dev/null
-    done | sed -n 's/.*(NEEDED).*\[\(.*\)\]$/\1/p' | sort -u)
+        [[ -f $f && ! -L $f ]] && printf '%s\0' "$f"
+    done | xargs -0 -r -n 64 -P "$(nproc)" readelf -d -- 2>/dev/null | sed -n 's/.*(NEEDED).*\[\(.*\)\]$/\1/p' | sort -u)
 done
 exit 0
