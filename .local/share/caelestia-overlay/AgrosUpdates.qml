@@ -47,7 +47,7 @@ PageBase {
     readonly property var pending: items.filter(i => i.kind !== "offline")
     readonly property bool offline: items.some(i => i.kind === "offline")
     readonly property var groups: [
-        { title: "System and apps", kinds: ["system", "aur", "capri"] },
+        { title: "System and apps", kinds: ["system", "aur"] },
         { title: "Firmware", kinds: ["firmware"] },
         { title: "Flatpaks", kinds: ["flatpak"] },
         { title: "AppImages", kinds: ["appimage"] },

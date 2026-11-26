@@ -7,7 +7,7 @@
 AgrOS is a whole desktop installed in one go, on top of CachyOS. You get Hyprland (Lua config) with the
 [Caelestia](https://github.com/caelestia-dots/shell) shell, patched with a dock and other changes, and a
 Caelestia-style login screen. It comes with fixes for games, tray apps and the keyboard, every app below with its
-settings, and Capri, the desktop companion. It's made for two machines: a Lenovo Legion Pro 7 (Gen 10) laptop and a
+settings. It's made for two machines: a Lenovo Legion Pro 7 (Gen 10) laptop and a
 desktop (RTX 2060, external monitor). Things that depend on the hardware check for it, so the same install works on
 both. The files are laid out like `$HOME`; `packages/` turns them into pacman packages.
 
@@ -31,9 +31,7 @@ Laptop settings and lighting are in a separate repo: **legion-control-linux**.
    what's per user: LibreWolf's settings, the Spotify, Nuvio and ArtCraft Flatpaks with Spicetify, VSCodium's
    extensions and Claude Code's plugins.
 3. **The one thing you run:** its notification offers *Restore accounts*. Plug in your pen drive and click it, or
-   run `agros-personal` ([Your accounts](#your-accounts)). Capri installs right after that (built from her code: a few
-   minutes), since her fork is private and needs your GitHub login (at the next login when gh only gets it from the
-   keyring brought back: `agros-check` installs her then). The offer comes back at each login until it's answered
+   run `agros-personal` ([Your accounts](#your-accounts)). The offer comes back at each login until it's answered
    (`~/.local/state/agros/offered`); an account set up before it did (its `done` there, without the `offer-sent` mark
    the offer leaves) isn't offered it again.
 
@@ -184,9 +182,6 @@ With the Windows ones they replace in brackets:
   plugged in, scan with Document Scanner
 - balenaEtcher (Rufus), and Phone Link: scrcpy, your Android phone's screen on the computer (USB debugging on, phone
   plugged in; its screen off while mirrored, kept awake, 20 Mbit/s)
-- Capri, the Edgerunners 2 desktop companion: [my fork](https://github.com/CrimzoAgra/capri-overlay) (private) of
-  [CapriDesktop](https://github.com/nunezValen/CapriDesktop), rewritten as a native Wayland app (Tauri and Rust), her
-  chat on your Claude Code (see [Apps](#apps))
 - WhatsApp, Outlook, Teams and OneDrive: use the web versions
 
 ### Your accounts
@@ -304,7 +299,7 @@ Windows, Sound & network), each with a button to its whole page.
     normally**, and a button that removes it; below them a dashed "Add an app" row opens the list of installed apps (not
     terminal ones, nor one listed already), whose entry is copied into `~/.config/autostart`, marked
     `X-AgrOS-Startup=true`, its mode in `X-AgrOS-Startup-Mode` and its own command in `X-AgrOS-Exec` (to switch back).
-    Minimised: Lutris, Capri, Proton VPN, Solaar and ArtCraft start in their tray (`dots-settings`' `LOGIN_EXEC`),
+    Minimised: Lutris, Proton VPN, Solaar and ArtCraft start in their tray (`dots-settings`' `LOGIN_EXEC`),
     once the tray is up (`gdbus wait` for `org.kde.StatusNotifierWatcher`: Proton VPN looks for it once, and started
     before it, showed its window and quit when closed); any other app gets `AGROS_START_MINIMISED=1`, and
     `user/apps.lua` minimises its windows of the first minute to the dock. Removed: one added here is deleted, any other
@@ -315,9 +310,7 @@ Windows, Sound & network), each with a button to its whole page.
   - **Shortcuts**: my shortcuts (`dots.bind` in `user/keys.lua`, `user/windows.lua` and `user/apps.lua`; defaults in the
     schema), Caelestia's (its `kb*` variables, by its sections, minus the ones `hypr-vars.lua` turns off; your changes
     go back through `hypr-vars.lua`), and the fixed ones neither can change (Caelestia's arrows, media keys...:
-    Hyprland's list of binds, `hyprctl binds`), shown so a clash with them shows too; Capri's fixed keys (she binds
-    them herself while she runs: `"reserved"` in the schema) are shown as hers and refused for any other shortcut
-    (`dots-settings set` says why, by the key; the app shows it by the label). + records a new one: Hyprland
+    Hyprland's list of binds, `hyprctl binds`), shown so a clash with them shows too. + records a new one: Hyprland
     switches to an empty submap (`dots-capture`) meanwhile so every key reaches the app, and Esc always leaves it. A
     shortcut used twice shows in red. A new shortcut of mine is a `dots.bind` with its default in the schema: no other
     code
@@ -825,14 +818,14 @@ helper a package update just brought works before `agros-links` has linked it), 
   their windows get the games' class
 - **`.local/bin/hypr-reload`**: the one way to reload Hyprland's config: after any game (a reload takes a fullscreen
   game out of fullscreen), Hyprland named (works from an SSH login or a text console). Used by the Settings app
-  (`dots-settings`), `capri-update`, `vm-screen-follow` and `user/workspaces.lua`. Exit 3: another reload already
+  (`dots-settings`), `vm-screen-follow` and `user/workspaces.lua`. Exit 3: another reload already
   waits for the game and reads the config then (`user/workspaces.lua` waits for that one before putting windows back)
 - **`.local/bin/qs-running`**: whether a Quickshell config is running (`qs list --all` read whole: `grep -q` quitting
   early got qs a SIGPIPE, which `pipefail` took for "not running"). Whether Caelestia runs from the overlay:
   `caelestia-overlay --running` (its folder's path resolved too), `agros-welcome`'s and the overlay's own
 - **`.local/bin/notify-when-up`**: the one way to notify at login or from a hook: tried again for up to a minute, as
   Caelestia is the notification server and one sent while it isn't up (login, a restart, a rebuild) went to nobody.
-  Used by `dots-warn`, `agros-check`, `hyprbars-build`, `capri-update`, `agros-welcome`'s offer, `nvidia-shader-fix`,
+  Used by `dots-warn`, `agros-check`, `hyprbars-build`, `agros-welcome`'s offer, `nvidia-shader-fix`,
   `caelestia-restart` and `hypr-reload` (each waiting for a game), `update-kinds`' notices, `agros-each-user --notify`,
   `appimage-open` and `claude-notify` (Claude Code waits on its hook:
   2 s of tries, not a minute)
@@ -853,7 +846,7 @@ helper a package update just brought works before `agros-links` has linked it), 
   (`uwsm/env.d/nvidia-vaapi.sh`, by its installed path: read before `agros-links` runs) and the desktop widgets' stats
   panel's GPU meter
 - **`.local/bin/fail-streak`**: counts a failure that keeps coming back, so it's given up on at the third run in a row
-  rather than tried for good (`capri-update`'s downloads, `agros-welcome`'s VSCodium step)
+  rather than tried for good (`agros-welcome`'s VSCodium step)
 - **`.local/bin/wait-online`**: waits (at most ~2 min) for the network at boot or login (`auto-update`,
   `hyprbars-build`, `timezone-auto`); any HTTP answer is online, an error too: only no connection waits
 - **`.local/bin/pacman-lock-holder`**: what running may hold pacman's lock, the one list of what takes it
@@ -901,7 +894,7 @@ helper a package update just brought works before `agros-links` has linked it), 
   (`update-apps`, after its `paru -Su`, through paru's sudo) reinstall what it names; that failing never fails the
   update (said, tried again after the next one)
 - **`.local/bin/update-kinds`**: the kinds of update, how each is listed (`--list`, what Settings' Updates page shows: system,
-  aur, firmware, flatpak, appimage, capri, proton, dev) and run (`update-kinds <kind>...`), and the Qt installed
+  aur, firmware, flatpak, appimage, proton, dev) and run (`update-kinds <kind>...`), and the Qt installed
   (`--qt-now`): `update-apps` and the boot's `auto-update` (as each user, `--boot`) both run it, its updates never as
   root (its queries, `--qt-now` and the runtimes' below, also from root's `auto-update`), one run at a time per user
   (a lock in `~/.local/state/agros`: the boot's and Updates' worked on the same Proton folders at once), and one list
@@ -1035,40 +1028,6 @@ helper a package update just brought works before `agros-links` has linked it), 
   user; one left, that installation isn't updated). A missing runtime comes from Flathub
   (both use `.local/share/github-release/lib.sh`: the release's x86_64 file and its checksum). At boot, each user's
   own are done as that user and the system-wide ones once, as root
-- **`.local/bin/capri-update`**: installs and updates Capri: my fork's main (`CrimzoAgra/capri-overlay`: CapriDesktop
-  with her brain on Claude Code, on Hyprland, rewritten as a Tauri 2 app: her React page in WebKitGTK, Rust behind it,
-  native on Wayland through gtk-layer-shell). It no longer takes the original's
-  ([nunezValen/CapriDesktop](https://github.com/nunezValen/CapriDesktop)) Electron releases. Cloned to
-  `~/.local/share/capri/src` and built there: her lockfile's packages (`npm ci`, no install scripts), her types
-  (`npm run typecheck`) and tests (`npm test`) first, her Rust crates downloaded (`cargo fetch --locked`), then
-  `npm run tauri build -- --no-bundle` offline. Rust's build is one folder shared by every run
-  (`~/.local/share/capri/target`, `CARGO_TARGET_DIR`: a build from scratch takes minutes and ~1.5 GB, an update only
-  rebuilds what changed); her Rust tests (`cargo test`, a second, debug build) aren't run. What's kept of a build is her
-  one binary (her page is in it), `~/.local/share/capri/<commit>/capri` with its `.capri-build` mark, and she's
-  switched to it (`current`, atomically) only once it's built and checked; the build before is kept, and any she's
-  still running from, older ones (and the Electron Capri's builds) removed. A commit that doesn't install, check or
-  build is said once (notification, `agros-check`) and isn't built again; she stays on her build until the fork
-  moves on. A download that failed (her packages, her crates) is tried again next run, and at its third run in a row
-  it's that commit's own. Without Rust (`cargo`, `rustc`: the `rust` package, or `rustup` with a toolchain chosen)
-  it's said, and tried again next time. One run at a time (a `--check` meanwhile says nothing). The fork is private:
-  with no GitHub login (`gh auth login`) its last copy is used, never a login prompt (`$CAPRI_FORK` fetches it from
-  elsewhere for one run, e.g. a bundle of it). It runs from Settings' Updates page (as AUR apps: the code is built and
-  checked, not unseen at boot); `--check` is what Settings' Updates page lists and what the boot runs. Exit 2: it failed and
-  said so in a notification itself.
-  **`.local/bin/capri`** starts her build's binary (Super menu entry and icon made by `capri-update`; log
-  `~/.cache/capri.log`, moved aside past 5 MB): native on Wayland, a layer-shell surface that lets the clicks around
-  her through; `$CAPRI_RUN`, set in your session, names a start script run instead (a checkout of her code you work
-  on). Started again while she runs, she comes back. At login she starts put away (`--hidden`: only her tray icon)
-  when you add her on the Settings app's Startup page (none preset: `dots-settings`' `LOGIN_EXEC` gives her entry
-  `--hidden`); once she's installed (her build's `current/capri`),
-  Shift+Space (Settings, Shortcuts; off while a game or a fullscreen window has the focus) puts her away or brings her
-  back, through her local bridge (`POST 127.0.0.1:47823/toggle`). Her own keys (Ctrl+Alt+Space talk,
-  Ctrl+Alt+Shift+Space always listening, Ctrl+Alt+K chat, Ctrl+Alt+X the scanner) are binds she makes herself while she
-  runs (`hyprctl eval`, made again after a config reload); none of AgrOS's or Caelestia's shortcuts take them
-  (`tests/dots-settings-keys.sh`). She sets her own layer rules, and writes her windows' own (hidden) launcher entry for
-  their icon (app id `dev.cybercompanion.capri`). `agros-desktop` brings what she's built and runs with: `rust`,
-  `nodejs` and `npm`, `webkit2gtk-4.1`, `gtk-layer-shell`, `libayatana-appindicator` (her tray icon), `gst-plugins-good`
-  and `gst-libav` (her clips, H.264), `grim` (her scanner)
 - **`.config/legion-control/`**: Legion Control's lighting choices, and the backup of Lenovo's original keyboard
   lighting profile (its "Default" mode puts that back)
 
@@ -1082,7 +1041,7 @@ brings each change; nothing to run by hand).
   a window of its own, whose launcher entry `updates.desktop` stays as a hidden one so a copy in a home from before is
   replaced by it and leaves the Super menu):
   - Lists what's waiting, by app with its icon and old → new version (one too long for its column shown whole while
-    its row is hovered): system and AUR apps, firmware, Flatpaks, AppImages, Capri, Proton builds, developer tools
+    its row is hovered): system and AUR apps, firmware, Flatpaks, AppImages, Proton builds, developer tools
   - A list that couldn't be made (`update-apps --list` failed, or hung for 10 minutes) says so, not "Everything is up
     to date"
   - An account that isn't an admin (not in `wheel`: it can't sudo) sees the list with "An administrator has to install
@@ -1184,7 +1143,7 @@ brings each change; nothing to run by hand).
     chroot's or CI's `pacman.conf`). Said in the log, and once by `agros-check` after login
     (`/var/lib/auto-update/pacman-conf-repaired`, until the next boot)
 - **`.local/bin/update-apps`**: updates everything (system and AUR apps with `paru` through the upstream gate, then each
-  kind `update-kinds` runs: firmware with fwupd, Flatpaks, AppImages, Capri, Proton builds, developer tools), like at
+  kind `update-kinds` runs: firmware with fwupd, Flatpaks, AppImages, Proton builds, developer tools), like at
   boot. `--list` is what Settings' Updates page shows (`update-kinds --list`); every 6 hours (`update-check.timer`) it checks,
   and when updates are waiting a notification's "Update now" opens Settings' Updates page and starts (an admin's, in `wheel`:
   an account that can't sudo isn't offered it, nor `agros-welcome`'s system part, and `update-apps` itself refuses it;
@@ -1228,7 +1187,7 @@ brings each change; nothing to run by hand).
   off
 - **The boot update** (`agros-system`: `packages/agros-system/auto-update`, for every account): updates everything at
   every boot. Then: Flatpaks (system-wide and yours), AppImages, Proton builds and developer tools (`update-kinds
-  --boot`, as each user; Capri's new commits only looked for: `capri-update --check`). Downloaded then and installed at
+  --boot`, as each user). Downloaded then and installed at
   shutdown, after a Snapper snapshot (installed under the running session, a new NVIDIA driver or kernel broke games and
   USB devices until a reboot): the system, kernel and CachyOS gaming packages, the AUR apps, and firmware. The keyrings
   (Arch's, CachyOS's, AgrOS's) are downloaded alone first and installed first: a key expired on the machine doesn't stop
@@ -1280,7 +1239,7 @@ brings each change; nothing to run by hand).
     sources fetched and their signatures checked before, `makepkg --holdver`), and never the host's: a network
     namespace of the sandbox's own, outbound internet through pasta (`passt`, run as `agros-aur`: `pasta --config-net`
     makes the namespace, bwrap starts in it and maps the account back from pasta's root). 127.0.0.1 and ::1 are its own
-    loopback and abstract sockets are per network namespace, so the host's local services (Capri's bridge, CUPS,
+    loopback and abstract sockets are per network namespace, so the host's local services (CUPS,
     an editor's) are out of its reach; pasta forwards no port either way (`-t`/`-u`/`-T`/`-U none`: its default binds
     the host's listening ports in the namespace) and maps neither the gateway's address to the host's loopback
     (`--no-map-gw`, `--map-guest-addr none`). The host's main address is the sandbox's own (pasta copies it), but its
@@ -1556,7 +1515,7 @@ Caelestia's too, the Super menu's actions, the user services, the Quickshell app
 which also holds agros-desktop to Caelestia's own list of what its dots need, its `manifest.toml`), and that each file
 of Caelestia's installed shell AgrOS names by its path (its wallpaper) is still there (`caelestia-paths`: a Caelestia
 release that moved one is held back, not put out with a first login that has no wallpaper), and that no two shortcuts
-share keys, Capri's fixed ones included, and every one the manual lists is bound (`dots-settings-keys`). One is a lint
+share keys, and every one the manual lists is bound (`dots-settings-keys`). One is a lint
 (`no-pipefail-grep-q`): every shell script that sets `pipefail` must not pipe into `grep -q` (it stops reading at its
 first match, the writer dies of SIGPIPE, and the pipeline reads as "not found": a running Proton was removed under a
 game), nor into `head`/`grep -m` where the pipeline's status decides something; read the output whole (`grep -q x
@@ -1692,9 +1651,7 @@ breaks something holds back that one piece, never the rest (`.github/workflows/c
   its record, `agros-aur-maintainers`, unreadable), and `agros-desktop` not resolving with CachyOS's v3 or znver4 repos
   (or a library there at another soname) for 3 days or more (above; a shorter one only in its table); a lookup that
   fails is said too, never read as nothing to say. What CI handles by itself is said apart, "for your information",
-  nothing asked: each AUR package it holds while its new maintainers wait their 14 days (above), and until when; a new
-  release of Capri's upstream, nunezValen/CapriDesktop, which Capri's fork follows by hand (the one last noted kept
-  in the issue's body, as the sizes below; the first noted quietly). Its table also says how far Caelestia's dots have
+  nothing asked: each AUR package it holds while its new maintainers wait their 14 days (above), and until when. Its table also says how far Caelestia's dots have
   gone since the commit `agros-hyprland-settings` pins (a new one is taken on purpose; nothing else says when there's
   one). The owner is mentioned, so GitHub notifies them. Its size watch
   (`ci/sizes.sh` in an Arch container, `ci/sizes.py`) works out from the package databases what goes on the live ISO

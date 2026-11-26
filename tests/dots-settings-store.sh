@@ -55,23 +55,6 @@ run("set", b[0], json.dumps(not settings[b[0]]["default"]), "--later")
 run("set", b[1], json.dumps(not settings[b[1]]["default"]), "--later")
 saved = json.load(open(ds.SETTINGS))
 assert set(saved) == {b[0], b[1]}, f"a change lost another: {saved}"
-# Capri's fixed keys (she binds them herself while she runs) shown read-only on the Shortcuts page, and refused for any
-# other shortcut, AgrOS's or Caelestia's, in any order and case, with a message (the Settings app shows a refused
-# change's): with them, Hyprland and she both acted on the keys
-page = next(p for p in ds.schema()["pages"] if p["id"] == "keys")
-capri = {k for g in page["groups"] for s in g["settings"] if s.get("reserved") == "Capri's" and s.get("readonly")
-         for k in s["default"]}
-assert capri == {"CTRL + ALT + Space", "CTRL + ALT + SHIFT + Space", "CTRL + ALT + K", "CTRL + ALT + X"},     f"Capri's keys not on the Shortcuts page: {capri}"
-k = next(k for k, s in settings.items() if k.startswith("keys.") and not s.get("modifier") and "get" not in s)
-err = run("set", k, json.dumps(settings[k]["default"] + ["alt + ctrl + k"]), "--later")
-assert err.startswith(k + ": CTRL + ALT + K is Capri's (her chat)"), f"Capri's chat key taken by {k}: {err!r}"
-m = next(k for k, s in settings.items() if s.get("modifier") and "get" not in s)
-err = run("set", m, json.dumps(["CTRL + ALT"]), "--later")
-assert not err.startswith(m + ":"), f"a modifier for 0-9 with Capri's modifiers refused: {err!r}"
-err = run("set", "capri-keys.chat", json.dumps(["SUPER + K"]), "--later")
-assert err.startswith("capri-keys.chat:"), f"Capri's own key changed: {err!r}"
-assert k not in ds.stored() and "capri-keys.chat" not in ds.stored(), f"saved: {ds.stored()}"
-run("set", m, json.dumps(settings[m]["default"]), "--later")
 # A setting changed by its own command (hyprctl eval prints "ok"): --later's stdout only how to apply it, the Settings
 # app's word for it; the command's output on stderr. Read at the descriptor: the command writes there, not to sys.stdout
 import os, tempfile

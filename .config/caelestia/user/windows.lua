@@ -302,7 +302,7 @@ end
 dots.bind("minimise", function() dots.minimise_window() end)
 -- An app's own request: to minimise, or (false) to come back, which isn't one to minimise
 -- (no window: nothing, not the focused one minimise_window would take)
--- Not a game's: games ask on losing focus (clicking Capri, a notification), then stop drawing as if minimised, so
+-- Not a game's: games ask on losing focus (clicking a notification), then stop drawing as if minimised, so
 -- they came back black; Alt+Tab and the minimise key still minimise them, without the game being told
 hl.on("window.minimize", function(win, on)
     if win and on ~= false and on ~= 0 and not (dots.is_game and dots.is_game(win)) then dots.minimise_window(win) end
@@ -926,7 +926,7 @@ function dots.toggle_window_mode()
     apply_mode_settings(float and "floating" or "tiling")
     -- Normal workspaces and the minimised windows' (special:minimised-N), not other special ones (Spotify's hidden one).
     -- Not games (dots.is_game, apps.lua: Proton, Lutris, gamescope, native): they always float at their own size (on_open below).
-    -- Nor pinned windows (picture-in-picture, Capri), minimised ones too: on every workspace, tiling unpinned them for good
+    -- Nor pinned windows (picture-in-picture), minimised ones too: on every workspace, tiling unpinned them for good
     local function switched(w)
         if w.pinned or has_tag(w, "minimised_pinned") or dots.is_game and dots.is_game(w) then return false end
         return w.workspace and ((w.workspace.id or 0) > 0 or (w.workspace.name or ""):match("^special:minimised%-"))

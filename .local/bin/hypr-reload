@@ -1,5 +1,5 @@
 #!/bin/sh
-# hypr-reload [--tell]: Hyprland's config loaded again, the scripts' one way to do it (dots-settings, capri-update,
+# hypr-reload [--tell]: Hyprland's config loaded again, the scripts' one way to do it (dots-settings,
 # vm-screen-follow, workspaces.lua). After any game: a reload takes a fullscreen game out of fullscreen (after-games
 # beside this file). Hyprland named, as after-games does: from an SSH login or a text console the reload failed with
 # nothing said. Quiet, its output let go at once: a caller that runs it in the background (setsid -f) isn't held

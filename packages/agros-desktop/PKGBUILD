@@ -4,7 +4,7 @@
 # (agros-welcome --system installs the ones for what's plugged in), as is VMware Workstation (its license forbids
 # passing it on: built from the AUR on your machine by agros-welcome --system).
 pkgname=agros-desktop
-pkgver=19
+pkgver=20
 pkgrel=1
 pkgdesc='AgrOS: Hyprland + Caelestia desktop with its apps (meta package)'
 arch=('any')
@@ -40,10 +40,6 @@ depends=(
     squashfs-tools                      # an AppImage's name and icon read without running it (appimage-open)
     grim slurp swappy brightnessctl ddcutil libqalculate ydotool xdg-user-dirs flatpak nodejs npm python
     python-gobject python-xlib pacman-contrib paru github-cli
-    # Capri (capri-update builds her: Rust, with base-devel, nodejs and npm; rustup stands in for rust, a toolchain
-    # chosen. Her tray icon: libayatana-appindicator, below; her scanner: grim): her page (WebKitGTK), her layer-shell
-    # window, her clips (H.264: GStreamer's libav)
-    rust webkit2gtk-4.1 gtk-layer-shell gst-plugins-good gst-libav
     gammastep geoclue                   # night light (Settings > Startup, off by default; no location without geoclue)
     # Games: CachyOS's gaming packages, Steam, Lutris (every store's library), Faugus, MangoHud, Gamescope
     # (agros-wine first: one Wine, CachyOS's, as the system's. Before the gaming packages, whose winetricks needs a wine:

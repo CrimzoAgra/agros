@@ -349,10 +349,7 @@ ShellRoot {
     }
 
     // ---- Media: the same player as Caelestia's dashboard (its default player, else the first one) ----
-    // Not Capri's: her page's media make her a media player (WebKitGTK's org.mpris.MediaPlayer2.org.webkit.app-...,
-    // identity "capri"; Electron's was "Capri Desktop"), and with Spotify closed hers, with nothing playing, took the
-    // widget
-    readonly property var players: Mpris.players.values.filter(p => !/^capri/i.test(p.identity ?? ""))
+    readonly property var players: Mpris.players.values
     readonly property var playerAliases: services.playerAliases ?? [{ from: "com.github.th_ch.youtube_music", to: "YT Music" }]
     readonly property string defaultPlayer: services.defaultPlayer ?? "Spotify"
     readonly property MprisPlayer player: root.players.find(p => (root.playerAliases.find(a => a.from === p.identity)?.to ?? p.identity) === root.defaultPlayer) ?? root.players[0] ?? null

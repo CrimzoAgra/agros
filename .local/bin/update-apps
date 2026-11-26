@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Updates everything now, in a terminal you can watch: the system (AgrOS's AUR apps too: Equibop, Boxflat... are in
-# [agros]), other AUR apps, firmware, Flatpaks (Spotify, Nuvio, ArtCraft), any AppImages you've installed, Capri, your
+# [agros]), other AUR apps, firmware, Flatpaks (Spotify, Nuvio, ArtCraft), any AppImages you've installed, your
 # Proton builds and developer tools. The same as the boot-time auto-update (each kind but the system's and the AUR's:
 # update-kinds, which both run).
 #   update-apps           update everything (the Updates app runs this and shows its output)
 #   update-apps --list    what's waiting, one per line: kind<TAB>name<TAB>old<TAB>new (update-kinds --list: system,
-#                         aur, firmware, flatpak, appimage, capri, proton or dev; offline when the package servers
+#                         aur, firmware, flatpak, appimage, proton or dev; offline when the package servers
 #                         can't be reached)
 #   update-apps --check   if updates are waiting, a notification whose "Update now" opens Settings' Updates page and
 #                         starts (update-check.timer); the same updates aren't announced twice
@@ -377,7 +377,7 @@ changes=$(awk 'NR == FNR { old[$1] = $2; next } ($1 in old) && old[$1] != $2 { p
 qt_rebuild "$changes" || status=1
 [[ -z $inhibitor ]] || kill "$inhibitor" 2>/dev/null
 # The rest, kind by kind (each under its own "== " title)
-"$helpers/update-kinds" firmware flatpak appimage capri proton dev || status=1
+"$helpers/update-kinds" firmware flatpak appimage proton dev || status=1
 rm -f "${XDG_CACHE_HOME:-$HOME/.cache}/update-apps-notified"
 echo
 # In a terminal: wait, so the output can be read (the Updates app shows it itself), saying how it went as the Updates

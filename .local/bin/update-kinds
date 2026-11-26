@@ -3,12 +3,12 @@
 # auto-update (as each AgrOS user) both use. Its updates and --list never run as root; its queries (--qt-now,
 # --runtime-target, --built-on) do, from auto-update and auto-update-aur.
 #   update-kinds --list              what's waiting, one per line: kind<TAB>name<TAB>old<TAB>new. Kinds: system, aur,
-#                                    firmware, flatpak, appimage, capri, proton, dev; an "offline" line when the package
+#                                    firmware, flatpak, appimage, proton, dev; an "offline" line when the package
 #                                    servers can't be reached
-#   update-kinds [--boot] <kind>...  update those kinds (firmware, flatpak, appimage, capri, proton, dev; system and AUR
+#   update-kinds [--boot] <kind>...  update those kinds (firmware, flatpak, appimage, proton, dev; system and AUR
 #                                    are update-apps' paru and the boot's auto-update), each under "== <title>"; exit 1
 #                                    when one failed. --boot (auto-update's, per user): only the user's own Flatpaks
-#                                    (root does the system's, and those from a file under its hold), Capri only checked.
+#                                    (root does the system's, and those from a file under its hold).
 #                                    One run at a time per user (the boot's and Updates'): the second waits
 #   update-kinds --qt-now            the Qt installed ("qt6-base <ver> qt6-declarative <ver> ", "none" for one missing):
 #                                    what Quickshell and Caelestia must be built for (update-apps, auto-update)
@@ -65,7 +65,6 @@ case ${1:-} in
         done | tr ' ' '\n' | sed '/^$/d; /^None$/d' | sort -u
         exit 0 ;;
 esac
-capri_current="${XDG_DATA_HOME:-$HOME/.local/share}/capri/current"
 # (the user's own tools: not on PATH at boot)
 PATH=$HOME/.cargo/bin:$HOME/.local/bin:$PATH
 # (the AUR's build scripts, npm's, rustup's: a user's, never root's)
@@ -350,9 +349,6 @@ if [[ ${1:-} == --list ]]; then
     # Flatpaks installed from a downloaded file (no repo): their GitHub releases
     "$helpers/flatpak-bundle-update" --check 2>/dev/null |
         sed -n 's/^\(.*\): update available (\(.*\) -> \(.*\))$/flatpak\t\1\t\2\t\3/p'
-    # Capri, when she's installed (capri-update's build): my fork moved on
-    [[ -e $capri_current ]] && "$helpers/capri-update" --check 2>/dev/null |
-        sed -n 's/^capri: update available (\(.*\))$/capri\tcapri\t\t\1/p'
     "$helpers/appimage-update" --check 2>/dev/null | sed -n 's/^\(.*\): update available (\(.*\))$/appimage\t\1\t\t\2/p'
     list_proton
     list_dev
@@ -364,7 +360,7 @@ boot=false
 # One run at a time per user: the boot's (auto-update, as you) and Updates' worked on the same Proton folders at once
 # (each downloading it, one failing to unpack it or nesting it in the other's) and ran npm, rustup and cargo twice. The
 # second waits for the first (its lock: fd 8, held here alone: closed for every kind below, so no helper, nor what it
-# leaves running in the background (capri-update's notice, a reload), holds it past this run. Bash keeps its own copy
+# leaves running in the background (a notice, a reload), holds it past this run. Bash keeps its own copy
 # of it, closed for what it runs)
 lock=${XDG_STATE_HOME:-$HOME/.local/state}/agros/update-kinds.lock
 mkdir -p "${lock%/*}" && exec 8>>"$lock" || exit 1
@@ -395,11 +391,7 @@ for kind; do
             $boot || "$helpers/flatpak-bundle-update" || rc=1  # (and those from a downloaded file)
             ((!rc)) ;;
         appimage) echo; echo "== AppImages"; "$helpers/appimage-update" ;;
-        capri)
-            [[ -e $capri_current ]] || continue
-            echo; echo "== Capri"
-            # (at boot only whether my fork moved on: built and tested from Updates)
-            if $boot; then "$helpers/capri-update" --check; else "$helpers/capri-update"; fi ;;
+        capri) continue ;;  # (gone from AgrOS: an auto-update from before still names it)
         proton) proton_any || continue; echo; echo "== Proton"; update_proton ;;
         dev) echo; echo "== Developer tools"; update_dev ;;
         *) echo "update-kinds: no kind $kind" >&2; false ;;

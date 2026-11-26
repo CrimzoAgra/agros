@@ -215,7 +215,7 @@ def place_games(clients: list, active: str = "") -> None:
             continue
         placed.add(c["address"])
         ws = c["workspace"].get("id", 0)
-        # (a pinned window, Capri, shows on every workspace: Hyprland lists it on the one its screen shows, and it
+        # (a pinned window shows on every workspace: Hyprland lists it on the one its screen shows, and it
         # neither shares the game's nor takes one, as in user/workspaces.lua)
         others = [o for o in clients if not o.get("pinned")]
         if not any(o["workspace"].get("id", 0) == ws and o["address"] != c["address"] for o in others):

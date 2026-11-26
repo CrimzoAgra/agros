@@ -32,8 +32,6 @@ Kinds of setting ("type"): bool, choice (its "options", or "options_cmd": a comm
 or "value<TAB>label"; "open": a value not listed is kept), keys, number ("min", "max", "step", "integer"), text
 ("pattern": a regular expression the whole value must match, "format": how it's said when it doesn't), json
 (any JSON value: Caelestia's lists), image (a choice shown as pictures: the wallpaper). "readonly": shown, not changed.
-"reserved": whose keys a "keys" setting's are (Capri's, which she binds herself while she runs): no other shortcut can
-have them.
 Caelestia's own options: a key caelestia-shell.<option> (its shell.json) or caelestia-tokens.<option> (its
 shell-tokens.json, sizes and timings): type, default and choices come from the installed Caelestia
 (caelestia-options.qml), so the schema only gives the label and description, and one Caelestia no longer has isn't
@@ -106,16 +104,15 @@ ADDED = "X-AgrOS-Startup"
 TRAY_WAIT = "gdbus wait --session --timeout 60 org.kde.StatusNotifierWatcher"
 LOGIN_EXEC = {name: f'sh -c "{TRAY_WAIT}; {cmd}"' for name, cmd in {
     "net.lutris.Lutris.desktop": "exec env LUTRIS_START_HIDDEN=1 lutris",  # (the patched one, ~/.local/bin/lutris)
-    "capri.desktop": "exec capri --hidden",  # put away, only her tray icon: it or her key brings her out
     # (after keyring-default has made "login" the default keyring: on a fresh install it could ask for the old one's
     # password while that's being moved)
     "proton.vpn.app.gtk.desktop": "keyring-default; exec protonvpn-app --start-minimized",
     "solaar.desktop": "exec solaar --window=hide",  # (puts the mouse's settings back when it reconnects)
     "ai.storyteller.artcraft-launcher.desktop": "exec artcraft-silent",  # (also when it restarts after updating itself)
 }.items()}
-# Startup's switches until 2026-11-20 (startup.<app> in settings.json, Lutris and Capri on unless turned off), by the
+# Startup's switches until 2026-11-20 (startup.<app> in settings.json, Lutris on unless turned off), by the
 # launcher entry "Add an app" now adds for each; the night light's is its own setting now
-OLD_STARTUP = {"lutris": ("net.lutris.Lutris.desktop", True), "capri": ("capri.desktop", True),
+OLD_STARTUP = {"lutris": ("net.lutris.Lutris.desktop", True),
                "protonvpn": ("proton.vpn.app.gtk.desktop", False), "solaar": ("solaar.desktop", False),
                "artcraft": ("ai.storyteller.artcraft-launcher.desktop", False)}
 
@@ -134,7 +131,7 @@ def desktop_entry(path):
     return entry
 
 
-# How an app of yours starts at login (Startup's choice for each): minimised (Lutris, Capri, Proton VPN... in their
+# How an app of yours starts at login (Startup's choice for each): minimised (Lutris, Proton VPN... in their
 # tray, LOGIN_EXEC; any other app's first window minimised, user/apps.lua by AGROS_START_MINIMISED) or as it opens
 # from the menu. Kept in its entry (MODE), with the app's own command (OWN_EXEC) to switch back
 MODES = [{"value": "minimised", "label": "Minimised"}, {"value": "normal", "label": "Open normally"}]
@@ -244,7 +241,7 @@ def startup_add(name, minimised=True):
 def migrate(settings, old_account):
     """At every login (agros-links): apps "Add an app" added before their quiet start changed get it; and once, an
     account from before the Startup page's rework (old_account) gets its old switches as entries (the update dropped
-    them: Proton VPN, Lutris, Capri no longer started), and the old keys go"""
+    them: Proton VPN, Lutris no longer started), and the old keys go"""
     for name in LOGIN_EXEC:
         mine = os.path.join(AUTOSTART[1], name)
         entry = desktop_entry(mine) if os.path.exists(mine) else {}
@@ -966,21 +963,6 @@ def check(key, setting, value):
     return None
 
 
-def reserved_clash(key, setting, value, settings):
-    """Why a shortcut can't have those keys: they're another program's ("reserved": Capri's, which she binds herself while
-    she runs), or None. Refused, not only shown as a clash as two of the desktop's own are: Hyprland and she would both
-    act on them (her Ctrl+Alt+C once cleared every notification too), and she'd still have them after any change here"""
-    if setting["type"] != "keys" or setting.get("reserved"):
-        return None
-    mine = {norm(k) for keys in value for k in ([f"{keys} + {d}" for d in "1234567890"] if setting.get("modifier")
-                                                 else [keys])}
-    for s in settings.values():
-        for keys in s["default"] if s.get("reserved") and s["type"] == "keys" else []:
-            if norm(keys) in mine:
-                return f"{key}: {keys} is {s['reserved']} ({s['label'][:1].lower() + s['label'][1:]}): choose other keys"
-    return None
-
-
 def caelestia_set(setting, value):
     """Written to Caelestia's file, which it watches (no restart). Back to the default: the option left out, unless AgrOS
     ships its own value (then that one written), so a Caelestia update's new default reaches it"""
@@ -1024,7 +1006,7 @@ def main(args):
             setting["options"] = options_from(setting["options_cmd"])  # (checked against them)
         if setting["type"] == "number" and setting.get("integer") and isinstance(value, float) and value.is_integer():
             value = int(value)  # (35.0 from the app's slider: 35)
-        problem = check(args[1], setting, value) or reserved_clash(args[1], setting, value, settings)
+        problem = check(args[1], setting, value)
         if problem:
             sys.exit(problem)
         if "path" in setting:

@@ -281,7 +281,7 @@ sleep 1
 flock -u 6; exec 6>&-
 wait "$waiter" || fail "the run that waited failed: $(cat "$t/waited")"
 grep -q '^uv tool upgrade' "$t/dev" || fail "the run that waited didn't run after: $(cat "$t/waited")"
-# A helper that leaves something running in the background (capri-update's notice, a reload) doesn't hold the lock
+# A helper that leaves something running in the background (a notice, a reload) doesn't hold the lock
 # past the run: the next one doesn't wait for it
 stub uv 'echo "uv $*" >>'"$t"'/dev; sleep 5 >/dev/null 2>&1 & true'
 NPM_PREFIX=/usr run dev >/dev/null 2>&1

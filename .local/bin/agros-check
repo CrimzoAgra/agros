@@ -19,7 +19,7 @@ hyprctl() { command hyprctl -i "${HYPRLAND_INSTANCE_SIGNATURE:-0}" "$@"; }
 
 # Hyprland: config errors, settings an update made outdated. The config checked here, as Hyprland loads it from disk
 # (hypr-config-check: Hyprland --verify-config, its errors in its file), not by hyprctl configerrors alone: every
-# hyprctl eval (Capri, the switcher, game-focus) clears that list, and one that fails leaves its own error there. Its
+# hyprctl eval (the switcher, game-focus) clears that list, and one that fails leaves its own error there. Its
 # lines naming a config file only (<file>.lua:<line>:, where an eval's start with its code), when the check found
 # nothing (it can't see what fails only in the running session)
 hc="${XDG_STATE_HOME:-$HOME/.local/state}/hypr-config-check"
@@ -40,29 +40,6 @@ hyprctl plugin list -j 2>/dev/null | jq -e 'any(.[]; .name == "hyprbars")' >/dev
 # Caelestia patches that no longer fit (caelestia-overlay writes them down)
 skipped="${XDG_STATE_HOME:-$HOME/.local/state}/caelestia-overlay-skipped"
 [[ -s $skipped ]] && problems+=("Caelestia changes that are off: $(paste -sd';' "$skipped")")
-
-# Capri's update that failed (capri-update writes down why; she stays on the version she has)
-capri_failed="${XDG_STATE_HOME:-$HOME/.local/state}/capri-update-failed"
-[[ -s $capri_failed ]] && problems+=("Capri not updated: $(tail -n +2 "$capri_failed")")
-# Capri waiting for the GitHub login a restore brought back (agros-personal's mark: gh's login is in the keyring, which
-# opens from the login after): installed now, at the login's check, in the background (minutes; a failure said in a
-# notification). Once: gh still without a login, said
-capri_mark="${XDG_STATE_HOME:-$HOME/.local/state}/agros/capri-at-login"
-if [[ ${1:-} == --notify && -e $capri_mark ]]; then
-    rm -f "$capri_mark"
-    if [[ -e ${XDG_DATA_HOME:-$HOME/.local/share}/capri/current ]]; then
-        :
-    elif gh auth status >/dev/null 2>&1; then
-        gh auth setup-git >/dev/null 2>&1
-        # shellcheck disable=SC2016  # (the inner shell's own variables)
-        # (exit 2: capri-update said why in a notification itself; one is enough)
-        setsid -f bash -c 'out=$("$1/capri-update" 2>&1); rc=$?
-            ((rc == 0 || rc == 2)) || exec "$1/dots-warn" "Capri didn'\''t install" "$(tail -1 <<<"$out")"' \
-            _ "$helpers" </dev/null >/dev/null 2>&1
-    else
-        problems+=("Capri isn't installed: GitHub has no login here (gh auth login, then capri-update)")
-    fi
-fi
 
 # My QML in Caelestia (the overlay's files) failing to load: a Caelestia update renamed something it uses. It still
 # patches in, so caelestia-overlay can't see this; Caelestia's log can

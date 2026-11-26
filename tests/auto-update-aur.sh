@@ -517,7 +517,7 @@ if [[ -n $real ]] && "$real" --unshare-all --ro-bind / / true 2>/dev/null; then
     out=$("$t/auto-update-aur" --sandbox fetch "$sb" -- sh -c "$probe" 2>&1) || fail "the real fetch sandbox didn't run: $out"
     [[ $out == "net "* && $out != *sees* && $out != *staged* && $out != *"not "* ]] || fail "the fetch's sandbox sees too much: $out"
     # With pasta: the network its own. A port listened on on the host's loopback (IPv4 and IPv6), one on every address
-    # (the host's others: a second card, docker0, a VM's vmnet, a VPN's), and an abstract socket (Capri's bridge, CUPS,
+    # (the host's others: a second card, docker0, a VM's vmnet, a VPN's), and an abstract socket (CUPS,
     # an editor's): out of reach from it, and the gateway's address not the host's (--no-map-gw); the internet (HTTPS)
     # in reach, where the host has it
     if [[ -n $pasta ]]; then

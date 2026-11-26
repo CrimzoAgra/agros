@@ -314,8 +314,7 @@ librewolf_theme() {
 # notification hook
 # (the plugins tried even when an extension failed: Claude Code's may be there all the same)
 # A failure is tried again at the next login (offline), not for good: one extension or plugin gone from its store
-# failed the step at every login. Failing a third login in a row (as capri-update does a failure that keeps coming
-# back), it's said and counts as done
+# failed the step at every login. Failing a third login in a row, it's said and counts as done
 vscodium_setup() {
     local rc=0 n tries="$st/vscodium-failed"
     vscode_extensions || rc=1

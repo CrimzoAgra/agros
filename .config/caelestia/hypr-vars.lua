@@ -26,7 +26,7 @@ local vars = {
     kbScreenshot               = "",
     kbToggleWindowFloating     = "",
     kbWindowBorderedFullscreen = "",
-    -- Clear every notification: Ctrl+Alt+C, as Caelestia has it (Capri's chat, which took it too, is on Ctrl+Alt+K)
+    -- Clear every notification: Ctrl+Alt+C, as Caelestia has it
     kbClearNotifs              = "CTRL + ALT + C",
 }
 

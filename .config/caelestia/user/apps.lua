@@ -7,7 +7,7 @@ for _, tag in ipairs({ "music_player", "communication_app", "todo_app", "system_
 end
 
 -- Apps started at login: only the ones you add (Settings app, Startup page: your autostart entries, each in a unit of
--- its own). None preset. Lutris, Capri, Proton VPN, Solaar and ArtCraft added there start quietly, in their tray
+-- its own). None preset. Lutris, Proton VPN, Solaar and ArtCraft added there start quietly, in their tray
 -- (dots-settings' LOGIN_EXEC)
 -- Steam's own notification toasts ("friend started playing...") are windows: tag them like its menus, so the dock
 -- doesn't show them
@@ -355,7 +355,7 @@ function dots.minimise_launcher(address)
 end
 
 -- An app you start at login minimised (Settings app, Startup: dots-settings writes its entry's command with
--- AGROS_START_MINIMISED=1): its windows of the first minute go to the dock as they open. Lutris, Capri, Proton VPN...
+-- AGROS_START_MINIMISED=1): its windows of the first minute go to the dock as they open. Lutris, Proton VPN...
 -- start in their tray by their own options instead
 hl.on("window.open", function(win)
     if not (win and win.pid and win.pid > 0) then return end
@@ -438,39 +438,3 @@ if dots.setting("nightlight") then hl.on("hyprland.start", function() hl.exec_cm
 -- ...and keep it there when Caelestia (the tray) restarts or crashes; Spotify shows its window when the tray goes away.
 -- tray-keeper also brings back tray icons apps like Proton VPN don't re-add themselves
 hl.on("hyprland.start", function() hl.exec_cmd("systemctl --user start tray-keeper") end)  -- a service: restarted if it crashes
-
--- Capri (~/.local/bin/capri: native on Wayland, a layer-shell surface, namespace "capri"; her other windows' app id
--- "dev.cybercompanion.capri") sets her own layer rules and places herself: no window rules of hers here.
--- Her key and her start at login only once she's installed (else her key would take Shift+Space from other apps): her
--- build's binary (capri-update's), or the start script $CAPRI_RUN names (a checkout of her code: ~/.local/bin/capri
--- runs it)
-local function file_exists(path)
-    local f = io.open(path)
-    if f then f:close() end
-    return f ~= nil
-end
-local home = os.getenv("HOME")
-local data = os.getenv("XDG_DATA_HOME") or (home .. "/.local/share")
-local capri_run = os.getenv("CAPRI_RUN")
-if (capri_run and capri_run ~= "" and file_exists(capri_run)) or file_exists(data .. "/capri/current/capri") then
-    -- Put away / back (Shift+Space by default): apps can't have a shortcut of their own on Wayland, so it's bound here
-    -- and passed to her local bridge. Switched off while a game has the focus (borderless too:
-    -- dots.is_game) or a window is fullscreen where you are: bound, Hyprland takes the key from the game or app even
-    -- when it does nothing (sprint + jump lost the jump, Shift seemed not to register). The tray still calls her out
-    -- then. Any other app focused still loses Shift+Space to her: change her key in the Settings app if one needs it
-    local capri_keys = dots.bind("capri", hl.dsp.exec_cmd("curl -s --max-time 2 -X POST http://127.0.0.1:47823/toggle"))
-    local function capri_keys_follow()
-        local ws = hl.get_active_workspace()
-        local on = not (ws and ws.has_fullscreen) and not dots.is_game(hl.get_active_window())
-        for _, b in ipairs(capri_keys) do b:set_enabled(on) end
-    end
-    -- Looked at just after each event: while it runs, a closing window is still there and a minimised one still on
-    -- your workspace (a fullscreen game's kept them off). And as focus moves to another screen: an empty one beside a
-    -- game's has no window to make it "active"
-    local function capri_keys_soon() hl.timer(capri_keys_follow, { timeout = 1, type = "oneshot" }) end
-    for _, ev in ipairs({ "window.fullscreen", "workspace.active", "window.active", "window.move_to_workspace",
-                          "monitor.focused", "window.close" }) do
-        hl.on(ev, capri_keys_soon)
-    end
-    capri_keys_follow()
-end

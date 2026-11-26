@@ -34,7 +34,7 @@ PERSONAL_PATHS=(.config/equibop .var/app/com.spotify.Client/config/spotify .var/
     .local/share/Steam/config/config.vdf
     # SteamGridDB's key (lutris-covers: covers for games the stores have none for)
     .config/dots/steamgriddb.key
-    # GitHub's login (gh): Capri's fork is private, so capri-update needs it (installs her after a restore)
+    # GitHub's login (gh)
     .config/gh/hosts.yml
     # VSCodium's extensions' own data (their logins and settings; the extensions themselves: agros-welcome's list)
     .config/VSCodium/User/globalStorage)
@@ -308,19 +308,6 @@ personal_restore() {
     fi
     [[ -d $backup ]] && echo "Replaced files backed up to $backup."
     [[ -n $prof ]] || echo "LibreWolf has no profile yet: start it once and close it, then agros-personal."
-    # Capri: her fork is private, so an install without your GitHub login couldn't fetch her. With it back now, she's
-    # installed (a failure said, the restore still done). gh keeps its login in the keyring, and the one brought back
-    # opens only from the next login: then agros-check installs her (its mark), as it runs at every login
-    if [[ ! -e ${XDG_DATA_HOME:-$HOME/.local/share}/capri/current && -x $helpers/capri-update ]] && command -v gh >/dev/null; then
-        if gh auth status >/dev/null 2>&1; then
-            echo "Installing Capri (your GitHub login is back)..."
-            gh auth setup-git >/dev/null 2>&1 || true
-            "$helpers/capri-update" || echo "!! Capri didn't install: run capri-update"
-        elif grep -qx .config/gh/hosts.yml <<<"$list"; then
-            mkdir -p "${XDG_STATE_HOME:-$HOME/.local/state}/agros" && : >"${XDG_STATE_HOME:-$HOME/.local/state}/agros/capri-at-login"
-            echo "Capri is installed at your next login (your GitHub login works from then: it's in the keyring)."
-        fi
-    fi
     # Proton VPN's account is back, but not its start at login (a VPN at every login is yours to choose): said, unless
     # it's among the apps you start at login already (Desktop Settings → Startup: your autostart entries)
     if grep -qE '^\.config/Proton/VPN(/|$)' <<<"$list" &&

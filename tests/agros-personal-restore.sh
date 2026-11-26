@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 # agros-personal --save onto a made-up pen drive, then agros-personal into another home: the logins (Claude Code's too) come back (LibreWolf's into
 # the new profile, whatever its name), caches stay out, replaced files are backed up, the weather's place comes back,
-# nothing is readable on the drive, a wrong passphrase brings nothing back, and it won't save into the repo; Capri left
-# to the next login when gh can't take the GitHub login brought back yet. Without the drive: signing in refused with no
-# terminal, the weather's place asked
+# nothing is readable on the drive, a wrong passphrase brings nothing back, and it won't save into the repo. Without
+# the drive: signing in refused with no terminal, the weather's place asked
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
@@ -92,20 +91,14 @@ HOME=$new XDG_RUNTIME_DIR=$t bash -c '
 lutris_db "$new" ea-app 0 "" ""  # (lutris-library's entry for it, not installed)
 nl=$new/.config/librewolf/librewolf/xyz.default-release
 echo stale >"$nl/logins.json-wal"  # the new profile's journal, which would be replayed over the one brought back
-# GitHub's login back, gh not taking it yet (it's in the keyring brought back, which opens from the next login): Capri
-# left to that login (agros-check's mark), said, not tried now
-mkdir -p "$t/ghbin"; printf '#!/bin/sh\n[ "$1 $2" = "auth status" ] && exit 1\nexit 0\n' >"$t/ghbin/gh"
-printf '#!/bin/sh\ntouch "%s/capri-ran"\n' "$t" >"$repo/.local/bin/capri-update"; chmod +x "$t/ghbin/gh" "$repo/.local/bin/capri-update"
 # (the first login's setup still going: waited for; agros-welcome's offer not made again once it's back)
 [[ -e $new/.local/state/agros/offered ]] && fail "a restore that failed marked the welcome's offer answered"
 mkdir -p "$new/.local/state/agros"; sleep 3 & echo $! >"$new/.local/state/agros/setup-running"; setup=$!
-out=$(PATH=$t/ghbin:$PATH run "$new" personal_main) || fail "--personal failed"
+out=$(run "$new" personal_main) || fail "--personal failed"
 [[ $out == *"Waiting for AgrOS's first setup"* ]] && ! kill -0 "$setup" 2>/dev/null ||
     fail "the restore didn't wait for the first login's setup: $out"
 [[ -e $new/.local/state/agros/offered ]] || fail "accounts back, but the welcome's offer made again at the next login"
 [[ $(cat "$new/.config/gh/hosts.yml") == SECRET-GH ]] || fail "GitHub's login not back"
-[[ -e $new/.local/state/agros/capri-at-login && ! -e $t/capri-ran ]] || fail "Capri not left to the next login, or tried now"
-[[ $out == *"Capri is installed at your next login"* ]] || fail "Capri's install at the next login not said: $out"
 # (Proton VPN's account back, its start at login not: a desktop setting, off here, said)
 [[ -f $new/.config/Proton/VPN/settings.json ]] || fail "Proton VPN's settings not back"
 [[ $out == *"Proton VPN starts at login only if you add it: Desktop Settings → Startup."* ]] ||

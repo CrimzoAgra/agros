@@ -84,7 +84,7 @@ ds.startup_add("net.lutris.Lutris.desktop")
 text = open(f"{mine}/net.lutris.Lutris.desktop").read()
 assert "\nExec=sh -c \"gdbus wait --session --timeout 60 org.kde.StatusNotifierWatcher; exec env LUTRIS_START_HIDDEN=1 lutris\"\n" in text \
     and "Exec=lutris --x" in text, text
-# migrate: an account from before the Startup rework gets its old switches as entries (Lutris and Capri were on unless
+# migrate: an account from before the Startup rework gets its old switches as entries (Lutris was on unless
 # turned off), once; the old keys go, the night light's becomes its own. An entry added with an older quiet start gets
 # the new one. A new account gets none, then or later
 import json
@@ -92,10 +92,10 @@ ds.write_lua = lambda settings: None
 ds.CONFIG = f"{t}/config"
 ds.SETTINGS = f"{ds.CONFIG}/settings.json"
 os.makedirs(ds.CONFIG)
-for name in ("proton.vpn.app.gtk.desktop", "capri.desktop"):
+for name in ("proton.vpn.app.gtk.desktop",):
     open(f"{apps}/{name}", "w").write(f"[Desktop Entry]\nType=Application\nName={name}\nExec=x\n")
 os.remove(f"{mine}/net.lutris.Lutris.desktop")
-json.dump({"startup.protonvpn": True, "startup.capri": False, "startup.nightlight": True, "x": 1}, open(ds.SETTINGS, "w"))
+json.dump({"startup.protonvpn": True, "startup.nightlight": True, "x": 1}, open(ds.SETTINGS, "w"))
 ds.migrate({}, True)
 assert sorted(n for n in os.listdir(mine) if n in ds.LOGIN_EXEC) == ["net.lutris.Lutris.desktop", "proton.vpn.app.gtk.desktop"], os.listdir(mine)
 assert json.load(open(ds.SETTINGS)) == {"nightlight": True, "x": 1}, open(ds.SETTINGS).read()

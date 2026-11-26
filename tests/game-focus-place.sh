@@ -57,11 +57,11 @@ second = dict(game, address="0xs", workspace={"id": 11}, monitor=1, size=[2048, 
 gf.place_games([second, dict(other, workspace={"id": 11}, monitor=1), dict(other, address="0xp", workspace={"id": 2})], "0xs")
 if not any("workspace = 13," in " ".join(c) for c in calls): fail("not moved to the second screen's free workspace")
 if ("eval", "dots.goto_workspace(3)") not in calls: fail("not followed to the free column")
-# A pinned window (Capri, listed on the workspace its screen shows) doesn't share the game's: a game alone stays
+# A pinned window (listed on the workspace its screen shows) doesn't share the game's: a game alone stays
 gf.hypr = hypr
 calls.clear()
-capri = dict(other, address="0xc", pinned=True)
-gf.place_games([dict(game, address="0xa"), capri], "0xa")
+pinned = dict(other, address="0xc", pinned=True)
+gf.place_games([dict(game, address="0xa"), pinned], "0xa")
 if moved(): fail("a game alone but for a pinned window moved")
 # Only the game you're on: one that came to cover its screen while you were elsewhere stays (else it pulled you back)
 calls.clear()

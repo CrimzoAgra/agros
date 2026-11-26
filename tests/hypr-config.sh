@@ -726,7 +726,7 @@ check("not maximised: tag", r.tag, nil); check("not maximised: size", r.w, nil)
 win.tags = { "maximised" }
 r = (dots.titlebar_drag_start("0x9", "before") or true) and result()
 check("title bar drag: tag", r.tag, "-maximised")
--- The floating/tiling switch, both ways, leaves a pinned window be (picture-in-picture, Capri): tiled, it lost its pin
+-- The floating/tiling switch, both ways, leaves a pinned window be (picture-in-picture): tiled, it lost its pin
 local pip = { address = "0xd", class = "librewolf", title = "Picture-in-Picture", floating = true, pinned = true, fullscreen = 0,
               pid = 1, tags = {}, workspace = ws(1), monitor = SCREENS[1], at = { x = 1500, y = 800 },
               size = { x = 400, y = 225 }, focus_history_id = 1 }
@@ -1434,80 +1434,6 @@ out=$(cd "$t" && HOME=$t/home XDG_RUNTIME_DIR=$t/run HYPRLAND_INSTANCE_SIGNATURE
     "open 0|closed 1|let go, not yet 0|died open 1|let go, closed 1" ]] ||
     fail "Super+drag around the switcher: $(grep -E '^(open|closed|let go|died)' <<<"$out" | paste -sd'|')"
 
-# Capri: her key only once she's installed (it would take Shift+Space from other apps), and off over a fullscreen window
-cat >"$t/capri.lua" <<'L'
-local home = os.getenv("HOME")
-package.path = home .. "/.config/caelestia/?.lua;" .. home .. "/.config/hypr/?.lua;" .. package.path
-dofile(arg[1])
-local blur, config = {}, hl.config
-hl.config = function(c)
-    config(c)
-    for k, v in pairs((c.decoration or {}).blur or {}) do blur[k] = v end
-end
-local vars = require("variables")
-for k, v in pairs(require("hypr-vars")) do vars[k] = v end
--- Her key's binds as Hyprland makes them (on or off: set_enabled), and timers run when the test says (later)
-local made, timers, bind = {}, {}, hl.bind
-hl.bind = function(keys, ...)
-    bind(keys, ...)
-    local b = { keys = keys, on = true, set_enabled = function(self, on) self.on = on end }
-    made[#made + 1] = b
-    return b
-end
-hl.timer = function(fn) timers[#timers + 1] = fn end
-require("hypr-user")
-io.write("blur ", tostring(blur.size), "\n")
-for _, b in ipairs(binds) do io.write("bind ", b, "\n") end
--- Off while the workspace you're on has a fullscreen window (a game kept losing Shift), on again once it's gone: its
--- closing (still there while its close event runs) and focus moving to the other screen
-local function fire(name, ...) for _, fn in ipairs(handlers[name] or {}) do fn(...) end end
--- (hers by its keys: not the last bind made, which a module loaded after apps.lua may add)
-local function key()
-    for _, b in ipairs(made) do if b.keys == "SHIFT + Space" then return tostring(b.on) end end
-    return "none"
-end
--- (what an event timed to run just after it: hers are looked at then)
-local function settle() local due = timers; timers = {}; for _, fn in ipairs(due) do fn() end end
-local ws = hl.get_active_workspace()
-ws.has_fullscreen = true; fire("window.fullscreen", WINDOWS[2]); settle(); io.write("fullscreen ", key(), "\n")
-fire("window.close", WINDOWS[2]); ws.has_fullscreen = false
-settle()
-io.write("closed ", key(), "\n")
-ws.has_fullscreen = true; fire("window.fullscreen", WINDOWS[2]); settle(); FOCUS = 2; fire("monitor.focused", SCREENS[2]); settle()
-io.write("other screen ", key(), "\n")
--- Off while a game has the focus, borderless (not fullscreen) too; on again once something else has it
-FOCUS = 1; ws.has_fullscreen = false
-ACTIVE = { address = "0x9", class = "steam_app_2", title = "Borderless", fullscreen = 0, pid = 1, tags = { "game*" },
-           workspace = ws, monitor = SCREENS[1] }
-fire("window.active", ACTIVE); settle(); io.write("borderless game ", key(), "\n")
-ACTIVE = nil; fire("window.active", WINDOWS[1]); settle(); io.write("game unfocused ", key(), "\n")
-L
-printf '%s\n' 'return { ["keys.capri"] = { "SHIFT + Space" } }' >"$t/home/.config/dots/settings.lua"
-capri_load() { (cd "$t" && HOME=$t/home CAPRI_RUN=$1 XDG_RUNTIME_DIR=$t/run HYPRLAND_INSTANCE_SIGNATURE=test lua capri.lua stub.lua 2>&1); }
-out=$(capri_load "") || fail "Capri: $out"
-grep -qx "bind SHIFT + Space" <<<"$out" && fail "Capri's key bound with her not installed"
-# (her Electron build from before, no binary: not her build now)
-mkdir -p "$t/home/.local/share/capri/current"; echo '{}' >"$t/home/.local/share/capri/current/package.json"
-out=$(capri_load "") || fail "Capri: $out"
-grep -qx "bind SHIFT + Space" <<<"$out" && fail "Capri's key bound for her Electron build"
-: >"$t/home/.local/share/capri/current/capri"
-out=$(capri_load "") || fail "Capri: $out"
-grep -qx "bind SHIFT + Space" <<<"$out" || fail "Capri's key missing with her installed"
-grep -qx "fullscreen false" <<<"$out" || fail "Capri's key still bound over a fullscreen window: $out"
-grep -qx "closed true" <<<"$out" || fail "Capri's key stayed off after the fullscreen window closed: $out"
-grep -qx "other screen true" <<<"$out" || fail "Capri's key stayed off on the other screen: $out"
-grep -qx "borderless game false" <<<"$out" || fail "Capri's key still bound over a focused borderless game: $out"
-grep -qx "game unfocused true" <<<"$out" || fail "Capri's key stayed off after the game lost the focus: $out"
-# Run from a checkout of her code ($CAPRI_RUN, as ~/.local/bin/capri runs it) with no build: her key too. A start
-# script where the launcher once looked by itself (~/Projects/run-capri.sh), not named in $CAPRI_RUN: not hers
-rm -r "$t/home/.local/share/capri"
-mkdir -p "$t/home/Projects"; printf '#!/bin/sh\n' >"$t/home/Projects/run-capri.sh"; chmod +x "$t/home/Projects/run-capri.sh"
-out=$(capri_load "") || fail "Capri: $out"
-grep -qx "bind SHIFT + Space" <<<"$out" && fail "Capri's key bound for a start script \$CAPRI_RUN doesn't name"
-out=$(capri_load "$t/home/Projects/run-capri.sh") || fail "Capri: $out"
-grep -qx "bind SHIFT + Space" <<<"$out" || fail "Capri's key missing with \$CAPRI_RUN's start script there"
-rm -r "$t/home/Projects"
-mkdir -p "$t/home/.local/share/capri/current"; : >"$t/home/.local/share/capri/current/capri"
 # One user module erroring (a Hyprland update renamed something it uses): the others still load, and it's still an
 # error for Hyprland to show
 cp "$t/home/.config/caelestia/user/workspaces.lua" "$t/workspaces.lua.bak"
@@ -1522,9 +1448,11 @@ local ok, err = pcall(require, "hypr-user")
 io.write("loaded ", tostring(ok), " ", tostring(err):gsub("\n", " "), "\n")
 for _, b in ipairs(binds) do io.write("bind ", b, "\n") end
 L
+# (a key of keys.lua's, loaded after workspaces.lua, bound from settings.lua)
+printf '%s\n' 'return { ["keys.restart_shell"] = { "CTRL + SUPER + ALT + R" } }' >"$t/home/.config/dots/settings.lua"
 out=$(cd "$t" && HOME=$t/home XDG_RUNTIME_DIR=$t/run HYPRLAND_INSTANCE_SIGNATURE=test lua broken.lua stub.lua 2>&1)
 grep -q '^loaded false .*user.workspaces.*renamed API' <<<"$out" || fail "a broken user module wasn't reported: $(head -3 <<<"$out")"
-grep -qx "bind SHIFT + Space" <<<"$out" || fail "a broken user module took the ones after it down: $(head -5 <<<"$out")"
+grep -qx "bind CTRL + SUPER + ALT + R" <<<"$out" || fail "a broken user module took the ones after it down: $(head -5 <<<"$out")"
 cp "$t/workspaces.lua.bak" "$t/home/.config/caelestia/user/workspaces.lua"
 # A game's splash (its first window, small) holds its other windows back; a first window filling a scaled screen (a
 # window's size is in the screen's units, its mode over its scale) isn't one: its next window shown, not held

@@ -1,11 +1,7 @@
 #!/usr/bin/env bash
 # Claude Code's Stop hook (~/.claude/settings.json, set by agros-welcome): a desktop notification when it
-# finishes an answer, titled with the project folder, the answer's start as the body (none while Capri's chat is open:
-# you're reading it there)
+# finishes an answer, titled with the project folder, the answer's start as the body
 in=$(cat)
-# Not while you're in her chat: her window has the keyboard then. She's a layer surface, not a window Hyprland calls
-# active, so she says it herself on her local bridge (none running: no answer, notified)
-[[ $(curl -s --max-time 1 -X POST http://127.0.0.1:47823/focused 2>/dev/null) == yes ]] && exit 0
 dir=$(jq -r '.cwd // empty' <<<"$in")
 # The answer: last_assistant_message (Claude Code's Stop input); a version without it: the last text of an answer in
 # the conversation's file (transcript_path, one JSON object a line), which may lag behind; neither: "Done"
@@ -19,5 +15,5 @@ fi
 msg=$(jq -Rrs 'gsub("\\s+"; " ") | gsub("^ | $"; "") | .[:200]' <<<"$text")
 # (--: an answer starting with a "- " list was taken for options, and nothing was shown). Through notify-when-up,
 # beside this, the scripts' one way to notify, but tried for 2 s at most, not its minute: Claude Code waits on its hook
-NOTIFY_WHEN_UP_TRIES=4 "$(dirname "$(readlink -f "$0")")/notify-when-up" -a Capri -i capri -- \
-    "Capri: ${dir##*/}" "${msg:-Done}"
+NOTIFY_WHEN_UP_TRIES=4 "$(dirname "$(readlink -f "$0")")/notify-when-up" -a "Claude Code" -- \
+    "Claude Code: ${dir##*/}" "${msg:-Done}"

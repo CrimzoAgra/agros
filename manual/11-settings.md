@@ -18,10 +18,9 @@ setting on any page.
 - **Features**: low input lag in games, how games and their launchers behave, and each of AgrOS's changes to the
   desktop and Lutris, which you can turn off one by one
 - **Startup**: which apps start when you log in: none until you add them with **Add an app** (switch one you added off
-  to take it out again). Lutris, Capri, Proton VPN, Solaar and ArtCraft start quietly, in their tray
+  to take it out again). Lutris, Proton VPN, Solaar and ArtCraft start quietly, in their tray
 - **Shortcuts**: every shortcut. Click **+** next to one and press the new keys. One used twice shows in red. The
-  fixed ones at the bottom can't be changed, but show so you don't pick their keys. Capri's own keys show there too,
-  and no other shortcut can have them (she uses them while she runs)
+  fixed ones at the bottom can't be changed, but show so you don't pick their keys
 - **All Caelestia options**: every option the shell has, by area: click an area to open it
 
 A setting you've changed has a ↺ button that puts it back as AgrOS set it; not the ones kept by the system or by
