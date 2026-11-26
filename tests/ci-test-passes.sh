@@ -37,7 +37,11 @@ sed "s|@T@|$t|g" >"$t/bin/pacman" <<'S'
 #!/bin/bash
 srv=$(sed -n 's|^Server = ||p' @T@/pacman.conf) && srv=${srv##*/}
 case $1 in
-    -Sy*) [[ -z $PACFAIL || $srv != "$PACFAIL" ]] || exit 1
+    -Sy*) [[ ! -s @T@/mirrorlist ]] || srv=archive
+        echo "$srv $*" >>@T@/syncs
+        if [[ -n $PACFAIL && $srv == "${PACFAIL%:once}" ]]; then
+            [[ $PACFAIL == *:once && -e @T@/failed-once ]] || { touch @T@/failed-once; exit 1; }
+        fi
         [[ ! -e @T@/dbs/$srv.db ]] || cp @T@/dbs/$srv.db @T@/sync/agros.db ;;
     -U) for f in "${@:2}"; do [[ $f == -* ]] || { f=${f##*/}; echo "${f%-*-*-*}" >>@T@/installed; }; done ;;
     -Suu) : >@T@/installed ;;
@@ -81,11 +85,11 @@ S
 chmod +x "$t/bin/"* "$t/repo/tests/run.sh"
 # go <BROKEN> [<day>]: the result line, what ran (a line per pass, or trial: the tests it ran)
 go() {
-    rm -f "$t/ran" "$t/out" "$t/flaky-seen"; : >"$t/mirrorlist"; : >"$t/installed"
+    rm -f "$t/ran" "$t/out" "$t/flaky-seen" "$t/failed-once" "$t/syncs"; : >"$t/mirrorlist"; : >"$t/installed"
     sed -i 's|^Server = .*|Server = https://example.invalid/old|' "$t/pacman.conf"
     # (the published repo's database signatures, as an earlier sync leaves them)
     mkdir -p "$t/sync"; touch "$t/sync/agros.db.sig" "$t/sync/agros.files.sig" "$t/sync/core.db"
-    BROKEN=$1 PATH=$t/bin:$PATH PACMAN_CONF=$t/pacman.conf PACMAN_SYNC=$t/sync MIRRORLIST=$t/mirrorlist GITHUB_OUTPUT=$t/out \
+    BROKEN=$1 AGROS_RETRY_WAIT=0 PATH=$t/bin:$PATH PACMAN_CONF=$t/pacman.conf PACMAN_SYNC=$t/sync MIRRORLIST=$t/mirrorlist GITHUB_OUTPUT=$t/out \
         AGROS_TEST_REPORT=$t/report "$t/repo/ci/test-passes.sh" file:///built https://example.invalid/published "${2:-}" \
         >/dev/null 2>&1 || true
     echo "$(grep '^result=' "$t/out") | $(paste -sd'|' "$t/ran")"
@@ -153,6 +157,15 @@ grep -qx '    AHEAD lutris: no longer fits main; x' "$t/report" || fail "upstrea
     fail "the published [agros] not installing: not a failure: $(PACFAIL=published go "lutris@built")"
 grep -q "^    !! the published \[agros\] didn't install: not known which side" "$t/report" ||
     fail "an install that failed not in the report: $(cat "$t/report")"
+# (a download that failed once, the archive's or the published [agros]'s: tried again, the pass run; the archive's
+# without pacman's download timeout, which its slow answers tripped. Failing every time: tried three times, stopped)
+[[ $(PACFAIL=published:once go "lutris@built") == "result=hold-agros | all|all|lutris|lutris|lutris" ]] ||
+    fail "the published [agros] failing once: not tried again: $(PACFAIL=published:once go "lutris@built")"
+[[ $(PACFAIL=archive:once go "hypr-api@today" 2026/11/14) == "result=hold-upstream | all|all|all" ]] ||
+    fail "Arch's archive failing once: not tried again: $(PACFAIL=archive:once go "hypr-api@today" 2026/11/14)"
+grep -q '^archive .*--disable-download-timeout' "$t/syncs" || fail "the archive's sync with pacman's download timeout: $(cat "$t/syncs")"
+[[ $(PACFAIL=archive go "hypr-api@today" 2026/11/14) == "result=fail | all|all" && $(grep -c '^archive ' "$t/syncs") == 3 ]] ||
+    fail "Arch's archive failing each time: not tried three times, then stopped: $(cat "$t/syncs")"
 # (not in a background job, which starts with Ctrl+C ignored: dotfiles-sync-edge's Ctrl+C then never reached the sync)
 [[ ! -s $t/int ]] || fail "the tests ran with Ctrl+C ignored: $(sort -u "$t/int")"
 echo "ok ci-test-passes"

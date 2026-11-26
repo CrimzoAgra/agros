@@ -52,6 +52,22 @@ tests() {
 # stopped <why>: a pass that couldn't be run (a download failed, an install refused), said in the report too: the issue
 # read as AgrOS's own code failing, with nothing under it saying otherwise
 stopped() { echo "$1"; echo "    $1: not known which side broke the tests" >>"$report"; result fail 1; }
+# synced <why> <pacman option>...: a pass's packages synced and installed, tried again a minute later, three times (a
+# server's hiccup: archive.archlinux.org's "Operation too slow" stopped pass C, a mirror caught mid-sync), then stopped.
+# Each try within AGROS_SYNC_TIMEOUT seconds (a download that hangs, with pacman's own timeout off: its lock then left
+# behind taken away, or the next try found the database locked)
+synced() {
+    local why=$1 i rc
+    shift
+    for i in 1 2 3; do
+        rc=0
+        timeout -k 10 "${AGROS_SYNC_TIMEOUT:-1200}" pacman "$@" >/dev/null || rc=$?
+        ((rc)) || return 0
+        ((rc != 124 && rc != 137)) || { echo "!! pacman $1 stopped at its time limit"; rm -f "${sync%/*}/db.lck"; }
+        ((i == 3)) || sleep "${AGROS_RETRY_WAIT:-60}"
+    done
+    stopped "$why"
+}
 # descs <db>: each package in a sync database, "<name> <file>", "<name> > <what it needs>" and "<name> = <what it
 # provides>" (versions left out)
 descs() {
@@ -181,7 +197,7 @@ result() {
     echo "result=$1" >>"$out"; echo "Tests: $1"; exit "${2:-0}"
 }
 agros_at "$built"
-pacman -Syuu --noconfirm --needed caelestia-shell >/dev/null || stopped "!! the built [agros] didn't install"
+synced "!! the built [agros] didn't install" -Syuu --noconfirm --needed caelestia-shell
 # (the built database, for which builds are new: pass B syncs the published one over it)
 cp "$sync/agros.db" "$keep/built.db" 2>/dev/null
 echo "- With this run's [agros], on today's Arch:" >>"$report"
@@ -191,7 +207,7 @@ ahead=$(sed -n 's/^ok \([^ ]*\) .*(AHEAD: \(.*\))$/    AHEAD \1: \2/p' <<<"$log"
 broke=("${failed[@]}")
 agros_at "$published"
 # (-yy: the sync db is the built one, newer than the published; -y kept it, checked against the published .sig)
-pacman -Syyuu --noconfirm >/dev/null || stopped "!! the published [agros] didn't install"
+synced "!! the published [agros] didn't install" -Syyuu --noconfirm
 echo "- All again with the published [agros]:" >>"$report"
 tests
 ((${#failed[@]})) || { echo "    passed: this run's new AUR builds broke them" >>"$report"; culprits; result hold-agros; }
@@ -199,7 +215,8 @@ tests
 [[ $day =~ ^[0-9]{4}/[0-9]{2}/[0-9]{2}$ ]] || stopped "!! no day Arch last passed on (agros-arch-ok), not tried on an older Arch"
 # shellcheck disable=SC2016  # (pacman's own variables)
 printf 'Server = https://archive.archlinux.org/repos/%s/$repo/os/$arch\n' "$day" >"${MIRRORLIST:-/etc/pacman.d/mirrorlist}"
-pacman -Syyuu --noconfirm >/dev/null || stopped "!! Arch as of $day didn't install"
+# (no download timeout: the archive answers slowly, pacman gave up after 10 seconds under a byte a second)
+synced "!! Arch as of $day didn't install" -Syyuu --noconfirm --disable-download-timeout
 echo "- All again on Arch as of $day (the last day they passed on it):" >>"$report"
 tests
 ((${#failed[@]})) || { echo "    passed: an Arch update since broke them" >>"$report"; result hold-upstream; }
