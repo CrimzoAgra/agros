@@ -401,7 +401,8 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
       its first icon, its place in the bar the closed tray's: nothing beside it squeezed (`tray_over_dock`)
     - AMOLED black (Light or dark's third choice, on Home's Look card and Settings › Wallpaper & style in place of the
       Dark theme switch; `look.mode` sets the hidden `look.amoled`, `amoled`; on by default): in dark mode the scheme's backgrounds pure black, the bar, its border and the panels, the surfaces on them darkened
-      to match; read live from `settings.json`
+      to match; read live from `settings.json`, and with the scheme before the shell's first frame (it started in
+      Caelestia's default dark for a moment)
     - A window's icon found by one lookup for the bar, the dock and Alt+Tab (`.config/quickshell/common/WindowApps.qml`:
       Quickshell's, else `.local/bin/app-for-window`: the class's last part, a Flatpak's id, the window's program)
     - Right-clicking the empty bar between the workspaces and the tray (not on the dock) opens a menu (`BarMenu.qml`)

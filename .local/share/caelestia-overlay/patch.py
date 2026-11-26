@@ -1608,17 +1608,23 @@ def amoled():
     onAmoledChanged: if (lastScheme)
         load(lastScheme, false)
 
+    // (on unless the settings say it's off: none, or unreadable, on)
+    function amoledFrom(text: string): void {
+        try {
+            root.amoled = JSON.parse(text)?.["look.amoled"] !== false;
+        } catch (e) {
+            root.amoled = true;
+        }
+    }
+
     FileView {
+        id: amoledSettings
+
         path: `${Quickshell.env("HOME")}/.config/dots/settings.json`
+        blockLoading: true
         watchChanges: true
         onFileChanged: reload()
-        onLoaded: {
-            try {
-                root.amoled = JSON.parse(text())?.["look.amoled"] !== false;
-            } catch (e) {
-                root.amoled = true;
-            }
-        }
+        onLoaded: root.amoledFrom(text())
         onLoadFailed: root.amoled = true
     }
 
@@ -1648,6 +1654,27 @@ def amoled():
         }
     }
 """, "the scheme's colours")
+    # Both read before the shell's first frame, not as they load: it showed Caelestia's default dark for a moment (its
+    # border and bar grey, then black) as it started
+    c = swap(c, """    FileView {
+        path: `${Paths.state}/scheme.json`
+        watchChanges: true
+""", """    FileView {
+        id: schemeFile
+
+        path: `${Paths.state}/scheme.json`
+        blockLoading: true // caelestia-overlay (amoled): read at the start, below
+        watchChanges: true
+""", "the scheme's file")
+    c = swap(c, "    Component.onCompleted: root.requestReloadHyprRules()\n", """    Component.onCompleted: {
+        root.requestReloadHyprRules();
+        // caelestia-overlay (amoled): the settings, then the scheme, read now: the first frame in their colours
+        root.amoledFrom(amoledSettings.text());
+        const scheme = schemeFile.text();
+        if (scheme)
+            root.load(scheme, false);
+    }
+""", "the colours' start")
     return {rel: c}
 
 

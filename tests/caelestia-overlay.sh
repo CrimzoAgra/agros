@@ -465,6 +465,14 @@ missing='This may be due to a missing import statement or incomplete qmltypes fi
     ! blind dst/NoImport.qml 'Type margins is used but it is not resolved [unresolved-type]'; } ||
     fail "the qmllint check misjudges Qt 6.12.1's missing types and Quickshell's margins"
 
+# The colours in the shell's first frame: AMOLED's setting and the scheme read as Colours is made (blocking), not as
+# they load (Caelestia's default dark showed for a moment at every start)
+c=$dst/services/Colours.qml
+on_start=$(sed -n '/^    Component.onCompleted: {$/,/^    }$/p' "$c")
+{ [[ $(grep -c '^        blockLoading: true' "$c") == 2 ]] && grep -q 'root.amoledFrom(amoledSettings.text());' <<<"$on_start" &&
+    grep -q 'root.load(scheme, false);' <<<"$on_start" && grep -q 'const scheme = schemeFile.text();' <<<"$on_start"; } ||
+    fail "the shell's first frame not in the scheme's colours: $on_start"
+
 # The bar on the right (Settings: bar.side): the split windows' layout mirrored (drawers/: barEdge), the border's zones
 # swapped, the bar's content and its popouts against its inner edge, the wallpaper's frame and the clock's and the
 # visualiser's margins on the other side; with it on the left (the run above), none of that
