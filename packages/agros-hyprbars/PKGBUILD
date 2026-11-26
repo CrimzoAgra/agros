@@ -34,6 +34,8 @@ pkgver() {
 }
 
 build() {
+    # (with makepkg's flags, for any x86-64 machine (ci/build-repo.sh): built for CI's own CPU it had AVX-512, and
+    # Hyprland died loading it on CPUs without, 26 Nov 2026)
     # (an account's build, into a home of the build's own: the plugins' version for this Hyprland, the patch applied)
     mkdir -p "$srcdir/home/.local/share/hyprbars"
     cp "$_root/.local/share/hyprbars/hyprbars.patch" "$srcdir/home/.local/share/hyprbars/"
