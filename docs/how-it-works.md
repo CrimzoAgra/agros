@@ -1236,7 +1236,11 @@ brings each change; nothing to run by hand).
     download, so the new code decides what's downloaded and built for: installed from those lists, under pacman's own
     lock as well (these lists' lock is their own, and the install writes what's installed: `db.lck` made as pacman
     makes it, only where there's none, and removed after; there already, pacman or Updates running, it's left for the
-    shutdown's, said), then the boot's run starts again with it
+    shutdown's, said), then the boot's run starts again with it. pacman's own installed list is bind-mounted in those
+    lists' place for that install, not the link they have otherwise: pacman 7.1, writing through the link, made a folder
+    of its own there, its new entries in it and pacman's own half made (an entry with no files, the old version's still
+    listed), every pacman after it failing. A folder found there is mended at the start: its complete entries put in
+    pacman's own in place of the half made ones, then the link back
   - **AUR apps** (`packages/agros-system/auto-update-aur`, after the download; an app whose AUR maintainer
     or co-maintainers changed since its last build (a co-maintainer can push its build files too), or one its repo
     dropped (signed, now foreign), isn't built: left for `update-apps` in a terminal, where paru shows its build files
@@ -1295,7 +1299,9 @@ brings each change; nothing to run by hand).
     run's build folder (`/var/lib/auto-update/aur-build`, `agros-aur`'s alone, made anew each run and removed after: no
     git config, cache or anything else a build wrote reaches the next run, nor a step outside the sandbox). Root opens
     nothing in it: each step's output goes to root's own `/var/lib/auto-update/aur/log/`; right after each build, the
-    packages it made are read through the sandbox into root's own folder (a regular file only: a FIFO a build left there
+    packages it made are read through the sandbox into root's own folder (on a file descriptor of their own, not its
+    output, which `agros-each-user` cleans of control characters: a package read through it came out unreadable, every
+    rebuild for a new Qt left out and that Qt held; a regular file only: a FIFO a build left there
     would block the read; each read under a `timeout`), and only those the plan names are kept (their `.PKGINFO`'s name
     and version as their file names them, at least the version planned, the AUR's or the installed one a runtime rebuild
     is pinned to: a `sudo` or `linux` a build left beside them isn't); a dependency a `.SRCINFO` names must look like

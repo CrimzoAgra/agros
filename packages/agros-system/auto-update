@@ -35,6 +35,29 @@ fi
 # by hand and the Updates app aren't kept waiting on it
 db=/var/lib/auto-update/db
 mkdir -p "$db/sync"
+# (a folder there, not the link: pacman 7.1, installing through the link, made a folder of its own in its place and
+# wrote its new entries there, pacman's own left half made (an entry with no files, the old version's still listed), and
+# every pacman after it failed. Those entries, complete ones, put in pacman's own in place of the half made ones, then
+# the folder gone and the link back; one still mounted from an install cut off unmounted first, never emptied)
+if [[ -d $db/local && ! -L $db/local ]]; then
+    mountpoint -q "$db/local" && umount "$db/local"
+    if ! mountpoint -q "$db/local"; then
+        for e in "$db/local"/*/; do
+            e=${e%/}
+            [[ -f $e/desc && -f $e/files ]] || continue
+            name=$(sed -n '/^%NAME%$/{n;p;q}' "$e/desc")
+            [[ -n $name && ! -f /var/lib/pacman/local/${e##*/}/files ]] || continue
+            for o in /var/lib/pacman/local/"$name"-*/; do
+                o=${o%/}
+                # (its other versions; a half made one with no desc only when it's this very version's)
+                if [[ -f $o/desc ]]; then [[ $(sed -n '/^%NAME%$/{n;p;q}' "$o/desc") == "$name" ]] && rm -rf "$o"
+                elif [[ -d $o && ${o##*/} == "${e##*/}" ]]; then rm -rf "$o"; fi
+            done
+            cp -a "$e" /var/lib/pacman/local/ && echo "pacman's entry for $name put back whole (${e##*/})"
+        done
+        rm -rf "$db/local"
+    fi
+fi
 ln -sfn /var/lib/pacman/local "$db/local"
 
 # pacman's own lists an install replaced, kept until it's over ("installing" while it runs): an install that fails, or
@@ -621,10 +644,16 @@ if ((synced)); then
             echo "AgrOS's update code not updated first (${first[*]#agros/}): pacman's lock is taken, at shutdown with the rest"
         elif ((${#first[@]})); then
             echo "AgrOS's update code first: ${first[*]#agros/}"
-            if LC_ALL='' LC_MESSAGES=C pacman -S --needed --noconfirm --dbpath "$db" -- "${first[@]}"; then
+            # (pacman's own entries bind-mounted in these lists' place, not the link: pacman 7.1 writing through the link
+            # made a folder of its own there, its entries in it and pacman's own half made; above)
+            if rm -f "$db/local" && mkdir "$db/local" && mount --bind "$pacdb/local" "$db/local" &&
+                LC_ALL='' LC_MESSAGES=C pacman -S --needed --noconfirm --dbpath "$db" -- "${first[@]}"; then
+                umount "$db/local"; rmdir "$db/local"; ln -sfn "$pacdb/local" "$db/local"
                 rm -f "$pacdb/db.lck"
                 SECONDS=$SECONDS AGROS_SELF_UPDATED=1 exec "$0" "$@"
             fi
+            ! mountpoint -q "$db/local" || umount "$db/local"
+            [[ -L $db/local ]] || { rmdir "$db/local" 2>/dev/null; ln -sfn "$pacdb/local" "$db/local"; }
             rm -f "$pacdb/db.lck"
             echo "!! AgrOS's update code couldn't be installed first: the update goes on with the code it has"
         fi

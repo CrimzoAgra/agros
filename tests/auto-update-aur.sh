@@ -22,7 +22,10 @@ cp -r "$here/packages/agros-system/aur-agros-patch" "$here/packages/agros-system
 # agros-each-user: --as runs the command (noted); the build account: this user here (agros-aur on the system; the
 # users agros-each-user lists aren't asked for)
 # shellcheck disable=SC2016  # (expanded by the stand-ins)
-stub agros-each-user 'case $1 in --list) echo "list" >>'"$t"'/calls; echo someone ;; --as) echo "as $2" >>'"$t"'/calls; shift 2; exec "$@" ;; esac'
+# (its output cleaned of control characters as the real one's is, a --fd passed as it is: a package file read back through
+# its output came out unreadable)
+stub agros-each-user 'case $1 in --list) echo "list" >>'"$t"'/calls; echo someone ;; --as) echo "as $2" >>'"$t"'/calls; shift 2
+    while [ "$1" = --fd ]; do shift 2; done; "$@" | tr -d "\000-\010\013-\037\177"; exit "${PIPESTATUS:-0}" ;; esac'
 export AGROS_EACH_USER=$t/bin/agros-each-user AGROS_AUR_USER=$me
 # Through PAM (a logind session for the user, out of the service's cgroup): never
 for c in runuser sudo su; do stub "$c" 'echo "PAM '"$c"'" >>'"$t"'/calls; exit 1'; done

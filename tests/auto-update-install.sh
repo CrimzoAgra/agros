@@ -861,6 +861,12 @@ esac
 exec "$t/bin/pacman" "\$@"
 EOF
 chmod +x "$t/first-bin/pacman"
+# (a bind mount, as far as the boot's install can tell: the folder made a link to what's mounted, and a folder again once
+# unmounted; mountpoint: is it mounted)
+printf '#!/bin/sh\necho "mount $*" >>"%s/calls"; [ "$1" = --bind ] && rmdir "$3" && ln -s "$2" "$3"\n' "$t" >"$t/first-bin/mount"
+printf '#!/bin/sh\necho "umount $*" >>"%s/calls"; rm -f "$1" && mkdir "$1"\n' "$t" >"$t/first-bin/umount"
+printf '#!/bin/sh\nfor a; do :; done; [ -L "$a" ]\n' >"$t/first-bin/mountpoint"
+chmod +x "$t/first-bin/mount" "$t/first-bin/umount" "$t/first-bin/mountpoint"
 first() { cp "$t/auto-update.old" "$t/auto-update"; : >"$t/calls"; : >"$t/log"; PATH=$t/first-bin:$PATH timeout 60 "$t/auto-update" "$@"; }
 newer=$'agros-scripts r622.a-1 -> r702.b-1\nfoo 1-1 -> 2-1'
 lists
@@ -901,6 +907,22 @@ steps=$(grep -oE '^first .*|^new auto-update .*|^download -Suw' "$t/calls" | sed
 [[ $steps == "first -S --needed --noconfirm --dbpath $t/au/db -- agros/agros-scripts (lists $have, locked),new auto-update :1:<time>,download -Suw" ]] ||
     fail "the boot's download not run by AgrOS's newer update code, installed first from its lists: $(cat "$t/calls")"
 [[ ! -e $t/pac/db.lck && -e $t/au/db/complete ]] || fail "the boot's install left pacman's lock, or its download not done"
+# (pacman's own entries bind-mounted in the lists' place for it, the link back after: pacman 7.1 writing through the
+# link made a folder of its own there, pacman's own entries half made)
+{ [[ $(grep -oE '^(mount|umount|first) ' "$t/calls" | paste -sd,) == "mount ,first ,umount " ]] &&
+    grep -qxF "mount --bind $t/pac/local $t/au/db/local" "$t/calls" && [[ $(readlink "$t/au/db/local") == "$t/pac/local" ]]; } ||
+    fail "the boot's first install not through a bind mount of pacman's entries, or the link not back: $(cat "$t/calls")"
+# The folder such an install left: its complete entries in pacman's own in place of the half made ones (another version's,
+# this one's with no files), the rest of pacman's left, then the link back
+mkdir -p "$t/au/keep" && mv "$t/au/db/local" "$t/au/keep/link"
+mkdir -p "$t/au/db/local/foo-2-1" "$t/pac/local/foo-1-1" "$t/pac/local/foo-2-1" "$t/pac/local/foobar-1-1"
+printf '%%NAME%%\nfoo\n' | tee "$t/au/db/local/foo-2-1/desc" "$t/pac/local/foo-1-1/desc" >/dev/null
+printf '%%NAME%%\nfoobar\n' >"$t/pac/local/foobar-1-1/desc"; echo files >"$t/au/db/local/foo-2-1/files"
+QU=$newer first
+{ [[ -L $t/au/db/local && -f $t/pac/local/foo-2-1/files && -f $t/pac/local/foo-2-1/desc && ! -e $t/pac/local/foo-1-1 &&
+    -e $t/pac/local/foobar-1-1 ]] && grep -q "pacman's entry for foo put back whole (foo-2-1)" "$t/log"; } ||
+    fail "the folder a first install left not repaired into pacman's entries: $(ls "$t/pac/local") / $(cat "$t/log")"
+rm -rf "$t/pac/local/foo-2-1" "$t/pac/local/foobar-1-1" "$t/au/keep"
 # (pacman's lock taken: not installed then, said; the lock left as it was. Held open, as pacman holds it: a lock
 # nothing has open is stale, taken out first)
 touch "$t/pac/db.lck"
