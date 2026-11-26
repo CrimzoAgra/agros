@@ -102,9 +102,10 @@ if [[ ${1:-} == --login ]]; then
     if ! "$0" >"$log" 2>&1; then
         # (notify-when-up: at login Caelestia, the notification server, may not be up yet)
         warn() { "$helpers/notify-when-up" -u normal -a Hyprbars -i dialog-warning "$@"; }
-        # (the packaged one is built for one Hyprland build: after an update it may not fit either)
+        # (the packaged one is built for one Hyprland build: after an update it may not fit either. Loaded, it's AgrOS's
+        # patch as packaged, an older one than this: it has the highlight)
         if loaded; then
-            warn "Title bar highlight not rebuilt" "Building it for Hyprland $ver failed, so the title bars have no hover highlight for now. Details: $log"
+            warn "Title bars not up to date" "Building hyprbars for Hyprland $ver failed, so the title bars are the packaged ones for now, without AgrOS's latest changes to them. Details: $log"
         else
             warn "No title bars" "Building hyprbars for Hyprland $ver failed, and the packaged one wasn't built for it: no title bars for now. Details: $log"
         fi
