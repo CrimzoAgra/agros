@@ -356,7 +356,7 @@ if [[ ${1:-} == --list ]]; then
     if ((rc == 1)); then printf 'offline\t\t\t\n'; exit 0; fi
     copy=${CHECKUPDATES_DB:-${TMPDIR:-/tmp}/checkup-db-${UID}/}
     gated=$(mktemp --tmpdir agros-pacman.XXXXXX.conf)
-    "$helpers/update-gate" /etc/pacman.conf "$gated" --dbpath "$copy" >/dev/null 2>&1 || cp /etc/pacman.conf "$gated"
+    "$helpers/update-gate" /etc/pacman.conf "$gated" --dbpath "$copy" --runtimes-later >/dev/null 2>&1 || cp /etc/pacman.conf "$gated"
     repo=$(LC_ALL=C pacman -Qu --config "$gated" --dbpath "$copy" 2>/dev/null | "$helpers/updates-pending")
     rm -f "$gated"
     exec 7>&-

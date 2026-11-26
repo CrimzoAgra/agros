@@ -1149,6 +1149,12 @@ brings each change; nothing to run by hand).
     approving (broken, or not run) held Hyprland, and every update that needs it, for good. And with nothing waiting,
     the gated packages with no update of their own are passed to `soname-hold` as held: a library whose new soname came
     before their rebuild waits for it, rather than the soname guard's hook refusing every update until it comes
+  - A new Qt, or a new Python series (`update-kinds`' runtimes), waits for the boot and the shutdown when the update is
+    Settings' (`update-gate --runtimes-later`, its list's too): Qt's whole release (every `qt6-*` in the update, and by
+    the dry run what needs it) held, said ("installs at shutdown"); the boot's download builds what's built on it (the
+    shell's Quickshell and Caelestia) in the background and the shutdown installs them together. Installed from
+    Settings, the running shell ran its old Quickshell on the new Qt until a rebuild minutes of compiling later (Nexus
+    froze), and was never restarted
   - Checks that stop passing are said on the machine too: the boot's update keeps the day they last passed on Arch
     (`agros-arch-ok`, beside the repo; `/var/lib/agros/agros-arch-ok`, from the first of `[agros]`'s servers that
     answers, taken only with a good signature by AgrOS's key, as the list is), and `agros-check` says after login,

@@ -31,6 +31,8 @@ var() { local v="$1_${name//-/_}"; echo "${!v:-}"; }
 case $1 in
     -Q) [[ -n $(var HAVE) ]] && echo "$name $(var HAVE)" ;;
     -Si) [[ -n $(var NEW) ]] && echo "Version         : $(var NEW)" ;;
+    # (what the update brings, "name old -> new" lines: $QU)
+    -Qu) [[ -z ${QU:-} ]] || printf '%s\n' "$QU" ;;
     -Sup) conf=$(sed -n 's/.*--config \([^ ]*\) .*/\1/p' <<<"$args")
           # ($NEEDS: hyprlock rebuilt against the held hyprutils's new version, until it's held too)
           if [[ -n ${NEEDS:-} ]] && ! grep -q 'IgnorePkg = .*hyprlock' "$conf"; then
@@ -188,4 +190,14 @@ out=$(SONAME_HOLD=$t/bin/soname-hold HAVE_hyprland=0.58.0-1 NEW_hyprland=0.58.0-
 : >"$t/sh-calls"
 out=$(SONAME_HOLD=$t/bin/soname-hold HAVE_hyprland=0.58.0-1 NEW_hyprland=0.58.1-1 APPROVED='hyprland 0.58.1' gate)
 ! grep -q -- '--held' "$t/sh-calls" && [[ -z $out ]] || fail "a Hyprland updating in the same run taken as held: $(cat "$t/sh-calls")"
+# --runtimes-later (Settings' Updates and its list, in the session): a new Qt's whole release left for the boot and the
+# shutdown, said, the rest let through; a new Python patch release (no new series) not; without it, as before
+printf '#!/bin/sh\nexit 0\n' >"$t/bin/no-hold"; chmod +x "$t/bin/no-hold"
+qu=$'qt6-base 6.12.0-5 -> 6.12.1-1\nqt6-wayland 6.12.0-1 -> 6.12.1-1\nfoo 1-1 -> 2-1\npython 3.14.1-1 -> 3.14.2-1'
+out=$(QU=$qu SONAME_HOLD=$t/bin/no-hold HAVE_hyprland=0.58.0-1 NEW_hyprland=0.58.0-1 APPROVED='hyprland 0.58.0' gate --runtimes-later)
+[[ $(pacman-conf --config "$t/out.conf" IgnorePkg | sort | paste -sd' ') == "qt6-base qt6-wayland" &&
+    $out == "qt6-base qt6-wayland (installs at shutdown:"* ]] ||
+    fail "a new Qt not left for the shutdown by the session's Updates, or more held: $out / $(pacman-conf --config "$t/out.conf" IgnorePkg)"
+out=$(QU=$qu SONAME_HOLD=$t/bin/no-hold HAVE_hyprland=0.58.0-1 NEW_hyprland=0.58.0-1 APPROVED='hyprland 0.58.0' gate)
+[[ -z $(pacman-conf --config "$t/out.conf" IgnorePkg) && -z $out ]] || fail "a new Qt held without --runtimes-later (the boot's): $out"
 echo "ok update-gate"

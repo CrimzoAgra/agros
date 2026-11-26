@@ -312,8 +312,9 @@ if "${paru[@]}" -Sy --noconfirm; then
             echo "!! AgrOS's update code couldn't be updated first: the update goes on with the code it has"
         fi
     fi
-    waits=$("$helpers/update-gate" /etc/pacman.conf "$gated") || cp /etc/pacman.conf "$gated"
-    [[ -z $waits ]] || printf "Waits for AgrOS's check (comes with a later update): %s\n" "$waits"
+    # (--runtimes-later: a new Qt waits for the boot and the shutdown, which build the shell for it in the background)
+    waits=$("$helpers/update-gate" /etc/pacman.conf "$gated" --runtimes-later) || cp /etc/pacman.conf "$gated"
+    [[ -z $waits ]] || printf "Waits (comes with a later update): %s\n" "$waits"
     # The keyrings first, on their own, where there's a newer one (as the boot's update does, auto-update): a package
     # signed by a key the keyring here doesn't have yet (weeks offline, a new packager's) failed the whole update
     mapfile -t keys < <(LC_ALL=C pacman -Qu --config "$gated" 2>/dev/null | "$helpers/updates-pending" |

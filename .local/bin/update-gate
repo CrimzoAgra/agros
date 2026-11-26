@@ -15,16 +15,18 @@
 # through. The list is taken only with a good signature by AgrOS's key beside it (agros-approved.sig, checked with gpgv
 # against agros-keyring's key alone): none, or a bad one (a mirror or a network in between that changed it), and it's
 # as if the repo couldn't be reached, said: the kept list, nothing new let through. --offline: the kept list only (the
-# shutdown's install: no more let through than the boot downloaded)
+# shutdown's install: no more let through than the boot downloaded). --runtimes-later (Settings' Updates and its list, in
+# the session): a new Qt, or a new Python series (update-kinds' runtimes), left for the boot and the shutdown (below)
 set -uo pipefail
-usage="usage: update-gate <pacman.conf> <out> [--dbpath <dir>] [--offline]"
+usage="usage: update-gate <pacman.conf> <out> [--dbpath <dir>] [--offline] [--runtimes-later]"
 base=${1:?$usage} out=${2:?$usage}
 shift 2
-db=() offline=0
+db=() offline=0 later=0
 while (($#)); do
     case $1 in
         --dbpath) db=(--dbpath "${2:?$usage}"); shift 2 ;;
         --offline) offline=1; shift ;;
+        --runtimes-later) later=1; shift ;;
         *) echo "$usage" >&2; exit 2 ;;
     esac
 done
@@ -53,7 +55,24 @@ hold_sonames() {
     done <<<"$holds"
     sed -i "/^\\[options\\]/a IgnorePkg = $(cut -d' ' -f1 <<<"$holds" | sort -u | paste -sd' ')" "$out"
 }
-((${#gated[@]})) || { hold_sonames; exit 0; }
+# --runtimes-later: a new Qt (or Python series) left for the boot's download and the shutdown's install, which build what's
+# built on it (the shell's Quickshell and Caelestia) in the background and install them together. Installed here, under
+# the running shell, the shell ran on the old Qt build against the new Qt's files until the rebuild, minutes of compiling
+# in the session later (Nexus froze), and was never restarted. Qt's whole release held (every qt6-* in the update: its
+# modules go together), the new Python, and by the dry run below what needs them
+hold_runtimes() {
+    if ((later)); then
+        pending=$(LC_ALL=C pacman -Qu --config "$out" "${db[@]}" 2>/dev/null)
+        target=$("${UPDATE_KINDS:-$(dirname "$(readlink -f "$0")")/update-kinds}" --runtime-target <<<"$pending" 2>/dev/null) || target=
+        later_held=$(awk -v t=" $target " '($1 ~ /^qt6-/ && t ~ / qt6-/) || ($1 == "python" && t ~ / python /) { print $1 }' \
+            <<<"$pending" | sort -u | paste -sd' ')
+        if [[ -n $later_held ]]; then
+            echo "$later_held (installs at shutdown: what's built on it, the shell too, is rebuilt for it in the background at boot first)"
+            sed -i "/^\\[options\\]/a IgnorePkg = $later_held" "$out"
+        fi
+    fi
+}
+((${#gated[@]})) || { hold_sonames; hold_runtimes; exit 0; }
 # (the approved list from the [agros] repo's own servers, fetched beside its database: each in turn, as the boot's copy
 # of agros-arch-ok, so a GitHub Pages outage doesn't hold Hyprland's updates while the R2 mirror has the list. One
 # unreachable, or whose list has no good signature, gives way to the next)
@@ -128,6 +147,7 @@ hold_sonames
 # (nothing waiting: those with no update of their own in this one, as held: a library's new soname that came before
 # their rebuild held for it, not refused at every update by the soname guard's hook)
 if ((${#waits[@]})); then hold_sonames --held "${gated[@]}"; elif ((${#still[@]})); then hold_sonames --held "${still[@]}"; fi
+hold_runtimes
 for try in 1 2 3 4 5 6; do
     ((try < 6)) || { echo "update-gate: the update still can't be worked out (pacman says why as it runs)" >&2; break; }
     dry=$(LC_ALL=C pacman -Sup --config "$out" "${db[@]}" --print-format '%n' 2>&1) && break
