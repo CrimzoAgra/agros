@@ -226,7 +226,8 @@ if ((${#notes[@]})); then
     printf '%s\n' "${notes[@]}"
     # (its old name kept: the record of what was already said, on machines from before agros-check was renamed)
     seen="${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles-check-hypr-notified"
-    if [[ ${1:-} == --notify && $(cat "$seen" 2>/dev/null) != "$hypr_new" ]]; then
+    # (only with an update of it to say: another note alone sent this too, for a version said before)
+    if [[ ${1:-} == --notify && -n $hypr_new && $(cat "$seen" 2>/dev/null) != "$hypr_new" ]]; then
         "$helpers/notify-when-up" -u low -a Dotfiles -i system-software-update "Caelestia's Hyprland config has an update" \
             "Run caelestia-hypr-refresh: those files only (no system update); one you've edited is kept, its new version beside it as .new" &&
             { mkdir -p "${seen%/*}"; echo "$hypr_new" >"$seen"; }
