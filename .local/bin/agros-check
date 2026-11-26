@@ -91,14 +91,15 @@ pacdb=${PACMAN_DB_DIR:-/var/lib/pacman}
 # its reasons can carry a build's or a package script's words)
 plain() { tr -cd "A-Za-z0-9 @._+=:,;/()'\n-"; }
 # behind <file>: the packages of its "<name> <version>" lines (each line's first and last word) not at that version
-# yet (older, or not installed), comma-separated
+# yet (older), comma-separated. One not installed isn't waiting: removed since (an AUR app whose install at shutdown
+# failed, uninstalled, was said for good: only an install of other AUR apps took that note away)
 behind() {
     local name ver have
     while read -r name ver; do
         ver=${ver##* }
         [[ -n $ver ]] || continue
         have=$(pacman -Q "$name" 2>/dev/null | awk '{print $2}')
-        [[ -n $have && $(vercmp "$have" "$ver") -ge 0 ]] || echo "$name"
+        [[ -z $have || $(vercmp "$have" "$ver") -ge 0 ]] || echo "$name"
     done <"$1" | plain | paste -sd, | sed 's/,/, /g'
 }
 # a Qt or Python update the boot's install held back, its rebuild of what's built on it failed (auto-update): Updates

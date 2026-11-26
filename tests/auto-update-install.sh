@@ -293,7 +293,7 @@ mkdir -p "$t/h"
 for s in hyprctl Hyprland qs; do printf '#!/bin/sh\nexit 0\n' >"$t/bin/$s"; chmod +x "$t/bin/$s"; done
 # (an administrator's account, as on a desktop: CI runs as root, not in wheel, and agros-check words its advice by it)
 printf '#!/bin/sh\n[ "$1" = -nG ] && exec echo users wheel\nexec /usr/bin/id "$@"\n' >"$t/bin/id"; chmod +x "$t/bin/id"
-out=$(HOME=$t/h AUTO_UPDATE_DIR=$t/au PACMAN_DB_DIR=$t/pac "$here/.local/bin/agros-check" 2>&1) || true  # (problems: exit 1)
+out=$(Q_HAVE=6.9.0-1 HOME=$t/h AUTO_UPDATE_DIR=$t/au PACMAN_DB_DIR=$t/pac "$here/.local/bin/agros-check" 2>&1) || true  # (problems: exit 1)
 [[ $out == *"hasn't installed for 3 shutdowns in a row"*"the last: something using pacman still ran"* &&
     $out == *"failed to install at shutdown"* && $out == *"held back"* ]] ||
     fail "agros-check didn't say the skipped installs, or the failed or held one: $out"
@@ -669,7 +669,7 @@ CONFLICT=foo "$t/auto-update" --install >/dev/null || fail "the install beside a
 [[ $(sed -n 2p "$t/au/conflicts") == "foo 2-1" && $(head -1 "$t/au/conflicts") == *" foo conflicts with bar (needs a person: sudo pacman -Syu"* ]] ||
     fail "what waits for a conflict not written down: $(cat "$t/au/conflicts" 2>/dev/null)"
 grep -q -- '--noconfirm.*-R\|-Rdd\|--overwrite' "$t/calls" && fail "a package removed or overwritten unattended: $(cat "$t/calls")"
-out=$(HOME=$t/h AUTO_UPDATE_DIR=$t/au PACMAN_DB_DIR=$t/pac "$here/.local/bin/agros-check" 2>&1) || true
+out=$(Q_HAVE=1-1 HOME=$t/h AUTO_UPDATE_DIR=$t/au PACMAN_DB_DIR=$t/pac "$here/.local/bin/agros-check" 2>&1) || true
 [[ $out == *"held back foo at shutdown, for a conflict ("*"foo conflicts with bar (needs a person: sudo pacman -Syu, which asks whether to remove bar)): the rest installed"* ]] ||
     fail "agros-check didn't say what waits for a conflict: $out"
 lists; : >"$t/calls"
@@ -704,7 +704,7 @@ Q_HAVE=0.2-1 "$t/auto-update" --install >/dev/null
 [[ $(res) == "ok "* ]] && grep -q '^pacman -Su .* agros-aur/quickshell-git' "$t/calls" ||
     fail "the rest not installed beside a failed AUR build: $(res) $(cat "$t/calls")"
 grep -q "AUR apps wait" "$t/log" || fail "the AUR apps waiting not said"
-out=$(HOME=$t/h AUTO_UPDATE_DIR=$t/au PACMAN_DB_DIR=$t/pac "$here/.local/bin/agros-check" 2>&1) || true
+out=$(Q_HAVE=1.0-1 HOME=$t/h AUTO_UPDATE_DIR=$t/au PACMAN_DB_DIR=$t/pac "$here/.local/bin/agros-check" 2>&1) || true
 [[ $out == *"couldn't build AUR apps (equibop: the build failed): still waiting: equibop;"* ]] || fail "agros-check didn't say the failed AUR build: $out"
 rm -rf "$aurdir"
 

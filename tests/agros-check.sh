@@ -102,6 +102,13 @@ case $2 in equibop) echo "equibop $EQUIBOP" ;; qt6-base) echo "qt6-base ${QT:-6.
 chmod +x "$t/pacman"
 [[ $(EQUIBOP=1.0-1 chk) == *"couldn't build AUR apps (a build failed): still waiting: equibop;"* ]] || fail "the failed AUR builds not said: $(EQUIBOP=1.0-1 chk)"
 [[ $(EQUIBOP=1.1-1 chk) != *"couldn't build AUR apps"* ]] || fail "the failed AUR builds said after Updates built them"
+# (one not installed, removed since, isn't waiting: an AUR app the shutdown couldn't install, then uninstalled, was
+# said for good)
+printf '%s\n' "2026-11-05 22:10 error: x" "gone-app 2.0-1" "equibop 1.1-1" >"$t/au/aur-install-failed"
+out=$(EQUIBOP=1.0-1 chk)
+[[ $out == *"couldn't install AUR apps at shutdown (equibop, 2026-11-05"* ]] || fail "an AUR app removed since said as waiting: $out"
+[[ $(EQUIBOP=1.1-1 chk) != *"couldn't install AUR apps"* ]] || fail "AUR apps all removed or installed since still said"
+rm "$t/au/aur-install-failed"
 # (a run that failed before it planned anything, the AUR out of reach: nothing known to be waiting, nothing said)
 rm "$t/au/aur/wanted"
 [[ $(EQUIBOP=1.0-1 chk) != *"couldn't build AUR apps"* ]] || fail "a whole run's failure with nothing planned said as AUR apps waiting"
