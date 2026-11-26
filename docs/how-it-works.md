@@ -690,8 +690,9 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
     there, in place of the AUR's plain one; loaded only when built for the running Hyprland, its commit in it and its
     ABI hash in the stamp beside it, `/usr/lib/libhyprbars.so.built-for`: on any other, a point release or the same one
     rebuilt against other libraries too, the plugin's own check refuses it with a red "Version mismatch" error on
-    screen), and a
-    notification if the build fails. On the live USB (no compiler) only that packaged build, when it matches
+    screen), and a notification if the build fails. No build at all when the packaged one is that very build (its
+    stamp has this Hyprland's ABI hash and this patch's sum): a new account's first login, and the update's build for
+    each user (`--prebuild`, the pacman hook), which held the shutdown's install up compiling the same plugin. On the live USB (no compiler) only that packaged build, when it matches
 - **Keys** (`user/keys.lua`):
   - Ctrl+Shift+Esc opens btop (Task Manager; the open one if there is); Print selects an area to screenshot, opened
     in swappy (`.config/swappy/config`): Save puts it in `~/Pictures/Screenshots` (swappy makes the folder), where
@@ -1705,6 +1706,6 @@ breaks something holds back that one piece, never the rest (`.github/workflows/c
 - **An update broke the system**: boot the snapshot from before it (Esc at start-up; it runs in RAM, above), then Btrfs
   Assistant's Snapper, Browse/Restore, to keep it (the manual's
   [If an update goes wrong](../manual/12-updates.md#if-an-update-goes-wrong))
-- **No title bar highlight**: see `~/.cache/hyprbars-build.log`, or run `hyprbars-build`
+- **No title bars, or not up to date**: see `~/.cache/hyprbars-build.log`, or run `hyprbars-build`
 - **A first-login step failed**: `agros-welcome` runs again at the next login (or run it yourself); its log is
   `~/.local/state/agros/welcome.log`

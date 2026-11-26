@@ -35,7 +35,8 @@ build() {
     # (an account's build, into a home of the build's own: the plugins' version for this Hyprland, the patch applied)
     mkdir -p "$srcdir/home/.local/share/hyprbars"
     cp "$_root/.local/share/hyprbars/hyprbars.patch" "$srcdir/home/.local/share/hyprbars/"
-    HOME="$srcdir/home" "$_root/.local/bin/hyprbars-build" --prebuild
+    # (no packaged one to compare with: an installed agros-hyprbars of this very build made it skip the build)
+    HOME="$srcdir/home" HYPRBARS_PACKAGED=/nonexistent "$_root/.local/bin/hyprbars-build" --prebuild
 }
 
 package() {

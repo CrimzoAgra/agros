@@ -14,9 +14,10 @@ set -euo pipefail
 mkdir -p "$t/pkg" "$t/lbin" "$t/lhome/.local/share/hyprbars" "$t/lhome/.cache"
 cp "$here/.local/share/hyprbars/hyprbars.patch" "$t/lhome/.local/share/hyprbars/"
 printf 'ELF\0%s\0' 1111111111111111111111111111111111111111 >"$t/pkg/libhyprbars.so"
+# ($LOADED: a plugin loaded is listed after it, as Hyprland lists it)
 # shellcheck disable=SC2016  # (expanded by the stand-in)
-printf '#!/bin/sh\necho "$*" >>%s/login-calls\n[ "$3" = version ] && echo "{\\"commit\\":\\"$COMMIT\\",\\"version\\":\\"0.57.2\\",\\"abiHash\\":\\"${COMMIT}_aq_0.12\\"}"\n[ "$3" = plugin ] && [ "$4" = list ] && echo "[]"\nexit 0\n' \
-    "$t" >"$t/lbin/hyprctl"
+printf '#!/bin/sh\necho "$*" >>%s/login-calls\n[ "$3" = version ] && echo "{\\"commit\\":\\"$COMMIT\\",\\"version\\":\\"0.57.2\\",\\"abiHash\\":\\"${COMMIT}_aq_0.12\\"}"\n[ "$3" = plugin ] && [ "$4" = list ] && { [ -n "$LOADED" ] && grep -q "plugin load" %s/login-calls && echo "[{\\"name\\":\\"hyprbars\\",\\"version\\":\\"1.0-dotfiles\\"}]" || echo "[]"; }\nexit 0\n' \
+    "$t" "$t" >"$t/lbin/hyprctl"
 printf '#!/bin/sh\nexit 0\n' >"$t/lbin/notify-send"
 chmod +x "$t/lbin/"*
 login() { HOME=$t/lhome HYPRBARS_LIVE=$t/nolive HYPRBARS_PACKAGED=$t/pkg/libhyprbars.so PATH=$t/lbin:$PATH COMMIT=$1 \
@@ -35,6 +36,16 @@ echo "1111111111111111111111111111111111111111_aq_0.12 x" >"$t/pkg/libhyprbars.s
 : >"$t/login-calls"
 login 1111111111111111111111111111111111111111 || fail "--login with the packaged stamp failed"
 grep -qx -- "-i 0 plugin load $t/pkg/libhyprbars.so" "$t/login-calls" || fail "--login: the packaged one, its stamp this Hyprland's, not loaded"
+# The packaged one this very build (its stamp: this Hyprland's ABI hash and this patch): loaded, and nothing built (a
+# new account's first login compiled the same plugin again, and offline said its bars had no highlight)
+echo "1111111111111111111111111111111111111111_aq_0.12 $(sha256sum "$t/lhome/.local/share/hyprbars/hyprbars.patch" | cut -d' ' -f1)" \
+    >"$t/pkg/libhyprbars.so.built-for"
+: >"$t/login-calls"
+rm -f "$t/lhome/.cache/hyprbars-build.log"
+LOADED=1 login 1111111111111111111111111111111111111111 || fail "--login with the packaged one this very build failed"
+grep -qx -- "-i 0 plugin load $t/pkg/libhyprbars.so" "$t/login-calls" || fail "--login: the packaged one, this very build, not loaded"
+[[ ! -e $t/lhome/.cache/hyprbars-build.log ]] ||
+    fail "--login built again what the packaged one already is: $(cat "$t/lhome/.cache/hyprbars-build.log")"
 rm "$t/pkg/libhyprbars.so.built-for"
 # On the live USB: at login the packaged one is loaded (the installer's title bar), again only when it was built for
 # that Hyprland; nothing built; otherwise nothing at all
@@ -64,6 +75,22 @@ echo "abc_aq_0.1_hu_0.1_hg_0.1_hc_0.1 $(sha256sum "$here/.local/share/hyprbars/h
 out=$(HOME=$t/ph HYPRBARS_LIVE=$t/nolive HYPRBARS_VERSION_H=$t/ph.h "$here/.local/bin/hyprbars-build" --prebuild 2>&1) ||
     fail "--prebuild failed: $out"
 [[ $out == *"Already built"* ]] || fail "--prebuild took the patch in the user's home, not AgrOS's: $out"
+# ...and with none of the user's own, the packaged one (updated with that Hyprland) this very build, its stamp says:
+# nothing built (each user's clone and compile of the same plugin held the shutdown's install up)
+rm "$t/ph/.local/lib/hyprbars/libhyprbars.so" "$t/ph/.local/lib/hyprbars/built-for"
+mkdir -p "$t/phpkg" "$t/phbin"
+: >"$t/phpkg/libhyprbars.so"
+echo "abc_aq_0.1_hu_0.1_hg_0.1_hc_0.1 $(sha256sum "$here/.local/share/hyprbars/hyprbars.patch" | cut -d' ' -f1)" \
+    >"$t/phpkg/libhyprbars.so.built-for"
+printf '#!/bin/sh\necho "git $*" >>%s/ph-git\nexit 1\n' "$t" >"$t/phbin/git"
+chmod +x "$t/phbin/git"
+out=$(HOME=$t/ph HYPRBARS_LIVE=$t/nolive HYPRBARS_VERSION_H=$t/ph.h HYPRBARS_PACKAGED=$t/phpkg/libhyprbars.so \
+    PATH=$t/phbin:$PATH "$here/.local/bin/hyprbars-build" --prebuild 2>&1) || fail "--prebuild with the packaged one this very build: $out"
+[[ ! -e $t/ph-git && $out == *"nothing to build"* ]] || fail "--prebuild built what the packaged one already is: $out"
+# (agros-hyprbars' own build, which makes the packaged one, compares with none: an installed one skipped its build)
+# shellcheck disable=SC2016  # (the PKGBUILD's text)
+grep -qF 'HYPRBARS_PACKAGED=/nonexistent "$_root/.local/bin/hyprbars-build" --prebuild' "$here/packages/agros-hyprbars/PKGBUILD" ||
+    fail "agros-hyprbars' build may take an installed packaged one for the build it makes"
 [[ -f /usr/include/hyprland/src/version.h ]] || { echo "skip hyprbars (no Hyprland headers)"; exit 0; }
 
 # A running Hyprland older than the headers on disk

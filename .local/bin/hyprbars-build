@@ -70,6 +70,10 @@ if [[ ${1:-} == --prebuild ]]; then
     grep -q "#define HYPRLANG_VERSION" "$h" && abi+="_hlg_$(mm HYPRLANG_VERSION)"
     build_id="$abi $(sha256sum "$patch" | cut -d" " -f1)"
     [[ -f $out && $(cat "$stamp" 2>/dev/null) == "$build_id" ]] && { echo "Already built for Hyprland $ver."; exit 0; }
+    # (nor when the packaged one, updated with Hyprland, is this very build: --login loads it. Each user's clone and
+    # compile of the same plugin held the shutdown's install up. agros-hyprbars' own build, which makes it, names none)
+    [[ -f $aur && $(cat "$aur.built-for" 2>/dev/null) == "$build_id" ]] &&
+        { echo "The packaged hyprbars is built for Hyprland $ver and this patch: nothing to build."; exit 0; }
     prebuild=true
 else
     hypr=$(hyprctl version -j | jq -r .commit)
@@ -91,6 +95,9 @@ if [[ ${1:-} == --login ]]; then
         loaded mine && exit 0
     fi
     load_packaged
+    # (the packaged one is this very build, its stamp says: this Hyprland's ABI and this patch. Nothing to build: every
+    # new account's first login compiled the same plugin again, and offline said its title bars had no highlight)
+    [[ $(cat "$aur.built-for" 2>/dev/null) == "$build_id" ]] && loaded && exit 0
     log="$HOME/.cache/hyprbars-build.log"
     if ! "$0" >"$log" 2>&1; then
         # (notify-when-up: at login Caelestia, the notification server, may not be up yet)
