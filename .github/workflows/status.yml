@@ -55,4 +55,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           OWNER: ${{ github.repository_owner }}
           SIZES: sizes
+          # (only asked when it expires: GitHub's answer to it says)
+          ISO_TOKEN: ${{ secrets.AGROS_ISO_TOKEN }}
         run: ci/status.sh

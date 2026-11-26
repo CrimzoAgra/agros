@@ -1596,7 +1596,12 @@ breaks something holds back that one piece, never the rest (`.github/workflows/c
   soname than below them, is a warning, and the release goes out. Each is also kept in a record across runs,
   `agros-cpu-repos` beside the repo (written after the signing, unsigned: only the weekly status reads it), with the day
   it was first seen: their lag is routine and gone in a day or two, so the status says one only once it has lasted 3
-  days. Changing the signing key: add the new one to `ci/agros.asc` (and agros-iso's `agros.asc`) and raise
+  days. So too the tests that failed among the others and passed alone (`tests/run.sh`'s `AGROS_FLAKY`, a flake):
+  `agros-flaky`, "<day> <test>" lines, the last 14 days', and the status says one seen on 2 days of its week. Beside
+  `agros-arch-ok`, `agros-pass-time` (signed too) says when the tests last passed to the second: agros-iso builds an
+  ISO only within 26 hours of it, whenever GitHub starts the nightly run. The status also asks GitHub when agros-iso's
+  token (`AGROS_ISO_TOKEN`) expires, and says it from 30 days before, or that GitHub refuses it. Changing the signing
+  key: add the new one to `ci/agros.asc` (and agros-iso's `agros.asc`) and raise
   `agros-keyring`'s `pkgver`, let machines update, then replace the secret; signing with a key `ci/agros.asc` lacks
   fails the release, before anything goes out.
 - **A package that doesn't build** (an AUR change, AgrOS's Quickshell patch or Calamares changes no longer fitting,

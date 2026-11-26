@@ -218,6 +218,21 @@ if c=$(curl -fsS --retry 3 "$site/agros-cpu-repos" 2>/dev/null); then
 else
     cpu_cell="CI's record couldn't be read"
 fi
+# agros-iso's token (the AGROS_ISO_TOKEN secret, a fine-grained token CI starts the ISO's build with): its expiry, as
+# GitHub says it in its answer to the token, said from 30 days before (from then on every ISO's start fails, and only
+# its run's log said why); GitHub refusing it (expired, revoked), said too. Not given (the secret not set): not asked
+if [[ -n ${ISO_TOKEN:-} ]]; then
+    hdr=$(mktemp)
+    code=$(curl -sS --retry 3 -o /dev/null -D "$hdr" -w '%{http_code}' -H "Authorization: Bearer $ISO_TOKEN" \
+        "${AGROS_GITHUB_API:-https://api.github.com}/rate_limit" 2>/dev/null) || code=000
+    exp=$(sed -n 's/^github-authentication-token-expiration: *//Ip' "$hdr" | tr -d '\r')
+    rm -f "$hdr"
+    if [[ $code == 401 ]]; then
+        problems+=("agros-iso's token (the AGROS_ISO_TOKEN secret) is refused by GitHub (expired or revoked): no ISO starts until a new one is put in it (Actions: read and write on agros-iso)")
+    elif [[ -n $exp ]] && left=$((($(date -u -d "$exp" +%s) - now) / 86400)) && ((left < 30)); then
+        problems+=("agros-iso's token (the AGROS_ISO_TOKEN secret) expires on ${exp%% *}, in $left days: make a new one (Actions: read and write on agros-iso) and put it in the secret")
+    fi
+fi
 # Flaky tests (CI's record, agros-flaky: "<day> <test>" lines, a test that failed among the others and passed alone,
 # tests/run.sh): one on 2 days or more of the record's last 7 said (a flake every night was only in CI's logs). The
 # record not there, or empty: nothing said

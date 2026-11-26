@@ -118,6 +118,11 @@ case "$*" in
     echo "# checked 2026-11-20"
     [[ $STATE != *cpu-new* ]] || printf '2026-11-19\tv3 unresolved\tagros-desktop does not resolve on v3 (x)\n'
     [[ $STATE != *cpu-old* ]] || printf '2026-11-16\tznver4 skew libplacebo\tznver4 machines: libplacebo (y)\n' ;;
+  # (GitHub's answer to agros-iso's token: $TOKEN_ANSWER, its expiry, or 401)
+  *rate_limit*)
+    d=/dev/null; while (($#)); do [[ $1 == -D ]] && d=$2; shift; done
+    if [[ $TOKEN_ANSWER == 401 ]]; then printf 401; exit 0; fi
+    printf 'HTTP/2 200\r\ngithub-authentication-token-expiration: %s\r\n\r\n' "$TOKEN_ANSWER" >"$d"; printf 200 ;;
   # (CI's record of flaky tests: with flaky, tray-menu on 2 days of the last 7, once on 1, old 2 weeks before)
   *agros-flaky*)
     [[ $STATE == *flaky* ]] || exit 22
@@ -283,6 +288,15 @@ grep -qxF -- "- CI hasn't read the AUR since 2026-11-16: whether [agros]'s AUR p
 go "aur-down"
 grep -qxF -- "- CI's record of [agros]'s AUR packages' maintainers couldn't be read (https://crimzoagra.github.io/agros/x86_64/agros-aur-maintainers): whether any changed not checked" "$t/body" ||
     fail "the record unreadable not said: $(cat "$t/body")"
+# (agros-iso's token: said 30 days before it expires, by GitHub's answer to it; refused, said; far off, nothing)
+for c in "2026-12-10 12:00:00 UTC|expires on 2026-12-10, in 20 days" "2027-03-01 12:00:00 UTC|" "401|is refused by GitHub"; do
+    TOKEN_ANSWER=${c%%|*} ISO_TOKEN=secret go ""
+    if [[ -z ${c#*|} ]]; then
+        ! grep -q "AGROS_ISO_TOKEN" "$t/body" || fail "a token far from expiring said: $(grep AGROS_ISO_TOKEN "$t/body")"
+    else
+        grep -q "agros-iso's token (the AGROS_ISO_TOKEN secret) ${c#*|}" "$t/body" || fail "the token's ${c%%|*} not said: $(grep -i token "$t/body")"
+    fi
+done
 # (flaky tests: one on 2 days of the record's last 7 said, one on a day, or 2 weeks before, not)
 go "flaky"
 grep -qxF -- "- Tests that failed among the others and passed alone, on 2 days or more this week: tray-menu (2 days) (CI's logs say how: likely timing; the fix makes one wait on what it checks, not on time)" "$t/body" ||
