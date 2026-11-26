@@ -647,8 +647,8 @@ def scroll_lock():
 
 def updates_button():
     # Super menu: a "check for updates" button right of the search bar (~/.local/bin/update-apps --check-now). Its
-    # icon spins while checking; then a notification says the result (also when the menu was closed meanwhile), and
-    # clicking it opens the Updates app
+    # icon spins while checking (closed and opened again meanwhile too); then a notification says the result, and
+    # clicking it opens Settings' Updates
     rel = "modules/launcher/Content.qml"
     t = read(rel)
     t = insert(t, "import QtQuick\n", "import Quickshell\nimport Quickshell.Io\n", before=False)
@@ -676,30 +676,23 @@ def updates_button():
         type: IconButton.Text
         inactiveOnColour: Colours.palette.m3primary
         icon: "sync"
-        onClicked: updatesCheck.running = true
+        // (the check itself in AgrosUpdateCheck, which outlives the menu: reopened while it runs, still spinning)
+        onClicked: AgrosUpdateCheck.start()
 
         RotationAnimation {
             target: updatesButton.label
             property: "rotation"
-            running: updatesCheck.running
+            running: AgrosUpdateCheck.running
             from: 360
             to: 0
             duration: 1000
             loops: Animation.Infinite
             onStopped: updatesButton.label.rotation = 0
         }
-
-        // Closing the menu ends this process: the check runs in its own session behind a shell, so only the shell
-        // (what the icon waits on) goes then, and the check still finishes and says the result
-        Process {
-            id: updatesCheck
-
-            command: ["sh", "-c", 'setsid -w "$0" --check-now & wait $!', `${Quickshell.env("HOME")}/.local/bin/update-apps`]
-        }
     }
 
 """)
-    return {rel: t}
+    return {rel: t, **components("services/AgrosUpdateCheck.qml")}
 
 
 def settings_button():
