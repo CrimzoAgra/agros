@@ -150,11 +150,16 @@ def autostart_settings():
                 not entry.get("Icon") or entry.get("NoDisplay") == "true" or (only and "Hyprland" not in only)):
             continue
         # (an app uninstalled since: not listed; its TryExec keeps it from starting)
-        if entry.get(ADDED) == "true" and program_of(entry) and not shutil.which(program_of(entry)):
+        if uninstalled(entry):
             continue
         out.append({"key": f"autostart.{name[:-8]}", "label": entry.get("Name", name[:-8]), "icon": entry.get("Icon", ""),
                     "description": entry.get("Comment", ""), "type": "startup", "options": MODES, "autostart": name})
     return sorted(out, key=lambda o: o["label"].lower())
+
+
+def uninstalled(entry):
+    """An app added from "Add an app" whose program is gone since"""
+    return entry.get(ADDED) == "true" and bool(program_of(entry)) and not shutil.which(program_of(entry))
 
 
 def program_of(entry):
@@ -199,10 +204,18 @@ def startup_apps():
         if entry.get("Type") != "Application" or not entry.get("Exec") \
                 or "true" in (entry.get("NoDisplay"), entry.get("Hidden"), entry.get("Terminal")) \
                 or (only and "Hyprland" not in only) or "Hyprland" in never \
-                or any(os.path.exists(os.path.join(d, name)) for d in AUTOSTART):
+                or any(os.path.exists(os.path.join(d, name)) for d in AUTOSTART) and not added_gone(name):
             continue
         out.append({"value": name, "label": entry.get("Name", name[:-8])})
     return sorted(out, key=lambda o: o["label"].lower())
+
+
+def added_gone(name):
+    """Your autostart entry of an app added there whose program is gone (not listed, not started): its app offered
+    again all the same, and picked it's written anew. Its program back elsewhere (Capri's own app after AgrOS's
+    ~/.local/bin/capri went) was neither listed nor could be added"""
+    mine = os.path.join(AUTOSTART[1], name)
+    return os.path.exists(mine) and uninstalled(desktop_entry(mine))
 
 
 def startup_add(name, minimised=True):

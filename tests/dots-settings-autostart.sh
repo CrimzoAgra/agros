@@ -74,6 +74,18 @@ assert "editor.desktop" not in offered(), "added, still offered"
 assert "\nTryExec=editor\n" in open(f"{mine}/editor.desktop").read(), open(f"{mine}/editor.desktop").read()
 gone.add("editor")
 assert "autostart.editor" not in [s["key"] for s in ds.autostart_settings()], "an uninstalled app still listed"
+# ...and its app offered again (its program back elsewhere: Capri's own app after AgrOS's ~/.local/bin/capri went),
+# picked, its entry written anew from the app's
+open(f"{apps}/moved.desktop", "w").write("[Desktop Entry]\nType=Application\nName=Moved\nExec=/opt/moved/run\n")
+open(f"{mine}/moved.desktop", "w").write("[Desktop Entry]\nTryExec=/home/u/.local/bin/moved\nX-AgrOS-Startup=true\n"
+                                         "Name=Moved\nExec=sh -c \"exec moved --hidden\"\n")
+gone.add("/home/u/.local/bin/moved")
+assert "moved.desktop" in offered(), "an added app whose old program is gone can't be added again"
+ds.startup_add("moved.desktop", False)
+assert "autostart.moved" in [s["key"] for s in ds.autostart_settings()], "added again, not listed"
+assert ds.desktop_entry(f"{mine}/moved.desktop")["TryExec"] == "/opt/moved/run", open(f"{mine}/moved.desktop").read()
+ds.autostart_set("moved.desktop", False)
+os.remove(f"{apps}/moved.desktop")
 gone.clear()
 ds.autostart_set("editor.desktop", False)
 assert not os.path.exists(f"{mine}/editor.desktop"), "one you added, switched off, still listed"
