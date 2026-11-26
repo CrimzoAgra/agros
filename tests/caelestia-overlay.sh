@@ -513,17 +513,26 @@ out=$(DOTS_SETTINGS=$t/bin/dots-settings python3 "$here/.local/share/caelestia-o
     grep -qE '^auth\s.*pam_faillock\.so\s+preauth nodelay$' "$t/main-dst/assets/pam.d/passwd"; } ||
     fail "the lock's PAM change doesn't fit Caelestia's main: $(grep 'wrong password' <<<"$out")"
 # ...its utilities panel's shouldBeActive (main names its own part showUtils, as of 2026-11: the sidebar's whole chain,
-# the four windows and the bar's side were skipped with it): a copy of the installed file made as main has it
-m=$t/main2 mu=modules/utilities/Wrapper.qml
-mkdir -p "$m/src/${mu%/*}"
+# the four windows and the bar's side were skipped with it) and its wallpaper (drawn by WallpaperImpl, whose source is
+# its own): copies of the installed files made as main has them
+m=$t/main2 mu=modules/utilities/Wrapper.qml mw=modules/background/Wallpaper.qml mb=modules/background/Background.qml
+mkdir -p "$m/src/${mu%/*}" "$m/src/${mw%/*}"
 sed 's/^    readonly property bool shouldBeActive: screenState.sidebar || (\(screenState.utilities.*\))$/    readonly property bool showUtils: \1\n    readonly property bool shouldBeActive: screenState.sidebar || showUtils/' \
     "/etc/xdg/quickshell/caelestia/$mu" >"$m/src/$mu"
 grep -q 'shouldBeActive: screenState.sidebar || showUtils$' "$m/src/$mu" || fail "test setup: the utilities panel's shouldBeActive not found"
+cp "/etc/xdg/quickshell/caelestia/$mb" "$m/src/$mb"
+printf '%s\n' 'import QtQuick' 'import qs.components.widgets' 'import qs.services' '' 'Item {' '    id: root' '' \
+    '    property bool completed' '' '    Component.onCompleted: completed = true' '' '    WallpaperImpl {' '        id: impl' '' \
+    '        anchors.fill: parent' '    }' '}' >"$m/src/$mw"
 cp -as "$m/src" "$m/dst"
 out=$(DOTS_SETTINGS=$t/bin/dots-settings python3 "$here/.local/share/caelestia-overlay/patch.py" "$m/src" "$m/dst" 2>&1) || true
 { grep -q '^Patched: notification sidebar without the utilities panel$' <<<"$out" &&
     grep -q '^    readonly property bool shouldBeActive: showUtils$' "$m/dst/$mu"; } ||
     fail "the utilities panel's change doesn't fit Caelestia's main: $(grep 'without the utilities' <<<"$out")"
+{ grep -q '^Patched: a wallpaper of its own for each screen$' <<<"$out" && grep -q '^        source: root.source // ' "$m/dst/$mw" &&
+    grep -q '^    property string source: typeof own === "string"' "$m/dst/$mw"; } ||
+    fail "the screens' own wallpapers don't fit Caelestia's main: $(grep 'wallpaper of its own' <<<"$out")"
+
 # Every member of Caelestia's services (Hypr.focusWorkspace, Colours.palette...) the overlay's code uses is still there:
 # a renamed one patches in fine and reads as undefined without an error (with Hypr.usingLua gone, as Caelestia plans,
 # the dock's clicks went down a branch for the old config language)

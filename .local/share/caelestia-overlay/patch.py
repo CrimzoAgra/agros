@@ -2821,6 +2821,11 @@ def screen_wallpapers():
              "the background's wallpaper")
     rel = "modules/background/Wallpaper.qml"
     w = swap(read(rel), "import QtQuick\n", "import QtQuick\nimport Quickshell\nimport Quickshell.Io\n", "its imports")
+    # (Caelestia's main draws it with WallpaperImpl, whose own source follows Caelestia's: given this one)
+    if "    property string source: Wallpapers.current\n" not in w and "    WallpaperImpl {\n        id: impl\n" in w:
+        w = swap(w, "    WallpaperImpl {\n        id: impl\n", "    WallpaperImpl {\n        id: impl\n\n"
+                 "        source: root.source // caelestia-overlay: this screen's own (screen_wallpapers)\n", "its picture")
+        w = insert(w, "    property bool completed\n", "    property string source: Wallpapers.current\n")
     w = swap(w, "    property string source: Wallpapers.current\n", """    // caelestia-overlay: this screen's own wallpaper, if the Settings app has one for it
     property ShellScreen screen
     property var settings: ({})
