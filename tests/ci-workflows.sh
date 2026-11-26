@@ -3,12 +3,13 @@
 # never pull_request_target (a fork's code run with the secrets and a token that writes), no ${{ }} in a run: script
 # (a branch name or an issue's title pasted into bash: passed through env: instead, as each one does), each job a
 # time limit (a hang stopped, not run on to GitHub's 6 hours), and each curl there tried again (--retry), as is
-# each sync through CachyOS's mirror list. And ci.yml's per-package gating (below)
+# each sync through CachyOS's mirror list, of the published [agros] from Pages, and each git fetch from GitHub. And
+# ci.yml's per-package gating (below)
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
 python3 - "$here"/.github/workflows/*.yml <<'PY' || fail "the workflows: see above"
-import sys, yaml
+import re, sys, yaml
 bad = []
 for path in sys.argv[1:]:
     name = path.rsplit("/", 1)[-1]
@@ -35,6 +36,20 @@ for path in sys.argv[1:]:
                 retried = any("pacman -Syy" in l and "&& break" in l for l in run[i:i + 6])
                 if "cachyos-mirrorlist|" in line and not retried:
                     bad.append(f"{name}: job {jn}, step {s.get('name')}: CachyOS's mirror list synced, not tried again")
+        # (and each later sync in a job with CachyOS's mirror list, each sync of the published [agros] from Pages (a 503
+        # for minutes now and then) and each git fetch or clone from GitHub: tried again too, in a loop, "&& break")
+        cachy = False
+        for s in job.get("steps", []):
+            run = s.get("run", "")
+            for line in run.splitlines():
+                if line.lstrip().startswith("#"):
+                    continue
+                sync = re.search(r"pacman -S[a-z]*y", line) and (cachy or "github.io/agros" in run)
+                fetch = re.search(r"git( -C \S+)? (fetch|clone)\b.*https://", line)
+                if (sync or fetch) and "&& break" not in line:
+                    bad.append(f"{name}: job {jn}, step {s.get('name')}: a download not tried again: {line.strip()}")
+                if "cachyos-mirrorlist|" in line:
+                    cachy = True
 for b in bad:
     print(b)
 sys.exit(1 if bad else 0)

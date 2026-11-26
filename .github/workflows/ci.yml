@@ -137,10 +137,19 @@ jobs:
           # (signatures checked when there (the published repo's, a kept package's), not required: this run's new builds are
           # unsigned until the sign job signs what passed)
           printf '\n[agros]\nSigLevel = Optional TrustedOnly\nServer = https://crimzoagra.github.io/agros/$arch\n' >>/etc/pacman.conf
-          pacman -Sy --noconfirm --needed caelestia-shell
+          # (each download tried again a minute later, three times: Pages answers a 503 for minutes now and then, and
+          # GitHub drops a fetch; one that failed stopped the tests, nothing published, the held issue opened for it)
+          for i in 1 2 3; do
+            pacman -Sy --noconfirm --needed caelestia-shell && break
+            [ "$i" != 3 ] || exit 1; sleep 60
+          done
           # (the dots' commit agros-hyprland-settings pins)
           dots=$(sed -n 's/^_dots=//p' packages/agros-hyprland-settings/PKGBUILD)
-          git init -q /tmp/dots && git -C /tmp/dots fetch -q --depth 1 https://github.com/caelestia-dots/caelestia "$dots"
+          git init -q /tmp/dots
+          for i in 1 2 3; do
+            git -C /tmp/dots fetch -q --depth 1 https://github.com/caelestia-dots/caelestia "$dots" && break
+            [ "$i" != 3 ] || exit 1; sleep 60
+          done
           git -C /tmp/dots checkout -q FETCH_HEAD
       - name: Shellcheck (AgrOS's own scripts and package scripts, the tests)
         run: |
@@ -605,7 +614,11 @@ jobs:
           pacman-key --add ci/agros.asc
           pacman-key --lsign-key BFE9289F7759E521AE60CFCD23B6096B42D05E1E
           printf '\n[agros]\nServer = file://%s/out/x86_64\n' "$PWD" >>/etc/pacman.conf
-          pacman -Sy
+          # (through CachyOS's mirror list again: tried again a minute later, five times, as the step above)
+          for i in 1 2 3 4 5; do
+            pacman -Syy && break
+            [ "$i" != 5 ] || exit 1; sleep 60
+          done
           pacman -S --noconfirm --print agros-desktop >/tmp/plan 2>&1 || { cat /tmp/plan; exit 1; }
           # (an if, not "! grep": sh -e ignores a negated command's failure, which counted only as the step's last line)
           if grep -E '/(noctalia[^/]*|jack2|firefox|dolphin|kitty|alacritty|cachyos-hello)-[0-9]' /tmp/plan; then exit 1; fi
