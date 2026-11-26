@@ -7,7 +7,7 @@
 # as it was); one with any other .sig stops it (none should have one: never signed over). The database as the release
 # job made it (ci/repo-db.sh: pacman's repo-add runs a package's .PKGINFO line of the wrong kind as code, so it runs
 # there, never beside the key; this reads no package, gpg signs them as files), its four files signed; the upstream
-# gate's list (agros-approved), the day Arch last passed (agros-arch-ok) and CI's record of the AUR packages'
+# gate's list (agros-approved), the day and time Arch last passed (agros-arch-ok, agros-pass-time) and CI's record of the AUR packages'
 # maintainers (agros-aur-maintainers, which the next run reads back: ci/aur-maintainers.sh) signed beside it.
 # The key: the secret one in gpg's keyring, AgrOS's (ci/agros.asc's primary key, or a signing subkey of it: gpg picks
 # the one it has the secret of); every signature made checked against ci/agros.asc alone after, so a secret that isn't
@@ -54,6 +54,6 @@ echo "-- $signed packages signed, $kept kept with their published signature"
 # The database, its names as plain files (GitHub Pages serves no symlinks)
 for f in "${db[@]}"; do sign "$f"; done
 echo "-- the database signed"
-for f in agros-approved agros-arch-ok agros-aur-maintainers; do
+for f in agros-approved agros-arch-ok agros-pass-time agros-aur-maintainers; do
     if [[ -e $f ]]; then sign "$f" && echo "-- $f signed"; fi
 done

@@ -36,13 +36,14 @@ db app-1-1-x86_64.pkg.tar.zst lib+x-2:1-1-any.pkg.tar.zst
 cp "$site/agros.db" "$site/agros.db.tar.gz" && sign "$site/agros.db.tar.gz"
 echo 'hyprland 0.50.0' >"$site/agros-approved"
 echo 2026/11/16 >"$site/agros-arch-ok"
+echo 1795689167 >"$site/agros-pass-time"
 fetch() { rm -rf "$t/repo" "$t/repo".*; "$here/ci/mirror.sh" fetch https://site "$t/repo" "$t/key.asc" 2>&1; }
 
 out=$(fetch) || fail "a good repo not fetched: $out"
-[[ $(LC_ALL=C ls "$t/repo" | paste -sd' ') == "agros-approved agros-arch-ok agros.db agros.db.sig agros.db.tar.gz agros.db.tar.gz.sig app-1-1-x86_64.pkg.tar.zst app-1-1-x86_64.pkg.tar.zst.sig lib+x-2:1-1-any.pkg.tar.zst lib+x-2:1-1-any.pkg.tar.zst.sig" ]] ||
+[[ $(LC_ALL=C ls "$t/repo" | paste -sd' ') == "agros-approved agros-arch-ok agros-pass-time agros.db agros.db.sig agros.db.tar.gz agros.db.tar.gz.sig app-1-1-x86_64.pkg.tar.zst app-1-1-x86_64.pkg.tar.zst.sig lib+x-2:1-1-any.pkg.tar.zst lib+x-2:1-1-any.pkg.tar.zst.sig" ]] ||
     fail "not the published repo (no agros.files, no .sig of the lists: not published): $(ls "$t/repo")"
 [[ $(paste -sd' ' "$t/repo.db") == "agros.db agros.db.sig agros.db.tar.gz agros.db.tar.gz.sig" &&
-    $(paste -sd' ' "$t/repo.meta") == "agros-approved agros-arch-ok" &&
+    $(paste -sd' ' "$t/repo.meta") == "agros-approved agros-arch-ok agros-pass-time" &&
     $(paste -sd' ' "$t/repo.pkgs") == "app-1-1-x86_64.pkg.tar.zst app-1-1-x86_64.pkg.tar.zst.sig lib+x-2:1-1-any.pkg.tar.zst lib+x-2:1-1-any.pkg.tar.zst.sig" ]] ||
     fail "the upload's lists: $(tail -n +1 "$t"/repo.db "$t"/repo.meta "$t"/repo.pkgs)"
 # (a list's signature, published, fetched and checked too)

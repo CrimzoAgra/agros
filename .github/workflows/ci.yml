@@ -437,16 +437,20 @@ jobs:
         with:
           name: held
           path: /tmp/held
-      # The day Arch last passed the tests (ci/test-passes.sh tries an older Arch from it): today's when it did,
-      # else the one published before (ci/kept.sh: one that can't be read stops here, as the approved list below)
+      # The day Arch last passed the tests (ci/test-passes.sh tries an older Arch from it), and when to the second
+      # (agros-pass-time, Unix time: agros-iso builds an ISO only within a day of it, whenever GitHub starts the nightly
+      # run): now when they did, else those published before (ci/kept.sh: one that can't be read stops here, as the
+      # approved list below; none published yet, empty)
       - name: The day Arch last passed
         env:
           RESULT: ${{ needs.test.outputs.result }}
         run: |
           if [ "$RESULT" = ok ] || [ "$RESULT" = hold-agros ]; then
             date -u +%Y/%m/%d >out/x86_64/agros-arch-ok
+            date -u +%s >out/x86_64/agros-pass-time
           else
             ci/kept.sh https://crimzoagra.github.io/agros/x86_64/agros-arch-ok out/x86_64/agros-arch-ok
+            ci/kept.sh https://crimzoagra.github.io/agros/x86_64/agros-pass-time out/x86_64/agros-pass-time
           fi
       # The upstream gate's list (update-gate reads it beside the repo's database): this run's approvals added to those
       # published before (a machine on a CachyOS build a day behind Arch's still finds its version), the last 20 of

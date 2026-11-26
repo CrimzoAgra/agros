@@ -34,6 +34,7 @@ repo() {
     cp "$t/repo/kept-1-1-x86_64.pkg.tar.zst.sig" "$t/kept.sig"
     echo 'hyprland 0.58.0' >"$t/repo/agros-approved"
     echo 2026/11/16 >"$t/repo/agros-arch-ok"
+    echo 1795689167 >"$t/repo/agros-pass-time"
     echo "# checked 2026-11-16" >"$t/repo/agros-aur-maintainers"
     local f
     for f in agros.db agros.db.tar.gz agros.files agros.files.tar.gz; do echo "the $f" >"$t/repo/$f"; done
@@ -50,7 +51,7 @@ for home in agros sub; do
     repo
     out=$(sign "$t/$home") || fail "$home: not signed: $out"
     for f in new-1-1-x86_64.pkg.tar.zst other-2-1-any.pkg.tar.xz agros.db agros.db.tar.gz agros.files agros.files.tar.gz \
-        agros-approved agros-arch-ok agros-aur-maintainers; do
+        agros-approved agros-arch-ok agros-pass-time agros-aur-maintainers; do
         good "$t/repo/$f" || fail "$home: $f without a good signature by AgrOS's key"
     done
     cmp -s "$t/kept.sig" "$t/repo/kept-1-1-x86_64.pkg.tar.zst.sig" || fail "$home: a package kept as published signed over"

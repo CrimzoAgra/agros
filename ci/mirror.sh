@@ -4,7 +4,7 @@
 #   mirror.sh fetch <site> <dir> <key.asc>
 #       The published repo into <dir> (empty or new): agros.db with its .sig, agros.files and the .tar.gz copies of
 #       both (with theirs) where published, every package the database lists with its .sig, agros-approved and
-#       agros-arch-ok (with theirs, where published). Every signature checked against <key.asc> alone (gpgv), the
+#       agros-arch-ok, agros-pass-time (with theirs, where published). Every signature checked against <key.asc> alone (gpgv), the
 #       database's required: nothing is mirrored that AgrOS didn't sign. Writes the upload's order beside <dir>:
 #       <dir>.pkgs (the packages), <dir>.meta (the rest), <dir>.db (the database). Fails, said, on anything missing
 #   mirror.sh upload <dir> <remote>
@@ -36,7 +36,7 @@ fetch() {
     : >"$dir.pkgs"; : >"$dir.meta"; : >"$dir.db"
     get agros.db && get agros.db.sig || return 1
     printf '%s\n' agros.db agros.db.sig >>"$dir.db"
-    for f in agros.db.tar.gz agros.files agros.files.tar.gz agros-approved agros-arch-ok; do
+    for f in agros.db.tar.gz agros.files agros.files.tar.gz agros-approved agros-arch-ok agros-pass-time; do
         get "$f" optional
         case $? in 1) continue ;; 2) return 1 ;; esac
         if [[ $f == agros.db.* ]]; then echo "$f" >>"$dir.db"; else echo "$f" >>"$dir.meta"; fi
