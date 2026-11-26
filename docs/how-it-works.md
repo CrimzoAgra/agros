@@ -1354,7 +1354,8 @@ brings each change; nothing to run by hand).
   Log: `/var/log/auto-update.log` (its last 20 runs kept; readable by admins, `wheel`, only: it holds every account's
   updates);
   `agros-check` says an install at shutdown that failed or was held back (until one goes through), AUR builds, AUR
-  apps the install left out, packages it held back for a conflict (with the command that settles it), or a firmware
+  apps the install left out, packages it held back for a conflict (with the command that settles it; each said while
+  it's older than the version that waited, not once it's removed), or a firmware
   update that failed, and 3 shutdowns in a row with nothing installed, with the
   last one's reason (the boot's download didn't finish: only a finished one is installed; something else using pacman
   still held its lock; a soft reboot, which keeps the kernel running; its unit stopped outside a shutdown, by hand or
