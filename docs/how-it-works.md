@@ -1120,7 +1120,11 @@ brings each change; nothing to run by hand).
     `agros-keyring`'s key file alone, `/usr/share/pacman/keyrings/agros.gpg`): with none, or a bad one (a mirror or a
     network in between that changed it), that server's is as if it couldn't be reached, said ("no good signature by
     AgrOS's key"), and the next one is tried: none good, the kept list, nothing new let through. agros-iso's build and
-    installer check it the same way
+    installer check it the same way. A set that has waited 14 days for AgrOS's check (`AGROS_GATE_DAYS`; since when
+    each waits, `agros-approved.waiting` beside the list) is let through unchecked, said in the log: CI no longer
+    approving (broken, or not run) held Hyprland, and every update that needs it, for good. And with nothing waiting,
+    the gated packages with no update of their own are passed to `soname-hold` as held: a library whose new soname came
+    before their rebuild waits for it, rather than the soname guard's hook refusing every update until it comes
   - Checks that stop passing are said on the machine too: the boot's update keeps the day they last passed on Arch
     (`agros-arch-ok`, beside the repo; `/var/lib/agros/agros-arch-ok`, from the first of `[agros]`'s servers that
     answers, taken only with a good signature by AgrOS's key, as the list is), and `agros-check` says after login,

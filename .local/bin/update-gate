@@ -43,7 +43,8 @@ hold_sonames() {
     local holds lib by so with
     local opts=("${db[@]}")
     ((offline == 0)) || opts+=(--offline)
-    holds=$("$(dirname "$(readlink -f "$0")")/soname-hold" "$out" "${opts[@]}" "$@") || return 0
+    # (SONAME_HOLD: the tests' stand-in)
+    holds=$("${SONAME_HOLD:-$(dirname "$(readlink -f "$0")")/soname-hold}" "$out" "${opts[@]}" "$@") || return 0
     [[ -n $holds ]] || return 0
     while read -r lib by so with; do
         if [[ -n $with ]]; then echo "$lib (waits with $with for $by's update: it needs $with, and may be built for its new version)"
@@ -79,7 +80,8 @@ for server in "${servers[@]}"; do
     echo "update-gate: AgrOS's approved list has no good signature by AgrOS's key ($server/agros-approved.sig): not taken, as if unreachable (the list kept from before, nothing new let through)" >&2
 done
 [[ -z $tmp ]] || rm -f "$tmp" "$tmp.sig"
-waits=()
+# (still: those installed with no update of their own in this one)
+waits=() still=()
 for name in "${gated[@]}"; do
     have=$(pacman -Q "${db[@]}" -- "$name" 2>/dev/null | cut -d' ' -f2) || continue
     [[ -n $have ]] || continue
@@ -87,11 +89,12 @@ for name in "${gated[@]}"; do
     # (read whole, then its first Version line: no early reader on pacman's pipe under pipefail)
     new=$(LC_ALL=C pacman -Si --config "$base" "${db[@]}" -- "$name" 2>/dev/null)
     new=$(sed -n '/^Version *: /{s///p;q;}' <<<"$new")
-    [[ -n $new && $new != "$have" ]] || continue
+    [[ -n $new && $new != "$have" ]] || { still+=("$name"); continue; }
     # (a rebuild of the same version: as Arch's for a library's new soname, which comes with it. Let through unchecked,
     # but held with the set when another of it waits, and the library then with it: hold_sonames --held)
     [[ ${new%-*} == "${have%-*}" ]] && continue
-    (($(vercmp "$new" "$have") > 0)) || continue  # (older in the repo, rolled back: pacman -Su keeps the newer one)
+    # (older in the repo, rolled back: pacman -Su keeps the newer one)
+    (($(vercmp "$new" "$have") > 0)) || { still+=("$name"); continue; }
     grep -qxF -- "$name ${new%-*}" "$cache" 2>/dev/null || waits+=("$name $have -> $new")
 done
 # The set waiting AGROS_GATE_DAYS (14) for AgrOS's check (CI no longer approving: broken, or not run): let through
@@ -122,7 +125,9 @@ fi
 # <out>, until the next lists (a few tries: one held can hold another). Found by pacman's own dry run, as the update
 # it's for would fail on it whole
 hold_sonames
-((${#waits[@]} == 0)) || hold_sonames --held "${gated[@]}"
+# (nothing waiting: those with no update of their own in this one, as held: a library's new soname that came before
+# their rebuild held for it, not refused at every update by the soname guard's hook)
+if ((${#waits[@]})); then hold_sonames --held "${gated[@]}"; elif ((${#still[@]})); then hold_sonames --held "${still[@]}"; fi
 for try in 1 2 3 4 5 6; do
     ((try < 6)) || { echo "update-gate: the update still can't be worked out (pacman says why as it runs)" >&2; break; }
     dry=$(LC_ALL=C pacman -Sup --config "$out" "${db[@]}" --print-format '%n' 2>&1) && break

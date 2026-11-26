@@ -175,4 +175,17 @@ out=$(HAVE_hyprland=0.57.2-1 NEW_hyprland=0.59.0-1 HAVE_hyprutils=0.10-1 NEW_hyp
 [[ $out == *"hyprutils 0.10-1 -> 0.11-1"* ]] && ! open || fail "the set let through with one of it waiting a day: $out"
 out=$(HAVE_hyprland=0.57.2-1 NEW_hyprland=0.59.0-1 APPROVED='hyprland 0.59.0' gate)
 [[ -z $out ]] && open && [[ ! -s $AGROS_GATE_CACHE.waiting ]] || fail "an approved one's wait not forgotten: $(cat "$AGROS_GATE_CACHE.waiting")"
+# Nothing waiting, Hyprland with no update of its own: a library whose new soname came before Hyprland's rebuild held
+# for it (soname-hold --held, as for a held set), not left for the soname guard to refuse every update on; Hyprland
+# updating in the same run: not taken as held
+# shellcheck disable=SC2016  # (expanded by the stand-in)
+printf '#!/bin/sh\necho "$*" >>%s/sh-calls\ncase " $* " in *" --held hyprland"*) echo "glslang hyprland libglslang.so.16" ;; esac\n' "$t" >"$t/bin/soname-hold"
+chmod +x "$t/bin/soname-hold"
+: >"$t/sh-calls"
+out=$(SONAME_HOLD=$t/bin/soname-hold HAVE_hyprland=0.58.0-1 NEW_hyprland=0.58.0-1 APPROVED='hyprland 0.58.0' gate)
+[[ $out == "glslang (waits for hyprland's update: its update takes away libglslang.so.16, which hyprland loads)" ]] &&
+    grep -qx 'IgnorePkg = glslang' "$t/out.conf" || fail "a library breaking an up-to-date Hyprland not held: $out / $(cat "$t/sh-calls")"
+: >"$t/sh-calls"
+out=$(SONAME_HOLD=$t/bin/soname-hold HAVE_hyprland=0.58.0-1 NEW_hyprland=0.58.1-1 APPROVED='hyprland 0.58.1' gate)
+! grep -q -- '--held' "$t/sh-calls" && [[ -z $out ]] || fail "a Hyprland updating in the same run taken as held: $(cat "$t/sh-calls")"
 echo "ok update-gate"
