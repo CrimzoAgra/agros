@@ -19,6 +19,33 @@ hl.on("config.reloaded", function() hl.exec_cmd("~/.local/bin/xwayland-primary")
 -- game runs, the very time Wine needs one: clicks off, the pointer offset)
 hl.on("monitor.added", function() hl.exec_cmd("~/.local/bin/xwayland-primary") end)
 
+-- Screens asleep and awake together. A DisplayPort screen asleep disconnects (the MSI, seconds after "dpms off"), and
+-- Hyprland turns a screen that connects on whatever the others are: one that comes back while the rest sleep sleeps
+-- with them (a key or the mouse wakes them all). And the lock screen's keyboard: the screen that had it gone, Hyprland
+-- hands it to the one under the pointer only as the pointer moves (a key only wakes the screens), so typing went
+-- nowhere till a click: the pointer moved to where it is. (Timers: the screen's rule applied first, the list settled)
+if hl.timer and not dots.verifying then
+    hl.on("monitor.added", function(mon)
+        local name = mon and mon.name
+        hl.timer(function()
+            local others = 0
+            for _, m in ipairs(hl.get_monitors()) do
+                if m.name ~= name then
+                    if m.dpms_status then return end
+                    others = others + 1
+                end
+            end
+            if name and others > 0 then hl.dispatch(hl.dsp.dpms({ action = "off", monitor = name })) end
+        end, { timeout = 200, type = "oneshot" })
+    end)
+    hl.on("monitor.removed", function()
+        hl.timer(function()
+            local p = hl.get_cursor_pos()
+            if p then hl.dispatch(hl.dsp.cursor.move({ x = p.x, y = p.y })) end
+        end, { timeout = 200, type = "oneshot" })
+    end)
+end
+
 -- Clear the text console under the desktop, so no old text shows when the desktop closes (shutdown)
 hl.on("hyprland.start", function() hl.exec_cmd("~/.local/bin/console-clear") end)
 -- The pointer on the graphics card's cursor layer (Hyprland's default: it follows the mouse with no lag; drawn into the
