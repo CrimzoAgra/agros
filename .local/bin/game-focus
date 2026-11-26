@@ -354,9 +354,22 @@ def close_launcher(game: dict) -> None:
                     pass
 
 
+def own_pids() -> list[int]:
+    """Your processes: another account's, logged in beside yours, aren't your Steam's games (theirs kept your Steam open
+    in its tray, and your launcher's prefix running, while they played)"""
+    pids = []
+    for d in filter(str.isdigit, os.listdir("/proc")):
+        try:
+            if os.stat(f"/proc/{d}").st_uid == os.getuid():
+                pids.append(int(d))
+        except OSError:
+            pass
+    return pids
+
+
 def steam_game_running() -> bool:
     """A game Steam runs, window or not (still loading, compiling shaders): Steam starts each under reaper SteamLaunch"""
-    return any(b"SteamLaunch" in cmdline(int(d)) for d in os.listdir("/proc") if d.isdigit())
+    return any(b"SteamLaunch" in cmdline(pid) for pid in own_pids())
 
 
 def steam_running() -> bool:
@@ -458,7 +471,7 @@ def doing(pids: list[int]) -> str:
 
 def reapers_of(gid: str) -> list[int]:
     mark = f"SteamLaunch AppId={gid} ".encode()
-    return [int(d) for d in os.listdir("/proc") if d.isdigit() and mark in cmdline(int(d)).replace(b"\0", b" ")]
+    return [pid for pid in own_pids() if mark in cmdline(pid).replace(b"\0", b" ")]
 
 
 @logged
