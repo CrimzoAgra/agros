@@ -90,7 +90,7 @@ restore() {
     settled
 }
 # (the AUR builds' repo list too, put there for the install alone)
-settled() { rm -rf "$prev" "$au/installing" "$pacdb/sync/agros-aur.db"; }
+settled() { rm -rf "$prev" "$au/installing" "$pacdb/sync/agros-aur.db" "$au/ready"; }
 # retire: the packages AgrOS dropped (agros-system's list: an app it replaced), removed once an update took them out
 # of what AgrOS installs: only those in as a dependency that nothing needs now (one you installed yourself, or that
 # something else still needs, kept). Its failing never fails the update: said, and tried again at the next install
@@ -621,7 +621,7 @@ if [[ -e $db/db.lck ]] && ! /usr/lib/agros/bin/pacman-lock-holder "$db" >/dev/nu
     rm -f "$db/db.lck"
 fi
 # (the AUR builds made for the last download's lists with it: made again for this one's, below)
-rm -rf "$db/complete" "$db/keyrings" "$au/download-failed" "$aur"
+rm -rf "$db/complete" "$db/keyrings" "$au/download-failed" "$au/ready" "$aur"
 # Through the upstream gate (update-gate): Hyprland and its libraries only to versions AgrOS's CI has checked, else
 # held (a library whose update would break one held, with it). The pacman.conf it gives for the download and the AUR
 # builds for it (the shutdown decides again, on the lists it installs from)
@@ -708,6 +708,8 @@ if ((synced)); then
         rotated "$gated" "$au/rotated.conf" && echo "the download failed: tried again with each mirror list's next mirror first" &&
             LC_ALL='' LC_MESSAGES=C pacman -Suw --noconfirm --config "$au/rotated.conf" --dbpath "$db" --logfile /dev/null 2>>"$err"; }; then
         touch "$db/complete"
+        # (how many install at the next shutdown or restart, for the power menu to say so: the shell reads it)
+        LC_ALL=C pacman -Qu --config "$gated" --dbpath "$db" 2>/dev/null | /usr/lib/agros/bin/updates-pending | grep -c . >"$au/ready"
     fi
 else
     cp /etc/pacman.conf "$gated"

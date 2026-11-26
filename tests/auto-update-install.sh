@@ -409,9 +409,16 @@ lists
 echo updates-app >"$t/pac/sync/core.db"
 QU='' QU_RC=1 "$t/auto-update" --install || fail "nothing to install failed"
 [[ $(cat "$t/pac/sync/core.db") == updates-app ]] || fail "the Updates app's newer lists replaced by the boot's older ones"
-# ...and the download marks itself finished only when it is
+# ...and the download marks itself finished only when it is; finished, how many install at shutdown (the power menu's
+# "an update installs" on Restart and Shut down), gone once they're installed, and with the next boot's download
+QU=$'foo 1-1 -> 2-1\nbar 1-1 -> 2-1' "$t/auto-update" || fail "the boot's download failed: $(cat "$t/log")"
+[[ -e $t/au/db/complete && $(cat "$t/au/ready" 2>/dev/null) == 2 ]] || fail "what installs at shutdown not counted for the power menu: $(cat "$t/au/ready" 2>/dev/null)"
+QU='' QU_RC=1 "$t/auto-update" --install >/dev/null || fail "nothing to install failed"
+[[ ! -e $t/au/ready ]] || fail "the power menu's count left after the install"
+echo 2 >"$t/au/ready"
 SYUW_RC=1 "$t/auto-update" || true
 [[ ! -e $t/au/db/complete ]] || fail "a failed download marked as finished"
+[[ ! -e $t/au/ready ]] || fail "the power menu's count left from an earlier download"
 # The keyrings first: downloaded alone before the rest (one pacman.conf holds back left out), so a package signed by a
 # key the keyring here hasn't got (or has expired) failing the rest's download leaves them; installed first at shutdown,
 # on their own when the rest didn't download (the lists put back after), said with the boot's error from pacman

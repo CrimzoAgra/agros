@@ -2499,6 +2499,117 @@ def battery_suspend():
     return {rel: s, menu: m}
 
 
+def power_menu():
+    """The power menu top to bottom Log out, Sleep, (its picture,) Restart, Shut down; Shut down in the menu's own
+    colour, the others alike (the focused one, Log out as it opens, took that colour: it read as Log out's own; the focus
+    is still its rounder shape), and on Restart and Shut down a mark while an update the boot downloaded waits to install
+    as they run (auto-update's /var/lib/auto-update/ready, how many: its firmware's list too)"""
+    menu = "modules/session/Content.qml"
+    m = read(menu)
+    head = "    SessionButton {\n        id: logout\n"
+    tail = "    component SessionButton: IconButton {\n"
+    if m.count(head) != 1 or m.count(tail) != 1:
+        raise LookupError("the session menu's buttons")
+    a, b = m.index(head), m.index(tail)
+    # (its buttons and picture, each a block of the Column's: by its id, the picture by its type)
+    blocks, cur = {}, []
+    for line in m[a:b].splitlines(True):
+        cur.append(line)
+        if line == "    }\n":
+            text = "".join(cur).strip("\n") + "\n"
+            ident = re.search(r"^        id: (\w+)$", text, re.M)
+            key = ident.group(1) if ident else ("gif" if text.startswith("    AnimatedImage {") else None)
+            if key is None or key in blocks:
+                raise LookupError(f"the session menu's blocks: {text.splitlines()[0]}")
+            blocks[key] = text
+            cur = []
+    if set(blocks) != {"logout", "shutdown", "hibernate", "reboot", "gif"} or "".join(cur).strip():
+        raise LookupError(f"the session menu's buttons: {sorted(blocks)}")
+    order = [("logout", None, "hibernate", ""), ("hibernate", "logout", "reboot", ""),
+             ("reboot", "hibernate", "shutdown", "        updates: root.updateReady\n"),
+             ("shutdown", "reboot", None, "        accent: true\n        updates: root.updateReady\n")]
+    out = []
+    for key, up, down, extra in order:
+        text = re.sub(r"^        KeyNavigation\.(up|down): \w+\n", "", blocks[key], flags=re.M)
+        nav = (f"        KeyNavigation.up: {up}\n" if up else "") + (f"        KeyNavigation.down: {down}\n" if down else "")
+        text = text.replace("\n\n    }\n", "\n    }\n")
+        text = text[:-len("    }\n")].rstrip("\n") + "\n" + extra + ("\n" + nav if nav else "") + "    }\n"
+        out.append(text)
+        if key == "hibernate":
+            out.append(blocks["gif"])
+    m = m[:a] + "\n".join(out) + "\n" + m[b:]
+    m = swap(m, """        inactiveColour: activeFocus ? Colours.palette.m3secondaryContainer : Colours.tPalette.m3surfaceContainer
+        inactiveOnColour: activeFocus ? Colours.palette.m3onSecondaryContainer : Colours.palette.m3onSurface
+""", """        // caelestia-overlay: the menu's own colour Shut down's alone, not the focused one's
+        inactiveColour: accent ? Colours.palette.m3secondaryContainer : Colours.tPalette.m3surfaceContainer
+        inactiveOnColour: accent ? Colours.palette.m3onSecondaryContainer : Colours.palette.m3onSurface
+""", "the session buttons' colours")
+    m = swap(m, "        required property list<string> command\n", """        required property list<string> command
+        // caelestia-overlay: the menu's own colour (Shut down's), and the mark of an update installing as it runs
+        property bool accent
+        property bool updates
+
+        StyledRect {
+            visible: button.updates
+            anchors.top: parent.top
+            anchors.right: parent.right
+            anchors.margins: Tokens.padding.small
+            implicitWidth: mark.implicitHeight + Tokens.padding.small
+            implicitHeight: implicitWidth
+            radius: Tokens.rounding.full
+            color: Colours.palette.m3primary
+
+            MaterialIcon {
+                id: mark
+
+                anchors.centerIn: parent
+                text: "download"
+                color: Colours.palette.m3onPrimary
+                fontStyle: Tokens.font.icon.builders.large.scale(0.55).build()
+            }
+        }
+""", "the session buttons' update mark")
+    m = swap(m, "    spacing: Tokens.spacing.large\n", """    spacing: Tokens.spacing.large
+
+    // caelestia-overlay: an update the boot downloaded waits to install at the next restart or shut down (auto-update's
+    // count, or its firmware's list): looked at again every half minute (the file comes only once the download's done)
+    property bool updateReady: packagesReady || firmwareReady
+    property bool packagesReady
+    property bool firmwareReady
+
+    FileView {
+        id: readyFile
+
+        path: "/var/lib/auto-update/ready"
+        printErrors: false
+        onLoaded: root.packagesReady = parseInt(text()) > 0
+        onLoadFailed: root.packagesReady = false
+    }
+
+    FileView {
+        id: firmwareFile
+
+        path: "/var/lib/auto-update/firmware"
+        printErrors: false
+        onLoaded: root.firmwareReady = text().trim() !== ""
+        onLoadFailed: root.firmwareReady = false
+    }
+
+    Timer {
+        running: true
+        repeat: true
+        triggeredOnStart: true
+        interval: 30000
+        onTriggered: {
+            readyFile.reload();
+            firmwareFile.reload();
+        }
+    }
+""", "the session menu's update state")
+    m = insert(m, "import Quickshell\n", "import Quickshell.Io\n", before=False)
+    return {menu: m}
+
+
 def osd_quiet_start():
     # No volume popup unless you changed the volume: not when the shell starts (login, caelestia-restart; changes in
     # its first 3 s are ignored), and not when the sound device changes or comes up: at login the sound system can
@@ -3520,6 +3631,7 @@ FEATURES = (
     ("lock screen dimmed like the login screen", lock_tint),
     ("lock screen text cursor", lock_cursor),
     ("critical battery hibernates, or suspends where it can't", battery_suspend),
+    ("the power menu: log out, sleep, restart, shut down, Shut down in its colour, an update's mark", power_menu),
     ("lock screen: a wrong password said at once", lock_instant_fail),
     ("Scroll Lock icon", scroll_lock),
     ("tray A-Z", tray_az),

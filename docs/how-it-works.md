@@ -495,7 +495,11 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
     (unless `shell.json`'s `session.commands.hibernate` sets another command), hibernate where the system can and
     suspend where it can't (`systemctl hibernate || systemctl suspend`): an AgrOS install has no swap to hibernate into
     (zram only), where Caelestia's call did nothing and the laptop died; no warnings about a missing account picture
-    (`~/.face`)
+    (`~/.face`). The power menu top to bottom Log out, Sleep, (its picture,) Restart, Shut down, Shut down in its own
+    colour and the others alike (the focused one took it: Log out, focused as it opens, read as coloured; the focus
+    shows as a rounder shape), and on Restart and Shut down a download mark while an update the boot downloaded waits to
+    install as they run (`auto-update`'s `/var/lib/auto-update/ready`, how many, written when its download finishes and
+    gone once installed; or its firmware list), looked at every half minute (`power_menu`)
 - **`.local/bin/caelestia-overlay`**: builds `~/.config/quickshell/caelestia` (Caelestia + the patches); also run by the
   pacman hook after every `caelestia-shell` or `agros-scripts` update. Nothing it's built from changed since the last
   build (Caelestia's files, the script, the patches, the Settings app's `caelestia.*` switches: one checksum, kept in
