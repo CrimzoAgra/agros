@@ -145,7 +145,8 @@ machine. Settings in `/etc/skel` reach new accounts. An account that has them al
 after it (`agros-links`, run for each user by `agros-system`'s pacman hook, and again at every login) where its file is
 still one AgrOS shipped, byte for byte (one you never edited); one you edited is kept, AgrOS's new version put beside it
 as `<file>.agros-new` (as pacman's `.pacnew`), and a notification says so once (gone once yours is updated after all,
-or is AgrOS's current one: merged by hand).
+or is AgrOS's current one: merged by hand). A program an update took away goes from each home too (its link in
+`~/.local/bin`), and with Capri's (an app of her own since 2026-11-26) the Super menu entry `capri-update` made for it.
 The settings that are yours to change, mostly through the apps that write them, are never updated, only copied in when
 missing: Caelestia's `shell.json` (its settings, the weather location), the dock's pins, `mimeapps.list`,
 `~/.config/autostart` (Settings > Startup), VSCodium's, Legion Control's, and `user/hosts/` (one machine's screens). A
@@ -304,10 +305,11 @@ Windows, Sound & network), each with a button to its whole page.
     before it, showed its window and quit when closed); any other app gets `AGROS_START_MINIMISED=1`, and
     `user/apps.lua` minimises its windows of its first minute to the dock (counted from the start of the app the login
     started: what it starts later, a game from Steam, inherits the variable but isn't minimised). Removed: one added
-    here is deleted, any other (an app's own entry) hidden with `Hidden=true`. `dots-settings migrate` (`agros-links`,
-    at login) gives minimised entries added with an older quiet start the current one, and gave accounts from before
-    this page's rework their old switches (`startup.<app>`) as entries, once; an entry from before the choice counts as
-    minimised when AgrOS had a quiet start for it
+    here is deleted, any other (an app's own entry) hidden with `Hidden=true`. One added whose program is gone (its
+    `TryExec`) is neither listed nor started, and its app is offered again (installed elsewhere since: Capri's own
+    app). `dots-settings migrate` (`agros-links`, at login) gives minimised entries added with an older quiet start the
+    current one, and gave accounts from before this page's rework their old switches (`startup.<app>`) as entries,
+    once; an entry from before the choice counts as minimised when AgrOS had a quiet start for it
   - **Shortcuts**: my shortcuts (`dots.bind` in `user/keys.lua`, `user/windows.lua` and `user/apps.lua`; defaults in the
     schema), Caelestia's (its `kb*` variables, by its sections, minus the ones `hypr-vars.lua` turns off; your changes
     go back through `hypr-vars.lua`), and the fixed ones neither can change (Caelestia's arrows, media keys...:
