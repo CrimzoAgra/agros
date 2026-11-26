@@ -498,6 +498,7 @@ conf_repair() {
     rm -f "$au/pacman-conf-repaired"
     [[ -f $conf ]] && missing=$(conf_lacks "$conf" | paste -sd, | sed 's/,/, /g') && [[ -n $missing ]] || return 0
     for inst in "$pacdb"/local/agros-system-*/install; do
+        # shellcheck source=/dev/null
         (. "$inst" && pacman_includes && agros_repo restore) >/dev/null 2>&1
     done
     if [[ -n $(conf_lacks "$conf") ]]; then
@@ -615,7 +616,7 @@ if command -v fwupdmgr >/dev/null; then
 fi
 
 # flatpak apps: the system-wide ones, then each user's (Spotify: user-installed so spicetify can change it) and those
-# installed from a downloaded file (Nuvio, ArtCraft), as that user; then their AppImages, Capri's check, Proton builds
+# installed from a downloaded file (Nuvio, ArtCraft), as that user; then their AppImages, Proton builds
 # and developer tools (update-kinds, as Updates runs them)
 # (each given up on after half an hour: a stalled one held shutdown off for as long as it hung)
 # Root's apps from a file (system-wide, and root's own) first have their -origin remote's URL emptied
@@ -662,7 +663,7 @@ for user in "${users[@]}"; do
     notes=$(mktemp)
     "$each_user" --as "$user" --fd 3 \
         env XDG_RUNTIME_DIR="/run/user/$uid" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" \
-        /usr/lib/agros/bin/update-kinds --boot flatpak appimage capri proton dev 3>"$notes"
+        /usr/lib/agros/bin/update-kinds --boot flatpak appimage proton dev 3>"$notes"
     head -n 5 "$notes" | while IFS=$'\t' read -r icon title text; do
         [[ -n $title ]] && "$each_user" --notify --user "$user" -a Updates -i "$icon" "$title" "$text"
     done

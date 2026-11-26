@@ -50,9 +50,9 @@ for ((round = 1; round <= ${AGROS_INSTALL_ROUNDS:-3}; round++)); do
     # An empty root, mounted as pacstrap does
     umnt
     rm -rf --one-file-system "$root"
-    mkdir -m 0755 -p "$root"/{var/cache/pacman/pkg,var/lib/pacman,var/log,dev,run,etc}
-    mkdir -m 1777 -p "$root/tmp"
-    mkdir -m 0555 -p "$root"/{sys,proc}
+    mkdir -p "$root"/{var/cache/pacman/pkg,var/lib/pacman,var/log,dev,run,etc,tmp,sys,proc}
+    chmod 1777 "$root/tmp"
+    chmod 0555 "$root"/{sys,proc}
     { mount proc "$root/proc" -t proc -o nosuid,noexec,nodev && mount sys "$root/sys" -t sysfs -o nosuid,noexec,nodev,ro &&
         mount --bind /dev "$root/dev" && mount run "$root/run" -t tmpfs -o nosuid,nodev,mode=0755; } ||
         { notes+=("the install test couldn't mount its root's /proc, /sys, /dev"); break; }
