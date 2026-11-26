@@ -81,6 +81,12 @@ out=$(chk)
 grep -q "failed to install at shutdown (2026-11-05 22:10: error: failed to commit transaction" <<<"$out" ||
     fail "a failed install at shutdown not reported: $out"
 grep -q "pacman's lock was left behind" <<<"$out" || fail "pacman's stale lock not reported: $out"
+grep -qF "(sudo rm $t/pacdb/db.lck, with no update running; the next boot takes it out too)" <<<"$out" ||
+    fail "an administrator not told how the stale lock goes: $out"
+# (another account can't sudo: not told to)
+out=$(ID_GROUPS=users chk)
+[[ $out == *"pacman's lock was left behind"*"(the next boot takes it out, or an administrator can)"* && $out != *"sudo rm"* ]] ||
+    fail "an account that can't sudo told to remove pacman's lock with sudo: $out"
 # ...but not while the boot's download runs: AgrOS's own update code installed first, from its lists, holds it
 touch "$t/au/downloading"
 # shellcheck disable=SC2016  # (expanded by the stand-in)

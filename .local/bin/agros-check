@@ -162,10 +162,13 @@ read -r skips since skipwhy 2>/dev/null <"$au/skipped"
 # fails on it, the one at shutdown too. What takes it: pacman-lock-holder's list, beside this (auto-update's too). Not
 # while the boot's download runs (auto-update's "downloading"): AgrOS's own update code is installed first then, from
 # the boot's lists, a pacman pacman-lock-holder doesn't count (their lock is their own) holding this one too (minutes,
-# its hooks, right when this runs after login: said "left behind", and removing it let another pacman in)
+# its hooks, right when this runs after login: said "left behind", and removing it let another pacman in). The next
+# boot's update takes it out too (auto-update); another account can't sudo, so it isn't told to
+unlock="the next boot takes it out, or an administrator can"
+[[ -n $see_log ]] && unlock="sudo rm $pacdb/db.lck, with no update running; the next boot takes it out too"
 [[ -e $pacdb/db.lck ]] && ! "$helpers/pacman-lock-holder" "$pacdb" >/dev/null &&
     ! { [[ -e $au/downloading ]] && systemctl is-active -q auto-update 2>/dev/null; } &&
-    problems+=("pacman's lock was left behind ($pacdb/db.lck): nothing installs until it's removed (sudo rm $pacdb/db.lck, with no update running)")
+    problems+=("pacman's lock was left behind ($pacdb/db.lck): nothing installs until it's removed ($unlock)")
 
 # AgrOS's checks (its CI's tests on Arch) not passed for over 10 days: Hyprland's updates wait meanwhile (the upstream
 # gate), and AgrOS may have stopped looking after itself. The day they last passed is the boot's copy (auto-update:
