@@ -51,6 +51,19 @@ echo '{"screens.X Big 1.position":"0x280","screens.Y Small 2.position":"2560x0",
 DOTS_SETTINGS_JSON=$t/settings.json PATH=$t/bin:$PATH "$here/.local/share/caelestia-greeter/make-theme.sh" "$t/a" nobody
 [[ $(jq -c '.screen, [.screens[] | [.name, .transform, .scale, .x, .y]]' "$t/a/theme.json") == $'{"name":"DP-1","model":"Big"}\n[["DP-1",0,1,0,280],["HDMI-A-1",3,1.25,2560,0]]' ]] ||
     fail "the screens' layout (saved places, no gap): $(jq -c '.screen, .screens' "$t/a/theme.json")"
+# Each screen's own wallpaper (the Settings app's) beside the main one, its path in its entry; one no longer its own gone
+# (a 1x1 PNG)
+base64 -d >"$t/own.png" <<<'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+echo text >"$t/not-a-picture"
+echo '{"screens.X Big 1.wallpaper":"'"$t"'/own.png","screens.Y Small 2.wallpaper":"'"$t"'/not-a-picture"}' >"$t/settings.json"
+DOTS_SETTINGS_JSON=$t/settings.json PATH=$t/bin:$PATH "$here/.local/share/caelestia-greeter/make-theme.sh" "$t/a" nobody
+[[ $(jq -c '[.screens[] | [.name, .wallpaper]]' "$t/a/theme.json") == '[["DP-1","'"$t"'/a/wallpaper-DP-1"],["HDMI-A-1",null]]' ]] &&
+    cmp -s "$t/own.png" "$t/a/wallpaper-DP-1" && [[ ! -e $t/a/wallpaper-HDMI-A-1 ]] ||
+    fail "a screen's own wallpaper not beside the main one, or a file not a picture taken: $(jq -c .screens "$t/a/theme.json")"
+echo '{}' >"$t/settings.json"
+DOTS_SETTINGS_JSON=$t/settings.json PATH=$t/bin:$PATH "$here/.local/share/caelestia-greeter/make-theme.sh" "$t/a" nobody
+[[ ! -e $t/a/wallpaper-DP-1 && $(jq -c '[.screens[].wallpaper]' "$t/a/theme.json") == '[null,null]' ]] ||
+    fail "a screen's own wallpaper left after it went back to the main one: $(ls "$t/a")"
 echo '{"screens.X Big 1.position":"0x280"}' >"$t/settings.json"
 DOTS_SETTINGS_JSON=$t/settings.json PATH=$t/bin:$PATH "$here/.local/share/caelestia-greeter/make-theme.sh" "$t/a" nobody
 [[ $(jq -c '[.screens[] | [.x, .y]]' "$t/a/theme.json") == '[[0,280],[2624,0]]' ]] ||

@@ -582,7 +582,12 @@ README asks: everything goes in the files Caelestia leaves for you, so its updat
     `system/boot-video-mode`)
   - Once the wallpaper shows, its elements come down onto the screen from in front of it (bigger and out of focus,
     shrinking and sharpening into place): the password bar first, then the rest from the centre outward
-  - The wallpaper and colours are copied to it at every login (`greeter-theme-sync`)
+  - The wallpaper and colours are copied to it at every login (`greeter-theme-sync`), and each screen's own wallpaper
+    (Settings', `screens.<its description>.wallpaper`) beside them as `wallpaper-<connector>`, shown on that screen
+  - The login card on the main screen (Settings', else workspace 1's), found by connector and model, by its model, then
+    by its connector alone (cage may give its model otherwise); what it saw of the screens and where the card went kept
+    in `/var/lib/caelestia-greeter/caelestia-greeter-screens.json` (nothing else of the login screen's is left after a
+    login)
   - It shows the last account that logged in (before anyone has, as on a new install: the first account, from
     `agros-greeter`'s `run`, as its install, which runs before the installer makes the account, couldn't name one);
     with more than one account (uid 1000 and up, a login shell), or the last one gone, the person

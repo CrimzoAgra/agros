@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Writes theme.json (Caelestia's current colours and fonts, user, main screen and the screens' layout) and copies the current wallpaper
+# (and each screen's own, when the Settings app gives it one)
 # into the given folder, for the login screen in that folder. Run at every login by greeter-theme-sync (into
 # /etc/greetd/caelestia-greeter/theme), and by agros-greeter's install for a first theme (as the user it shows).
 #   usage: make-theme.sh <folder> [user]   (user: whoever runs it, by default)
@@ -35,7 +36,23 @@ if mons=$(hyprctl -j monitors 2>/dev/null) && [[ $mons == '['* ]]; then
                         | capture("^(?<x>-?[0-9]+)x(?<y>-?[0-9]+)$")? | {x: (.x | tonumber), y: (.y | tonumber)}] | first)}]
         | (all(.saved != null)) as $all
         | map({name, model, transform: (.transform // 0), scale: (.scale // 1),
-               x: (if $all then .saved.x else .x end), y: (if $all then .saved.y else .y end)})' <<<"$mons") || screens=null
+               x: (if $all then .saved.x else .x end), y: (if $all then .saved.y else .y end),
+               own: ($s["screens.\(.description).wallpaper"] // null)})' <<<"$mons") || screens=null
+    # Each screen's own wallpaper (the Settings app's, screens.<its description>.wallpaper) beside the main one, as
+    # wallpaper-<connector>, a picture only; its path in its screen's entry, none for those that show the main one; one
+    # for a screen no longer with its own taken out
+    if [[ $screens == '['* ]]; then
+        walls='{}'
+        while IFS=$'\t' read -r name own; do
+            [[ $name =~ ^[A-Za-z0-9._-]+$ && -n $own && -f $own && $(file -b --mime-type "$own") == image/* ]] || continue
+            cmp -s "$own" "$dir/wallpaper-$name" || install -m 644 "$own" "$dir/wallpaper-$name"
+            walls=$(jq -c --arg n "$name" --arg f "$dir/wallpaper-$name" '. + {($n): $f}' <<<"$walls")
+        done < <(jq -r '.[] | [.name, (.own // "" | tostring)] | @tsv' <<<"$screens")
+        for f in "$dir"/wallpaper-*; do
+            [[ -e $f ]] && ! jq -e --arg n "${f##*/wallpaper-}" 'has($n)' <<<"$walls" >/dev/null && rm -f "$f"
+        done
+        screens=$(jq -c --argjson w "$walls" 'map(del(.own) + {wallpaper: ($w[.name] // null)})' <<<"$screens")
+    fi
     main=$(jq -r '."screens.main" // "" | strings' "$settings" 2>/dev/null) || main=
     ws1=$(hyprctl -j workspaces 2>/dev/null | jq -r '.[] | select(.id == 1) | .monitor' 2>/dev/null) || ws1=
     screen=$(jq -c --arg d "$main" --arg w "$ws1" '[(.[] | select($d != "" and .description == $d)),

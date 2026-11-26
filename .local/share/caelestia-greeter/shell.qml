@@ -293,9 +293,28 @@ ShellRoot {
         readonly property var external: outputs.find(o => !/^(eDP|LVDS|DSI)/.test(o.name))
         readonly property var mainOutput: {
             const want = root.theme.screen;
+            // (by its connector alone last: cage may give its model otherwise than Hyprland, and the card went to another)
             const found = want ? outputs.find(o => o.name === want.name && (!want.model || o.model === want.model))
-                ?? outputs.find(o => !!want.model && o.model === want.model) : null;
+                ?? outputs.find(o => !!want.model && o.model === want.model)
+                ?? outputs.find(o => o.name === want.name) : null;
             return (found && !(external && /^(eDP|LVDS|DSI)/.test(found.name)) ? found : null) ?? external ?? outputs[0];
+        }
+
+        // What it saw of the screens and where the card went, kept for a look after a login (nothing else of the login
+        // screen's is left once it's closed): each screen's connector, model and place, the main one asked for, the one
+        // taken
+        onMainOutputChanged: if (spansOutputs)
+            screensSeen.setText(JSON.stringify({
+                screens: outputs.map(o => ({ name: o.name, model: o.model, x: o.x, y: o.y, width: o.width, height: o.height })),
+                wanted: root.theme.screen ?? null,
+                card: mainOutput?.name ?? null
+            }, null, 1) + "\n")
+
+        FileView {
+            id: screensSeen
+
+            path: `${Quickshell.env("XDG_STATE_HOME") || "/tmp"}/caelestia-greeter-screens.json`
+            printErrors: false
         }
 
         function rectOf(o: var): rect {
@@ -311,6 +330,9 @@ ShellRoot {
 
                 required property var modelData
                 readonly property rect r: win.rectOf(modelData)
+                // (its own wallpaper, the Settings app's for this screen: theme.json's screens, by connector; else the main one)
+                readonly property string wallpaper: (root.theme.screens ?? []).find(s => modelData && s?.name === modelData.name)?.wallpaper
+                    || root.wallpaper
 
                 x: r.x
                 y: r.y
@@ -322,7 +344,7 @@ ShellRoot {
                     id: wall
 
                     anchors.fill: parent
-                    source: root.wallpaper ? `file://${root.wallpaper}` : ""
+                    source: wallArea.wallpaper ? `file://${wallArea.wallpaper}` : ""
                     fillMode: Image.PreserveAspectCrop
                     asynchronous: true
                     visible: false
