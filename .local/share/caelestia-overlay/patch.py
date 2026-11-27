@@ -1506,6 +1506,12 @@ def tray_click():
 """)
 
     wrapper = read("modules/bar/BarWrapper.qml")
+    # (kept loaded while a fullscreen window hides it: rebuilt as it came back, the dock read its pins and loaded and
+    # measured every icon again while the bar slid in, its icons growing in only after the shell had finished
+    # appearing; kept, it slides in with the bar and is there when it ends)
+    wrapper = swap(wrapper, "        active: root.shouldBeVisible\n",
+                   "        active: root.shouldBeVisible || root.fullscreen && !root.disabled && Config.bar.persistent // caelestia-overlay: kept loaded behind a fullscreen window\n",
+                   "the bar's content loaded")
     wrapper = insert(wrapper, """    function closeTray(): void {
         (content.item as Bar)?.closeTray();
     }
