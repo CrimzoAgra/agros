@@ -499,6 +499,22 @@ def safe_triangle():
     return {rel: s}
 
 
+def tray_menu_gaps():
+    # The tray menu's items take a click in the gaps between them too: each one's click area (its highlight) reached
+    # half the padding past its text, the column spaced wider, and a click between two items did nothing
+    rel = "modules/bar/popouts/TrayMenu.qml"
+    s = swap(read(rel), """                        StateLayer {
+                            anchors.margins: -Tokens.padding.extraSmall / 2
+                            anchors.leftMargin: -Tokens.padding.small
+""", """                        StateLayer {
+                            anchors.margins: -Tokens.padding.extraSmall / 2
+                            anchors.topMargin: -menu.spacing / 2 // caelestia-overlay: meeting the next item's
+                            anchors.bottomMargin: -menu.spacing / 2
+                            anchors.leftMargin: -Tokens.padding.small
+""", "the tray menu items' click area")
+    return {rel: s}
+
+
 def steam_installed_only():
     # Steam's tray menu: the recent games at the top only show installed games (not Proton, runtimes,
     # uninstalled games); list from ~/.local/bin/steam-installed-games, refreshed each time the menu opens
@@ -3762,6 +3778,7 @@ FEATURES = (
     ("bar logo does nothing", logo_inert),
     ("popout safe triangle", safe_triangle),
     ("Steam menu: installed games only", steam_installed_only),
+    ("tray menu: a click between items counts", tray_menu_gaps),
     ("lock screen dimmed like the login screen", lock_tint),
     ("lock screen text cursor", lock_cursor),
     ("critical battery hibernates, or suspends where it can't", battery_suspend),
