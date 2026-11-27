@@ -2579,8 +2579,8 @@ def power_menu():
 
         MaterialIcon {
             visible: button.updates
-            x: button.width - button.notch * 0.45 - width / 2
-            y: button.notch * 0.45 - height / 2
+            x: button.width - button.notch * 0.35 - width / 2
+            y: button.notch * 0.35 - height / 2
             text: "download"
             color: Colours.palette.m3onSurface
             fill: 1
