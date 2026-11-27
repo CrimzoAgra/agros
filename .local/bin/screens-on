@@ -7,6 +7,28 @@
 # NVIDIA driver resumed) may not answer or take it yet. Each of its answers waited for up to 3 s, so a Hyprland that
 # doesn't answer holds this for up to ~40 s (~70 s when it answers the check but not the switch), each session in turn
 on='hl.dsp.dpms({ action = "enable" })'  # (the Lua config's dispatcher, as Caelestia's idle sends it)
+# The lock screen's keyboard, after waking locked: the PC's sleep switches to a text console and back (NVIDIA's sleep
+# script), every keyboard taken away and added again, and typing on the lock screen went nowhere until a click. The
+# pointer to the middle of another screen and straight back: Hyprland hands the keyboard to the lock screen under the
+# pointer as it moves, and from one screen to another it hands it over anew, as the click did. Only when Caelestia's
+# lock is on and there's another screen (one: nothing)
+refocus_lock() {
+    local sig=$1 pos x y mid
+    [[ $(timeout 3 qs -c caelestia ipc call lock isLocked 2>/dev/null) == true ]] || return 0
+    pos=$(timeout 3 hyprctl -i "$sig" cursorpos -j 2>/dev/null) || return 0
+    x=$(jq -r '.x | floor' <<<"$pos" 2>/dev/null) y=$(jq -r '.y | floor' <<<"$pos" 2>/dev/null)
+    [[ $x =~ ^-?[0-9]+$ && $y =~ ^-?[0-9]+$ ]] || return 0
+    # (each screen's size as laid out: turned a quarter, its width and height swap; scaled, smaller)
+    mid=$(timeout 3 hyprctl -i "$sig" monitors -j 2>/dev/null | jq -r --argjson x "$x" --argjson y "$y" '
+        [.[] | (if .transform % 2 == 1 then {w: (.height / .scale), h: (.width / .scale)}
+                else {w: (.width / .scale), h: (.height / .scale)} end) as $s
+             | select($x < .x or $x >= .x + $s.w or $y < .y or $y >= .y + $s.h)
+             | "\((.x + $s.w / 2) | floor) \((.y + $s.h / 2) | floor)"] | first // empty' 2>/dev/null)
+    [[ -n $mid ]] || return 0
+    timeout 3 hyprctl -i "$sig" dispatch "hl.dsp.cursor.move({ x = ${mid% *}, y = ${mid#* } })" >/dev/null 2>&1
+    sleep 0.2
+    timeout 3 hyprctl -i "$sig" dispatch "hl.dsp.cursor.move({ x = $x, y = $y })" >/dev/null 2>&1
+}
 for sock in "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"/hypr/*/.socket.sock; do
     [[ -S $sock ]] || continue
     sig=${sock%/.socket.sock} sig=${sig##*/}
@@ -16,5 +38,8 @@ for sock in "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"/hypr/*/.socket.sock; do
         [[ -z $out ]] || timeout 3 hyprctl -i "$sig" dispatch "$on" >/dev/null 2>&1
         sleep 1
     done
+    # (once the screens are on: the lock screen draws again by then, its keyboard back)
+    sleep 1
+    refocus_lock "$sig"
 done
 exit 0

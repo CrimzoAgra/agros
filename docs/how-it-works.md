@@ -960,7 +960,11 @@ helper a package update just brought works before `agros-links` has linked it), 
   sessions (`hl.dsp.dpms({ action = "enable" })`, as Caelestia's idle sends it); only when one is off (screens on, a
   fullscreen game: nothing sent), no reload, the pointer never moved; tried 10 times a second apart (just after waking
   Hyprland may not answer yet), each answer waited for up to 3 s: up to ~40 s per session when Hyprland doesn't answer,
-  ~70 s when it answers the check but not the switch. Run after waking by `agros-system`'s sleep hook, as each user
+  ~70 s when it answers the check but not the switch. Run after waking by `agros-system`'s sleep hook, as each user.
+  Woken locked (`qs -c caelestia ipc call lock isLocked`), with another screen: the pointer to that screen's middle and
+  straight back, a second after the screens come on. The sleep switches to a text console and back (NVIDIA's sleep
+  script), every keyboard removed and added again, and typing on the lock screen went nowhere until a click; Hyprland
+  hands the keyboard to the lock screen under the pointer anew as it moves from one screen to another
 - **`.local/bin/screens-off`**: the screens switched off (`hl.dsp.dpms({ action = "disable" })`) in each of your Hyprland
   sessions just before the PC sleeps, then Hyprland's fade to black waited for (1.2 s); a Hyprland that doesn't answer
   is left as it is (2 s). Run before sleeping by `agros-system`'s sleep hook, as each user, waited on
