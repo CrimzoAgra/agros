@@ -1074,28 +1074,39 @@ local function back_to_fullscreen(win)
     hl.dispatch(hl.dsp.window.fullscreen({ mode = "fullscreen", action = "set", window = win }))
     return true
 end
--- (one put back leaving it again by itself, still focused: Overwatch in exclusive fullscreen did, 3 ms to 0.6 s after,
--- not yet active to itself, and stayed a window under the bar. Put back a moment later, at most 3 times, only in the
--- second or two after: later, a drop while focused is the Super menu taking the keyboard, which a fullscreen closes)
+-- (one put back leaving it again by itself, still focused: Overwatch in exclusive fullscreen did, 3 to 25 ms after,
+-- not yet active to itself, and stayed a window under the bar. Put back a moment later, at most 3 times, only for a
+-- drop in the 150 ms after: one later while focused is the Super menu taking the keyboard (0.35 s and more after you
+-- went back to the game), and putting the game back in fullscreen closed it. Such a drop also shows the game is in
+-- exclusive fullscreen (apps.lua: crossing.lua holds the pointer in it), before you ever left it for the other screen)
 local settling = {}
+local function settle(address, left)
+    local s = { left = left }
+    settling[address] = s
+    if hl.timer then
+        hl.timer(function() if settling[address] == s then settling[address] = nil end end, { timeout = 150, type = "oneshot" })
+    end
+end
 hl.on("window.close", function(win) if win then settling[win.address] = nil end end)
 hl.on("window.fullscreen", function(win)
     if not (win and (win.fullscreen or 0) < 2 and dots.is_game and dots.is_game(win)) then return end
     out_of_fullscreen[win.address] = true
     local s, active = settling[win.address], hl.get_active_window()
-    if not (s and s.left > 0 and os.time() - s.at <= 1 and active and active.address == win.address and hl.timer) then return end
-    s.left = s.left - 1
+    if not (s and s.left > 0 and active and active.address == win.address and hl.timer) then return end
+    settling[win.address] = nil
+    if dots.exclusive_fullscreen then dots.exclusive_fullscreen[win.address] = true end
     hl.timer(function()
         local w, now = by_address(win.address), hl.get_active_window()
         if w and out_of_fullscreen[w.address] and now and now.address == w.address and back_to_fullscreen(w) then
             out_of_fullscreen[w.address] = nil
+            settle(w.address, s.left - 1)
         end
     end, { timeout = 200, type = "oneshot" })
 end)
 hl.on("window.active", function(win)
     if not (win and out_of_fullscreen[win.address]) then return end
     out_of_fullscreen[win.address] = nil
-    if back_to_fullscreen(win) then settling[win.address] = { at = os.time(), left = 3 } end
+    if back_to_fullscreen(win) then settle(win.address, 3) end
 end)
 -- (and at a config load, the games over their screen out of fullscreen by then: a moment after, once apps.lua, loaded
 -- after this file, has given dots.is_game)

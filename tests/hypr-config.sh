@@ -879,27 +879,40 @@ local function back_maximised()
     return full
 end
 check("a game out of fullscreen to maximised, gone back to: fullscreen again", back_maximised(), true)
--- ...and put back again (a moment later, at most 3 times) when it drops it by itself right after, still focused
--- (exclusive fullscreen, not yet active to itself); not once another window has the focus
+-- ...and put back again (a moment later, at most 3 times) when it drops it by itself right after (150 ms), still
+-- focused: exclusive fullscreen, not yet active to itself, and known as such. Not a drop later (the Super menu taking
+-- the keyboard: fullscreen again closed it), nor once another window has the focus
 local other_win = { address = "0xow", class = "foot", workspace = ws(11), fullscreen = 0, tags = {} }
-local function drops_after(focused, times)
+-- (the held timers of this timeout run, the others kept)
+local function run_held(timeout)
+    local q, t = HELD_TIMERS, TIMER_SETS
+    HELD_TIMERS, TIMER_SETS = {}, {}
+    for i, fn in ipairs(q) do
+        if t[i] == timeout then fn() else HELD_TIMERS[#HELD_TIMERS + 1], TIMER_SETS[#TIMER_SETS + 1] = fn, t[i] end
+    end
+end
+local function drops_after(focused, times, late)
     game.size, game.workspace, game.address, game.fullscreen = { x = 1920, y = 1080 }, ws(1), "0xdrop" .. tostring(math.random(1e6)), 0
-    WINDOWS, ACTIVE, sent = { game, other_win }, game, {}
+    WINDOWS, ACTIVE, sent, HOLD_TIMERS, HELD_TIMERS, TIMER_SETS = { game, other_win }, game, {}, true, {}, {}
     fire("window.fullscreen", game)
     fire("window.active", game)
     ACTIVE = focused
     local n = 0
     for _ = 1, times do
+        if late then run_held(150) end
         sent = {}
         fire("window.fullscreen", game)
+        run_held(200)
         for _, d in ipairs(sent) do if d[1] == "window.fullscreen" and (d[2] or {}).action == "set" then n = n + 1 end end
     end
-    sent, WINDOWS, ACTIVE = {}, {}, nil
-    return n
+    local exclusive = dots.exclusive_fullscreen[game.address] == true
+    sent, WINDOWS, ACTIVE, HOLD_TIMERS, HELD_TIMERS, TIMER_SETS = {}, {}, nil, false, {}, {}
+    return n .. (exclusive and " exclusive" or "")
 end
-check("a game put back, dropping it again by itself, focused: put back again", drops_after(game, 1), 1)
-check("...dropping it 5 times: put back 3 times", drops_after(game, 5), 3)
-check("...dropping it as another window is focused: left", drops_after(other_win, 1), 0)
+check("a game put back, dropping it again by itself, focused: put back again", drops_after(game, 1), "1 exclusive")
+check("...dropping it 5 times: put back 3 times", drops_after(game, 5), "3 exclusive")
+check("...dropping it 150 ms and more after (the Super menu): left", drops_after(game, 1, true), "0")
+check("...dropping it as another window is focused: left", drops_after(other_win, 1), "0 exclusive")
 -- ...but not once it closed: a new window given its address isn't made fullscreen
 game.address, WINDOWS = "0xreused", { game }
 game.fullscreen = 0
