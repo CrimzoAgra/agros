@@ -1026,6 +1026,21 @@ game.tags = { "game*" }
 check("a game leaving fullscreen while focused: not exclusive", exclusive_after(game), false)
 check("...not tagged", tagged(), false)
 check("a game minimised to a hidden workspace: not exclusive", exclusive_after(other, { id = -98, name = "special:minimised-1" }), false)
+-- ...unmarked once it stays fullscreen without the focus (switched to borderless in its settings); not while it drops
+-- it as an exclusive one does
+local function unmarked_after(full)
+    game.address, game.workspace, game.fullscreen, game.tags = "0xswitch", ws(1), 0, { "game*" }
+    WINDOWS, ACTIVE = { game, other }, other
+    fire("window.fullscreen", game)
+    game.fullscreen, game.workspace = full, ws(-98, "special:minimised-1")
+    fire("window.active", other)
+    local got = dots.exclusive_fullscreen[game.address] == true
+    WINDOWS, ACTIVE, game.fullscreen, game.workspace = {}, nil, 0, ws(1)
+    return (got and "exclusive" or "not") .. " " .. (tagged() and "tagged" or "untagged")
+end
+check("an exclusive game switched to borderless (fullscreen without the focus): unmarked", unmarked_after(2), "not untagged")
+check("...still dropping fullscreen without the focus: stays marked", unmarked_after(0), "exclusive tagged")
+game.tags = { "game*" }
 local beside = { address = "0xbeside", class = "foot", workspace = ws(1), fullscreen = 0, tags = {} }
 check("a game Hyprland took out of fullscreen for a window on its workspace (borderless too): not exclusive", exclusive_after(beside), false)
 -- A notification's click: the app's most recently used window, not one never focused (Hyprland's focus_history_id -1:

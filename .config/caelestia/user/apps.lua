@@ -196,6 +196,24 @@ function dots.mark_exclusive(win)
     hl.dispatch(hl.dsp.window.tag({ tag = "+exclusive_fs", window = "address:" .. win.address }))
 end
 hl.window_rule({ match = { tag = "exclusive_fs" }, rounding = 0, border_size = 0, no_shadow = true })
+-- ...and unmarked once it shows it isn't any more: switched to borderless in its own settings, it stays fullscreen
+-- without the focus (an exclusive one drops it within milliseconds); looked at 300 ms after another window got it
+local function unmark_exclusive(address)
+    dots.exclusive_fullscreen[address] = nil
+    hl.dispatch(hl.dsp.window.tag({ tag = "-exclusive_fs", window = "address:" .. address }))
+end
+hl.on("window.active", function(win)
+    for address in pairs(dots.exclusive_fullscreen) do
+        if not (win and win.address == address) and hl.timer then
+            hl.timer(function()
+                local g, now = hl.get_window("address:" .. address), hl.get_active_window()
+                if g and dots.exclusive_fullscreen[address] and (g.fullscreen or 0) >= 2 and not (now and now.address == address) then
+                    unmark_exclusive(address)
+                end
+            end, { timeout = 300, type = "oneshot" })
+        end
+    end
+end)
 hl.on("window.fullscreen", function(win)
     if not (win and (win.fullscreen or 0) < 2 and win.workspace and (win.workspace.id or 0) > 0 and dots.is_game(win)) then
         return
