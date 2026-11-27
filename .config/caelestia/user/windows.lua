@@ -1108,6 +1108,19 @@ hl.on("window.active", function(win)
     out_of_fullscreen[win.address] = nil
     if back_to_fullscreen(win) then settle(win.address, 3) end
 end)
+-- A game over its screen focused (Alt+Tab, the dock) with the pointer on another screen: the pointer to its middle, as
+-- a fullscreen game on Windows takes it. Floating mode has no warps (no_warps), and the pointer moving on there handed
+-- the focus straight back to the window under it (follow_mouse): the game, unfocused, a window under the shell
+hl.on("window.active", function(win)
+    if not (win and dots.is_game and dots.is_game(win)) then return end
+    local w = by_address(win.address) or win
+    local m, p = w.monitor, hl.get_cursor_pos()
+    if not (p and m and m.x and w.at and w.size and w.workspace and (w.workspace.id or 0) > 0) then return end
+    if not ((w.fullscreen or 0) >= 2 or covers_screen(w)) then return end
+    local mw, mh = screen_size(m)
+    if p.x >= m.x and p.x < m.x + mw and p.y >= m.y and p.y < m.y + mh then return end
+    hl.dispatch(hl.dsp.cursor.move({ x = w.at.x + w.size.x / 2, y = w.at.y + w.size.y / 2 }))
+end)
 -- (and at a config load, the games over their screen out of fullscreen by then: a moment after, once apps.lua, loaded
 -- after this file, has given dots.is_game)
 function dots.games_out_of_fullscreen()

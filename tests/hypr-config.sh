@@ -913,6 +913,23 @@ check("a game put back, dropping it again by itself, focused: put back again", d
 check("...dropping it 5 times: put back 3 times", drops_after(game, 5), "3 exclusive")
 check("...dropping it 150 ms and more after (the Super menu): left", drops_after(game, 1, true), "0")
 check("...dropping it as another window is focused: left", drops_after(other_win, 1), "0 exclusive")
+-- A game over its screen focused with the pointer on another screen: the pointer to its middle; not when it's on the
+-- game's screen already, nor for a game in a window
+local function pointer_on_focus(x, size, full)
+    game.size, game.workspace, game.address, game.fullscreen = size or { x = 1920, y = 1080 }, ws(1), "0xptr", full or 2
+    WINDOWS, sent = { game }, {}
+    local was = hl.get_cursor_pos
+    hl.get_cursor_pos = function() return { x = x, y = 300 } end
+    fire("window.active", game)
+    hl.get_cursor_pos = was
+    local to = "stays"
+    for _, d in ipairs(sent) do if d[1] == "cursor.move" then to = d[2].x .. "," .. d[2].y end end
+    sent, WINDOWS, game.fullscreen = {}, {}, 0
+    return to
+end
+check("a game focused, the pointer on the other screen: to the game's middle", pointer_on_focus(2500), "960.0,540.0")
+check("...the pointer on its screen already: stays", pointer_on_focus(500), "stays")
+check("...a game in a window: stays", pointer_on_focus(2500, { x = 1280, y = 720 }, 0), "stays")
 -- ...but not once it closed: a new window given its address isn't made fullscreen
 game.address, WINDOWS = "0xreused", { game }
 game.fullscreen = 0
