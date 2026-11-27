@@ -114,9 +114,9 @@ The system takes a snapshot before every update (on the btrfs drive AgrOS instal
 up). Snapshots hold the system only: your home folder and its files are never rolled back.
 
 **Usually it fixes itself.** After an update installed at shutdown, the next start is watched. If the computer
-doesn't get to the login screen (it crashes, or the screen never comes up), or the desktop doesn't start once you log
-in, it restarts by itself and tries once more. If that fails too, it starts the snapshot from before the update and
-makes it the system for good, with no one having to do anything. A notification says so once you're logged in, and the
+doesn't get to the login screen (it crashes, or the screen never comes up), it restarts by itself and tries once more.
+If the desktop doesn't start once you log in, a message says so and asks you to restart (it never restarts under your
+open apps). Failing a second time, it starts the snapshot from before the update and makes it the system for good. A notification says so once you're logged in, and the
 system's updates wait 3 days (7 after a second time in a row) so a fix can come out first. A start that freezes without
 crashing needs you to press the reset button once; the rest is the same.
 

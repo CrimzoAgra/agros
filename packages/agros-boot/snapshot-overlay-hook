@@ -7,7 +7,7 @@
 build() {
     add_module btrfs
     add_module overlay
-    map add_binary bash btrfs findmnt mount umount mktemp mkdir rmdir mv date awk sed tr tail cat
+    map add_binary bash btrfs findmnt mount umount mktemp mkdir rmdir mv date awk sed tr tail cat find
     add_file /usr/lib/agros/snapshot-overlay /usr/lib/agros/snapshot-overlay 755
     add_file /usr/lib/agros/snapshot-overlay.service /usr/lib/systemd/system/agros-snapshot-overlay.service 644
     add_symlink /usr/lib/systemd/system/initrd.target.wants/agros-snapshot-overlay.service ../agros-snapshot-overlay.service

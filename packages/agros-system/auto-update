@@ -134,16 +134,17 @@ recover() {
 held() { [[ -e $pacdb/db.lck ]] && lock_holder; }
 each_user=${AGROS_EACH_USER:-/usr/lib/agros/bin/agros-each-user}
 # rollback_hold: an update the boots after it failed on, the system from before it brought back (agros-boot's
-# boot-trial and boot-rollback, which writes rolled-back: "<date> <time> <snapshot> <boot id> <rollbacks in a row>"):
+# boot-trial and boot-rollback, which writes rolled-back: "<date> <time, UTC> <snapshot> <boot id> <rollbacks in a row>"):
 # the system's updates held 3 days after it, 7 after a second in a row (what broke it likely fixed by then), said; the
 # apps' (Flatpaks...) go on. The next update that boots fine takes the note away (boot-trial)
 rollback_hold() {
     local day time snap n until
     read -r day time snap _ n 2>/dev/null <"$au/rolled-back" || return 1
     [[ $n =~ ^[0-9]+$ ]] || n=1
-    until=$(date -d "$day $time $((n > 1 ? 7 : 3)) days" +%s 2>/dev/null) || return 1
+    # (its time UTC: the boot image's)
+    until=$(date -d "$day $time UTC $((n > 1 ? 7 : 3)) days" +%s 2>/dev/null) || return 1
     (($(date +%s) < until)) || return 1
-    echo "the update before $day $time failed to boot, and the system from before it came back ($snap): the system's updates wait until $(date -d "@$until" '+%F %H:%M')"
+    echo "the update before $(date -d "$day $time UTC" '+%F %H:%M') failed to boot, and the system from before it came back ($snap): the system's updates wait until $(date -d "@$until" '+%F %H:%M')"
 }
 # The boot's AUR builds (auto-update-aur: what they are, and how they went)
 aur=$au/aur
@@ -564,7 +565,11 @@ if [[ ${1:-} == --install ]]; then
     result ok
     # The next boots watched (agros-boot's boot-trial): the login screen and the desktop not coming up, the PC restarts,
     # and after a second try the system from the snapshot above comes back by itself
-    [[ ! $pre =~ ^[0-9]+$ || ! -x /usr/lib/agros/boot-trial ]] || /usr/lib/agros/boot-trial arm "/.snapshots/$pre/snapshot" || true
+    # (no snapshot to come back to: an older update's watch cleared, never left to bring back one from before this)
+    if [[ -x /usr/lib/agros/boot-trial ]]; then
+        if [[ $pre =~ ^[0-9]+$ ]]; then /usr/lib/agros/boot-trial arm "/.snapshots/$pre/snapshot" || true
+        else /usr/lib/agros/boot-trial disarm; fi
+    fi
     say "Updates are underway (100%)"
     # (the Qt the shells were rebuilt for, or needed no rebuild for: Updates' update-apps doesn't rebuild them again)
     [[ $target != *qt6-* ]] || /usr/lib/agros/bin/update-kinds --qt-now >"$au/qt-built"

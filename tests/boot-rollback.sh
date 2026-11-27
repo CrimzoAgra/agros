@@ -8,13 +8,14 @@ set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 top=$t/top
 export BOOT_ROLLBACK_TOP=$top BOOT_ROLLBACK_CMDLINE=$t/cmdline
-# btrfs: subvolume snapshot <a> <b> (copied), list -o <path> (the subvolumes listed in $t/subs, as btrfs-progs prints
-# them), delete <path>
-stub btrfs "case \"\$2 \$3\" in
-    'snapshot '*) cp -a \"\$3\" \"\$4\" ;;
-    'list -o') sed 's/^/ID 300 gen 9 top level 256 path /' $t/subs ;;
-    'delete '*) rm -rf \"\$3\" ;;
+# btrfs: subvolume snapshot <a> <b> (copied), show <path> (a subvolume: its path under the root in $t/subs), delete
+# <path>; find: the empty folders btrfs leaves in a snapshot for the root's subvolumes (those in $t/subs the copy has)
+stub btrfs "case \"\$2\" in
+    snapshot) cp -a \"\$3\" \"\$4\" ;;
+    show) grep -qxF \"\${3#$top/@/}\" $t/subs ;;
+    delete) rm -rf \"\$3\" ;;
 esac"
+stub find "while read -r rel; do [[ -d \$1/\$rel ]] && printf '%s\\0' \"\$1/\$rel\"; done <$t/subs"
 export PATH=$t/bin:$PATH
 run() { "$here/packages/agros-boot/boot-rollback"; }
 # A root (@, "new": the update's) with its snapshots and machines, snapshot 5 ("old", with the empty folders a
@@ -23,7 +24,7 @@ fresh() {
     rm -rf "$top"; mkdir -p "$top/@/.snapshots/5/snapshot/.snapshots" "$top/@/.snapshots/5/snapshot/var/lib/machines" \
         "$top/@/var/lib/machines/m1"
     echo new >"$top/@/version"; echo old >"$top/@/.snapshots/5/snapshot/version"
-    printf '%s\n' "@/.snapshots" "@/var/lib/machines" >"$t/subs"
+    printf '%s\n' .snapshots var/lib/machines >"$t/subs"
 }
 echo 'BOOT_IMAGE=/@/.snapshots/5/snapshot/boot/vmlinuz root=UUID=1234 rw rootflags=defaults,subvol=@ agros.rollback=@/.snapshots/5/snapshot' >"$t/cmdline"
 
@@ -48,16 +49,10 @@ run >/dev/null
 # the root as it was
 fresh
 rmdir "$top/@/.snapshots/5/snapshot/.snapshots"
-printf '%s\n' "@/var/lib/machines" "@/.snapshots" >"$t/subs"
+printf '%s\n' var/lib/machines .snapshots >"$t/subs"
 out=$(run)
 [[ $(cat "$top/@/version") == new && -d $top/@/var/lib/machines/m1 && -d $top/@/.snapshots/5 && ! -e $top/@.agros-new ]] &&
     ! compgen -G "$top/@.agros-broken-*" >/dev/null && [[ $out == *"booted as it was"* ]] || fail "a failed rollback not undone: $out"
-
-# btrfs listing paths in a form not understood (the snapshots never found): not swapped
-fresh
-printf '%s\n' "<weird>/.snapshots" >"$t/subs"
-out=$(run)
-[[ $(cat "$top/@/version") == new && ! -e $top/@.agros-new && $out == *"weren't found to move"* ]] || fail "swapped without the snapshots: $out"
 
 # No agros.rollback: nothing done
 fresh

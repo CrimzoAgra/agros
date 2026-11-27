@@ -931,7 +931,7 @@ helper a package update just brought works before `agros-links` has linked it), 
   Left for a person (`agros-check`'s note): changes that overlap, a previous version no longer cached, a `.pacnew` the
   upgrade before left too (a newer one written over it: a merge from the last one would undo that version's changes),
   and the files a bad merge locks you out with (`passwd`, `group`, `shadow`, `gshadow`, `sudoers`, `fstab`,
-  `crypttab`) (`tests/pacnew-merge.sh`)
+  `crypttab`, `nsswitch.conf`, `pam.d/`, `security/`, `sudoers.d/`) (`tests/pacnew-merge.sh`)
 - **`.local/bin/soname-broken`**: `[agros]`'s installed packages that no longer load, to reinstall from `[agros]`: one
   of the libraries their own programs load (ELF `NEEDED`, `readelf`, as `soname-hold` reads them) is gone from the
   system (not in `/usr/lib`, not in the loader's cache, `ldconfig -p`, nor among the package's own files), and
@@ -1467,26 +1467,34 @@ brings each change; nothing to run by hand).
   others stay), the quiet boot's options below that weren't there before AgrOS, the splash and the motherboard's wait
   (where it noted the one before)
 - **`agros-boot`** also: an update that leaves the PC unable to start the desktop undone by itself. The shutdown's
-  install (`auto-update`, after a good install) runs `boot-trial arm` with the snapshot taken before it: GRUB's
-  environment file on the EFI partition (`/EFI/agros/trial.env`: GRUB can't write one on Btrfs) gets a count of 2 and
-  the snapshot's own kernel, boot image and this boot's options with `agros.rollback=<the snapshot's path>`. It isn't
-  armed where GRUB's menu doesn't count (no `01_agros-trial` in it), nor where the snapshot can't boot by itself (a
-  separate `/boot`, or no `boot-rollback` in it). GRUB's `/etc/grub.d/01_agros-trial` takes one off before each boot
-  (2, 1, 0) and at 0 boots the snapshot. A kernel that crashes restarts the PC after 10 s (`panic=10`, beside the quiet
-  boot's options in `boot-video-mode`), so that counts too; a boot that hangs needs the reset button once (CachyOS
-  turns the hardware watchdog off). `agros-boot-trial.service` (`boot-trial watch`) then waits for the login screen
-  (the greeter's Quickshell, 4 min: else it restarts the PC) and stops the count ("greeter"), then for the desktop once
-  someone logs in: Caelestia's shell running for 40 s clears it all; not running 3 min into a session, or 3 sessions
-  ending within 20 s, restarts the PC, and a second such failure sets the count to 0. A count GRUB didn't take one off
-  (its menu made before `01_agros-trial`) is cleared, never acted on, so a failure can't restart the PC for good.
-  `boot-rollback`, in the boot image (the `agros-snapshot-overlay` hook, `agros-boot-rollback.service`, before the
-  root's mounted): a writable copy of the snapshot takes the root subvolume's place, the root's own subvolumes
-  (`/.snapshots`, `/var/lib/machines`...) moved into it, the old root kept as `<root>.agros-broken-<time>`, every step
-  undone if a later one fails. It writes `/var/lib/auto-update/rolled-back`, by which `agros-check` says so (for a
-  week) and `auto-update` holds the system's updates (3 days, 7 after a second in a row; the download the restored
-  system has ready isn't installed). The next update that boots fine takes the note away. agros-boot's upgrade turns
-  the watch on and makes GRUB's menu again once (by `boot-menu`) where it lacks the count (`tests/boot-trial.sh`,
-  `tests/boot-rollback.sh`)
+  install (`auto-update`, after a good install) runs `boot-trial arm` with the snapshot taken before it (none: an older
+  update's watch cleared): GRUB's environment file on the EFI partition (`/EFI/agros/trial.env`: GRUB can't write one
+  on Btrfs) gets a count of 2, the filesystem, the root's and the snapshot's subvolumes, the kernel, its boot images
+  (the CPU's microcode first) and this boot's options. It isn't armed where GRUB's menu doesn't count (no
+  `01_agros-trial` in it), where the login screen isn't AgrOS's (greetd's `caelestia-greeter`: a text login would
+  never pass), nor where the snapshot can't boot by itself (a separate `/boot`, a boot image missing, or none with
+  `boot-rollback` in it: `lsinitcpio`). GRUB's `/etc/grub.d/01_agros-trial` makes the menu's first entry, while it
+  runs, one of its own for the updated system, which takes one off as it boots (2, 1; `agros.trial` on the kernel's
+  line): Windows, a snapshot picked from the menu, the firmware's settings or the PC switched off at the menu aren't
+  counted. At 0 the first entry boots the snapshot's own kernel and boot images with `agros.rollback=<the snapshot's
+  path>`. A kernel that crashes restarts the PC after 10 s (`panic=10`, beside the quiet boot's options in
+  `boot-video-mode`), so that counts too; a boot that hangs needs the reset button once (CachyOS turns the hardware
+  watchdog off). `agros-boot-trial.service` (`boot-trial watch`, after the EFI partition's mount) then, on a counted
+  boot, waits for the login screen (the greeter's Quickshell, 4 min: else it restarts the PC) and stops the count
+  ("greeter"), then watches the desktop once someone logs in: Caelestia's shell running for 40 s clears it all. The
+  desktop failing is counted apart, the first time tried once more, the second setting the count to 0: a session
+  without its shell 3 min in is told (Hyprland's own notification) and never restarted under its apps, the next
+  restart doing it; 3 sessions ending within 20 s (a desktop crashing at login; Hyprland's own children, which carry
+  its name a moment, not counted) restart the PC. A failure GRUB's file can't take clears it instead. `boot-rollback`,
+  in the boot image (the `agros-snapshot-overlay` hook, `agros-boot-rollback.service`, before the root's mounted): a
+  writable copy of the snapshot, the root's own subvolumes (`/.snapshots`, `/var/lib/machines`...: the empty folders
+  btrfs leaves for them in the copy, inode 2) moved into it, swapped with the root in one step (`mv --exchange`; two
+  renames where it can't), the old root kept as `<root>.agros-broken-<time>`, every step undone if a later one fails.
+  It writes `/var/lib/auto-update/rolled-back` (its time UTC: the boot image has no time zone), by which `agros-check`
+  says so (for a week) and `auto-update` holds the system's updates (3 days, 7 after a second in a row; the download
+  the restored system has ready isn't installed). The next update that boots fine takes the note away. agros-boot's
+  upgrade turns the watch on and makes GRUB's menu again once (by `boot-menu`) where it lacks the count
+  (`tests/boot-trial.sh`, `tests/boot-rollback.sh`)
 - **`agros-boot`** also: a snapshot booted from the menu is made writable in RAM (`agros-snapshot-overlay`, a
   systemd boot image's hook, added by `/etc/mkinitcpio.conf.d/91-agros-snapshot-overlay.conf` on a Btrfs root;
   CachyOS's installer rewrites `HOOKS` without grub-btrfs's, which only busybox images run): read-only, the desktop

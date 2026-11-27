@@ -3,6 +3,8 @@
 [Unit]
 Description=Watch the boot after an update
 After=local-fs.target
+# (the EFI partition mounted first, where it's one: "nofail" in fstab orders it after local-fs.target)
+WantsMountsFor=/boot/efi /efi /boot
 ConditionPathExists=|/boot/efi/EFI/agros/trial.env
 ConditionPathExists=|/efi/EFI/agros/trial.env
 ConditionPathExists=|/boot/EFI/agros/trial.env

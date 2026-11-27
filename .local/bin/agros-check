@@ -140,9 +140,10 @@ fi
 # an update the boots after it failed on, the system from before it brought back by itself (agros-boot's boot-trial and
 # boot-rollback: "<date> <time> <snapshot> <boot id> <rollbacks in a row>"): said for the week after it, while the
 # system's updates wait (auto-update: 3 days, 7 after a second in a row); the next update that boots fine takes it away
-if read -r rbday rbat rbsnap _ rbn 2>/dev/null <"$au/rolled-back" && rbs=$(date -d "$rbday $rbat" +%s 2>/dev/null) &&
+# (its time UTC: the boot image's)
+if read -r rbday rbat rbsnap _ rbn 2>/dev/null <"$au/rolled-back" && rbs=$(date -d "$rbday $rbat UTC" +%s 2>/dev/null) &&
     (($(date +%s) - rbs < 7 * 86400)); then
-    problems+=("An update failed to start the desktop, so the system from before it came back by itself ($rbday $rbat, $(plain <<<"$rbsnap")): the system's updates wait $([[ ${rbn:-1} == 1 ]] && echo 3 || echo 7) days, then try again")
+    problems+=("An update failed to start the desktop, so the system from before it came back by itself ($(date -d "@$rbs" '+%F %H:%M'), $(plain <<<"$rbsnap")): the system's updates wait $([[ ${rbn:-1} == 1 ]] && echo 3 || echo 7) days, then try again")
 fi
 # ...and one that couldn't be brought back (boot-trial: "<date> <time>")
 read -r rfday rfat 2>/dev/null <"$au/rollback-failed" &&

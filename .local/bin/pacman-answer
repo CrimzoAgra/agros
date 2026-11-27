@@ -33,6 +33,11 @@ while chunk := os.read(p.stdout.fileno(), 65536):
     m = remove.search(tail)
     answer = b"y" if m and m.group(1).decode(errors="replace") in removable else b""
     tail = b""
+    # (pacman writes an answer it read after its question, but an empty one not even its line's end: written here, so
+    # what it says next starts a line of its own, as with --noconfirm)
+    if not answer:
+        out.write(b"\n")
+        out.flush()
     try:
         p.stdin.write(answer + b"\n")
         p.stdin.flush()

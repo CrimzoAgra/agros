@@ -2,37 +2,51 @@
 # GRUB's menu script /etc/grub.d/01_agros-trial (agros-boot): the boots after an update installed at shutdown counted,
 # and the system from before it booted once they've failed. The count is in a GRUB environment file on the EFI partition
 # (FAT: GRUB can't write one on Btrfs), /EFI/agros/trial.env, which boot-trial arms after the install ("agros_trial=2",
-# with the snapshot's kernel, boot image, filesystem and options) and clears once the desktop has come up. Each boot
-# takes one off before it starts: 2, 1, then 0, which boots the snapshot's own kernel and boot image with
-# agros.rollback=<snapshot> (boot-rollback, in the boot image: the snapshot made the system, before it's mounted).
-# "greeter": the login screen came up, its count kept off (boot-trial watches the desktop). Anything amiss (no file,
-# a value it doesn't know, the snapshot's kernel gone) and it boots as it would without this
+# with the filesystem, the root's and the snapshot's subvolumes, the kernel, its boot images and this boot's options)
+# and clears once the desktop has come up. While it runs, the menu's first entry (the one booted) is the updated system
+# through an entry of its own, which takes one off as it boots (2, then 1; agros.trial on the kernel's line): a boot of
+# Windows, of a snapshot from the menu or of the firmware's settings, or the PC switched off at the menu, isn't counted. At 0 the first entry is the
+# snapshot's own kernel and boot images with agros.rollback=<snapshot> (boot-rollback, in the boot image: the snapshot
+# made the system before it's mounted), the count "rollback" as it boots. "greeter": the login screen came up, its count
+# kept off (boot-trial watches the desktop). Anything amiss (no file, a value it doesn't know, a kernel gone) and it
+# boots as it would without this; at 0 with the snapshot gone, the count "rollback" all the same (boot-trial says so and
+# clears it), never left to restart the PC for good
 cat <<'EOF'
+function agros_boot {
+    set agros_images=""
+    for agros_f in $agros_initrds; do set agros_images="$agros_images /$1/boot/$agros_f"; done
+    set root=$agros_dev
+    linux /$1/boot/$agros_kernel $agros_args $2
+    initrd $agros_images
+}
 if search --no-floppy --file --set=agros_esp /EFI/agros/trial.env; then
     set agros_env=($agros_esp)/EFI/agros/trial.env
-    load_env --file $agros_env agros_trial agros_uuid agros_linux agros_initrd agros_args
-    if [ "$agros_trial" = 2 ]; then
-        set agros_trial=1
-        save_env --file $agros_env agros_trial
-    elif [ "$agros_trial" = 1 ]; then
-        set agros_trial=0
-        save_env --file $agros_env agros_trial
-    elif [ "$agros_trial" = 0 ]; then
-        # (the last state either way: a snapshot gone meanwhile can't be booted, and boot-trial says so and clears it,
-        # rather than the PC restarting for good)
-        set agros_trial=rollback
-        save_env --file $agros_env agros_trial
-        if search --no-floppy --fs-uuid --set=agros_root $agros_uuid; then
-            if [ -f ($agros_root)$agros_linux ]; then
-                if [ -f ($agros_root)$agros_initrd ]; then
-                    export agros_root agros_linux agros_initrd agros_args
-                    menuentry 'AgrOS: the system from before the update' --id agros-rollback {
-                        set root=$agros_root
-                        linux $agros_linux $agros_args
-                        initrd $agros_initrd
-                    }
-                    set default=agros-rollback
-                fi
+    load_env --file $agros_env agros_trial agros_uuid agros_root agros_snap agros_kernel agros_initrds agros_args
+    set agros_next=""
+    if [ "$agros_trial" = 2 ]; then set agros_next=1; fi
+    if [ "$agros_trial" = 1 ]; then set agros_next=0; fi
+    if search --no-floppy --fs-uuid --set=agros_dev $agros_uuid; then
+        export agros_env agros_dev agros_kernel agros_initrds agros_args agros_root agros_snap agros_next
+        if [ -n "$agros_next" ]; then
+            if [ -f ($agros_dev)/$agros_root/boot/$agros_kernel ]; then
+                menuentry 'AgrOS' --id agros-trial {
+                    set agros_trial=$agros_next
+                    save_env --file $agros_env agros_trial
+                    agros_boot $agros_root agros.trial
+                }
+                set default=agros-trial
+            fi
+        elif [ "$agros_trial" = 0 ]; then
+            if [ -f ($agros_dev)/$agros_snap/boot/$agros_kernel ]; then
+                menuentry 'AgrOS: the system from before the update' --id agros-rollback {
+                    set agros_trial=rollback
+                    save_env --file $agros_env agros_trial
+                    agros_boot $agros_snap "agros.rollback=$agros_snap"
+                }
+                set default=agros-rollback
+            else
+                set agros_trial=rollback
+                save_env --file $agros_env agros_trial
             fi
         fi
     fi

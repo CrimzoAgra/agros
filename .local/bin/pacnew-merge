@@ -9,7 +9,7 @@
 # replaced, pacman's log). Left for a person (agros-check says so): a merge whose changes overlap, a previous version no
 # longer in the cache, a .pacnew left by the upgrade before too (a newer one written over it: that version's changes
 # never merged, and a merge from the last one would undo them), and the files a bad merge locks you out with (accounts,
-# sudo, the disks mounted at boot). Run as root by the shutdown's install (auto-update), every time
+# logging in, sudo, the disks mounted at boot). Run as root by the shutdown's install (auto-update), every time
 #   pacnew-merge   prints what it did, a line each
 # (AGROS_ETC, as agros-check, PACMAN_LOG, PACMAN_CACHE, PACNEW_BACKUP: the tests' folders and files)
 set -uo pipefail
@@ -17,7 +17,7 @@ etc=${AGROS_ETC:-/etc}
 log=${PACMAN_LOG:-$(pacman-conf LogFile 2>/dev/null || echo /var/log/pacman.log)}
 mapfile -t caches < <(if [[ -n ${PACMAN_CACHE:-} ]]; then echo "$PACMAN_CACHE"; else pacman-conf CacheDir 2>/dev/null; fi)
 backup=${PACNEW_BACKUP:-/var/lib/auto-update/etc-before-merge}
-keep='^/etc/(passwd|group|shadow|gshadow|sudoers|fstab|crypttab)$'
+keep='^/etc/((passwd|group|shadow|gshadow|sudoers|fstab|crypttab|nsswitch\.conf)$|(pam\.d|security|sudoers\.d)/)'
 
 # history <pkg> <file>: the package's installs and upgrades in pacman's log, oldest first, "<old> <new> <pacnew>" each
 # (<old> "-" for an install; <pacnew> 1 where it left <file>.pacnew: pacman logs that warning just before the package)

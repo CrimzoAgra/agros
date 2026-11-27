@@ -3,10 +3,10 @@
 # agros-snapshot-overlay), the snapshot GRUB booted for a failed update (01_agros-trial, agros.rollback=<its path from
 # the filesystem's top>) made the system: a writable copy of it in place of the root subvolume (rootflags' subvol=, e.g.
 # @), the root's own subvolumes (/.snapshots, /var/lib/machines...: a snapshot leaves an empty folder for each) moved
-# into it, the root kept beside as <root>.agros-broken-<time>. Then the boot goes on
-# into it. Each step undone if a later one fails: the root as it was, booted as it was. What it did written in the new
-# root's /var/lib/auto-update/rolled-back ("<date> <time> <snapshot> <boot id> <rollbacks in a row>"), for boot-trial
-# and agros-check, and the update's hold (auto-update)
+# into it, the root kept beside as <root>.agros-broken-<time>. Then the boot goes on into it. Each step undone if a
+# later one fails: the root as it was, booted as it was. What it did written in the new root's
+# /var/lib/auto-update/rolled-back ("<date> <time> <snapshot> <boot id> <rollbacks in a row>", UTC: the boot image has
+# no time zone), for boot-trial and agros-check, and the update's hold (auto-update)
 # (BOOT_ROLLBACK_CMDLINE, BOOT_ROLLBACK_TOP: the tests', the filesystem's top already there, nothing mounted)
 cmdline=$(cat "${BOOT_ROLLBACK_CMDLINE:-/proc/cmdline}")
 word() { tr ' ' '\n' <<<"$cmdline" | sed -n "s/^$1=//p" | tail -1; }
@@ -39,27 +39,29 @@ undo() {
     say "$1: booted as it was"
     exit 0
 }
-# The root's own subvolumes (the direct ones: btrfs-progs' path from the top, "<FS_TREE>/" before it in some versions;
-# one with a space in its path can't be told apart: Snapper and systemd make none)
-while read -r sub; do
-    sub=${sub#"<FS_TREE>/"} rel=${sub#"$root"/}
-    [[ $rel != "$sub" && -n $rel ]] || continue
-    # (the snapshot's empty folder for it; none, or not empty: left in the old root, but /.snapshots must come)
-    if [[ -d $new/$rel ]] && rmdir "$new/$rel" 2>/dev/null; then
-        mv "$top/$root/$rel" "$new/$rel" || undo "$rel couldn't be moved"
-        moved+=("$rel")
-    elif [[ $rel == .snapshots ]]; then
-        undo "the snapshots couldn't be moved"
-    fi
-done < <(btrfs subvolume list -o "$top/$root" 2>/dev/null | awk '{print $NF}')
-# (the snapshots still in the root, never listed: btrfs-progs printing its paths otherwise. Not swapped without them)
-[[ " ${moved[*]} " == *" .snapshots "* || ! -d $top/$root/.snapshots ]] || undo "the snapshots weren't found to move"
-mv "$top/$root" "$broken" || undo "the root couldn't be moved aside"
-mv "$new" "$top/$root" || { mv "$broken" "$top/$root"; undo "the snapshot couldn't take the root's place"; }
+# The root's own subvolumes (/.snapshots, /var/lib/machines...): in the copy each is an empty folder of btrfs's own
+# (inode 2), put in its place where the root has it as a subvolume
+while IFS= read -r -d '' ph; do
+    rel=${ph#"$new"/}
+    btrfs subvolume show "$top/$root/$rel" >/dev/null 2>&1 || continue
+    rmdir "$ph" && mv "$top/$root/$rel" "$ph" || undo "$rel couldn't be moved"
+    moved+=("$rel")
+done < <(find "$new" -mindepth 1 -type d -inum 2 -empty -print0 2>/dev/null)
+# (the snapshots still in the root, never found: not swapped without them)
+[[ " ${moved[*]} " == *" .snapshots "* ]] || ! btrfs subvolume show "$top/$root/.snapshots" >/dev/null 2>&1 ||
+    undo "the snapshots weren't found to move"
+# The two swapped in one step (no moment without a root), the update's then renamed aside; two renames where the
+# filesystem can't exchange them
+if mv --exchange "$new" "$top/$root" 2>/dev/null; then
+    mv "$new" "$broken" || broken=$new
+else
+    mv "$top/$root" "$broken" || undo "the root couldn't be moved aside"
+    mv "$new" "$top/$root" || { mv "$broken" "$top/$root"; undo "the snapshot couldn't take the root's place"; }
+fi
 au=$top/$root/var/lib/auto-update
 mkdir -p "$au"
 # (one brought back before, the update after it never confirmed: the snapshot's own note, counted on)
 count=$(awk '{print $5}' "$au/rolled-back" 2>/dev/null)
-echo "$(date '+%F %H:%M') $snap $(cat /proc/sys/kernel/random/boot_id) $((${count:-0} + 1))" >"$au/rolled-back"
+echo "$(date -u '+%F %H:%M') $snap $(cat /proc/sys/kernel/random/boot_id) $((${count:-0} + 1))" >"$au/rolled-back"
 say "$snap is the system now; the root before it kept as ${broken#"$top"/}"
 exit 0
