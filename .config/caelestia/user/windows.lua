@@ -1094,11 +1094,14 @@ hl.on("window.fullscreen", function(win)
     local s, active = settling[win.address], hl.get_active_window()
     if not (s and s.left > 0 and active and active.address == win.address and hl.timer) then return end
     settling[win.address] = nil
-    if dots.mark_exclusive then dots.mark_exclusive(win) end
+    -- (exclusive only if it's still out of fullscreen then, on its own workspace: Hyprland itself takes a fullscreen
+    -- window out of it and back as it moves it, minimised by Alt+Tab or brought back, and a borderless game was taken
+    -- for one in exclusive fullscreen)
     hl.timer(function()
         local w, now = by_address(win.address), hl.get_active_window()
         if w and out_of_fullscreen[w.address] and now and now.address == w.address and back_to_fullscreen(w) then
             out_of_fullscreen[w.address] = nil
+            if dots.mark_exclusive then dots.mark_exclusive(w) end
             settle(w.address, s.left - 1)
         end
     end, { timeout = 200, type = "oneshot" })

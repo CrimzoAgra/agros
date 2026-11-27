@@ -924,6 +924,25 @@ check("...dropping it 150 ms and more after (the Super menu): left", drops_after
 check("a game focused still fullscreen, dropping it by itself right after: put back", drops_after(game, 1, false, true), "1 exclusive")
 check("...dropping it 150 ms and more after (the Super menu): left", drops_after(game, 1, true, true), "0")
 check("...dropping it as another window is focused: left", drops_after(other_win, 1), "0 exclusive")
+-- ...nor one Hyprland itself took out of fullscreen and back as it moved it (minimised, brought back): no longer out of
+-- fullscreen a moment later, so left, and not taken for exclusive (a borderless game was)
+local function moved_by_hyprland()
+    game.size, game.workspace, game.address, game.fullscreen = { x = 1920, y = 1080 }, ws(1), "0xmoved" .. tostring(math.random(1e6)), 2
+    WINDOWS, ACTIVE, sent, HOLD_TIMERS, HELD_TIMERS, TIMER_SETS = { game }, game, {}, true, {}, {}
+    fire("window.active", game)
+    game.fullscreen = 0
+    fire("window.fullscreen", game)
+    game.fullscreen, game.workspace = 2, ws(-98, "special:minimised-1")
+    fire("window.fullscreen", game)
+    sent = {}
+    run_held(200)
+    local n = 0
+    for _, d in ipairs(sent) do if d[1] == "window.fullscreen" and (d[2] or {}).action == "set" then n = n + 1 end end
+    local exclusive = dots.exclusive_fullscreen[game.address] == true
+    sent, WINDOWS, ACTIVE, HOLD_TIMERS, HELD_TIMERS, TIMER_SETS, game.fullscreen = {}, {}, nil, false, {}, {}, 0
+    return n .. (exclusive and " exclusive" or "")
+end
+check("a game moved by Hyprland right after focus (minimised): left, not exclusive", moved_by_hyprland(), "0")
 -- A game in exclusive fullscreen over its screen focused with the pointer on another screen: the pointer to its middle;
 -- not when it's on the game's screen already, nor for a game in a window, nor a borderless one
 local function pointer_on_focus(x, size, full, borderless)
@@ -987,6 +1006,8 @@ game.tags = { "game*" }
 check("a game leaving fullscreen while focused: not exclusive", exclusive_after(game), false)
 check("...not tagged", tagged(), false)
 check("a game minimised to a hidden workspace: not exclusive", exclusive_after(other, { id = -98, name = "special:minimised-1" }), false)
+local beside = { address = "0xbeside", class = "foot", workspace = ws(1), fullscreen = 0, tags = {} }
+check("a game Hyprland took out of fullscreen for a window on its workspace (borderless too): not exclusive", exclusive_after(beside), false)
 -- A notification's click: the app's most recently used window, not one never focused (Hyprland's focus_history_id -1:
 -- a launcher minimised as it opened), which came first
 local function app_win(address, history)

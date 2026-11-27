@@ -200,9 +200,23 @@ hl.on("window.fullscreen", function(win)
     if not (win and (win.fullscreen or 0) < 2 and win.workspace and (win.workspace.id or 0) > 0 and dots.is_game(win)) then
         return
     end
+    -- (focus on another workspace, the other screen's: Hyprland takes a game out of fullscreen itself for a window on
+    -- its own workspace, which a borderless one is too)
     local active = hl.get_active_window()
-    if not active or active.address ~= win.address then dots.mark_exclusive(win) end
+    if not active or active.address ~= win.address and not (active.workspace and active.workspace.id == win.workspace.id) then
+        dots.mark_exclusive(win)
+    end
 end)
+-- (marks from before a config load cleared: the list above starts empty again)
+if not dots.verifying then
+    for _, w in ipairs(hl.get_windows() or {}) do
+        for _, t in ipairs(w.tags or {}) do
+            if t:gsub("%*$", "") == "exclusive_fs" then
+                hl.dispatch(hl.dsp.window.tag({ tag = "-exclusive_fs", window = "address:" .. w.address }))
+            end
+        end
+    end
+end
 hl.on("window.close", function(win) if win then dots.exclusive_fullscreen[win.address] = nil end end)
 -- A game's splash screen (its first window, small: Batman: Arkham Knight's logo) shown alone: the game's other windows
 -- opening meanwhile (its main window, still white while it loads) kept out of sight, on a hidden workspace, until the
