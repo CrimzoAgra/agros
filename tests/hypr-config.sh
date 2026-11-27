@@ -904,6 +904,20 @@ end
 check("a game going fullscreen: focused", focused_on_fullscreen(), true)
 check("the same game fullscreen again: not focused again", focused_on_fullscreen(), false)
 WINDOWS = {}
+-- A game leaving fullscreen while another window has the focus: in exclusive fullscreen (crossing.lua keeps the
+-- pointer in it); one leaving it while focused (its own settings), or minimised to a hidden workspace, isn't
+local other = { address = "0xother", class = "foot", workspace = ws(11), fullscreen = 0, tags = {} }
+local function exclusive_after(focused, workspace)
+    game.address, game.workspace, game.fullscreen = "0xex" .. tostring(math.random(1e6)), workspace or ws(1), 0
+    WINDOWS, ACTIVE = { game, other }, focused
+    fire("window.fullscreen", game)
+    local got = dots.exclusive_fullscreen[game.address] == true
+    WINDOWS, ACTIVE = {}, nil
+    return got
+end
+check("a game leaving fullscreen as another window is focused: exclusive", exclusive_after(other), true)
+check("a game leaving fullscreen while focused: not exclusive", exclusive_after(game), false)
+check("a game minimised to a hidden workspace: not exclusive", exclusive_after(other, { id = -98, name = "special:minimised-1" }), false)
 -- A notification's click: the app's most recently used window, not one never focused (Hyprland's focus_history_id -1:
 -- a launcher minimised as it opened), which came first
 local function app_win(address, history)

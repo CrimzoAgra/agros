@@ -181,6 +181,19 @@ hl.on("window.fullscreen", function(win)
     focus_game(win)
 end)
 hl.on("window.close", function(win) if win then went_fullscreen[win.address] = nil end end)
+-- A game in exclusive fullscreen: it leaves fullscreen the moment it loses the focus, and stops drawing until it has it
+-- back (on Windows too). Windows keeps the pointer on such a game's screen; crossing.lua does the same for it (Alt+Tab
+-- and Super still leave it), not taking the focus to the other screen as for any other game. Known by that: leaving
+-- fullscreen while another window has the focus, on its own workspace (not minimised to a hidden one)
+dots.exclusive_fullscreen = {}
+hl.on("window.fullscreen", function(win)
+    if not (win and (win.fullscreen or 0) < 2 and win.workspace and (win.workspace.id or 0) > 0 and dots.is_game(win)) then
+        return
+    end
+    local active = hl.get_active_window()
+    if not active or active.address ~= win.address then dots.exclusive_fullscreen[win.address] = true end
+end)
+hl.on("window.close", function(win) if win then dots.exclusive_fullscreen[win.address] = nil end end)
 -- A game's splash screen (its first window, small: Batman: Arkham Knight's logo) shown alone: the game's other windows
 -- opening meanwhile (its main window, still white while it loads) kept out of sight, on a hidden workspace, until the
 -- splash closes, then shown where it was. At most 30 s (a small first window that isn't a splash never hides the game

@@ -4,7 +4,8 @@
 -- other screen (past its end), the pointer stays on its own, held at the edge, not thrown onto the other's nearest
 -- corner. A screen with no size in its EDID (a VM's, a projector): the edges matched end to end instead (top corner to
 -- top corner, bottom to bottom). Out of a
--- fullscreen game too, its pointer pushed into the edge, the focus taken to the other screen with it (the game keeps
+-- fullscreen game too (not one in exclusive fullscreen, apps.lua: it stops drawing without the focus, and Windows keeps
+-- the pointer in it), its pointer pushed into the edge, the focus taken to the other screen with it (the game keeps
 -- the pointer in its window while it has it); one it holds still for aiming doesn't move, and one it puts back in the
 -- middle after each move (older games) jumps a quarter of the screen and more at once: left alone. Nothing with one
 -- screen. Hyprland has no pointer-motion event: its position read every 8 ms here, in Hyprland itself (no IPC), nothing
@@ -162,7 +163,8 @@ local function tick()
     if not out then return end
     local w = hl.get_active_window()
     if w and w.fullscreen and w.fullscreen ~= 0 then
-        if jump > 1 then return end
+        -- (a game in exclusive fullscreen keeps it, as on Windows: losing the focus it stops drawing; apps.lua)
+        if jump > 1 or (dots.exclusive_fullscreen or {})[w.address] then return end
         -- (a game keeps the pointer inside its window while it has the focus, and Hyprland put it straight back: the
         -- focus to the other screen first)
         local to = box_at(out)
