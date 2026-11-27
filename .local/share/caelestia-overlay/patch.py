@@ -2542,24 +2542,16 @@ def power_menu():
         property bool accent
         property bool updates
 
-        StyledRect {
+        // (drawn as its own icon is: filled, in the button's colour, smaller, in its corner)
+        MaterialIcon {
             visible: button.updates
             anchors.top: parent.top
             anchors.right: parent.right
-            anchors.margins: Tokens.padding.small
-            implicitWidth: mark.implicitHeight + Tokens.padding.small
-            implicitHeight: implicitWidth
-            radius: Tokens.rounding.full
-            color: Colours.palette.m3primary
-
-            MaterialIcon {
-                id: mark
-
-                anchors.centerIn: parent
-                text: "download"
-                color: Colours.palette.m3onPrimary
-                fontStyle: Tokens.font.icon.builders.large.scale(0.55).build()
-            }
+            anchors.margins: Tokens.padding.medium
+            text: "download"
+            color: button.onColour
+            fill: button.label.fill
+            fontStyle: Tokens.font.icon.builders.large.scale(0.6).build()
         }
 """, "the session buttons' update mark")
     m = swap(m, "    spacing: Tokens.spacing.large\n", """    spacing: Tokens.spacing.large
@@ -3248,6 +3240,34 @@ def split_windows():
         raise LookupError(f"the drawers files changed since drawers/ was made from them (now {inputs})")
     out = {f"modules/drawers/{n}": own(f"drawers/{n}") for n in sorted(os.listdir(os.path.join(here, "drawers")))
            if n.endswith(".qml")}
+    # The lock above every menu: as it locks, the Super and power menus close, and no screen's shell holds a focus grab
+    # while it's locked (Drawers.qml's, by AgrosLock.locked). Choosing Sleep left the power menu open behind the lock,
+    # its grab taken up again once the shell redrew after waking, and Hyprland gave the keyboard to nothing outside it:
+    # typing on the lock screen went nowhere until a click
+    out |= components("services/AgrosLock.qml")
+    lock = swap(read("modules/lock/Lock.qml"), "import qs.components.misc\n", "import qs.components.misc\nimport qs.services\n",
+                "the lock's imports")
+    out["modules/lock/Lock.qml"] = swap(lock, """        id: lock
+
+        signal unlock
+""", """        id: lock
+
+        signal unlock
+
+        // caelestia-overlay (split_windows): said to the shell; the Super and power menus closed as it locks
+        onLockedChanged: {
+            AgrosLock.locked = locked;
+            if (!locked)
+                return;
+            for (const s of Quickshell.screens) {
+                const state = ShellState.forScreen(s);
+                if (state) {
+                    state.launcher = false;
+                    state.session = false;
+                }
+            }
+        }
+""", "the lock's state")
     # The notification sidebar and the utilities panel where PanelsLeft.qml and a mirrored PanelsRight.qml put them:
     # each keeps the larger spacing on its inner sides and the smaller (the border makes up the rest) on the screen's
     # edges, wherever those are (Caelestia's margins are for the right edge, and the top or bottom one; mirroring moves

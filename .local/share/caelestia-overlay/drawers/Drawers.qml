@@ -777,7 +777,8 @@ Variants {
             active: {
                 const s = scope.screenState;
                 const conf = scope.config;
-                if (!conf || !shared.popouts)
+                // (none while the session's locked: the lock screen takes the keyboard, AgrosLock.locked)
+                if (!conf || !shared.popouts || AgrosLock.locked)
                     return false;
                 if ((s.launcher && conf.launcher.enabled) || (s.session && conf.session.enabled))
                     return true;
