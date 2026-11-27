@@ -2581,11 +2581,11 @@ def power_menu():
             visible: button.updates
             x: button.width - button.notch * 0.4 - width / 2
             y: button.notch * 0.4 - height / 2
-            scale: button.notch * 0.72 / Math.max(1, implicitHeight)
             text: "download"
             color: Colours.palette.m3onSurface
             fill: 1
-            fontStyle: Tokens.font.icon.builders.large.build()
+            // (its glyph 0.72 of the cut's radius: a font's pixels, its points at 96 dpi)
+            fontStyle: Qt.font({ pointSize: button.notch * 0.72 * 0.75 })
         }
 """, "the session buttons' update notch")
     m = swap(m, "    spacing: Tokens.spacing.large\n", """    spacing: Tokens.spacing.large
@@ -2631,7 +2631,7 @@ def power_menu():
     // other three corners round (cornerRadius), that one an inverted curve (notch, its radius) centred on the corner,
     // and its two ends rounded too (fillet), each meeting the edge it starts from
     component NotchShape: Shape {
-        id: notch
+        id: outline
 
         property color fill
         property real cornerRadius
@@ -2644,21 +2644,21 @@ def power_menu():
         preferredRendererType: Shape.CurveRenderer
 
         ShapePath {
-            fillColor: notch.fill
+            fillColor: outline.fill
             strokeColor: "transparent"
-            startX: notch.cornerRadius
+            startX: outline.cornerRadius
             startY: 0
 
-            PathLine { x: notch.width - notch.along; y: 0 }
-            PathArc { x: notch.width - notch.along * notch.k; y: notch.fillet * notch.k; radiusX: notch.fillet; radiusY: notch.fillet }
-            PathArc { x: notch.width - notch.fillet * notch.k; y: notch.along * notch.k; radiusX: notch.notch; radiusY: notch.notch; direction: PathArc.Counterclockwise }
-            PathArc { x: notch.width; y: notch.along; radiusX: notch.fillet; radiusY: notch.fillet }
-            PathLine { x: notch.width; y: notch.height - notch.cornerRadius }
-            PathArc { x: notch.width - notch.cornerRadius; y: notch.height; radiusX: notch.cornerRadius; radiusY: notch.cornerRadius }
-            PathLine { x: notch.cornerRadius; y: notch.height }
-            PathArc { x: 0; y: notch.height - notch.cornerRadius; radiusX: notch.cornerRadius; radiusY: notch.cornerRadius }
-            PathLine { x: 0; y: notch.cornerRadius }
-            PathArc { x: notch.cornerRadius; y: 0; radiusX: notch.cornerRadius; radiusY: notch.cornerRadius }
+            PathLine { x: outline.width - outline.along; y: 0 }
+            PathArc { x: outline.width - outline.along * outline.k; y: outline.fillet * outline.k; radiusX: outline.fillet; radiusY: outline.fillet }
+            PathArc { x: outline.width - outline.fillet * outline.k; y: outline.along * outline.k; radiusX: outline.notch; radiusY: outline.notch; direction: PathArc.Counterclockwise }
+            PathArc { x: outline.width; y: outline.along; radiusX: outline.fillet; radiusY: outline.fillet }
+            PathLine { x: outline.width; y: outline.height - outline.cornerRadius }
+            PathArc { x: outline.width - outline.cornerRadius; y: outline.height; radiusX: outline.cornerRadius; radiusY: outline.cornerRadius }
+            PathLine { x: outline.cornerRadius; y: outline.height }
+            PathArc { x: 0; y: outline.height - outline.cornerRadius; radiusX: outline.cornerRadius; radiusY: outline.cornerRadius }
+            PathLine { x: 0; y: outline.cornerRadius }
+            PathArc { x: outline.cornerRadius; y: 0; radiusX: outline.cornerRadius; radiusY: outline.cornerRadius }
         }
     }
 
