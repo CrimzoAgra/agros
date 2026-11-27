@@ -2542,23 +2542,70 @@ def power_menu():
         property bool accent
         property bool updates
 
-        // (drawn as its own icon is: filled, in the button's colour, smaller, in its corner)
+        // (with an update waiting, its top right corner cut away in an inverted curve and the update's mark in that
+        // space, filled like its icon: its colour and its hover and press layer go through the cut, its icons don't)
+        readonly property color fillColour: disabled ? disabledColour : internalChecked ? activeColour : inactiveColour
+
+        color: updates ? "transparent" : fillColour
+        stateLayer.layer.enabled: updates
+        stateLayer.layer.effect: MultiEffect {
+            maskEnabled: true
+            maskInverted: true
+            maskSource: notchMask
+            maskThresholdMin: 0.5
+            maskSpreadAtMin: 1
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            z: -1
+            visible: button.updates
+            radius: button.radius
+            color: button.fillColour
+            layer.enabled: true
+            layer.effect: MultiEffect {
+                maskEnabled: true
+                maskInverted: true
+                maskSource: notchMask
+                maskThresholdMin: 0.5
+                maskSpreadAtMin: 1
+            }
+        }
+
+        Item {
+            id: notchMask
+
+            anchors.fill: parent
+            layer.enabled: true
+            visible: false
+
+            Rectangle {
+                x: parent.width - root.notchInset - width / 2
+                y: root.notchInset - height / 2
+                width: root.notchRadius * 2
+                height: width
+                radius: width / 2
+            }
+        }
+
         MaterialIcon {
             visible: button.updates
-            anchors.top: parent.top
-            anchors.right: parent.right
-            anchors.margins: Tokens.padding.medium
+            x: button.width - root.notchInset - width / 2
+            y: root.notchInset - height / 2
             text: "download"
-            color: button.onColour
-            fill: button.label.fill
-            fontStyle: Tokens.font.icon.builders.large.scale(0.6).build()
+            color: Colours.palette.m3onSurface
+            fill: 1
+            fontStyle: markSize.fontStyle
         }
-""", "the session buttons' update mark")
+""", "the session buttons' update notch")
     m = swap(m, "    spacing: Tokens.spacing.large\n", """    spacing: Tokens.spacing.large
 
     // caelestia-overlay: an update the boot downloaded waits to install at the next restart or shut down (auto-update's
     // count, or its firmware's list): looked at again every half minute (the file comes only once the download's done)
     property bool updateReady: packagesReady || firmwareReady
+    // (its mark: the size of the corner cut from Restart and Shut down for it, and where in it the mark sits)
+    readonly property real notchRadius: markSize.implicitHeight / 2 + Tokens.padding.small
+    readonly property real notchInset: markSize.implicitHeight * 0.3
     property bool packagesReady
     property bool firmwareReady
 
@@ -2590,8 +2637,17 @@ def power_menu():
             firmwareFile.reload();
         }
     }
+
+    MaterialIcon {
+        id: markSize
+
+        visible: false
+        text: "download"
+        fontStyle: Tokens.font.icon.builders.large.scale(0.6).build()
+    }
 """, "the session menu's update state")
     m = insert(m, "import Quickshell\n", "import Quickshell.Io\n", before=False)
+    m = insert(m, "import QtQuick\n", "import QtQuick.Effects\n", before=False)
     return {menu: m}
 
 
