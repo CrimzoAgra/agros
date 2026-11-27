@@ -879,6 +879,27 @@ local function back_maximised()
     return full
 end
 check("a game out of fullscreen to maximised, gone back to: fullscreen again", back_maximised(), true)
+-- ...and put back again (a moment later, at most 3 times) when it drops it by itself right after, still focused
+-- (exclusive fullscreen, not yet active to itself); not once another window has the focus
+local other_win = { address = "0xow", class = "foot", workspace = ws(11), fullscreen = 0, tags = {} }
+local function drops_after(focused, times)
+    game.size, game.workspace, game.address, game.fullscreen = { x = 1920, y = 1080 }, ws(1), "0xdrop" .. tostring(math.random(1e6)), 0
+    WINDOWS, ACTIVE, sent = { game, other_win }, game, {}
+    fire("window.fullscreen", game)
+    fire("window.active", game)
+    ACTIVE = focused
+    local n = 0
+    for _ = 1, times do
+        sent = {}
+        fire("window.fullscreen", game)
+        for _, d in ipairs(sent) do if d[1] == "window.fullscreen" and (d[2] or {}).action == "set" then n = n + 1 end end
+    end
+    sent, WINDOWS, ACTIVE = {}, {}, nil
+    return n
+end
+check("a game put back, dropping it again by itself, focused: put back again", drops_after(game, 1), 1)
+check("...dropping it 5 times: put back 3 times", drops_after(game, 5), 3)
+check("...dropping it as another window is focused: left", drops_after(other_win, 1), 0)
 -- ...but not once it closed: a new window given its address isn't made fullscreen
 game.address, WINDOWS = "0xreused", { game }
 game.fullscreen = 0

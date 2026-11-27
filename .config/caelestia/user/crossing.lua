@@ -162,9 +162,14 @@ local function tick()
     last = { x = p.x, y = p.y }
     if not out then return end
     local w = hl.get_active_window()
+    -- (a game in exclusive fullscreen keeps it, as on Windows: losing the focus it stops drawing; apps.lua. Out of
+    -- fullscreen for a moment too, still over its whole screen: it drops it as it gets the focus back)
+    if w and (dots.exclusive_fullscreen or {})[w.address] and w.size and was
+        and ((w.fullscreen or 0) ~= 0 or w.size.x >= was.w - 1 and w.size.y >= was.h - 1) then
+        return
+    end
     if w and w.fullscreen and w.fullscreen ~= 0 then
-        -- (a game in exclusive fullscreen keeps it, as on Windows: losing the focus it stops drawing; apps.lua)
-        if jump > 1 or (dots.exclusive_fullscreen or {})[w.address] then return end
+        if jump > 1 then return end
         -- (a game keeps the pointer inside its window while it has the focus, and Hyprland put it straight back: the
         -- focus to the other screen first)
         local to = box_at(out)

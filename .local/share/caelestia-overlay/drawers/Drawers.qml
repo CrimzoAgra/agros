@@ -823,9 +823,13 @@ Variants {
             }
         }
 
-        // A window going fullscreen closes what's open; the whole shell hidden closes what was opened from the Super menu
+        // A window going fullscreen closes what's open; the whole shell hidden closes what was opened from the Super menu.
+        // Not one leaving it: a game in exclusive fullscreen leaves it as the Super menu takes the keyboard, which closed
+        // the menu at once (it's fullscreen again as the menu gives the keyboard back: keyboardBack, windows.lua)
         Connections {
             function onHasFullscreenChanged(): void {
+                if (!left.hasFullscreen)
+                    return;
                 scope.screenState.launcher = false;
                 scope.screenState.session = false;
                 scope.screenState.dashboard = false;
