@@ -2542,9 +2542,10 @@ def power_menu():
         property bool accent
         property bool updates
 
-        // (with an update waiting, its top right corner turned inside out: an inverted curve of the same radius, from
-        // where the corner's own curve starts, its two ends themselves rounded, and the update's mark in that space,
-        // filled like the icons. Its colour and its hover and press layer have that outline; its icon doesn't change)
+        // (with an update waiting, its top right corner turned inside out: an inverted curve, its two ends themselves
+        // rounded, and the update's mark in that space, filled like the icons. Its colour and its hover and press layer
+        // have that outline; its icon doesn't change)
+        readonly property real notch: width * 0.42
         readonly property color fillColour: disabled ? disabledColour : internalChecked ? activeColour : inactiveColour
 
         color: updates ? "transparent" : fillColour
@@ -2562,6 +2563,7 @@ def power_menu():
             visible: button.updates
             fill: button.fillColour
             cornerRadius: button.radius
+            notch: button.notch
         }
 
         NotchShape {
@@ -2572,13 +2574,14 @@ def power_menu():
             layer.enabled: true
             fill: "white"
             cornerRadius: button.radius
+            notch: button.notch
         }
 
         MaterialIcon {
             visible: button.updates
-            x: button.width - button.radius * 0.4 - width / 2
-            y: button.radius * 0.4 - height / 2
-            scale: button.radius * 0.72 / Math.max(1, implicitHeight)
+            x: button.width - button.notch * 0.4 - width / 2
+            y: button.notch * 0.4 - height / 2
+            scale: button.notch * 0.72 / Math.max(1, implicitHeight)
             text: "download"
             color: Colours.palette.m3onSurface
             fill: 1
@@ -2625,17 +2628,18 @@ def power_menu():
     m = insert(m, "import Quickshell\n", "import Quickshell.Io\n", before=False)
     m = insert(m, "import QtQuick\n", "import QtQuick.Effects\nimport QtQuick.Shapes\n", before=False)
     m = insert(m, "    component SessionButton: IconButton {\n", """    // A button's outline with its top right corner turned inside out (SessionButton's, with an update waiting): the
-    // other three corners round (cornerRadius), that one an inverted curve of the same radius centred on the corner,
+    // other three corners round (cornerRadius), that one an inverted curve (notch, its radius) centred on the corner,
     // and its two ends rounded too (fillet), each meeting the edge it starts from
     component NotchShape: Shape {
         id: notch
 
         property color fill
         property real cornerRadius
-        readonly property real fillet: cornerRadius / 4
+        property real notch
+        readonly property real fillet: Math.min(cornerRadius, notch) / 2.5
         // (each end's round: how far along its edge it starts, and where it meets the inverted curve)
-        readonly property real along: Math.sqrt(cornerRadius * cornerRadius + 2 * cornerRadius * fillet)
-        readonly property real k: cornerRadius / Math.max(0.001, cornerRadius + fillet)
+        readonly property real along: Math.sqrt(notch * notch + 2 * notch * fillet)
+        readonly property real k: notch / Math.max(0.001, notch + fillet)
 
         preferredRendererType: Shape.CurveRenderer
 
@@ -2647,7 +2651,7 @@ def power_menu():
 
             PathLine { x: notch.width - notch.along; y: 0 }
             PathArc { x: notch.width - notch.along * notch.k; y: notch.fillet * notch.k; radiusX: notch.fillet; radiusY: notch.fillet }
-            PathArc { x: notch.width - notch.fillet * notch.k; y: notch.along * notch.k; radiusX: notch.cornerRadius; radiusY: notch.cornerRadius; direction: PathArc.Counterclockwise }
+            PathArc { x: notch.width - notch.fillet * notch.k; y: notch.along * notch.k; radiusX: notch.notch; radiusY: notch.notch; direction: PathArc.Counterclockwise }
             PathArc { x: notch.width; y: notch.along; radiusX: notch.fillet; radiusY: notch.fillet }
             PathLine { x: notch.width; y: notch.height - notch.cornerRadius }
             PathArc { x: notch.width - notch.cornerRadius; y: notch.height; radiusX: notch.cornerRadius; radiusY: notch.cornerRadius }
