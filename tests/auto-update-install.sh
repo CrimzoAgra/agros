@@ -89,7 +89,8 @@ unit=$(cat "$au/auto-update-install.service")
 # pacman: -Qu says what's waiting ($QU, exit $QU_RC; $QU_ERR on stderr); -Su installs (exit $PACMAN_RC; $PACMAN_HANG: hangs, to be cut off);
 # -Sy the boot's lists ($SY_ERR: fails, saying it), -Suw its download ($SYUW_RC; $SUW_ERR: fails, saying it), -Sw the
 # keyrings' download first and -S their install first (exit $KEYRING_RC); -Si the version a package would update to ($SI_NEW);
-# -Qdtq the dependencies nothing needs ($ORPHANS, a space between two), -Rns removes (exit $RNS_RC)
+# -Qdtq the dependencies nothing needs ($ORPHANS, a space between two), -Qqd those in as a dependency ($DEPS), -Rns
+# removes (exit $RNS_RC)
 cat >"$t/bin/pacman" <<EOF
 #!/bin/sh
 case \$1 in
@@ -97,6 +98,7 @@ case \$1 in
     -Q) [ -n "\$Q_HAVE" ] || exit 1
         case " \$* " in *" -- "*) for n in \$(echo "\$*" | sed 's/.* -- //'); do echo "\$n \$Q_HAVE"; done ;; *) echo "\$2 \$Q_HAVE" ;; esac ;;
     -Qdtq) [ -n "\$ORPHANS" ] || exit 1; printf '%s\n' \$ORPHANS ;;
+    -Qqd) [ -z "\$DEPS" ] || printf '%s\n' \$DEPS ;;
     -Rns) echo "pacman \$* (SNAP_PAC_SKIP=\$SNAP_PAC_SKIP)" >>"$t/calls"; exit \${RNS_RC:-0} ;;
     -Su) echo "pacman \$* (SNAP_PAC_SKIP=\$SNAP_PAC_SKIP)" >>"$t/calls"; echo "installing foo"
         # (the boot partition kept open by the install all along)
@@ -104,10 +106,19 @@ case \$1 in
         [ -z "\$PACMAN_HANG" ] || { echo \$\$ >"$t/hung"; exec sleep 60; }
         case " \$* " in *" agros-aur/"*) [ -z "\$PACMAN_AUR_RC" ] || { echo "error: failed to commit transaction (conflicting files)"; exit 1; } ;; esac
         # (\$CONFLICT: that package's update conflicts with bar, pacman's own words, until pacman.conf holds it;
-        # \$CONFLICT_ALWAYS: still)
-        if [ -n "\$CONFLICT" ] && { [ -n "\$CONFLICT_ALWAYS" ] || ! grep -q "^IgnorePkg = .*\$CONFLICT" "\$4"; }; then
-            echo ":: \$CONFLICT-2-1 and bar-1-1 are in conflict. Remove bar? [y/N] error: unresolvable package conflicts detected"
-            echo "error: failed to prepare transaction (conflicting dependencies)"; echo; echo ":: \$CONFLICT-2-1 and bar-1-1 are in conflict"; exit 1
+        # \$CONFLICT_ALWAYS: still. Its question answered on stdin, as pacman reads it: yes, bar removed, but
+        # \$CONFLICT_BREAKS: that breaks another package, refused)
+        conf=\$(echo " \$* " | sed 's/.* --config \([^ ]*\) .*/\1/')
+        if [ -n "\$CONFLICT" ] && { [ -n "\$CONFLICT_ALWAYS" ] || ! grep -q "^IgnorePkg = .*\$CONFLICT" "\$conf"; }; then
+            printf ':: %s-2-1 and bar-1-1 are in conflict. Remove bar? [y/N] ' "\$CONFLICT" >&2
+            read -r answer; echo "\$answer"
+            if [ "\$answer" = y ]; then
+                [ -z "\$CONFLICT_BREAKS" ] || { echo "error: failed to prepare transaction (could not satisfy dependencies)"; echo ":: removing bar breaks dependency 'bar' required by baz"; exit 1; }
+                echo "removing bar" >>"$t/calls"
+            else
+                echo "error: unresolvable package conflicts detected"
+                echo "error: failed to prepare transaction (conflicting dependencies)"; echo; echo ":: \$CONFLICT-2-1 and bar-1-1 are in conflict"; exit 1
+            fi
         fi
         # (\$SU_HOOKS: its hooks after the packages, as pacman numbers them)
         [ -z "\$SU_HOOKS" ] || printf ':: Running post-transaction hooks...\\n( 1/2) a\\n( 2/2) b\\n'
@@ -667,7 +678,7 @@ built() {
 newqt=$'qt6-base 6.9.0-1 -> 6.10.0-1\nfoo 1-1 -> 2-1'
 lists; built; : >"$t/calls"
 QU=$newqt Q_HAVE=0.3-1 "$t/auto-update" --install >/dev/null || fail "the install with the AUR's rebuilds failed: $(tail -5 "$t/log")"
-grep -q "^pacman -Su --noconfirm --config $t/au/prev/pacman.conf agros-aur/quickshell-git" "$t/calls" ||
+grep -q "^pacman -Su --config $t/au/prev/pacman.conf agros-aur/quickshell-git" "$t/calls" ||
     fail "the AUR's rebuild not in the repo's transaction: $(cat "$t/calls")"
 [[ $(res) == "ok "* && ! -e $t/pac/sync/agros-aur.db ]] || fail "the AUR repo's list left in pacman's, or not ok: $(res)"
 [[ $(cat "$t/au/qt-built") == "qt6-base 0.3 qt6-declarative 0.3 " ]] || fail "the Qt the shells were rebuilt for not written down: $(cat "$t/au/qt-built" 2>/dev/null)"
@@ -717,7 +728,7 @@ exit 0
 # them (failed, the lists back)
 lists; built; : >"$aurdir/rebuild"; : >"$t/calls"
 Q_HAVE=0.2-1 PACMAN_AUR_RC=1 "$t/auto-update" --install >/dev/null || fail "the install without the AUR apps failed: $(tail -5 "$t/log")"
-[[ $(res) == "ok "* && $(grep -c '^pacman -Su' "$t/calls") == 2 ]] && grep -q "^pacman -Su --noconfirm --config $t/au/prev/pacman.conf --ignore quickshell-git (" "$t/calls" ||
+[[ $(res) == "ok "* && $(grep -c '^pacman -Su' "$t/calls") == 2 ]] && grep -q "^pacman -Su --config $t/au/prev/pacman.conf --ignore quickshell-git (" "$t/calls" ||
     fail "the repo's part not installed without the AUR apps pacman refused: $(res) $(cat "$t/calls")"
 [[ $(sed -n 2p "$t/au/aur-install-failed") == "quickshell-git 0.3-1" && $(head -1 "$t/au/aur-install-failed") == *"conflicting files"* ]] ||
     fail "the AUR apps left out not written down: $(cat "$t/au/aur-install-failed" 2>/dev/null)"
@@ -741,6 +752,17 @@ grep -q -- '--noconfirm.*-R\|-Rdd\|--overwrite' "$t/calls" && fail "a package re
 out=$(Q_HAVE=1-1 HOME=$t/h AUTO_UPDATE_DIR=$t/au PACMAN_DB_DIR=$t/pac "$here/.local/bin/agros-check" 2>&1) || true
 [[ $out == *"held back foo at shutdown, for a conflict ("*"foo conflicts with bar (needs a person: sudo pacman -Syu, which asks whether to remove bar)): the rest installed"* ]] ||
     fail "agros-check didn't say what waits for a conflict: $out"
+# ...but where bar is in only as a dependency, pacman's "Remove bar?" answered yes (pacman-answer): the whole update
+# installed, bar swapped out, nothing held
+lists; : >"$t/calls"; rm -f "$t/au/conflicts"
+DEPS="baz bar" CONFLICT=foo "$t/auto-update" --install >/dev/null || fail "the install swapping out a dependency failed: $(tail -5 "$t/log")"
+[[ $(res) == "ok "* && $(grep -c '^pacman -Su' "$t/calls") == 1 && ! -e $t/au/conflicts ]] && grep -qx "removing bar" "$t/calls" ||
+    fail "a dependency in conflict not swapped out: $(res) $(cat "$t/calls")"
+# ...and where removing it breaks another package (pacman refuses): tried again removing nothing, what conflicts held
+lists; : >"$t/calls"
+DEPS=bar CONFLICT=foo CONFLICT_BREAKS=1 "$t/auto-update" --install >/dev/null || fail "the install after a refused removal failed: $(tail -5 "$t/log")"
+[[ $(res) == "ok "* && $(grep -c '^pacman -Su' "$t/calls") == 3 && $(sed -n 2p "$t/au/conflicts") == "foo 2-1" ]] &&
+    ! grep -qx "removing bar" "$t/calls" || fail "a refused removal not tried again removing nothing: $(res) $(cat "$t/calls")"
 lists; : >"$t/calls"
 CONFLICT=foo CONFLICT_ALWAYS=1 "$t/auto-update" --install >/dev/null && fail "an update still refused for a conflict reported success"
 [[ $(res) == "failed "*"the whole update waits for a conflict: foo conflicts with bar"* && $(cat "$t/pac/sync/core.db") == old && ! -e $t/au/conflicts ]] ||

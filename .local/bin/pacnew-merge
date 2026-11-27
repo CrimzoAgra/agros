@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# pacnew-merge: the config files an update left beside yours in /etc (<file>.pacnew: pacman keeps a file you or the
+# installer changed, the package's new version beside it) settled without a person where that's sure:
+#  - the same as yours: the .pacnew removed
+#  - the package's change merged into yours (diff3: yours, the version it came from, the new one), where the two don't
+#    touch the same lines: yours kept first in /var/lib/auto-update/etc-before-merge/<path>.<time>, then the .pacnew
+#    removed
+# The version yours came from is the package's previous version, from pacman's cache (the one its last upgrade
+# replaced, pacman's log). Left for a person (agros-check says so): a merge whose changes overlap, a previous version no
+# longer in the cache, a .pacnew left by the upgrade before too (a newer one written over it: that version's changes
+# never merged, and a merge from the last one would undo them), and the files a bad merge locks you out with (accounts,
+# sudo, the disks mounted at boot). Run as root by the shutdown's install (auto-update), every time
+#   pacnew-merge   prints what it did, a line each
+# (AGROS_ETC, as agros-check, PACMAN_LOG, PACMAN_CACHE, PACNEW_BACKUP: the tests' folders and files)
+set -uo pipefail
+etc=${AGROS_ETC:-/etc}
+log=${PACMAN_LOG:-$(pacman-conf LogFile 2>/dev/null || echo /var/log/pacman.log)}
+mapfile -t caches < <(if [[ -n ${PACMAN_CACHE:-} ]]; then echo "$PACMAN_CACHE"; else pacman-conf CacheDir 2>/dev/null; fi)
+backup=${PACNEW_BACKUP:-/var/lib/auto-update/etc-before-merge}
+keep='^/etc/(passwd|group|shadow|gshadow|sudoers|fstab|crypttab)$'
+
+# history <pkg> <file>: the package's installs and upgrades in pacman's log, oldest first, "<old> <new> <pacnew>" each
+# (<old> "-" for an install; <pacnew> 1 where it left <file>.pacnew: pacman logs that warning just before the package)
+history() {
+    awk -v pkg="$1" -v f="$2" '
+        /\[ALPM\] warning: / && index($0, " " f " installed as " f ".pacnew") { pend = 1; next }
+        /\[ALPM\] (installed|upgraded|reinstalled|downgraded) / {
+            if ($4 == pkg) {
+                v = $0; sub(/.*\(/, "", v); sub(/\)$/, "", v)
+                n = split(v, a, / -> /)
+                print (n == 2 ? a[1] : "-"), a[n], pend + 0
+            }
+            pend = 0
+        }' "$log" 2>/dev/null
+}
+
+while IFS= read -r -d '' new; do
+    mine=${new%.pacnew} rel=${mine#"$etc"/} path=/etc/$rel
+    [[ -f $mine ]] || continue
+    if cmp -s "$new" "$mine"; then
+        rm -f "$new" && echo "$path.pacnew: the same as $path, removed"
+        continue
+    fi
+    [[ ! $path =~ $keep ]] || continue
+    pkg=$(pacman -Qqo "$path" 2>/dev/null) || continue
+    have=$(pacman -Q "$pkg" 2>/dev/null | awk '{print $2}')
+    mapfile -t hist < <(history "$pkg" "$path")
+    ((${#hist[@]})) || continue
+    read -r old now made <<<"${hist[-1]}"
+    [[ $made == 1 && $now == "$have" && $old != - ]] || continue
+    if ((${#hist[@]} > 1)); then
+        read -r _ _ before <<<"${hist[-2]}"
+        [[ $before != 1 ]] || { echo "$path.pacnew: the upgrade before left one too, never merged: left for a person"; continue; }
+    fi
+    file=
+    for c in "${caches[@]}"; do
+        for f in "${c%/}/$pkg-$old"-*.pkg.tar.*; do
+            [[ -f $f && $f != *.sig ]] && file=$f && break 2
+        done
+    done
+    [[ -n $file ]] || { echo "$path.pacnew: $pkg $old no longer in pacman's cache: left for a person"; continue; }
+    tmp=$(mktemp -d) || continue
+    if bsdtar -xOf "$file" "${path#/}" >"$tmp/base" 2>/dev/null && diff3 -m "$mine" "$tmp/base" "$new" >"$tmp/merged" 2>/dev/null; then
+        mkdir -p "$(dirname "$backup/$rel")" && cp -a "$mine" "$backup/$rel.$(date +%Y%m%d-%H%M%S)" &&
+            cat "$tmp/merged" >"$mine" && rm -f "$new" &&
+            echo "$path.pacnew: $pkg's change ($old to $now) merged into $path (yours before it: $backup/$rel.*)"
+    else
+        echo "$path.pacnew: $pkg's change and yours overlap: left for a person"
+    fi
+    rm -rf "${tmp:?}"
+done < <(find "$etc" -name '*.pacnew' -type f -print0 2>/dev/null)
+exit 0

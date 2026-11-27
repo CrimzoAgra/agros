@@ -207,7 +207,7 @@ echo "$*" >>%s/sent
 note() { HOME=$h AUTO_UPDATE_DIR=$t/au NOTIFY_WHEN_UP_TRIES=1 PATH=$t:$PATH "$here/.local/bin/agros-check" --notify 2>&1; }
 sent() { grep -c "Config files to look at" "$t/sent" 2>/dev/null; }
 out=$(note)
-[[ $out == *"beside yours, the package's new version (yours is kept): $AGROS_ETC/pacman.conf.pacnew, $AGROS_ETC/pacman.d/mirrorlist.pacnew. To merge them: sudo pacdiff"* ]] ||
+[[ $out == *"beside yours that the automatic update couldn't merge, the package's new version (yours is kept): $AGROS_ETC/pacman.conf.pacnew, $AGROS_ETC/pacman.d/mirrorlist.pacnew. To merge them: sudo pacdiff"* ]] ||
     fail "the .pacnew files not noted, or not how to merge them: $out"
 [[ $(sent) == 1 ]] || fail "the .pacnew files not said in a notification: $(cat "$t/sent" 2>/dev/null)"
 note >/dev/null

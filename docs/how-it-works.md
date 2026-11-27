@@ -914,8 +914,24 @@ helper a package update just brought works before `agros-links` has linked it), 
   update runs with) and, as `update-gate` does, what a partial upgrade would break (pacman's dry run: one whose update
   needs a held one's new version, a library whose update would break a held one), and says each with the command a
   person runs to settle it (`sudo pacman -Syu`, which asks whether to remove the other package; `--overwrite` with the
-  files, once they're known to be safe to replace). Nothing is removed or replaced unattended. Still not worked out
+  files, once they're known to be safe to replace). Nothing is removed or replaced unattended here. Still not worked out
   without them: said, and the whole update waits, as before (`tests/conflict-hold.sh`)
+- **`.local/bin/pacman-answer`**: pacman run unattended as `--noconfirm` runs it (each question answered its default,
+  on its stdin; its questions are on stderr, read as they come), but for "a and b are in conflict. Remove b? [y/N]",
+  answered yes where b is in a list it's given: the shutdown's install gives it the packages in only as a dependency
+  (`pacman -Qqd`), so a dependency swapped for another (jack2 for pipewire-jack) no longer holds the update back; one a
+  person installed is still theirs to remove. pacman's own dependency check still refuses a removal that breaks another
+  package; the install then runs again answering no, and `conflict-hold` takes it from there
+  (`tests/auto-update-install.sh`)
+- **`.local/bin/pacnew-merge`**: the `.pacnew` files under `/etc` settled where that's sure, by the shutdown's install
+  after every run (as root): one the same as its file removed; otherwise the package's change merged into yours
+  (`diff3 -m`: yours, the package's previous version, the new one), where the two don't touch the same lines, yours
+  kept first in `/var/lib/auto-update/etc-before-merge/<path>.<time>`. The previous version is the one the package's
+  last upgrade replaced (pacman's log, which logs each ".pacnew" warning just before its package), from pacman's cache.
+  Left for a person (`agros-check`'s note): changes that overlap, a previous version no longer cached, a `.pacnew` the
+  upgrade before left too (a newer one written over it: a merge from the last one would undo that version's changes),
+  and the files a bad merge locks you out with (`passwd`, `group`, `shadow`, `gshadow`, `sudoers`, `fstab`,
+  `crypttab`) (`tests/pacnew-merge.sh`)
 - **`.local/bin/soname-broken`**: `[agros]`'s installed packages that no longer load, to reinstall from `[agros]`: one
   of the libraries their own programs load (ELF `NEEDED`, `readelf`, as `soname-hold` reads them) is gone from the
   system (not in `/usr/lib`, not in the loader's cache, `ldconfig -p`, nor among the package's own files), and
@@ -1360,8 +1376,8 @@ brings each change; nothing to run by hand).
     system never updated) is left out of a second try (`--ignore`; pacman installs nothing of a transaction it refuses),
     unless a new runtime in it needs it (then it fails as one, the lists put back); what's left out is written down
     (`/var/lib/auto-update/aur-install-failed`) and named by `agros-check` until it's installed. A conflict pacman
-    won't settle by itself (`--noconfirm` answers its "Remove b?" no; a file another package owns), the repos' too,
-    holds back only what conflicts (`conflict-hold`: with what needs it or its update would break, no partial upgrade),
+    won't settle by itself (its "Remove b?" answered no where b isn't in only as a dependency, `pacman-answer`; a file
+    another package owns), the repos' too, holds back only what conflicts (`conflict-hold`: with what needs it or its update would break, no partial upgrade),
     the rest tried again (up to 3 times: pacman names one package conflict a run); nothing removed or replaced. What
     waits, why and the command a person runs to settle it is said in the log ("waits: ...") and written down
     (`/var/lib/auto-update/conflicts`) for `agros-check` until it's installed. Still not worked out (or a new runtime
@@ -1796,8 +1812,8 @@ breaks something holds back that one piece, never the rest (`.github/workflows/c
   version written beside the ones you have as `.new`) and checks the config. Not `caelestia update`: its own system
   update skips the Qt rebuild (the boot update's and Settings' Updates page's), and a new Qt leaves the shell unable to start
 - **Config files to look at after an update** (a low-urgency note from `agros-check`, once per file): `.pacnew` files
-  under `/etc` (`find`; pacman kept a file you or the installer changed and wrote the package's new one beside it).
-  Merge them with `sudo pacdiff` (each beside its file), or by hand (what you want of it into the file, then the
+  under `/etc` (`find`; pacman kept a file you or the installer changed and wrote the package's new one beside it) that
+  the shutdown's install couldn't merge (`pacnew-merge`, above). Merge them with `sudo pacdiff` (each beside its file), or by hand (what you want of it into the file, then the
   `.pacnew` removed). Said again when a later update leaves one again (by its path and time:
   `~/.local/state/agros/etc-noted`). Also noted: `pacman.conf`'s AgrOS lines the boot's update put back (above, the
   upstream gate)

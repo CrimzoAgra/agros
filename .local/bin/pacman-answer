@@ -1,0 +1,41 @@
+#!/usr/bin/env python3
+# pacman-answer: pacman run unattended, as --noconfirm runs it (each question answered its default), but for one:
+# "a and b are in conflict. Remove b? [y/N]" is answered yes where b is one of <removable> (the shutdown's install,
+# auto-update: the packages in only as a dependency, so a dependency swapped for another, jack2 for pipewire-jack, no
+# longer holds the update back; one a person installed is still theirs to remove). pacman still refuses a removal that
+# breaks another package (its own dependency check), and nothing's removed then
+#   pacman-answer <removable: a file, a name a line> <pacman command...>
+# Its output and its errors are pacman's, as one stream (pacman writes each answer after its question, its stdin not a
+# terminal); exits with pacman's status. Run without --noconfirm (pacman would answer no itself): its questions are on
+# stderr, answered on its stdin
+import os, re, subprocess, sys
+
+if len(sys.argv) < 3:
+    sys.exit("usage: pacman-answer <removable> <pacman command...>")
+try:
+    with open(sys.argv[1]) as f:
+        removable = {line.strip() for line in f if line.strip()}
+except OSError:
+    removable = set()
+# (pacman's question(), select_question() and multiselect_question(), as they end; their words in English: LC_MESSAGES=C)
+prompt = re.compile(rb"(\[[yY]/[nN]\]|\(default=[^)]*\):) $")
+remove = re.compile(rb":: \S+ and \S+ are in conflict(?: \(.*\))?\. Remove (\S+)\? \[y/N\] $")
+
+p = subprocess.Popen(sys.argv[2:], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+out = sys.stdout.buffer
+tail = b""
+while chunk := os.read(p.stdout.fileno(), 65536):
+    out.write(chunk)
+    out.flush()
+    tail = (tail + chunk).rsplit(b"\n", 1)[-1]
+    if not prompt.search(tail):
+        continue
+    m = remove.search(tail)
+    answer = b"y" if m and m.group(1).decode(errors="replace") in removable else b""
+    tail = b""
+    try:
+        p.stdin.write(answer + b"\n")
+        p.stdin.flush()
+    except BrokenPipeError:
+        pass
+sys.exit(p.wait())

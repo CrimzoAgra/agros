@@ -114,6 +114,10 @@ repair() {
     SNAP_PAC_SKIP=y LC_ALL='' LC_MESSAGES=C pacman -S --noconfirm -- "${fix[@]}" ||
         echo "!! not reinstalled (${fix[*]#agros/}): tried again after the next install"
 }
+# etc_merge: the config files an update left beside yours (.pacnew) settled where that's sure (pacnew-merge: the same
+# as yours removed, the package's change merged into yours where they don't overlap, yours kept first), after every
+# install (or one with nothing to install: Updates may have left them). Its failing never fails the update
+etc_merge() { /usr/lib/agros/bin/pacnew-merge || echo "the .pacnew files not looked at (pacnew-merge failed)"; }
 # recover: an install cut off (shutdown's limit, a power cut), or its recovery put off: pacman's lists put back (its
 # packages came from the older ones; those it got to install are taken up again by the next install), and the lock it
 # left. Run at boot and before an install, each time until it's done (only with nothing holding pacman's lock)
@@ -426,7 +430,7 @@ if [[ ${1:-} == --install ]]; then
     [[ ! -s $aur/failed ]] || echo "AUR apps wait, the rest installs without them (the boot's builds: $(paste -sd';' "$aur/failed" | sed 's/;/; /g'))"
     # (what AgrOS dropped removed then too: the update that took it out may have come through Updates, the old
     # update-apps, with no removal of its own)
-    [[ -n $pending || ${#targets[@]} -gt 0 ]] || { echo "nothing to install"; result ok; settled; retire; repair; exit 0; }
+    [[ -n $pending || ${#targets[@]} -gt 0 ]] || { echo "nothing to install"; result ok; settled; retire; repair; etc_merge; exit 0; }
     # safety snapshot (pick it in the boot menu if an update breaks something). --no-dbus: this runs at shutdown, when
     # snapperd (started on demand over DBus) can't be started any more, and the snapshot was silently skipped
     # Then into the boot menu's snapshot list here: what does that otherwise (grub-btrfsd) is stopped by now, and isn't
@@ -453,15 +457,27 @@ if [[ ${1:-} == --install ]]; then
     # (its messages in English: pacman's "error:" is what the reason below is found by; translated, "erro:" or
     # "Fehler:", it was lost. Messages only: the hooks it runs keep the system's locale)
     # (its packages counted first, for the splash's percentage: pacman's dry run of the same install)
+    # (unattended, as --noconfirm, but a conflict's "Remove b?" answered yes for a package in only as a dependency:
+    # pacman-answer. pacman still refuses a removal that breaks another package: then tried again removing nothing,
+    # and what conflicts is held back below)
+    removable=$prev/removable
+    pacman -Qqd >"$removable" 2>/dev/null
     pacman_su() {
         local total
         total=$(LC_ALL=C pacman -Sup --config "$conf" --print-format '%n' "$@" 2>/dev/null | grep -c .)
-        SNAP_PAC_SKIP=y LC_ALL='' LC_MESSAGES=C pacman -Su --noconfirm --config "$conf" "$@" 2>&1 | tee "$prev/out" | progress "$total"
+        SNAP_PAC_SKIP=y LC_ALL='' LC_MESSAGES=C /usr/lib/agros/bin/pacman-answer "$removable" pacman -Su --config "$conf" "$@" |
+            tee "$prev/out" | progress "$total"
         return "${PIPESTATUS[0]}"
     }
     args=("${targets[@]}")
     pacman_su "${args[@]}"
     rc=$?
+    if ((rc)) && grep -qE '^:: .* are in conflict.*\? \[y/N\] y$' "$prev/out"; then
+        echo "!! the install refused removing what conflicts: tried again removing nothing"
+        : >"$removable"
+        pacman_su "${args[@]}"
+        rc=$?
+    fi
     # A conflict pacman won't settle by itself (--noconfirm answers its "Remove b?" no; a file another package owns):
     # it refused the whole transaction, at every shutdown. The packages in conflict held back alone (conflict-hold:
     # and what needs them or would break them, pacman's dry run, no partial upgrade), the rest tried again; a few
@@ -536,6 +552,7 @@ if [[ ${1:-} == --install ]]; then
     settled
     retire
     repair
+    etc_merge
     echo "===== done $(date) ====="
     exit
 fi

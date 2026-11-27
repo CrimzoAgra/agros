@@ -198,7 +198,7 @@ fi
 etc_notes=()
 pacnew=$(find "${AGROS_ETC:-/etc}" -name '*.pacnew' -printf '%p %T@\n' 2>/dev/null | sort)
 [[ -n $pacnew ]] &&
-    etc_notes+=("Config files an update left beside yours, the package's new version (yours is kept): $(sed 's/ [^ ]*$//' <<<"$pacnew" | plain | paste -sd, | sed 's/,/, /g'). To merge them: sudo pacdiff (each beside its file), or by hand (what you want of it into the file, then the .pacnew removed)")
+    etc_notes+=("Config files an update left beside yours that the automatic update couldn't merge, the package's new version (yours is kept): $(sed 's/ [^ ]*$//' <<<"$pacnew" | plain | paste -sd, | sed 's/,/, /g'). To merge them: sudo pacdiff (each beside its file), or by hand (what you want of it into the file, then the .pacnew removed)")
 read -r rpday rpat rpwhat 2>/dev/null <"$au/pacman-conf-repaired" &&
     etc_notes+=("pacman.conf had lost AgrOS's lines ($(plain <<<"$rpwhat"); a pacman.conf.pacnew merged whole?): the automatic update put them back ($rpday $rpat)")
 notes+=("${etc_notes[@]}")
