@@ -1048,7 +1048,7 @@
             {
               "key": "games.low_latency",
               "label": "Low input lag in games",
-              "description": "A game's frames reach the screen as soon as they're drawn (tearing allowed, for games only). Works with the game's own V-Sync off.",
+              "description": "A game's frames reach the screen as soon as they're drawn (tearing allowed, for games only). Works with the game's own V-Sync off. Not with an NVIDIA graphics card: its driver froze games that tear.",
               "type": "bool",
               "default": true,
               "apply": "hypr"

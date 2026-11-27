@@ -120,7 +120,11 @@ hl.window_rule({ match = { tag = "store_launcher", title = "^$", xwayland = true
 -- once the last one closes. Counted at every load (it sets this back on), as windows open and close (the closing one
 -- still mapped then), and as one is tagged a game later (the tag above, a class rule matching after a class change)
 local edges = true
-local low_latency = dots.setting("games.low_latency") ~= false
+-- (not on NVIDIA: its driver loses the screen's flips while a game tears, and the game froze on one frame until
+-- something was drawn over it, Overwatch under Wine's Wayland driver for HDR. SYSFS: another /sys, the tests')
+local nvidia = io.open((os.getenv("SYSFS") or "/sys") .. "/module/nvidia_drm/initstate")
+if nvidia then nvidia:close() end
+local low_latency = dots.setting("games.low_latency") ~= false and not nvidia
 local function game_edges(closing)
     local game = false
     for _, w in ipairs(hl.get_windows({ mapped = true }) or {}) do

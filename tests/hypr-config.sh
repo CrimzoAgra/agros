@@ -7,6 +7,9 @@
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
 . "$(dirname "$0")/lib.sh"
+# (the config's look at /sys, as on a machine with no NVIDIA driver loaded: never this machine's; a test sets its own)
+mkdir -p "$t/sys-none"
+export SYSFS=$t/sys-none
 command -v lua >/dev/null || { echo "skip hypr-config (no lua)"; exit 0; }
 
 for f in "$here"/.config/caelestia/*.lua "$here"/.config/caelestia/user/*.lua "$here"/.config/caelestia/user/hosts/*.lua; do
@@ -332,7 +335,7 @@ run_config() {
     rm -f "$t/home/.config/dots/settings.lua"
     [[ -z $1 ]] || printf '%s\n' "$1" >"$t/home/.config/dots/settings.lua"
     (cd "$t" && HOME=$t/home PLUGIN=$2 ONE_SCREEN=${3:-0} DOTS_VERIFY_CONFIG=${VERIFY:-} XDG_CONFIG_HOME=${XCH:-} XDG_RUNTIME_DIR=$t/run HYPRLAND_INSTANCE_SIGNATURE=test \
-        lua run.lua stub.lua 2>&1)
+        SYSFS=${SYSFS:-$t/sys-none} lua run.lua stub.lua 2>&1)
 }
 # A game focused at the load (the stand-in's): the pointer drawn into the picture with lower input lag on (tearing
 # allowed), the cursor layer kept with it off (no tearing to keep from it), and with the game open but another window
@@ -341,6 +344,14 @@ grep -qx 'no_hardware_cursors 1' <<<"$(GAME_FOCUSED=1 run_config '' 0)" || fail 
 grep -qx 'no_hardware_cursors 2' <<<"$(GAME_FOCUSED=1 run_config 'return { ["games.low_latency"] = false }' 0)" ||
     fail "the cursor layer taken away with lower input lag off"
 grep -qx 'no_hardware_cursors 2' <<<"$(run_config '' 0)" || fail "the pointer drawn into the picture with another window focused"
+# ...and on NVIDIA (its nvidia_drm module loaded) no tearing at all (its driver froze games that tear): the cursor
+# layer kept, tearing not allowed
+mkdir -p "$t/sys-nvidia/module/nvidia_drm" "$t/sys-none"; echo live >"$t/sys-nvidia/module/nvidia_drm/initstate"
+rm -f "$t/config-keys"
+grep -qx 'no_hardware_cursors 2' <<<"$(SYSFS=$t/sys-nvidia GAME_FOCUSED=1 run_config '' 0)" && ! grep -qx 'general.allow_tearing' "$t/config-keys" ||
+    fail "tearing allowed on NVIDIA"
+rm -f "$t/config-keys"
+GAME_FOCUSED=1 run_config '' 0 >/dev/null; grep -qx 'general.allow_tearing' "$t/config-keys" || fail "tearing not allowed elsewhere"
 good='return { ["keys.windows_next"] = { "ALT + TAB" }, ["keys.minimise"] = { "SUPER + M", "SUPER + DOWN" },
   ["keys.screenshot"] = {}, ["windows.cascade"] = true, ["windows.titlebars"] = true, ["windows.focus"] = "hover",
   ["nightlight"] = true, ["caelestia-keys.kbTerminal"] = { "SUPER + RETURN" }, ["caelestia-keys.kbGoToWs"] = { "ALT" } }'
