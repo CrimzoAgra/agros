@@ -1117,6 +1117,21 @@ hl.on("window.active", function(win)
         settle(win.address, 3)
     end
 end)
+-- A fullscreen game focused: the other windows on its workspace behind it again (not a pinned one: picture in
+-- picture). Hyprland lets a floating window focused on a workspace with a fullscreen window stay drawn above it
+-- (FocusState.cpp: allowed over fullscreen), and only fullscreen being set or the window lowered clears that. A game
+-- back from minimised (Alt+Tab) still fullscreen hands the focus to another window there for a moment first, and that
+-- one (the browser) stayed over the borderless game
+hl.on("window.active", function(win)
+    if not (win and dots.is_game and dots.is_game(win)) then return end
+    local game = by_address(win.address) or win
+    if (game.fullscreen or 0) < 2 or not (game.workspace and (game.workspace.id or 0) > 0) then return end
+    for _, w in ipairs(hl.get_windows() or {}) do
+        if w.address ~= game.address and not w.pinned and w.workspace and w.workspace.id == game.workspace.id then
+            hl.dispatch(hl.dsp.window.alter_zorder({ mode = "bottom", window = w }))
+        end
+    end
+end)
 -- A game in exclusive fullscreen (apps.lua) focused (Alt+Tab, the dock) with the pointer on another screen: the pointer
 -- to its middle, as such a game on Windows takes it. Floating mode has no warps (no_warps), and the pointer moving on
 -- there handed the focus straight back to the window under it (follow_mouse): the game, unfocused, a window under the

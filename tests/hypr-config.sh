@@ -945,6 +945,26 @@ end
 check("a game moved by Hyprland right after focus (minimised): left, not exclusive", moved_by_hyprland(), "0")
 -- A game in exclusive fullscreen over its screen focused with the pointer on another screen: the pointer to its middle;
 -- not when it's on the game's screen already, nor for a game in a window, nor a borderless one
+-- A fullscreen game focused: the other windows on its workspace lowered behind it (Hyprland kept one focused there
+-- for a moment over it: the browser over a borderless game back from Alt+Tab); not a pinned one, nor one elsewhere,
+-- nor any while the game isn't fullscreen
+local function lowered_on_focus(full)
+    game.address, game.workspace, game.fullscreen, game.size = "0xlow", ws(1), full, { x = 1920, y = 1080 }
+    local browser = { address = "0xbrowser", class = "librewolf", workspace = ws(1), fullscreen = 0, floating = true, tags = {} }
+    local pip = { address = "0xpip", class = "mpv", workspace = ws(1), fullscreen = 0, floating = true, pinned = true, tags = {} }
+    local away = { address = "0xaway", class = "foot", workspace = ws(11), fullscreen = 0, floating = true, tags = {} }
+    WINDOWS, sent = { game, browser, pip, away }, {}
+    fire("window.active", game)
+    local got = {}
+    for _, d in ipairs(sent) do
+        local a = d[2] or {}
+        if d[1] == "window.alter_zorder" and a.mode == "bottom" then got[#got + 1] = a.window.address end
+    end
+    sent, WINDOWS, game.fullscreen = {}, {}, 0
+    return table.concat(got, ",")
+end
+check("a fullscreen game focused: the window beside it lowered, not a pinned one or one elsewhere", lowered_on_focus(2), "0xbrowser")
+check("...not fullscreen: none", lowered_on_focus(0), "")
 local function pointer_on_focus(x, size, full, borderless)
     game.size, game.workspace, game.fullscreen = size or { x = 1920, y = 1080 }, ws(1), full or 2
     game.address = borderless and "0xborderless" or "0xptr"
