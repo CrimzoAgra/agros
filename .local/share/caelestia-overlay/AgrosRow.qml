@@ -162,6 +162,14 @@ ConnectedRect {
             visible: active
             sourceComponent: picturesC
         }
+
+        // HDR's calibration pattern (a screen's HDR row, "pattern": "hdr")
+        Loader {
+            Layout.fillWidth: true
+            active: root.setting?.pattern === "hdr"
+            visible: active
+            sourceComponent: hdrPatternC
+        }
     }
 
     // A switch
@@ -481,6 +489,62 @@ ConnectedRect {
             text: JSON.stringify(root.value ?? null)
             color: fits ? Colours.palette.m3onSurface : Colours.palette.m3error
             onEditingFinished: if (fits) root.set(JSON.parse(text))
+        }
+    }
+
+    // HDR calibration, to judge the screen's HDR rows by as they change it (on the screen being set): near-black steps,
+    // 1 to 12 of 255 beside black (the first just told apart from black: the black level; all lost or all grey: a level
+    // up or down), a grey ramp (gamma: even steps from dark to light), and colours (saturation: vivid, not garish; the
+    // skin tone natural)
+    Component {
+        id: hdrPatternC
+
+        ColumnLayout {
+            spacing: Tokens.spacing.small
+
+            Row {
+                Layout.fillWidth: true
+                spacing: 0
+
+                Repeater {
+                    model: 13
+
+                    Rectangle {
+                        required property int index
+
+                        width: parent.width / 13
+                        height: 48
+                        color: Qt.rgba(index / 255, index / 255, index / 255, 1)
+                    }
+                }
+            }
+
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 32
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0; color: "black" }
+                    GradientStop { position: 1; color: "white" }
+                }
+            }
+
+            Row {
+                Layout.fillWidth: true
+                spacing: 0
+
+                Repeater {
+                    model: ["#ff0000", "#00ff00", "#0000ff", "#00ffff", "#ff00ff", "#ffff00", "#e0ac69", "#87ceeb", "#228b22"]
+
+                    Rectangle {
+                        required property string modelData
+
+                        width: parent.width / 9
+                        height: 32
+                        color: modelData
+                    }
+                }
+            }
         }
     }
 

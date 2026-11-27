@@ -80,7 +80,7 @@ end
 -- Screens set in the Settings app (Screens page), by their full description (make, model and serial), or by their
 -- connector's name for a screen with none (a VM's, with no EDID: Virtual-1), as the Settings app and workspaces.lua name
 -- them: screens.<description>.mode ("1920x1080@143.98"), .scale ("1.5"), .position ("1920x0"), .transform ("1": turned
--- 90°), .enabled, .hdr ("on": always), .brightness (its white with HDR always, in nits); each one left
+-- 90°), .enabled, .hdr ("on": always), .brightness, .black, .gamma, .saturation (with HDR always); each one left
 -- empty keeps the rule above (the host file's, the fastest refresh rate). screens.main: that one at 0x0 (the first
 -- screen: workspaces 1-10), the others to its right unless given a position (here, or by the host file). After the
 -- rules above, so these win, and before the lid's, which starts from them
@@ -213,13 +213,17 @@ for _, m in ipairs(hl.get_monitors({ all = true }) or {}) do
     local transform = tonumber(s.transform)
     transform = transform and transform >= 0 and transform <= 3 and math.floor(transform) == transform and transform or nil
     -- HDR always ("on": the Settings app offers it on a screen that takes it): 10-bit, the desktop's SDR colours shown
-    -- in it as an SDR screen shows them: gamma 2.2 (Hyprland's sRGB curve lifted the darks), black at 0.005 nits and
-    -- white at .brightness nits, 250 unless set (its 0.2 and 80 left the desktop grey and washed out; the screen's own
-    -- brightness is locked in HDR). Else Hyprland's own: SDR, switched to HDR while a fullscreen game or video in HDR
-    -- asks (render.cm_auto_hdr)
+    -- in it as the Settings app's HDR rows set them (calibrated against its pattern): white at .brightness nits (250;
+    -- the screen's own brightness is locked in HDR), black at .black (0: Hyprland's 0.2 and 80 left the desktop grey and
+    -- washed out), .gamma "srgb" or 2.2 (Hyprland's sRGB curve lifted the darks), .saturation in % (100). Else
+    -- Hyprland's own: SDR, switched to HDR while a fullscreen game or video in HDR asks (render.cm_auto_hdr)
     local hdr = s.hdr == "on"
-    local white = tonumber(s.brightness)
-    white = white and white >= 80 and white <= 1000 and white or 250
+    local function within(v, lo, hi, default)
+        v = tonumber(v)
+        return v and v >= lo and v <= hi and v or default
+    end
+    local white, black = within(s.brightness, 80, 1000, 250), within(s.black, 0, 1, 0)
+    local saturation = within(s.saturation, 50, 200, 100) / 100
     -- A main screen: it at 0x0, the others where the host file puts them (not at 0x0: that's the main's now), else to
     -- its right
     local placed = applied.position ~= nil and applied.position ~= "auto" and applied.position ~= "0x0"
@@ -237,7 +241,8 @@ for _, m in ipairs(hl.get_monitors({ all = true }) or {}) do
         rule.transform = transform or rule.transform
         if hdr then
             rule.cm, rule.bitdepth = "hdr", 10
-            rule.sdr_eotf, rule.sdr_min_luminance, rule.sdr_max_luminance = "gamma22", 0.005, white
+            rule.sdr_eotf = s.gamma == "srgb" and "srgb" or "gamma22"
+            rule.sdr_min_luminance, rule.sdr_max_luminance, rule.sdrsaturation = black, white, saturation
         end
         rule.disabled = set_off[m.name] or nil
         if rule.disabled then off[m.name] = rule.output end

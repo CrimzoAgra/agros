@@ -79,6 +79,7 @@ local mine = { ["screens.Fast One.scale"] = "1.5", ["screens.Fast One.enabled"] 
                ["screens.Fast One.mode"] = "3840x2160@60.00", ["screens.Off One.mode"] = "1920x1080@60.00",
                ["screens.Off One.scale"] = "0", ["screens.Off One.position"] = "left of it",
                ["screens.DP-5.scale"] = "1.25", ["screens.DP-5.enabled"] = false, ["screens.Other One.hdr"] = "on", ["screens.Other One.brightness"] = "300",
+               ["screens.Other One.saturation"] = "120", ["screens.Other One.black"] = "0.05",
                ["screens.Fast One.hdr"] = "" }
 local list = { { name = "DP-1", description = "Fast One", available_modes = {
                    { width = 1920, height = 1080, refresh_rate = 60.0, preferred = true },
@@ -98,7 +99,7 @@ hl = { get_monitors = function(o)  -- (Hyprland 0.57: a screen that is off liste
        monitor = function(r)
            io.write(r.output, " ", tostring(r.mode), " ", tostring(r.scale), " ", tostring(r.position), " ",
                     tostring(r.disabled), "\n")
-           if r.cm then io.write("cm ", r.output, " ", r.cm, " ", tostring(r.bitdepth), " ", tostring(r.sdr_eotf), " ", tostring(r.sdr_min_luminance), " ", tostring(r.sdr_max_luminance), "\n") end
+           if r.cm then io.write("cm ", r.output, " ", r.cm, " ", tostring(r.bitdepth), " ", tostring(r.sdr_eotf), " ", tostring(r.sdr_min_luminance), " ", tostring(r.sdr_max_luminance), " ", tostring(r.sdrsaturation), "\n") end
        end, bind = function() end, dsp = { exec_cmd = function() end } }
 dots = { setting = function(k) return mine[k] end, settings = function() return mine end }
 dofile(".config/caelestia/user/monitors.lua")'; }
@@ -108,7 +109,7 @@ grep -qx "desc:Fast One 1920x1080@143.98 1.5 auto-right true" <<<"$out" ||
 # (a mode that isn't text, from a hand edit: left out; the second screen off would be every screen: it stays on)
 grep -qx "desc:Other One preferred auto 0x0 nil" <<<"$out" || fail "the main screen not at 0x0, or every screen off: $out"
 # (HDR always: 10-bit, HDR colour, SDR as an SDR screen shows it, its white as set; Automatic, empty: Hyprland's own, no colour mode set)
-grep -qx "cm desc:Other One hdr 10 gamma22 0.005 300" <<<"$out" && ! grep -q "^cm desc:Fast One" <<<"$out" || fail "HDR not as set: $out"
+grep -qx "cm desc:Other One hdr 10 gamma22 0.05 300 1.2" <<<"$out" && ! grep -q "^cm desc:Fast One" <<<"$out" || fail "HDR not as set: $out"
 out=$(settings 1)
 # (and a scale and position from a hand edit that Hyprland can't take left out: the rule that applied, to the main's right)
 grep -qx "desc:Off One 1920x1080@60.00 auto auto-right nil" <<<"$out" ||

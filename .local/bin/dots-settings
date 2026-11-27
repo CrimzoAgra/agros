@@ -39,7 +39,7 @@ shown; "from": "caelestia-options" lists every one of them, by area. Saved in Ca
 which Caelestia watches: they apply at once. The default is AgrOS's own value where it ships one (/etc/skel), else
 Caelestia's. caelestia-vars.<variable>: one of Caelestia's Hyprland variables (gaps, borders...), through
 hypr-vars.lua like its shortcuts. "from": "screens" lists the connected screens' settings (screens.<description>.mode,
-scale, position, enabled, hdr and brightness (a screen that takes HDR), by its connector's name for a screen with no description: screens.Virtual-1.mode;
+scale, position, enabled, hdr, brightness, black, gamma and saturation (a screen that takes HDR), by its connector's name for a screen with no description: screens.Virtual-1.mode;
 screens.main), read by user/monitors.lua; "from": "binds" the shortcuts no setting changes
 (Hyprland's list of binds), to show and to find clashes with."""
 import fcntl
@@ -661,14 +661,32 @@ def screens_groups():
             # (only where the screen takes it: HDR set on one that doesn't shows wrong colours)
             *([{"key": f"screens.{d}.hdr", "label": "HDR", "type": "choice", "default": "", "apply": "hypr",
                 "description": "Automatic: the desktop in SDR, switched to HDR while a fullscreen game or video in HDR"
-                               " asks for it. Always: the whole desktop in HDR (10-bit), its SDR colours shown in it.",
+                               " asks for it. Always: the whole desktop in HDR (10-bit), its SDR colours shown in it, as"
+                               " the settings below set them: the pattern under this helps (open Settings on this screen).",
+                "pattern": "hdr",
                 "options": [{"value": "", "label": "Automatic"}, {"value": "on", "label": "Always"}]},
                {"key": f"screens.{d}.brightness", "label": "Brightness in HDR", "type": "choice", "default": "",
                 "apply": "hypr",
                 "description": "How bright the desktop is with HDR always on (the screen's own brightness control is"
                                " locked in HDR): its white, in nits. Games and videos in HDR set their own.",
                 "options": [{"value": "", "label": "250 nits"}] + [
-                    {"value": str(n), "label": f"{n} nits"} for n in (100, 150, 200, 300, 350, 400, 450, 500)]}]
+                    {"value": str(n), "label": f"{n} nits"} for n in (100, 150, 200, 300, 350, 400, 450, 500)]},
+               {"key": f"screens.{d}.black", "label": "Black level in HDR", "type": "choice", "default": "",
+                "apply": "hypr",
+                "description": "How dark black is with HDR always on. The pattern's first steps should be just told apart"
+                               " from black: lost in it, a level up; greyish, a level down.",
+                "options": [{"value": "", "label": "Deepest"}, {"value": "0.005", "label": "0.005 nits"},
+                            {"value": "0.05", "label": "0.05 nits"}, {"value": "0.2", "label": "0.2 nits"}]},
+               {"key": f"screens.{d}.gamma", "label": "Gamma in HDR", "type": "choice", "default": "", "apply": "hypr",
+                "description": "How the desktop's dark tones are shown with HDR always on. 2.2, as most screens show"
+                               " SDR: deeper shadows. sRGB: lighter ones.",
+                "options": [{"value": "", "label": "2.2"}, {"value": "srgb", "label": "sRGB"}]},
+               {"key": f"screens.{d}.saturation", "label": "Colour in HDR", "type": "choice", "default": "",
+                "apply": "hypr",
+                "description": "How vivid the desktop's colours are with HDR always on. 100%: as they're meant (they can"
+                               " look pale next to this screen's own SDR mode, which stretches them).",
+                "options": [{"value": "", "label": "100%"}] + [
+                    {"value": str(n), "label": f"{n}%"} for n in (110, 120, 130, 140, 150)]}]
               if supports_hdr(m["name"]) else []),
             # (checked here: a typo reached Hyprland's monitor rule)
             {"key": f"screens.{d}.position", "label": "Position", "type": "text", "default": "", "apply": "hypr",
