@@ -213,7 +213,9 @@ for _, m in ipairs(hl.get_monitors({ all = true }) or {}) do
     local transform = tonumber(s.transform)
     transform = transform and transform >= 0 and transform <= 3 and math.floor(transform) == transform and transform or nil
     -- HDR always ("on": the Settings app offers it on a screen that takes it): 10-bit, the desktop's SDR colours shown
-    -- in it. Else Hyprland's own: SDR, switched to HDR while a fullscreen game or video in HDR asks (render.cm_auto_hdr)
+    -- in it as an SDR screen shows them: gamma 2.2 (Hyprland's sRGB curve lifted the darks), black at 0.005 nits and
+    -- white at 250 (its 0.2 and 80 left the desktop grey and washed out). Else Hyprland's own: SDR, switched to HDR
+    -- while a fullscreen game or video in HDR asks (render.cm_auto_hdr)
     local hdr = s.hdr == "on"
     -- A main screen: it at 0x0, the others where the host file puts them (not at 0x0: that's the main's now), else to
     -- its right
@@ -230,7 +232,10 @@ for _, m in ipairs(hl.get_monitors({ all = true }) or {}) do
         rule.scale = scale or rule.scale or "auto"
         rule.position = gapped[m.name] or position or rule.position or "auto"
         rule.transform = transform or rule.transform
-        if hdr then rule.cm, rule.bitdepth = "hdr", 10 end
+        if hdr then
+            rule.cm, rule.bitdepth = "hdr", 10
+            rule.sdr_eotf, rule.sdr_min_luminance, rule.sdr_max_luminance = "gamma22", 0.005, 250
+        end
         rule.disabled = set_off[m.name] or nil
         if rule.disabled then off[m.name] = rule.output end
         named[rule.output] = rule
