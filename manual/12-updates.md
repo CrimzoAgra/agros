@@ -113,6 +113,15 @@ details: [Keeping itself up](../docs/how-it-works.md#keeping-itself-up) and
 The system takes a snapshot before every update (on the btrfs drive AgrOS installs by default, where snapshots are set
 up). Snapshots hold the system only: your home folder and its files are never rolled back.
 
+**Usually it fixes itself.** After an update installed at shutdown, the next start is watched. If the computer
+doesn't get to the login screen (it crashes, or the screen never comes up), or the desktop doesn't start once you log
+in, it restarts by itself and tries once more. If that fails too, it starts the snapshot from before the update and
+makes it the system for good, with no one having to do anything. A notification says so once you're logged in, and the
+system's updates wait 3 days (7 after a second time in a row) so a fix can come out first. A start that freezes without
+crashing needs you to press the reset button once; the rest is the same.
+
+If it couldn't sort itself out, or something broke that still lets the desktop start, do it by hand:
+
 1. **Try it.** Restart, press **Esc** as the computer starts to show the boot menu, open the snapshots and pick the one
    named `auto-update` with the date and time before the update. The system starts as it was then. It's for checking,
    or for getting by: whatever changes in the system meanwhile is kept in memory only (nothing is updated there), and
@@ -121,5 +130,5 @@ up). Snapshots hold the system only: your home folder and its files are never ro
    to **Snapper**, **Browse/Restore**, pick the same snapshot and click **Restore**, then restart. The system is now
    the snapshot's for good.
 
-The same update is downloaded again at the next start, unless a fix has come out meanwhile. If it breaks the same
+Restored by hand, the same update is downloaded again at the next start, unless a fix has come out meanwhile. If it breaks the same
 thing again, [open an issue](https://github.com/CrimzoAgra/agros/issues).

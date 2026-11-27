@@ -43,6 +43,8 @@ STANDIN
 for x in grub-mkconfig efibootmgr systemctl; do
     printf '#!/bin/sh\necho "%s $*" >>%s/calls\n' "$x" "$t" >"$t/bin/$x"
 done
+# (grub-mkconfig's menu as the real one makes it with agros-boot's 01_agros-trial: the boots after an update counted)
+printf '[ "$1" = -o ] && echo "agros_trial" >"$2"\n' >>"$t/bin/grub-mkconfig"
 printf '#!/bin/sh\necho "mkinitcpio $*" >>%s/calls\nexit ${MKINITCPIO_RC:-0}\n' "$t" >"$t/bin/mkinitcpio"
 cat >"$t/bin/plymouth-set-default-theme" <<EOF
 #!/bin/sh
@@ -175,7 +177,7 @@ mkdir -p "$r/etc/grub.d" "$r/sys/firmware/efi" "$r/boot/grub" && touch "$r/boot/
 printf '%s\n' "echo '\$message'" 'linux $path' >"$r/etc/grub.d/10_linux"
 bash "$b/boot-menu" >/dev/null || fail "boot-menu on GRUB failed"
 [[ $(cat "$r/var/lib/agros/boot-menu.sum") == "$(sha256sum <"$b/boot-menu")" ]] || fail "boot-menu didn't note its run"
-want=$(printf '%s\n' 'GRUB_DEFAULT=0' 'GRUB_TIMEOUT=1' "GRUB_CMDLINE_LINUX_DEFAULT='nowatchdog quiet splash loglevel=3 rd.udev.log_level=3 systemd.show_status=false'" '#GRUB_THEME="/path/to/gfxtheme"' \
+want=$(printf '%s\n' 'GRUB_DEFAULT=0' 'GRUB_TIMEOUT=1' "GRUB_CMDLINE_LINUX_DEFAULT='nowatchdog quiet splash loglevel=3 rd.udev.log_level=3 systemd.show_status=false panic=10'" '#GRUB_THEME="/path/to/gfxtheme"' \
     'GRUB_THEME=/usr/share/grub/themes/agros/theme.txt' 'GRUB_TIMEOUT_STYLE=hidden' 'GRUB_SAVEDEFAULT=false' 'GRUB_DISABLE_OS_PROBER=false')
 [[ $(cat "$r/etc/default/grub") == "$want" ]] || fail "boot-menu's GRUB settings: $(cat "$r/etc/default/grub")"
 [[ $(cat "$r/etc/grub.d/10_linux") == 'linux $path' && -f $r/etc/default/grub.agros-orig ]] ||
@@ -209,6 +211,12 @@ sed -i 's/^GRUB_TIMEOUT=.*/GRUB_TIMEOUT=3/' "$r/etc/default/grub"; rm -f "$t/cal
 pac post_upgrade >/dev/null
 grep -qx 'GRUB_TIMEOUT=3' "$r/etc/default/grub" && ! grep -q grub-mkconfig <<<"$(calls)" ||
     fail "the first upgrade after the install ran boot-menu again: $(calls)"
+# An upgrade from an agros-boot before the boots were counted (GRUB's menu without 01_agros-trial): boot-menu run again
+# (the menu made again with it), and the watch turned on
+echo old >"$r/boot/grub/grub.cfg"; rm -f "$t/calls"
+pac post_upgrade >/dev/null
+grep -qx "grub-mkconfig -o $r/boot/grub/grub.cfg" <<<"$(calls)" && grep -qx 'systemctl enable agros-boot-trial.service' <<<"$(calls)" ||
+    fail "an upgrade to the boots counted didn't make GRUB's menu again: $(calls)"
 rm "$r/usr/lib/agros/boot-menu"
 # With AGROS_ROOT, a boot tool of the system's (here a link to one) refused before anything is done
 mkdir "$t/sysbin" && ln -s "$(readlink -f "$t/sys/cat")" "$t/sysbin/efibootmgr"

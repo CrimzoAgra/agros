@@ -84,7 +84,7 @@ jobs:
           # validates the launchers; both only when there, said nowhere): the tests that check against them
           pkgs=(git jq python python-yaml python-gobject python-xlib python-secretstorage gnupg shellcheck sudo libnotify fish
             procps-ng util-linux which diffutils pacman-contrib file gtk3 thunar lua lutris nodejs qt6-declarative hyprland
-            base-devel mkinitcpio bubblewrap passt xdg-desktop-portal-hyprland uwsm squashfs-tools dash desktop-file-utils)
+            base-devel mkinitcpio grub bubblewrap passt xdg-desktop-portal-hyprland uwsm squashfs-tools dash desktop-file-utils)
           # (a machine id: without one systemd's install hooks warn that /etc isn't set up)
           systemd-machine-id-setup >/dev/null
           pacman -Sy

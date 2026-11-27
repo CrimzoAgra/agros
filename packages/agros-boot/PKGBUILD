@@ -44,6 +44,12 @@ package() {
     install -Dm755 snapshot-overlay "$pkgdir/usr/lib/agros/snapshot-overlay"
     install -Dm644 snapshot-overlay.service "$pkgdir/usr/lib/agros/snapshot-overlay.service"
     install -Dm644 mkinitcpio-snapshot-overlay.conf "$pkgdir/etc/mkinitcpio.conf.d/91-agros-snapshot-overlay.conf"
+    # (the boots after an update counted, the system from before it brought back when they fail: GRUB's menu script,
+    # the watch at each boot, and boot-rollback, put in the boot image by the hook above)
+    install -Dm755 grub-agros-trial "$pkgdir/etc/grub.d/01_agros-trial"
+    install -Dm755 -t "$pkgdir/usr/lib/agros" boot-trial boot-rollback
+    install -Dm644 boot-rollback.service "$pkgdir/usr/lib/agros/boot-rollback.service"
+    install -Dm644 boot-trial.service "$pkgdir/usr/lib/systemd/system/agros-boot-trial.service"
     install -Dm644 agros-boot.tmpfiles "$pkgdir/usr/lib/tmpfiles.d/agros-boot.conf"
     # AgrOS's GRUB theme (boot-menu sets it); make.sh, which made its pictures and fonts, isn't installed
     install -Dm644 -t "$pkgdir/usr/share/grub/themes/agros" grub-theme/theme.txt grub-theme/*.png grub-theme/*.pf2

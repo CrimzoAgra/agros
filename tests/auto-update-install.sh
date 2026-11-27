@@ -39,8 +39,10 @@ sed -e "s|/var/lib/auto-update|$t/au|g" -e "s|/var/lib/pacman|$t/pac|g" -e "s|/v
     -e "s|/usr/lib/agros/auto-update-aur|$t/auto-update-aur|g; s|/usr/lib/agros/auto-update |$t/auto-update |g" \
     -e "s|/usr/lib/agros/bin/|$here/.local/bin/|g" \
     -e "s|/var/lib/agros/|$t/agros/|g" -e "s|/usr/share/pacman/keyrings/agros.gpg|$t/agros.gpg|g" \
-    -e "s|/usr/share/agros/retired|$t/retired|g" \
+    -e "s|/usr/share/agros/retired|$t/retired|g" -e "s|/usr/lib/agros/boot-trial|$t/boot-trial|g" \
     "$au/auto-update" >"$t/auto-update"
+# (agros-boot's boot-trial: noted)
+printf '#!/bin/sh\necho "boot-trial $*" >>%s/calls\n' "$t" >"$t/boot-trial"; chmod +x "$t/boot-trial"
 sed -e "s|/var/lib/auto-update|$t/au|g" -e "s|/usr/lib/agros/auto-update-aur|$t/auto-update-aur|g" \
     -e "s|/usr/lib/agros/bin/|$here/.local/bin/|g" "$au/auto-update-aur" >"$t/auto-update-aur"
 grep -q -- '--install' "$t/auto-update" || fail "auto-update has no --install"
@@ -146,6 +148,8 @@ EOF
 cat >"$t/bin/snapper" <<EOF
 #!/bin/sh
 case " \$* " in *" --no-dbus "*) echo "snapper \$*" >>"$t/calls" ;; *) exit 1 ;; esac
+# (the new snapshot's number, -p)
+case " \$* " in *" create "*" -p "*) echo 42 ;; esac
 EOF
 for s in curl flatpak; do printf '#!/bin/sh\nexit 0\n' >"$t/bin/$s"; done
 # (through PAM, never: a logind session for the user)
@@ -213,6 +217,29 @@ grep -q "^pacman -Su .*(SNAP_PAC_SKIP=y)" "$t/calls" || fail "snap-pac's snapsho
 [[ $(cat "$t/pac/sync/core.db") == new ]] || fail "the boot's package lists weren't used"
 [[ $(res) == "ok "* ]] || fail "the install's result not written down: $(res)"
 [[ ! -e $t/au/installing && ! -e $t/au/prev ]] || fail "an install that went fine left its marks"
+# ...and the boots after it watched, this snapshot to come back if they fail (agros-boot's boot-trial)
+grep -qx "boot-trial arm /.snapshots/42/snapshot" "$t/calls" || fail "the boots after the install not watched: $(cat "$t/calls")"
+# An update rolled back (boot-rollback's note, a day ago): the restored system's ready download not installed, and the
+# boot downloads nothing for the system, until 3 days after it (7 after a second in a row)
+lists; : >"$t/calls"
+echo "$(date -d '1 day ago' '+%F %H:%M') @/.snapshots/41/snapshot x 1" >"$t/au/rolled-back"
+"$t/auto-update" --install >/dev/null || fail "the install while held failed"
+[[ ! -s $t/calls ]] && grep -q "failed to boot, and the system from before it came back.*: nothing installed" "$t/log" ||
+    fail "installed in the days after a rollback: $(cat "$t/calls")"
+: >"$t/syncs"
+QU='foo 1-1 -> 2-1' "$t/auto-update" >/dev/null || fail "the boot while held failed"
+[[ ! -s $t/syncs && ! -e $t/au/db/complete ]] && grep -q "the system's updates wait until" "$t/log" ||
+    fail "downloaded in the days after a rollback: $(cat "$t/syncs")"
+out=$(Q_HAVE=1-1 HOME=$t/h AUTO_UPDATE_DIR=$t/au PACMAN_DB_DIR=$t/pac "$here/.local/bin/agros-check" 2>&1) || true
+[[ $out == *"An update failed to start the desktop, so the system from before it came back by itself"*"@/.snapshots/41/snapshot): the system's updates wait 3 days"* ]] ||
+    fail "agros-check didn't say the update was rolled back: $out"
+# ...4 days after it: installed again; a second rollback in a row 4 days ago: still held
+lists; : >"$t/calls"
+echo "$(date -d '4 days ago' '+%F %H:%M') @/.snapshots/41/snapshot x 2" >"$t/au/rolled-back"
+"$t/auto-update" --install >/dev/null && [[ ! -s $t/calls ]] || fail "installed 4 days after a second rollback in a row"
+echo "$(date -d '4 days ago' '+%F %H:%M') @/.snapshots/41/snapshot x 1" >"$t/au/rolled-back"
+"$t/auto-update" --install >/dev/null && grep -q "^pacman -Su" "$t/calls" || fail "still held 4 days after a rollback"
+rm -f "$t/au/rolled-back"
 grep -q "^installing foo" "$t/log" || fail "pacman's output not in the log"
 # The splash says how far it's got: "Updates are underway (N%)", its packages (of those its dry run counted) then its
 # hooks, never back, 100% once done (plymouth: the messages it's given)
@@ -231,7 +258,7 @@ chmod +x "$t/grub-btrfs"
 lists
 : >"$t/calls"
 "$t/auto-update" --install >/dev/null || fail "the install with grub-btrfs failed"
-[[ $(grep -v '^boot held' "$t/calls" | cut -d' ' -f1 | paste -sd' ') == "snapper snapper grub-btrfs pacman" ]] ||
+[[ $(grep -v '^boot held' "$t/calls" | cut -d' ' -f1 | paste -sd' ') == "snapper snapper grub-btrfs pacman boot-trial" ]] ||
     fail "the snapshot not put in the boot menu (grub-btrfs) right after it: $(cat "$t/calls")"
 rm "$t/grub-btrfs"
 # The packages AgrOS dropped (agros-system's retired list) removed after the install: only those in as a dependency

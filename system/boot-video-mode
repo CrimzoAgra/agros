@@ -40,8 +40,10 @@ OURS = r'video=[^\s:"\']+:\d+x\d+@\d+(?![^\s"\'])'
 # The boot's and shutdown's text kept behind the splash: no kernel messages but critical ones, Plymouth's splash (not its
 # text mode), udev's start-up line in the boot image (before Plymouth is up) and systemd's status lines (failures too:
 # in the journal, journalctl -b -p err) off; Esc on the splash still shows the text. The emergency shell still comes up.
-# No vt.global_cursor_default=0: a text console and the emergency shell would have no cursor
-QUIET = ["quiet", "splash", "loglevel=3", "rd.udev.log_level=3", "systemd.show_status=false"]
+# No vt.global_cursor_default=0: a text console and the emergency shell would have no cursor. With them panic=10: a
+# kernel that crashes restarts the PC after 10 s, not a frozen screen (and after an update, agros-boot's boot-trial
+# counts that boot as failed: the system from before it comes back with no one there)
+QUIET = ["quiet", "splash", "loglevel=3", "rd.udev.log_level=3", "systemd.show_status=false", "panic=10"]
 MODE = re.compile(r"\b(\d+)x(\d+)\s+([\d.]+) Hz")  # edid-decode's mode lines (interlaced ones read "1920x1080i")
 
 
@@ -304,17 +306,17 @@ if __name__ == "__main__":
         assert with_video('K="quiet', ["video=X:1x1@1"]) == 'K="quiet'
         # The quiet boot: the missing ones added (a name there kept as it is: loglevel=7); none missing, unchanged
         assert with_quiet("GRUB_CMDLINE_LINUX_DEFAULT='nowatchdog loglevel=7 splash'") == \
-            "GRUB_CMDLINE_LINUX_DEFAULT='nowatchdog loglevel=7 splash quiet rd.udev.log_level=3 systemd.show_status=false'"
+            "GRUB_CMDLINE_LINUX_DEFAULT='nowatchdog loglevel=7 splash quiet rd.udev.log_level=3 systemd.show_status=false panic=10'"
         full = 'K="' + " ".join(QUIET) + '"'
         assert with_quiet(full) == full and with_quiet("GRUB_CMDLINE_LINUX_DEFAULT=") == 'GRUB_CMDLINE_LINUX_DEFAULT="' + " ".join(QUIET) + '"'
         assert with_quiet('K="quiet') == 'K="quiet'
         # Taken out: only those the line before AgrOS had no option of the name of (its quiet and a loglevel of its own stay;
         # a quietx isn't quiet)
-        assert without_quiet('K="quiet nowatchdog splash loglevel=3 rd.udev.log_level=3 systemd.show_status=false quietx"',
+        assert without_quiet('K="quiet nowatchdog splash loglevel=3 rd.udev.log_level=3 systemd.show_status=false panic=10 quietx"',
                              names('K="quiet loglevel=4 nowatchdog"')) == 'K="quiet nowatchdog loglevel=3 quietx"'
         assert without_quiet(full, set()) == 'K=""'
         # A += line's: a space before them, even in an empty value (added onto the text before it); others' names count
-        assert with_quiet('K+=""', {"quiet", "splash", "loglevel"}) == 'K+=" rd.udev.log_level=3 systemd.show_status=false"'
+        assert with_quiet('K+=""', {"quiet", "splash", "loglevel"}) == 'K+=" rd.udev.log_level=3 systemd.show_status=false panic=10"'
         assert effective(["K+=a", "#K=b", "K=c", "K+=d", "X=e"], r"K\+?=") == [2, 3] and effective(["K+=a", "K+=b"], r"K\+?=") == [0, 1]
         print("ok")
         sys.exit(0)

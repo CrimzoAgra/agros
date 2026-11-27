@@ -1,0 +1,16 @@
+# agros-boot: the boots after an update watched (boot-trial watch: the login screen, then the desktop), the PC
+# restarted when they fail, and the system from before it brought back after that (GRUB's 01_agros-trial)
+[Unit]
+Description=Watch the boot after an update
+After=local-fs.target
+ConditionPathExists=|/boot/efi/EFI/agros/trial.env
+ConditionPathExists=|/efi/EFI/agros/trial.env
+ConditionPathExists=|/boot/EFI/agros/trial.env
+
+[Service]
+# exec: the boot doesn't wait for it
+Type=exec
+ExecStart=/usr/lib/agros/boot-trial watch
+
+[Install]
+WantedBy=multi-user.target

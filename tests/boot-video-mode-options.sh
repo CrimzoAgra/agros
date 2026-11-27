@@ -61,7 +61,7 @@ grub=$gr/etc/default/grub K='GRUB_CMDLINE_LINUX_DEFAULT'
 printf '#!/bin/sh\necho "grub-mkconfig $*" >>%s/edid/calls\n' "$t" >"$t/edid/grub-mkconfig"
 chmod +x "$t/edid/grub-mkconfig"
 bvm() { AGROS_ROOT=$gr PATH=$t/edid:$PATH "$here/system/boot-video-mode" "$@"; }
-Q='splash loglevel=3 rd.udev.log_level=3 systemd.show_status=false'
+Q='splash loglevel=3 rd.udev.log_level=3 systemd.show_status=false panic=10'
 check() {  # <name> <file before> <file after --quiet-boot>
     printf '%s\n' "$2" >"$grub"; cp "$grub" "$grub.agros-orig"
     bvm --quiet-boot || fail "$1: --quiet-boot failed"
@@ -73,7 +73,7 @@ check "one +=" "$K+=\"quiet rw\"" "$K+=\"quiet rw $Q\""
 check "two +=" "$(printf '%s\n' "$K+=\"quiet nowatchdog\"" "$K+=\" rw\"")" \
     "$(printf '%s\n' "$K+=\"quiet nowatchdog\"" "$K+=\" rw $Q\"")"
 check "a later =" "$(printf '%s\n' "$K+=\"quiet splash\"" "$K=\"rw\"" "$K+=\" loglevel=7\"")" \
-    "$(printf '%s\n' "$K+=\"quiet splash\"" "$K=\"rw\"" "$K+=\" loglevel=7 quiet splash rd.udev.log_level=3 systemd.show_status=false\"")"
+    "$(printf '%s\n' "$K+=\"quiet splash\"" "$K=\"rw\"" "$K+=\" loglevel=7 quiet splash rd.udev.log_level=3 systemd.show_status=false panic=10\"")"
 # --remove: the video= on a line no longer in effect (an older AgrOS put them on the first) out too, its QUIET ones (doing
 # nothing there) left; those on the lines in effect out, a += line's leading space kept
 printf '%s\n' "$K+=\"rw\"" >"$grub.agros-orig"

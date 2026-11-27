@@ -1,0 +1,14 @@
+# agros-boot, in the boot image only (agros-snapshot-overlay): the system from before a failed update brought back
+# (boot-rollback), before the root's mounted
+[Unit]
+Description=Bring back the system from before a failed update
+DefaultDependencies=no
+ConditionPathExists=/etc/initrd-release
+ConditionKernelCommandLine=agros.rollback
+After=initrd-root-device.target
+Before=sysroot.mount
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/agros/boot-rollback

@@ -1,0 +1,125 @@
+#!/usr/bin/env bash
+# boot-trial: the boots after an update installed at shutdown watched, and the system from before it brought back when
+# they fail, with no one having to do anything (agros-boot: /usr/lib/agros/boot-trial)
+#   boot-trial arm <snapshot>   after the shutdown's install (auto-update), <snapshot> the one taken just before it
+#                               (/.snapshots/<n>/snapshot): its kernel, boot image and the options this boot had written
+#                               to GRUB's file on the EFI partition, with the count of tries (2)
+#   boot-trial watch            each boot (agros-boot-trial.service): with a count running, the login screen waited for
+#                               (4 min), then the desktop once someone logs in (Hyprland with Caelestia's shell); either
+#                               failing restarts the PC
+#   boot-trial disarm           the count cleared
+# GRUB takes one off each boot (01_agros-trial: 2, 1, 0) and at 0 boots the snapshot, which boot-rollback (in the boot
+# image) makes the system. A boot that crashes (panic=10: restarts) or hangs before here counts that way too. The login
+# screen up stops the count ("greeter"); the desktop failing then twice (Caelestia's shell not running 3 min into a
+# session, or 3 sessions ending within 20 s) sets it to 0 itself. The desktop up (its shell running for 40 s): cleared.
+# A count GRUB didn't take one off (its menu made before 01_agros-trial was there) is cleared, never acted on: else a
+# failure would restart the PC for good. Nothing done on a snapshot booted from the menu (the root an overlay in RAM)
+# (BOOT_TRIAL_ENV, BOOT_TRIAL_CMDLINE, BOOT_TRIAL_POLL, BOOT_TRIAL_GRUB_CFG, BOOT_TRIAL_BOOT_ID, AUTO_UPDATE_DIR: the
+# tests')
+set -uo pipefail
+esp() {
+    local d
+    for d in /boot/efi /efi /boot; do
+        [[ $(findmnt -no FSTYPE --mountpoint "$d" 2>/dev/null) == vfat ]] && { echo "$d"; return 0; }
+    done
+    return 1
+}
+if [[ -n ${BOOT_TRIAL_ENV:-} ]]; then env=$BOOT_TRIAL_ENV; elif d=$(esp); then env=$d/EFI/agros/trial.env; else env=; fi
+au=${AUTO_UPDATE_DIR:-/var/lib/auto-update}
+# (each look this far apart; step: the seconds it counts each for, the tests' far shorter looks counted as 2 s too)
+poll=${BOOT_TRIAL_POLL:-2} step=2
+say() { echo "boot-trial: $*"; }
+get() { grub-editenv "$env" list 2>/dev/null | sed -n "s/^$1=//p"; }
+set_() { grub-editenv "$env" set "$@"; }
+disarm() { rm -f "$env"; }
+
+arm() {
+    local snap=${1:?usage: boot-trial arm <snapshot>} cmdline kernel rel uuid args
+    [[ -n $env ]] || { say "no EFI partition: not armed"; return 1; }
+    grep -q agros_trial "${BOOT_TRIAL_GRUB_CFG:-/boot/grub/grub.cfg}" 2>/dev/null ||
+        { say "GRUB's menu doesn't count the boots (01_agros-trial): not armed"; return 1; }
+    cmdline=$(cat "${BOOT_TRIAL_CMDLINE:-/proc/cmdline}")
+    kernel=$(sed -n 's/^BOOT_IMAGE=[^ ]*\/\(vmlinuz-[^ ]*\).*/\1/p' <<<"$cmdline")
+    # (the snapshot's path from the filesystem's top, as GRUB and the boot image reach it: btrfs's first line)
+    rel=$(btrfs subvolume show "$snap" 2>/dev/null | head -1)
+    uuid=$(findmnt -no UUID / 2>/dev/null)
+    # (the kernel in the snapshot: /boot part of the root, not a partition of its own; and boot-rollback in its boot image)
+    [[ -n $kernel && -n $rel && -n $uuid && -f $snap/boot/$kernel && -f $snap/boot/initramfs-${kernel#vmlinuz-}.img &&
+        -f $snap/usr/lib/agros/boot-rollback ]] || { say "the snapshot can't be booted by itself ($snap): not armed"; return 1; }
+    args=$(sed -E 's/(^| )(BOOT_IMAGE|agros\.rollback)=[^ ]*//g; s/^ +//' <<<"$cmdline")
+    mkdir -p "$(dirname "$env")" && { [[ -f $env ]] || grub-editenv "$env" create; } &&
+        set_ agros_trial=2 "agros_uuid=$uuid" "agros_linux=/$rel/boot/$kernel" \
+            "agros_initrd=/$rel/boot/initramfs-${kernel#vmlinuz-}.img" "agros_args=$args agros.rollback=$rel" &&
+        grub-editenv "$env" unset agros_desk && say "armed: the next boots counted, back to $rel if they fail"
+}
+
+# procs: "<user> <command line>" of every process
+procs() { ps -eo user:32=,args= 2>/dev/null; }
+
+# fail <why> [desktop]: the PC restarted. The desktop's second failure sets GRUB's count to 0 itself (its first: tried
+# once more); a boot's failure is counted by GRUB already
+fail() {
+    say "$1: the PC restarts"
+    if [[ ${2:-} == desktop && $(get agros_desk) == 1 ]]; then set_ agros_trial=0
+    elif [[ ${2:-} == desktop ]]; then set_ agros_desk=1; fi
+    systemctl reboot
+    exit 0
+}
+
+watch() {
+    [[ -n $env && -f $env ]] || return 0
+    [[ $(findmnt -no FSTYPE / 2>/dev/null) != overlay ]] || return 0
+    local state n
+    state=$(get agros_trial)
+    case $state in
+        2) say "GRUB didn't count this boot (its menu without 01_agros-trial): cleared"; disarm; return 0 ;;
+        rollback)
+            # (boot-rollback writes rolled-back in the system it brings back, "<date> <time> <snapshot> <boot id>
+            # <rollbacks in a row>": this boot's, or it failed)
+            if [[ $(awk '{print $4}' "$au/rolled-back" 2>/dev/null) == "$(cat "${BOOT_TRIAL_BOOT_ID:-/proc/sys/kernel/random/boot_id}")" ]]; then
+                say "the system from before the update is back ($(awk '{print $3}' "$au/rolled-back"))"
+            else
+                say "the system from before the update couldn't be brought back"
+                mkdir -p "$au" && date '+%F %H:%M' >"$au/rollback-failed"
+            fi
+            disarm; return 0 ;;
+        1 | 0)
+            for ((n = 0; ; n++)); do
+                grep -qE '^greeter +qs -p /etc/greetd/' <<<"$(procs)" && break
+                ((n * step < 240)) || fail "the login screen didn't come up"
+                sleep "$poll"
+            done
+            set_ agros_trial=greeter
+            say "the login screen is up" ;;
+        greeter) ;;
+        *) return 0 ;;
+    esac
+    # The desktop, once someone logs in (no time limit: the login screen waits for them)
+    local -A since=() shell=() seen=()
+    local quick=0 pid user t all
+    for ((t = 0; ; t++)); do
+        seen=()
+        all=$(procs)
+        while read -r pid user; do
+            seen[$pid]=1
+            [[ -n ${since[$pid]:-} ]] || { since[$pid]=$t; shell[$pid]=0; }
+            grep -qE "^$user +qs -c caelestia( |$)" <<<"$all" && shell[$pid]=$((shell[$pid] + 1))
+            ((shell[$pid] * step < 40)) || { say "the desktop is up: cleared"; disarm; rm -f "$au/rolled-back" "$au/rollback-failed"; exit 0; }
+            (((t - since[$pid]) * step < 180 || shell[$pid] >= 3)) || fail "Caelestia's shell didn't start in $user's desktop" desktop
+        done < <(awk '$3 == "Hyprland" && $2 != "greeter" { print $1, $2 }' <<<"$(ps -eo pid=,user:32=,comm= 2>/dev/null)")
+        for pid in "${!since[@]}"; do
+            [[ -z ${seen[$pid]:-} ]] || continue
+            (((t - since[$pid]) * step >= 20)) || quick=$((quick + 1))
+            unset "since[$pid]" "shell[$pid]"
+        done
+        ((quick < 3)) || fail "the desktop ended within seconds 3 times" desktop
+        sleep "$poll"
+    done
+}
+
+case ${1:-} in
+    arm) arm "${2:-}" ;;
+    watch) watch ;;
+    disarm) disarm ;;
+    *) echo "usage: boot-trial arm <snapshot> | watch | disarm" >&2; exit 2 ;;
+esac

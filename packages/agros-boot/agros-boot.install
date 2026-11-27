@@ -27,13 +27,18 @@ _restore() {
 
 post_install() {
     _boot_menu
-    systemctl enable boot-video-mode.service >/dev/null 2>&1 || true
+    systemctl enable boot-video-mode.service agros-boot-trial.service >/dev/null 2>&1 || true
     "$_lib/splash-theme" --no-initramfs || echo "agros-boot: the splash left as it was"
 }
 
 post_upgrade() {
-    # A changed boot-menu applied (it sets the same settings each run)
-    [[ $(sha256sum <"$_lib/boot-menu") == "$(cat "$_stamp" 2>/dev/null)" ]] || _boot_menu
+    # A changed boot-menu applied (it sets the same settings each run); also GRUB's menu without the boots counted after
+    # an update (01_agros-trial, new in agros-boot: the menu made again by it, panic=10 added with it)
+    if [[ $(sha256sum <"$_lib/boot-menu") != "$(cat "$_stamp" 2>/dev/null)" ]] ||
+        { [[ -f $_r/boot/grub/grub.cfg ]] && ! grep -q agros_trial "$_r/boot/grub/grub.cfg"; }; then
+        _boot_menu
+    fi
+    systemctl enable agros-boot-trial.service >/dev/null 2>&1 || true
     # The faster splash made again (a changed splash-theme; the boot images: mkinitcpio's hook, after the transaction)
     "$_lib/splash-theme" --update --no-initramfs >/dev/null 2>&1 ||
         echo "agros-boot: the splash not made again (run: sudo /usr/lib/agros/splash-theme)"
@@ -41,7 +46,9 @@ post_upgrade() {
 }
 
 pre_remove() {
-    systemctl disable boot-video-mode.service >/dev/null 2>&1 || true
+    systemctl disable boot-video-mode.service agros-boot-trial.service >/dev/null 2>&1 || true
+    # (the boots after an update no longer counted: GRUB's menu without 01_agros-trial once it's made again, below)
+    "$_lib/boot-trial" disarm >/dev/null 2>&1
     # The splash back to CachyOS's (out of the boot images: mkinitcpio's hook, after the transaction, as plymouth-title-font
     # goes)
     "$_lib/splash-theme" --remove --no-initramfs >/dev/null 2>&1 || echo "agros-boot: the splash left as it was"

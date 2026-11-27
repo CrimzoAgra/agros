@@ -133,6 +133,18 @@ recover() {
 # held: pacman's lock there and one of its users running (not one cut off: its lock left with nothing behind it)
 held() { [[ -e $pacdb/db.lck ]] && lock_holder; }
 each_user=${AGROS_EACH_USER:-/usr/lib/agros/bin/agros-each-user}
+# rollback_hold: an update the boots after it failed on, the system from before it brought back (agros-boot's
+# boot-trial and boot-rollback, which writes rolled-back: "<date> <time> <snapshot> <boot id> <rollbacks in a row>"):
+# the system's updates held 3 days after it, 7 after a second in a row (what broke it likely fixed by then), said; the
+# apps' (Flatpaks...) go on. The next update that boots fine takes the note away (boot-trial)
+rollback_hold() {
+    local day time snap n until
+    read -r day time snap _ n 2>/dev/null <"$au/rolled-back" || return 1
+    [[ $n =~ ^[0-9]+$ ]] || n=1
+    until=$(date -d "$day $time $((n > 1 ? 7 : 3)) days" +%s 2>/dev/null) || return 1
+    (($(date +%s) < until)) || return 1
+    echo "the update before $day $time failed to boot, and the system from before it came back ($snap): the system's updates wait until $(date -d "@$until" '+%F %H:%M')"
+}
 # The boot's AUR builds (auto-update-aur: what they are, and how they went)
 aur=$au/aur
 
@@ -282,6 +294,8 @@ if [[ ${1:-} == --install ]]; then
     # lists newer than the packages it got, and installing from them would download the rest at shutdown. But for the
     # keyrings it got first (below). Said with pacman's error, where the boot wrote one down (download-failed)
     unfinished() { local e; e=$(plain 2>/dev/null <"$au/download-failed"); echo "the boot's download didn't finish${e:+ ($e)}"; }
+    # (nor in the days after an update was rolled back: the restored system has that download, ready, in it)
+    ! hold=$(rollback_hold) || { echo "$hold: nothing installed"; exit 0; }
     [[ -e $db/complete || -s $db/keyrings ]] || skip "$(unfinished)"
     # (nor while something else using pacman holds its lock: its lists would change under it)
     ! holder=$(held) || skip "something using pacman still ran ($holder)"
@@ -435,8 +449,10 @@ if [[ ${1:-} == --install ]]; then
     # snapperd (started on demand over DBus) can't be started any more, and the snapshot was silently skipped
     # Then into the boot menu's snapshot list here: what does that otherwise (grub-btrfsd) is stopped by now, and isn't
     # started at shutdown, so this one never showed there. Not installed: nothing to do
+    # (its number kept: the boots after this install are watched, and this snapshot comes back if they fail, below)
+    pre=
     if snapper --no-dbus -c root list >/dev/null 2>&1 &&
-        snapper --no-dbus -c root create -c number -d "auto-update $(date +%F_%H%M)"; then
+        pre=$(snapper --no-dbus -c root create -c number -p -d "auto-update $(date +%F_%H%M)"); then
         if [[ -x /etc/grub.d/41_snapshots-btrfs ]]; then
             /etc/grub.d/41_snapshots-btrfs >/dev/null || echo "the boot menu's snapshot list not refreshed (grub-btrfs)"
         fi
@@ -546,6 +562,9 @@ if [[ ${1:-} == --install ]]; then
         exit 1
     fi
     result ok
+    # The next boots watched (agros-boot's boot-trial): the login screen and the desktop not coming up, the PC restarts,
+    # and after a second try the system from the snapshot above comes back by itself
+    [[ ! $pre =~ ^[0-9]+$ || ! -x /usr/lib/agros/boot-trial ]] || /usr/lib/agros/boot-trial arm "/.snapshots/$pre/snapshot" || true
     say "Updates are underway (100%)"
     # (the Qt the shells were rebuilt for, or needed no rebuild for: Updates' update-apps doesn't rebuild them again)
     [[ $target != *qt6-* ]] || /usr/lib/agros/bin/update-kinds --qt-now >"$au/qt-built"
@@ -665,7 +684,11 @@ rotated() {
 # CachyOS's security fixes among them, that repo's from its list from before, said. An error naming no repo's list
 # (pacman's lock, a full disk): nothing downloaded, as before)
 synced=0
-if LC_ALL='' LC_MESSAGES=C pacman -Sy --noconfirm --dbpath "$db" --logfile /dev/null 2>"$err"; then
+if hold=$(rollback_hold); then
+    # (nothing downloaded: the system's updates wait after one was rolled back, said by agros-check too)
+    echo "$hold"
+    : >"$err"
+elif LC_ALL='' LC_MESSAGES=C pacman -Sy --noconfirm --dbpath "$db" --logfile /dev/null 2>"$err"; then
     synced=1
 else
     echo "the lists' sync failed: tried again with each mirror list's next mirror first"

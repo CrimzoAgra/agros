@@ -2,14 +2,18 @@
 # agros-boot's mkinitcpio hook agros-snapshot-overlay (/usr/lib/initcpio/install): in a systemd boot image, a snapshot
 # booted from the boot menu made writable in RAM (snapshot-overlay, run by its unit after the root's mounted).
 # grub-btrfs's grub-btrfs-overlayfs is busybox's, run by no systemd image. Added to HOOKS by
-# 91-agros-snapshot-overlay.conf where it isn't there
+# 91-agros-snapshot-overlay.conf where it isn't there. Also the system from before a failed update brought back, before
+# the root's mounted (boot-rollback, its unit agros-boot-rollback.service: GRUB's 01_agros-trial boots it)
 build() {
     add_module btrfs
     add_module overlay
-    map add_binary bash btrfs findmnt mount mktemp mkdir
+    map add_binary bash btrfs findmnt mount umount mktemp mkdir rmdir mv date awk sed tr tail cat
     add_file /usr/lib/agros/snapshot-overlay /usr/lib/agros/snapshot-overlay 755
     add_file /usr/lib/agros/snapshot-overlay.service /usr/lib/systemd/system/agros-snapshot-overlay.service 644
     add_symlink /usr/lib/systemd/system/initrd.target.wants/agros-snapshot-overlay.service ../agros-snapshot-overlay.service
+    add_file /usr/lib/agros/boot-rollback /usr/lib/agros/boot-rollback 755
+    add_file /usr/lib/agros/boot-rollback.service /usr/lib/systemd/system/agros-boot-rollback.service 644
+    add_symlink /usr/lib/systemd/system/initrd.target.wants/agros-boot-rollback.service ../agros-boot-rollback.service
 }
 
 help() {

@@ -1,0 +1,40 @@
+#!/bin/sh
+# GRUB's menu script /etc/grub.d/01_agros-trial (agros-boot): the boots after an update installed at shutdown counted,
+# and the system from before it booted once they've failed. The count is in a GRUB environment file on the EFI partition
+# (FAT: GRUB can't write one on Btrfs), /EFI/agros/trial.env, which boot-trial arms after the install ("agros_trial=2",
+# with the snapshot's kernel, boot image, filesystem and options) and clears once the desktop has come up. Each boot
+# takes one off before it starts: 2, 1, then 0, which boots the snapshot's own kernel and boot image with
+# agros.rollback=<snapshot> (boot-rollback, in the boot image: the snapshot made the system, before it's mounted).
+# "greeter": the login screen came up, its count kept off (boot-trial watches the desktop). Anything amiss (no file,
+# a value it doesn't know, the snapshot's kernel gone) and it boots as it would without this
+cat <<'EOF'
+if search --no-floppy --file --set=agros_esp /EFI/agros/trial.env; then
+    set agros_env=($agros_esp)/EFI/agros/trial.env
+    load_env --file $agros_env agros_trial agros_uuid agros_linux agros_initrd agros_args
+    if [ "$agros_trial" = 2 ]; then
+        set agros_trial=1
+        save_env --file $agros_env agros_trial
+    elif [ "$agros_trial" = 1 ]; then
+        set agros_trial=0
+        save_env --file $agros_env agros_trial
+    elif [ "$agros_trial" = 0 ]; then
+        # (the last state either way: a snapshot gone meanwhile can't be booted, and boot-trial says so and clears it,
+        # rather than the PC restarting for good)
+        set agros_trial=rollback
+        save_env --file $agros_env agros_trial
+        if search --no-floppy --fs-uuid --set=agros_root $agros_uuid; then
+            if [ -f ($agros_root)$agros_linux ]; then
+                if [ -f ($agros_root)$agros_initrd ]; then
+                    export agros_root agros_linux agros_initrd agros_args
+                    menuentry 'AgrOS: the system from before the update' --id agros-rollback {
+                        set root=$agros_root
+                        linux $agros_linux $agros_args
+                        initrd $agros_initrd
+                    }
+                    set default=agros-rollback
+                fi
+            fi
+        fi
+    fi
+fi
+EOF
