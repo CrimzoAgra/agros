@@ -1103,10 +1103,16 @@ hl.on("window.fullscreen", function(win)
         end
     end, { timeout = 200, type = "oneshot" })
 end)
+-- (watched too when it's focused still fullscreen: brought back from minimised, Hyprland had kept it so, and the game
+-- dropped it 20 ms later all the same)
 hl.on("window.active", function(win)
-    if not (win and out_of_fullscreen[win.address]) then return end
-    out_of_fullscreen[win.address] = nil
-    if back_to_fullscreen(win) then settle(win.address, 3) end
+    if not win then return end
+    if out_of_fullscreen[win.address] then
+        out_of_fullscreen[win.address] = nil
+        if back_to_fullscreen(win) then settle(win.address, 3) end
+    elseif (win.fullscreen or 0) >= 2 and not settling[win.address] and dots.is_game and dots.is_game(win) then
+        settle(win.address, 3)
+    end
 end)
 -- A game over its screen focused (Alt+Tab, the dock) with the pointer on another screen: the pointer to its middle, as
 -- a fullscreen game on Windows takes it. Floating mode has no warps (no_warps), and the pointer moving on there handed

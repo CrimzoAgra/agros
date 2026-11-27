@@ -891,12 +891,13 @@ local function run_held(timeout)
         if t[i] == timeout then fn() else HELD_TIMERS[#HELD_TIMERS + 1], TIMER_SETS[#TIMER_SETS + 1] = fn, t[i] end
     end
 end
-local function drops_after(focused, times, late)
-    game.size, game.workspace, game.address, game.fullscreen = { x = 1920, y = 1080 }, ws(1), "0xdrop" .. tostring(math.random(1e6)), 0
+-- (already: focused still fullscreen, as Hyprland keeps a game minimised in fullscreen)
+local function drops_after(focused, times, late, already)
+    game.size, game.workspace, game.address, game.fullscreen = { x = 1920, y = 1080 }, ws(1), "0xdrop" .. tostring(math.random(1e6)), already and 2 or 0
     WINDOWS, ACTIVE, sent, HOLD_TIMERS, HELD_TIMERS, TIMER_SETS = { game, other_win }, game, {}, true, {}, {}
-    fire("window.fullscreen", game)
+    if not already then fire("window.fullscreen", game) end
     fire("window.active", game)
-    ACTIVE = focused
+    ACTIVE, game.fullscreen = focused, 0
     local n = 0
     for _ = 1, times do
         if late then run_held(150) end
@@ -912,6 +913,8 @@ end
 check("a game put back, dropping it again by itself, focused: put back again", drops_after(game, 1), "1 exclusive")
 check("...dropping it 5 times: put back 3 times", drops_after(game, 5), "3 exclusive")
 check("...dropping it 150 ms and more after (the Super menu): left", drops_after(game, 1, true), "0")
+check("a game focused still fullscreen, dropping it by itself right after: put back", drops_after(game, 1, false, true), "1 exclusive")
+check("...dropping it 150 ms and more after (the Super menu): left", drops_after(game, 1, true, true), "0")
 check("...dropping it as another window is focused: left", drops_after(other_win, 1), "0 exclusive")
 -- A game over its screen focused with the pointer on another screen: the pointer to its middle; not when it's on the
 -- game's screen already, nor for a game in a window
