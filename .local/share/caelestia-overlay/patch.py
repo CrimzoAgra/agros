@@ -3308,7 +3308,14 @@ def tray_over_dock():
         raise LookupError("the popouts' entry test")
     bar = bar.replace(old, "        const ch = entryAt(y);\n")
     bar = swap(bar, """                const index = Math.floor(((y - top - tray.padding * 2 + tray.spacing) / tray.layout.implicitHeight) * tray.items.count);
-""", """                const index = Math.floor(((y - top - tray.y - tray.padding * 2 + tray.spacing) / tray.layout.implicitHeight) * tray.items.count);
+""", """                // caelestia-overlay (tray_over_dock): the icon under the pointer, each with half the gap to the next (an
+                // estimate from the tray's padding and spacing had them shifted along the bar, an icon's menu opening
+                // past it, the last one's over the open/close arrow)
+                const index = [...Array(tray.items.count).keys()].findIndex(i => {
+                    const it = tray.items.itemAt(i);
+                    const at = it ? it.mapToItem(root, 0, 0).y : NaN;
+                    return y >= at - tray.layout.spacing / 2 && y < at + it.height + tray.layout.spacing / 2;
+                });
 """, "the tray's item test")
     bar = swap(bar, """        if (y < (ws ? ws.y + ws.height : 0) || y > (tray ? tray.y : height))
 """, """        if (y < (ws ? ws.y + ws.height : 0) || y > (tray ? tray.y + (tray.item?.y ?? 0) : height))
