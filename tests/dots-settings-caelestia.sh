@@ -98,6 +98,7 @@ ds.hyprctl = lambda *a: [{"description": f"Screen {n}", "name": f"DP-{n}", "make
                           "height": 1080, "refreshRate": 60.0, "scale": 1.0} for n in (1, 2)] if a[0] == "monitors" else []
 keys = [s["key"] for g in ds.screens_groups() for s in g["settings"]]
 assert "screens.Screen 2.hdr" in keys and "screens.Screen 1.hdr" not in keys, keys
+assert "screens.Screen 2.brightness" in keys and "screens.Screen 1.brightness" not in keys, keys
 del os.environ["SYSFS"]
 # A screen with no description (a VM's, with no EDID): listed all the same, its settings by its connector's name, as
 # user/monitors.lua reads them. None from Hyprland said as that, not as no Hyprland session

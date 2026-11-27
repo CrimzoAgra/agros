@@ -39,7 +39,7 @@ shown; "from": "caelestia-options" lists every one of them, by area. Saved in Ca
 which Caelestia watches: they apply at once. The default is AgrOS's own value where it ships one (/etc/skel), else
 Caelestia's. caelestia-vars.<variable>: one of Caelestia's Hyprland variables (gaps, borders...), through
 hypr-vars.lua like its shortcuts. "from": "screens" lists the connected screens' settings (screens.<description>.mode,
-scale, position, enabled, hdr (a screen that takes it), by its connector's name for a screen with no description: screens.Virtual-1.mode;
+scale, position, enabled, hdr and brightness (a screen that takes HDR), by its connector's name for a screen with no description: screens.Virtual-1.mode;
 screens.main), read by user/monitors.lua; "from": "binds" the shortcuts no setting changes
 (Hyprland's list of binds), to show and to find clashes with."""
 import fcntl
@@ -662,7 +662,13 @@ def screens_groups():
             *([{"key": f"screens.{d}.hdr", "label": "HDR", "type": "choice", "default": "", "apply": "hypr",
                 "description": "Automatic: the desktop in SDR, switched to HDR while a fullscreen game or video in HDR"
                                " asks for it. Always: the whole desktop in HDR (10-bit), its SDR colours shown in it.",
-                "options": [{"value": "", "label": "Automatic"}, {"value": "on", "label": "Always"}]}]
+                "options": [{"value": "", "label": "Automatic"}, {"value": "on", "label": "Always"}]},
+               {"key": f"screens.{d}.brightness", "label": "Brightness in HDR", "type": "choice", "default": "",
+                "apply": "hypr",
+                "description": "How bright the desktop is with HDR always on (the screen's own brightness control is"
+                               " locked in HDR): its white, in nits. Games and videos in HDR set their own.",
+                "options": [{"value": "", "label": "250 nits"}] + [
+                    {"value": str(n), "label": f"{n} nits"} for n in (100, 150, 200, 300, 350, 400, 450, 500)]}]
               if supports_hdr(m["name"]) else []),
             # (checked here: a typo reached Hyprland's monitor rule)
             {"key": f"screens.{d}.position", "label": "Position", "type": "text", "default": "", "apply": "hypr",
