@@ -15,6 +15,15 @@ if kb then
 end
 -- No "Hyprland updated" news window after an update
 hl.config({ ecosystem = { no_update_news = true } })
+-- NVIDIA: Wayland's commit timing off. Its driver sets a VSync'd (FIFO) frame's target time from the gap since the one
+-- before, with no limit: after a game's pause its next frame waited as long as the pause had lasted, and the game
+-- showed one frame until something drew over it (Overwatch under Wine's Wayland driver, for HDR). Hyprland reads it at
+-- start: from the next login. (SYSFS: another /sys, the tests')
+local nvidia = io.open((os.getenv("SYSFS") or "/sys") .. "/module/nvidia_drm/initstate")
+if nvidia then
+    nvidia:close()
+    hl.config({ render = { commit_timing_enabled = false } })
+end
 
 -- The functions other programs call through hyprctl eval 'dots.<name>(...)' (the dock, the switcher, game-focus...),
 -- kept in one table instead of loose globals; docs/how-it-works.md lists them ("Lua API")

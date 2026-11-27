@@ -1485,6 +1485,27 @@ out=$(cd "$t" && HOME=$t/home XDG_RUNTIME_DIR=$t/run HYPRLAND_INSTANCE_SIGNATURE
 grep -qx "full first window: the next 1" <<<"$out" || fail "a game's first window filling a scaled screen taken for a splash: $out"
 grep -qx "small first window: the next special:splash" <<<"$out" || fail "a game's small first window not taken for a splash: $out"
 
+# On NVIDIA (its nvidia_drm module loaded) Wayland's commit timing is off (its driver's frame target after a pause froze
+# games); elsewhere Hyprland's own
+cat >"$t/render.lua" <<'L'
+local home = os.getenv("HOME")
+package.path = home .. "/.config/caelestia/?.lua;" .. home .. "/.config/hypr/?.lua;" .. package.path
+dofile(arg[1])
+local timing, config = "unset", hl.config
+hl.config = function(c)
+    config(c)
+    if type(c.render) == "table" and c.render.commit_timing_enabled ~= nil then timing = tostring(c.render.commit_timing_enabled) end
+end
+local vars = require("variables")
+for k, v in pairs(require("hypr-vars")) do vars[k] = v end
+require("hypr-user")
+io.write(timing, "\n")
+L
+render_load() { (cd "$t" && HOME=$t/home XDG_RUNTIME_DIR=$t/run HYPRLAND_INSTANCE_SIGNATURE=test SYSFS=$1 lua render.lua stub.lua 2>&1 | tail -1); }
+mkdir -p "$t/sys-nv/module/nvidia_drm" "$t/sys-none/module"; echo live >"$t/sys-nv/module/nvidia_drm/initstate"
+[[ $(render_load "$t/sys-nv") == false && $(render_load "$t/sys-none") == unset ]] ||
+    fail "commit timing not off on NVIDIA only: $(render_load "$t/sys-nv") / $(render_load "$t/sys-none")"
+
 # Focus on a click (floating mode's default): a closed window's focus goes to the one used before it (focus_on_close 2,
 # "mru"), not to the one under the pointer (Caelestia's 1: none over the desktop, and Super+Q then did nothing); on
 # hover (the Settings app's choice, or tiling), as Caelestia has it
