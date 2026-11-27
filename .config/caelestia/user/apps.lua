@@ -161,6 +161,9 @@ hl.window_rule({ match = { tag = "game" }, focus_on_activate = false })
 -- No animation for games: one moving or popping in (minimised with Alt+Tab, brought back) left Hyprland's black
 -- fullscreen backdrop showing along the right and bottom edges for a moment
 hl.window_rule({ match = { tag = "game" }, no_anim = true })
+-- Nor rounded corners, a border or a shadow: a game in exclusive fullscreen drops it for a moment as it gets the focus
+-- back (windows.lua puts it back), and they flashed round its edges each time
+hl.window_rule({ match = { tag = "game" }, no_rounding = true, border_size = 0, no_shadow = true })
 -- ...but a game takes the focus when it opens and when it goes fullscreen: focus goes on a click here, so Steam's window
 -- (it shows when Lutris starts a game while Steam runs) kept it behind the game, and a Wine game gets mouse movement only
 -- while focused: the camera didn't turn

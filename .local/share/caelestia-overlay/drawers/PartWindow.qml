@@ -62,7 +62,17 @@ StyledWindow {
     // The screen's, from Drawers.qml (each window looking its own up had its size depend on itself: a binding loop)
     required property HyprlandMonitor monitor
     readonly property bool hasSpecialWorkspace: (monitor?.lastIpcObject.specialWorkspace?.name.length ?? 0) > 0
-    readonly property bool hasFullscreenOnNormalWs: monitor?.activeWorkspace?.toplevels.values.some(t => t.lastIpcObject.fullscreen > 1) ?? false
+    // (a game still over the whole screen counts too: one in exclusive fullscreen drops it for a moment as it gets the
+    // focus back, and the bar popped in and out over it until it was fullscreen again, windows.lua)
+    readonly property bool hasFullscreenOnNormalWs: monitor?.activeWorkspace?.toplevels.values.some(t => t.lastIpcObject.fullscreen > 1 || coversAsGame(t)) ?? false
+
+    function coversAsGame(t: HyprlandToplevel): bool {
+        const o = t.lastIpcObject, m = monitor?.lastIpcObject;
+        if (!o.size || !m?.width || !(o.tags ?? []).some(g => g.replace(/\*$/, "") === "game"))
+            return false;
+        const turned = (m.transform ?? 0) % 2 === 1, scale = m.scale || 1;
+        return o.size[0] >= (turned ? m.height : m.width) / scale - 1 && o.size[1] >= (turned ? m.width : m.height) / scale - 1;
+    }
     readonly property bool hasFullscreen: {
         if (hasSpecialWorkspace) {
             const specialName = monitor?.lastIpcObject.specialWorkspace?.name;
