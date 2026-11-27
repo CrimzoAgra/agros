@@ -2579,14 +2579,14 @@ def power_menu():
 
         MaterialIcon {
             visible: button.updates
-            x: button.width - button.notch * 0.42 - width / 2
-            y: button.notch * 0.42 - height / 2
+            x: button.width - button.notch * 0.45 - width / 2
+            y: button.notch * 0.45 - height / 2
             text: "download"
             color: Colours.palette.m3onSurface
             fill: 1
-            // (its glyph 1.2 times the cut's side, past the button's edges, to read: a font's pixels, its points at 96
-            // dpi; bold, as well)
-            fontStyle: Qt.font({ pointSize: button.notch * 1.2 * 0.75, weight: Font.Bold })
+            // (its glyph as wide as the cut, a little past the button's edges, to read; drawn as thick as the icons: a
+            // font's pixels, its points at 96 dpi)
+            fontStyle: Qt.font({ pointSize: button.notch * 0.75 })
         }
 """, "the session buttons' update notch")
     m = swap(m, "    spacing: Tokens.spacing.large\n", """    spacing: Tokens.spacing.large
