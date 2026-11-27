@@ -1094,7 +1094,7 @@ hl.on("window.fullscreen", function(win)
     local s, active = settling[win.address], hl.get_active_window()
     if not (s and s.left > 0 and active and active.address == win.address and hl.timer) then return end
     settling[win.address] = nil
-    if dots.exclusive_fullscreen then dots.exclusive_fullscreen[win.address] = true end
+    if dots.mark_exclusive then dots.mark_exclusive(win) end
     hl.timer(function()
         local w, now = by_address(win.address), hl.get_active_window()
         if w and out_of_fullscreen[w.address] and now and now.address == w.address and back_to_fullscreen(w) then
@@ -1114,11 +1114,12 @@ hl.on("window.active", function(win)
         settle(win.address, 3)
     end
 end)
--- A game over its screen focused (Alt+Tab, the dock) with the pointer on another screen: the pointer to its middle, as
--- a fullscreen game on Windows takes it. Floating mode has no warps (no_warps), and the pointer moving on there handed
--- the focus straight back to the window under it (follow_mouse): the game, unfocused, a window under the shell
+-- A game in exclusive fullscreen (apps.lua) focused (Alt+Tab, the dock) with the pointer on another screen: the pointer
+-- to its middle, as such a game on Windows takes it. Floating mode has no warps (no_warps), and the pointer moving on
+-- there handed the focus straight back to the window under it (follow_mouse): the game, unfocused, a window under the
+-- shell. Not a borderless one: it's fine without the focus, the pointer left where you put it
 hl.on("window.active", function(win)
-    if not (win and dots.is_game and dots.is_game(win)) then return end
+    if not (win and (dots.exclusive_fullscreen or {})[win.address]) then return end
     local w = by_address(win.address) or win
     local m, p = w.monitor, hl.get_cursor_pos()
     if not (p and m and m.x and w.at and w.size and w.workspace and (w.workspace.id or 0) > 0) then return end

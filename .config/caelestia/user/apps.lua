@@ -161,9 +161,6 @@ hl.window_rule({ match = { tag = "game" }, focus_on_activate = false })
 -- No animation for games: one moving or popping in (minimised with Alt+Tab, brought back) left Hyprland's black
 -- fullscreen backdrop showing along the right and bottom edges for a moment
 hl.window_rule({ match = { tag = "game" }, no_anim = true })
--- Nor rounded corners, a border or a shadow: a game in exclusive fullscreen drops it for a moment as it gets the focus
--- back (windows.lua puts it back), and they flashed round its edges each time
-hl.window_rule({ match = { tag = "game" }, no_rounding = true, border_size = 0, no_shadow = true })
 -- ...but a game takes the focus when it opens and when it goes fullscreen: focus goes on a click here, so Steam's window
 -- (it shows when Lutris starts a game while Steam runs) kept it behind the game, and a Wine game gets mouse movement only
 -- while focused: the camera didn't turn
@@ -188,13 +185,23 @@ hl.on("window.close", function(win) if win then went_fullscreen[win.address] = n
 -- back (on Windows too). Windows keeps the pointer on such a game's screen; crossing.lua does the same for it (Alt+Tab
 -- and Super still leave it), not taking the focus to the other screen as for any other game. Known by that: leaving
 -- fullscreen while another window has the focus, on its own workspace (not minimised to a hidden one)
+-- Only such a game gets what follows from it (a borderless one, never leaving fullscreen, none of it): tagged
+-- exclusive_fs, which the shell hides over while it covers its screen (drawers/PartWindow.qml) and which takes off its
+-- rounded corners, border and shadow, as it drops fullscreen for a moment each time it gets the focus back (windows.lua
+-- puts it back, and also marks it so on that drop)
 dots.exclusive_fullscreen = {}
+function dots.mark_exclusive(win)
+    if dots.exclusive_fullscreen[win.address] then return end
+    dots.exclusive_fullscreen[win.address] = true
+    hl.dispatch(hl.dsp.window.tag({ tag = "+exclusive_fs", window = "address:" .. win.address }))
+end
+hl.window_rule({ match = { tag = "exclusive_fs" }, no_rounding = true, border_size = 0, no_shadow = true })
 hl.on("window.fullscreen", function(win)
     if not (win and (win.fullscreen or 0) < 2 and win.workspace and (win.workspace.id or 0) > 0 and dots.is_game(win)) then
         return
     end
     local active = hl.get_active_window()
-    if not active or active.address ~= win.address then dots.exclusive_fullscreen[win.address] = true end
+    if not active or active.address ~= win.address then dots.mark_exclusive(win) end
 end)
 hl.on("window.close", function(win) if win then dots.exclusive_fullscreen[win.address] = nil end end)
 -- A game's splash screen (its first window, small: Batman: Arkham Knight's logo) shown alone: the game's other windows

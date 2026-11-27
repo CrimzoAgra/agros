@@ -166,10 +166,10 @@ hl = {
             end
         elseif name == "window.tag" then
             -- (tags added, "+name", or taken off, "-name", as Hyprland's tag dispatcher: window peek's and snapping's; the
-            -- maximised tag only recorded, as the drag tests set it themselves)
+            -- maximised tag only recorded, as the drag tests set it themselves; exclusive fullscreen's)
             local w = type(a.window) == "string" and hl.get_window(a.window) or a.window
             local sign, tag = tostring(a.tag):match("^([+-])(.+)$")
-            if w and tag and (tag:match("^dots%-peek") or tag:match("^snap")) then
+            if w and tag and (tag:match("^dots%-peek") or tag:match("^snap") or tag == "exclusive_fs") then
                 if tag:match("^dots%-peek") then PEEK_TAGS[#PEEK_TAGS + 1] = w.address .. sign .. tag end
                 w.tags = w.tags or {}
                 for k = #w.tags, 1, -1 do if w.tags[k] == tag then table.remove(w.tags, k) end end
@@ -916,10 +916,12 @@ check("...dropping it 150 ms and more after (the Super menu): left", drops_after
 check("a game focused still fullscreen, dropping it by itself right after: put back", drops_after(game, 1, false, true), "1 exclusive")
 check("...dropping it 150 ms and more after (the Super menu): left", drops_after(game, 1, true, true), "0")
 check("...dropping it as another window is focused: left", drops_after(other_win, 1), "0 exclusive")
--- A game over its screen focused with the pointer on another screen: the pointer to its middle; not when it's on the
--- game's screen already, nor for a game in a window
-local function pointer_on_focus(x, size, full)
-    game.size, game.workspace, game.address, game.fullscreen = size or { x = 1920, y = 1080 }, ws(1), "0xptr", full or 2
+-- A game in exclusive fullscreen over its screen focused with the pointer on another screen: the pointer to its middle;
+-- not when it's on the game's screen already, nor for a game in a window, nor a borderless one
+local function pointer_on_focus(x, size, full, borderless)
+    game.size, game.workspace, game.fullscreen = size or { x = 1920, y = 1080 }, ws(1), full or 2
+    game.address = borderless and "0xborderless" or "0xptr"
+    dots.exclusive_fullscreen["0xptr"] = true
     WINDOWS, sent = { game }, {}
     local was = hl.get_cursor_pos
     hl.get_cursor_pos = function() return { x = x, y = 300 } end
@@ -933,6 +935,7 @@ end
 check("a game focused, the pointer on the other screen: to the game's middle", pointer_on_focus(2500), "960.0,540.0")
 check("...the pointer on its screen already: stays", pointer_on_focus(500), "stays")
 check("...a game in a window: stays", pointer_on_focus(2500, { x = 1280, y = 720 }, 0), "stays")
+check("...a borderless game (never left fullscreen): stays", pointer_on_focus(2500, nil, 2, true), "stays")
 -- ...but not once it closed: a new window given its address isn't made fullscreen
 game.address, WINDOWS = "0xreused", { game }
 game.fullscreen = 0
@@ -970,7 +973,11 @@ local function exclusive_after(focused, workspace)
     return got
 end
 check("a game leaving fullscreen as another window is focused: exclusive", exclusive_after(other), true)
+local function tagged() for _, t in ipairs(game.tags) do if t == "exclusive_fs" then return true end end return false end
+check("...tagged for the shell and its frame (exclusive_fs)", tagged(), true)
+game.tags = { "game*" }
 check("a game leaving fullscreen while focused: not exclusive", exclusive_after(game), false)
+check("...not tagged", tagged(), false)
 check("a game minimised to a hidden workspace: not exclusive", exclusive_after(other, { id = -98, name = "special:minimised-1" }), false)
 -- A notification's click: the app's most recently used window, not one never focused (Hyprland's focus_history_id -1:
 -- a launcher minimised as it opened), which came first
