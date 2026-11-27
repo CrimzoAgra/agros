@@ -1569,6 +1569,8 @@ def tray_click():
     tray = read("modules/bar/components/Tray.qml")
     tray = insert(tray, "        sourceComponent: Item {\n", """            // caelestia-overlay: the arrow opens and closes the tray (not hovering), with the power button's highlight
             StateLayer {
+                id: arrowHighlight
+
                 parent: root.parent // outside the tray, which clips its contents (it cut the circle in half)
                 z: 1 // in front: the tray's hidden icons lie under the arrow while it's collapsed and would take the click
                 visible: root.visible
@@ -1579,6 +1581,20 @@ def tray_click():
                 implicitHeight: expandIconInner.implicitHeight + Tokens.padding.small
                 radius: Tokens.rounding.full
                 onClicked: root.expanded = !root.expanded
+            }
+
+            // ...and the tray's background round the whole circle, under the tray: open, it stopped at the tray's end,
+            // halfway through the circle, the dock showing behind its other half
+            StyledRect {
+                parent: root.parent
+                z: -1
+                visible: root.visible
+                x: arrowHighlight.x
+                y: arrowHighlight.y
+                implicitWidth: arrowHighlight.width
+                implicitHeight: arrowHighlight.height
+                radius: Tokens.rounding.full
+                color: root.color
             }
 
 """, before=False)
