@@ -2584,8 +2584,8 @@ def power_menu():
             text: "download"
             color: Colours.palette.m3onSurface
             fill: 1
-            // (its glyph 0.72 of the cut's radius: a font's pixels, its points at 96 dpi)
-            fontStyle: Qt.font({ pointSize: button.notch * 0.72 * 0.75 })
+            // (its glyph 0.72 of the cut's side: a font's pixels, its points at 96 dpi; bold, to read at that size)
+            fontStyle: Qt.font({ pointSize: button.notch * 0.72 * 0.75, weight: Font.Bold })
         }
 """, "the session buttons' update notch")
     m = swap(m, "    spacing: Tokens.spacing.large\n", """    spacing: Tokens.spacing.large
