@@ -876,6 +876,20 @@ local refull = false
 for _, d in ipairs(sent) do if d[1] == "window.fullscreen" and (d[2] or {}).action == "set" then refull = true end end
 sent, WINDOWS = {}, {}
 check("a closed game's address given to a new window: not made fullscreen", refull, false)
+-- A game going fullscreen takes the focus the first time only: one in exclusive fullscreen leaves it and comes back each
+-- time it loses focus, and focusing it again pulled the focus back from the other screen, several times a second
+game.address, game.workspace, game.fullscreen, WINDOWS = "0xfirst", ws(1), 2, { game }
+local function focused_on_fullscreen()
+    sent = {}
+    fire("window.fullscreen", game)
+    local f = false
+    for _, d in ipairs(sent) do if d[1] == "focus" then f = true end end
+    sent = {}
+    return f
+end
+check("a game going fullscreen: focused", focused_on_fullscreen(), true)
+check("the same game fullscreen again: not focused again", focused_on_fullscreen(), false)
+WINDOWS = {}
 -- A notification's click: the app's most recently used window, not one never focused (Hyprland's focus_history_id -1:
 -- a launcher minimised as it opened), which came first
 local function app_win(address, history)

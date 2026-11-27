@@ -168,11 +168,19 @@ local function focus_game(win)
     if dots.is_game(win) then hl.dispatch(hl.dsp.focus({ window = win })) end
 end
 hl.on("window.open", focus_game)
--- Only on the workspace you're on: the floating/tiling switch re-sends a game's fullscreen state, which took you to it
+-- Only on the workspace you're on: the floating/tiling switch re-sends a game's fullscreen state, which took you to it.
+-- And only the first time a window goes fullscreen: a game in exclusive fullscreen leaves it and comes straight back
+-- each time it loses focus, and focusing it then pulled the focus back from the other screen the pointer had gone to,
+-- several times a second (Overwatch under Wine's Wayland driver stopped on one frame, minimised in the dock)
+local went_fullscreen = {}
 hl.on("window.fullscreen", function(win)
     local ws = hl.get_active_workspace()
-    if win and win.fullscreen ~= 0 and ws and win.workspace and win.workspace.id == ws.id then focus_game(win) end
+    if not (win and win.fullscreen ~= 0 and ws and win.workspace and win.workspace.id == ws.id) then return end
+    if went_fullscreen[win.address] then return end
+    went_fullscreen[win.address] = true
+    focus_game(win)
 end)
+hl.on("window.close", function(win) if win then went_fullscreen[win.address] = nil end end)
 -- A game's splash screen (its first window, small: Batman: Arkham Knight's logo) shown alone: the game's other windows
 -- opening meanwhile (its main window, still white while it loads) kept out of sight, on a hidden workspace, until the
 -- splash closes, then shown where it was. At most 30 s (a small first window that isn't a splash never hides the game
