@@ -340,13 +340,21 @@ ClippingRectangle {
         CAnim {}
     }
 
+    // Its icons known (the pins read, and their apps found, or none pinned): the bar waits for it to slide in, so the
+    // icons grow in as it does, not after (BarWrapper, patch.py)
+    property bool pinsRead
+    readonly property bool ready: pinsRead && (pins.length === 0 || items.length > 0)
+
     FileView {
         id: pinsFile
 
         path: `${Quickshell.env("HOME")}/.config/quickshell/sidedock/pins.json`
+        blockLoading: true // (tiny: read as the dock is made, not a moment after)
         watchChanges: true
         onFileChanged: reload()
+        onLoadFailed: root.pinsRead = true // (none yet)
         onLoaded: {
+            root.pinsRead = true;
             try {
                 const pins = JSON.parse(text());
                 root.pins = Array.isArray(pins) ? pins : []; // (a hand edit that isn't a list: no pins, not a dock that errors)

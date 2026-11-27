@@ -148,6 +148,9 @@ def dock():
     # The bar's "dock" entry (shell.json's bar entries): pinned apps and open windows (Dock.qml), each with a
     # Caelestia-style hover popout (DockMenu.qml), shown through the bar's own popout machinery
     bar = read("modules/bar/Bar.qml")
+    bar = insert(bar, "    required property bool fullscreen\n",
+                 "    property bool dockReady: true // caelestia-overlay: the dock's icons known (BarWrapper waits for them)\n",
+                 before=False)
     bar = insert(bar, '        } else if (id === "activeWindow"', '''        } else if (id === "dock") {
             const dock = ch.item;
             const cell = dock.cellAt(mapToItem(dock, 0, y).y);
@@ -170,8 +173,11 @@ def dock():
                     Layout.preferredHeight: 0
 
                     Dock {
+                        id: dock
+
                         screen: root.screen
                         popouts: root.popouts
+                        Component.onCompleted: root.dockReady = Qt.binding(() => dock.ready)
                     }
                 }
             }
@@ -1512,6 +1518,20 @@ def tray_click():
     wrapper = swap(wrapper, "        active: root.shouldBeVisible\n",
                    "        active: root.shouldBeVisible || root.fullscreen && !root.disabled && Config.bar.persistent // caelestia-overlay: kept loaded behind a fullscreen window\n",
                    "the bar's content loaded")
+    # (and slides in once the dock has its icons, at most 1.5 s on: they grew in only after it, at the shell's start,
+    # the dock's pins and apps found a moment after the bar began. Started together, the same length, they end together)
+    wrapper = swap(wrapper, "        when: root.shouldBeVisible\n", "        when: root.shouldBeVisible && root.contentReady\n",
+                   "the bar shown once its content is")
+    wrapper = insert(wrapper, "    property bool isHovered\n", """    property bool waited
+    readonly property bool contentReady: waited || ((content.item as Bar)?.dockReady ?? false)
+    onShouldBeVisibleChanged: if (!shouldBeVisible) waited = false
+
+    Timer {
+        running: root.shouldBeVisible && !root.contentReady
+        interval: 1500
+        onTriggered: root.waited = true
+    }
+""", before=False)
     wrapper = insert(wrapper, """    function closeTray(): void {
         (content.item as Bar)?.closeTray();
     }
