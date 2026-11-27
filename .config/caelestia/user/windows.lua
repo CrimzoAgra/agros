@@ -208,9 +208,12 @@ function dots.focus_window(address, switcher)
     if not win then return end
     local active = hl.get_active_window()
     -- Fullscreen proper (2; 1 is maximised), and only when the pick is on its screen (one on another screen doesn't
-    -- cover it)
-    if switcher and active and active.address ~= win.address and (active.fullscreen or 0) >= 2
-        and active.monitor and win.monitor and active.monitor.id == win.monitor.id then
+    -- cover it). A game in exclusive fullscreen (apps.lua) too, wherever the pick is, as on Windows: it left fullscreen
+    -- as the switcher took the keyboard, and stayed where it was, its screen dark, the pointer over it handing it the
+    -- focus straight back
+    local exclusive = active and (dots.exclusive_fullscreen or {})[active.address] and dots.covers_screen and dots.covers_screen(active)
+    if switcher and active and active.address ~= win.address and (exclusive or (active.fullscreen or 0) >= 2
+        and active.monitor and win.monitor and active.monitor.id == win.monitor.id) then
         dots.window_fades(false)
         dots.minimise_window(active)
         hl.exec_cmd("sh -c 'sleep 0.5; exec hyprctl eval \"dots.window_fades(true)\"'")
@@ -1094,8 +1097,13 @@ local function settle(address, left)
 end
 hl.on("window.close", function(win) if win then settling[win.address] = nil end end)
 hl.on("window.fullscreen", function(win)
-    if not (win and (win.fullscreen or 0) < 2 and dots.is_game and dots.is_game(win)) then return end
+    if not (win and dots.is_game and dots.is_game(win)) then return end
+    -- (fullscreen again, Hyprland's own 0 and back as it moves it: nothing to put back. Left set, the next focus took
+    -- the put-back branch below, found it fullscreen, and never watched for the game's own drop after it)
+    if (win.fullscreen or 0) >= 2 then out_of_fullscreen[win.address] = nil; return end
     out_of_fullscreen[win.address] = true
+    -- (dragged with Super: Hyprland's own drop, the drag's end puts it back where it lands)
+    if game_drags[win.address] then return end
     local s, active = settling[win.address], hl.get_active_window()
     if not (s and s.left > 0 and active and active.address == win.address and hl.timer) then return end
     settling[win.address] = nil

@@ -943,6 +943,25 @@ local function moved_by_hyprland()
     return n .. (exclusive and " exclusive" or "")
 end
 check("a game moved by Hyprland right after focus (minimised): left, not exclusive", moved_by_hyprland(), "0")
+-- ...and after Hyprland's own 0 and back (a move), a game focused at 2 is still watched for its own drop
+local function after_flip()
+    game.size, game.workspace, game.address, game.fullscreen = { x = 1920, y = 1080 }, ws(1), "0xafter" .. tostring(math.random(1e6)), 0
+    WINDOWS, ACTIVE, sent, HOLD_TIMERS, HELD_TIMERS, TIMER_SETS = { game }, nil, {}, true, {}, {}
+    fire("window.fullscreen", game)
+    game.fullscreen = 2
+    fire("window.fullscreen", game)
+    ACTIVE = game
+    fire("window.active", game)
+    game.fullscreen = 0
+    fire("window.fullscreen", game)
+    sent = {}
+    run_held(200)
+    local n = 0
+    for _, d in ipairs(sent) do if d[1] == "window.fullscreen" and (d[2] or {}).action == "set" then n = n + 1 end end
+    sent, WINDOWS, ACTIVE, HOLD_TIMERS, HELD_TIMERS, TIMER_SETS, game.fullscreen = {}, {}, nil, false, {}, {}, 0
+    return n
+end
+check("after Hyprland's own 0 and back, focused at 2 and dropping right after: put back", after_flip(), 1)
 -- A game in exclusive fullscreen over its screen focused with the pointer on another screen: the pointer to its middle;
 -- not when it's on the game's screen already, nor for a game in a window, nor a borderless one
 -- A fullscreen game focused: the other windows on its workspace lowered behind it (Hyprland kept one focused there
@@ -1026,18 +1045,43 @@ game.tags = { "game*" }
 check("a game leaving fullscreen while focused: not exclusive", exclusive_after(game), false)
 check("...not tagged", tagged(), false)
 check("a game minimised to a hidden workspace: not exclusive", exclusive_after(other, { id = -98, name = "special:minimised-1" }), false)
--- ...unmarked once switched to windowed in its settings (out of fullscreen, smaller than its screen); not for a drop
--- that still covers the screen
-local function windowed_after(size)
+local function run_all() local q = HELD_TIMERS; HELD_TIMERS, TIMER_SETS = {}, {}; for _, fn in ipairs(q) do fn() end end
+-- ...not for Hyprland's own 0 and back as it moves an unfocused game (a borderless one: a workspace cleared, a screen
+-- turned off), back at 2 before the moment it's looked at again
+game.address, game.workspace, game.fullscreen, game.tags = "0xflip", ws(1), 0, { "game*" }
+WINDOWS, ACTIVE, HOLD_TIMERS, HELD_TIMERS, TIMER_SETS = { game, other }, other, true, {}, {}
+fire("window.fullscreen", game)
+game.fullscreen = 2
+fire("window.fullscreen", game)
+run_all()
+check("an unfocused game Hyprland took out of fullscreen and back as it moved it: not exclusive", dots.exclusive_fullscreen[game.address] == true, false)
+WINDOWS, ACTIVE, HOLD_TIMERS, HELD_TIMERS, TIMER_SETS, game.fullscreen = {}, nil, false, {}, {}, 0
+-- ...unmarked after it switched to borderless even when it's focused again at once (hover focus, the pointer over it):
+-- no drop since it lost the focus; an exclusive one drops, and stays marked
+local function refocused(drops)
     exclusive_after(other)
-    WINDOWS, ACTIVE, game.size, game.fullscreen = { game, other }, game, size, 0
-    fire("window.fullscreen", game)
+    game.fullscreen = 2
+    WINDOWS, ACTIVE, HOLD_TIMERS, HELD_TIMERS, TIMER_SETS = { game, other }, other, true, {}, {}
+    fire("window.active", other)
+    if drops then game.fullscreen = 0; fire("window.fullscreen", game); game.fullscreen = 2 end
+    ACTIVE = game
+    fire("window.active", game)
+    run_all()
     local got = dots.exclusive_fullscreen[game.address] == true
-    WINDOWS, ACTIVE, game.size = {}, nil, { x = 1920, y = 1080 }
+    WINDOWS, ACTIVE, HOLD_TIMERS, HELD_TIMERS, TIMER_SETS, game.fullscreen = {}, nil, false, {}, {}, 0
     return got
 end
-check("an exclusive game switched to windowed: unmarked", windowed_after({ x = 1280, y = 720 }), false)
-check("...dropping fullscreen still over its screen: stays marked", windowed_after({ x = 1920, y = 1080 }), true)
+check("switched to borderless, focused again at once: unmarked", refocused(false), false)
+check("...an exclusive one dropping as it lost the focus: stays marked", refocused(true), true)
+-- Alt+Tab from an exclusive game (out of fullscreen already, the switcher took the keyboard): minimised, the pick on
+-- the other screen too
+exclusive_after(other)
+game.fullscreen, game.size, game.monitor = 0, { x = 1920, y = 1080 }, SCREENS[1]
+other.monitor = SCREENS[2]
+WINDOWS, ACTIVE = { game, other }, game
+dots.focus_window(other.address, true)
+check("Alt+Tab from an exclusive game to the other screen: the game minimised", game.workspace.name, "special:minimised-1")
+WINDOWS, ACTIVE, game.workspace, other.monitor = {}, nil, ws(1), nil
 -- A pinned window (picture in picture) focused over a game: the game not minimised for it
 local pip = { address = "0xpip2", class = "mpv", workspace = ws(1), fullscreen = 0, floating = true, pinned = true, tags = {} }
 game.address, game.fullscreen = "0xunder", 2

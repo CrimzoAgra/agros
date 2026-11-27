@@ -198,46 +198,49 @@ end
 -- (and the pointer kept inside it by Hyprland itself, as Windows does: crossing.lua's hold only worked over the gap
 -- between screens, and with screens touching Hyprland took the pointer across first. Let go while a button is held)
 hl.window_rule({ match = { tag = "exclusive_fs" }, rounding = 0, border_size = 0, no_shadow = true, confine_pointer = true })
--- ...and unmarked once it shows it isn't any more: switched to borderless in its own settings, it stays fullscreen
--- without the focus (an exclusive one drops it within milliseconds); looked at 300 ms after another window got it
+-- ...and unmarked once it shows it isn't any more: switched to borderless in its own settings, it doesn't drop
+-- fullscreen as another window gets the focus (an exclusive one does within milliseconds). Whether it dropped is
+-- noted from the moment the focus went (dropped below): with hover focus the pointer still over it gave it the focus
+-- back before a later look could see it unfocused. (Switched to windowed is not told apart: in floating mode
+-- windows.lua keeps a game that leaves fullscreen over its whole screen)
 local function unmark_exclusive(address)
     dots.exclusive_fullscreen[address] = nil
     hl.dispatch(hl.dsp.window.tag({ tag = "-exclusive_fs", window = "address:" .. address }))
 end
+local dropped = {}
 hl.on("window.active", function(win)
     for address in pairs(dots.exclusive_fullscreen) do
-        if not (win and win.address == address) and hl.timer then
+        if not (win and win.address == address) and dropped[address] == nil and hl.timer then
+            dropped[address] = false
             hl.timer(function()
-                local g, now = hl.get_window("address:" .. address), hl.get_active_window()
-                if g and dots.exclusive_fullscreen[address] and (g.fullscreen or 0) >= 2 and not (now and now.address == address) then
+                local g, saw = hl.get_window("address:" .. address), dropped[address]
+                dropped[address] = nil
+                if g and saw == false and dots.exclusive_fullscreen[address] and (g.fullscreen or 0) >= 2 then
                     unmark_exclusive(address)
                 end
-            end, { timeout = 300, type = "oneshot" })
+            end, { timeout = 150, type = "oneshot" })
         end
     end
 end)
--- (switched to windowed: out of fullscreen and smaller than its screen a moment later, focused or not)
 hl.on("window.fullscreen", function(win)
-    if not (win and dots.exclusive_fullscreen[win.address] and (win.fullscreen or 0) < 2 and hl.timer) then return end
-    local address = win.address
-    hl.timer(function()
-        local g = hl.get_window("address:" .. address)
-        if g and dots.exclusive_fullscreen[address] and (g.fullscreen or 0) < 2 and g.workspace and (g.workspace.id or 0) > 0
-            and dots.covers_screen and not dots.covers_screen(g) then
-            unmark_exclusive(address)
-        end
-    end, { timeout = 300, type = "oneshot" })
+    if win and dropped[win.address] == false and (win.fullscreen or 0) < 2 then dropped[win.address] = true end
 end)
 hl.on("window.fullscreen", function(win)
     if not (win and (win.fullscreen or 0) < 2 and win.workspace and (win.workspace.id or 0) > 0 and dots.is_game(win)) then
         return
     end
     -- (focus on another workspace, the other screen's: Hyprland takes a game out of fullscreen itself for a window on
-    -- its own workspace, which a borderless one is too)
-    local active = hl.get_active_window()
-    if not active or active.address ~= win.address and not (active.workspace and active.workspace.id == win.workspace.id) then
-        dots.mark_exclusive(win)
+    -- its own workspace, which a borderless one is too. And still out of it a moment later: Hyprland's own 0 and back
+    -- as it moves a window, an unfocused borderless game's too (a workspace cleared, a screen turned off), isn't)
+    local address = win.address
+    local function decide()
+        local g, active = hl.get_window("address:" .. address), hl.get_active_window()
+        if g and (g.fullscreen or 0) < 2 and g.workspace and (g.workspace.id or 0) > 0 and active
+            and active.address ~= address and not (active.workspace and active.workspace.id == g.workspace.id) then
+            dots.mark_exclusive(g)
+        end
     end
+    if hl.timer then hl.timer(decide, { timeout = 200, type = "oneshot" }) end
 end)
 -- (marks from before a config load kept: the list above starts empty, the windows' tags outlast it, as "maximised"
 -- does. Losing them, the next push at the screen's edge left the game, which went dark)
