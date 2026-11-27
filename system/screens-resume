@@ -4,6 +4,11 @@
 # them off before its idle sleep, and on only at the next key press). In a unit of its own, not waited on here: sleep
 # hooks run before the user sessions are thawed (where systemd freezes them), and Hyprland can't answer before that
 # (AGROS_EACH_USER: another agros-each-user, the tests')
-[[ $1 == post ]] || exit 0
-systemd-run --quiet --collect --no-block "${AGROS_EACH_USER:-/usr/lib/agros/bin/agros-each-user}" screens-on
+# Before sleeping: each one's screens switched off first, waited on (screens-off): on NVIDIA a rotated screen's restore
+# as the PC wakes fails, and it came back after the others; off, they come on together (screens-on, after waking)
+each=${AGROS_EACH_USER:-/usr/lib/agros/bin/agros-each-user}
+case $1 in
+    pre) timeout 10 "$each" --limit 8 screens-off ;;
+    post) systemd-run --quiet --collect --no-block "$each" screens-on ;;
+esac
 exit 0

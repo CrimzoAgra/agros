@@ -961,6 +961,9 @@ helper a package update just brought works before `agros-links` has linked it), 
   fullscreen game: nothing sent), no reload, the pointer never moved; tried 10 times a second apart (just after waking
   Hyprland may not answer yet), each answer waited for up to 3 s: up to ~40 s per session when Hyprland doesn't answer,
   ~70 s when it answers the check but not the switch. Run after waking by `agros-system`'s sleep hook, as each user
+- **`.local/bin/screens-off`**: the screens switched off (`hl.dsp.dpms({ action = "disable" })`) in each of your Hyprland
+  sessions just before the PC sleeps, then Hyprland's fade to black waited for (1.2 s); a Hyprland that doesn't answer
+  is left as it is (2 s). Run before sleeping by `agros-system`'s sleep hook, as each user, waited on
 - **`.local/share/github-release/lib.sh`**: a GitHub release's x86_64 file and its checksum, when the release has any
   (`appimage-update`, `flatpak-bundle-update`)
 - **`.local/bin/app-for-window`**: the app a window belongs to when its class names none Quickshell finds (Java, Wine
@@ -1494,7 +1497,10 @@ brings each change; nothing to run by hand).
   `agros-each-user screens-on` in a unit of its own (`systemd-run --no-block`): not waited on, as sleep hooks run before
   systemd thaws the user sessions it froze (without NVIDIA's `SYSTEMD_SLEEP_FREEZE_USER_SESSIONS=0`, a VM's case), when
   Hyprland can't answer. Caelestia's idle still counts you idle until you touch something, so it doesn't switch them
-  off again until then
+  off again until then. Before sleeping, the hook runs `agros-each-user --limit 8 screens-off` and waits for it: on
+  NVIDIA the restore of a rotated screen as the PC wakes fails (`crtc ... failed restore`, the driver's EINVAL: NVIDIA
+  open-gpu-kernel-modules #1417, aquamarine #387 and #433), so that screen came back only on Hyprland's next modeset,
+  after the others. Switched off before sleeping, nothing is restored, and `screens-on` lights them together
 - **Screens asleep together** (`desktop.lua`): a DisplayPort screen switched off disconnects (the MSI, seconds after
   `dpms off`), and Hyprland switches on any screen that connects, whatever the others are, so one lit up alone while
   the rest slept; one that connects while every other screen sleeps is switched off with them (a key or the mouse

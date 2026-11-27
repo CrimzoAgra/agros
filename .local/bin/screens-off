@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# screens-off: the screens switched off (DPMS) in each of your Hyprland sessions, just before the PC sleeps
+# (agros-system's sleep hook, agros-screens-resume pre, as each user; screens-on lights them all together after waking).
+# On NVIDIA, the restore of a rotated screen as the PC wakes fails (the driver's EINVAL, "crtc ... failed restore": NVIDIA
+# open-gpu-kernel-modules #1417, aquamarine #387 and #433): that screen came back only on Hyprland's next modeset, the
+# others before it, so the screens woke out of step. Off as it sleeps, there's nothing to restore: they come on as one.
+# Waits for Hyprland's fade to black (it switches a screen off at the fade's end); a Hyprland that doesn't answer (a
+# frozen session) is left as it is, quickly
+off='hl.dsp.dpms({ action = "disable" })'  # (the Lua config's dispatcher, as Caelestia's idle sends it)
+sent=0
+for sock in "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"/hypr/*/.socket.sock; do
+    [[ -S $sock ]] || continue
+    sig=${sock%/.socket.sock} sig=${sig##*/}
+    timeout 2 hyprctl -i "$sig" dispatch "$off" >/dev/null 2>&1 && sent=1
+done
+# (the fade: Hyprland's "fade" animation, 0.6 s here)
+((sent)) && sleep 1.2
+exit 0

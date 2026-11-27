@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # system/screens-resume (the sleep hook) and .local/bin/screens-on, with systemd-run, hyprctl and sleep stand-ins and
 # Hyprland's sockets in a throwaway XDG_RUNTIME_DIR. The hook: after waking only, screens-on for each user in a unit of
-# its own, not waited on; before sleep nothing. screens-on: a screen off switched on (the Lua dispatcher, in that
+# its own, not waited on; before sleep screens-off, waited on. screens-on: a screen off switched on (the Lua dispatcher, in that
 # Hyprland), screens on left alone (nothing sent), a Hyprland not answering yet tried again, no Hyprland nothing
 set -euo pipefail
 # shellcheck source=lib.sh source-path=SCRIPTDIR
@@ -25,9 +25,13 @@ STUB
 chmod +x "$t/bin/"*
 export PATH=$t/bin:$PATH
 
-# The hook: before sleep nothing; after waking, screens-on for each user, in a unit of its own (--no-block)
-"$here/system/screens-resume" pre
-[[ ! -e $t/calls ]] || fail "something run before sleep: $(cat "$t/calls")"
+# The hook: before sleep, screens-off for each user, waited on; after waking, screens-on for each user, in a unit of
+# its own (--no-block)
+printf '#!/bin/sh\necho "each-user $*" >>"%s/calls"\n' "$t" >"$t/bin/each-user"
+chmod +x "$t/bin/each-user"
+AGROS_EACH_USER=$t/bin/each-user "$here/system/screens-resume" pre || fail "the hook failed before sleep"
+[[ $(cat "$t/calls") == "each-user --limit 8 screens-off" ]] || fail "screens-off not run for each user before sleep: $(cat "$t/calls")"
+rm -f "$t/calls"
 AGROS_EACH_USER=/x/agros-each-user "$here/system/screens-resume" post || fail "the hook failed after waking"
 [[ $(cat "$t/calls") == "systemd-run --quiet --collect --no-block /x/agros-each-user screens-on" ]] ||
     fail "screens-on not started for each user in a unit of its own: $(cat "$t/calls")"
@@ -47,4 +51,10 @@ on; ! grep -q dispatch "$t/calls" || fail "screens already on sent dpms: $(cat "
 # Not answering at first (just after waking): asked again, then switched on
 echo 0 >"$t/dpms"; echo 2 >"$t/silent"; on
 [[ $(grep -c ' monitors' "$t/calls") -ge 3 && $(cat "$t/dpms") == 1 ]] || fail "a Hyprland not answering yet not tried again: $(cat "$t/calls")"
+# screens-off: each Hyprland's screens switched off (the Lua dispatcher), then the fade waited for; none, nothing
+rm -f "$t/calls"; timeout 20 "$here/.local/bin/screens-off" || fail "screens-off failed"
+grep -qxF "hyprctl -i $sig dispatch hl.dsp.dpms({ action = \"disable\" })" "$t/calls" || fail "screens not switched off before sleep: $(cat "$t/calls")"
+rm -rf "${XDG_RUNTIME_DIR:?}/hypr"; rm -f "$t/calls"
+timeout 20 "$here/.local/bin/screens-off" || fail "screens-off with no Hyprland failed"
+[[ ! -e $t/calls ]] || fail "screens-off asked with no Hyprland: $(cat "$t/calls")"
 echo "ok screens-resume"
