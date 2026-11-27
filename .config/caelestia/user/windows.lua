@@ -147,16 +147,16 @@ local function window_mode()
     f:close()
     return mode == "tiling" and "tiling" or "floating"
 end
--- Floating, as on Windows: the pointer stays where it is when another window is focused, and focus changes on a click,
--- not on hover (follow_mouse 2; scrolling still reaches the window under the pointer). With focus following the
--- pointer, the window under it took focus back right after an Alt+Tab pick when the mouse had moved meanwhile.
--- Focus on hover in floating mode too if chosen in the Settings app (windows.focus). With focus on a click, a window
+-- Floating: the pointer stays where it is when another window is focused. Focus follows the pointer (hover) unless
+-- the Settings app has it on a click, as on Windows (windows.focus "click": follow_mouse 2; scrolling still reaches the
+-- window under the pointer; with focus following the pointer, the window under it took focus back right after an
+-- Alt+Tab pick when the mouse had moved meanwhile). With focus on a click, a window
 -- closed passes the focus to the one used before it there (Hyprland's focus_on_close "mru", as on Windows), not to the
 -- one under the pointer (Caelestia's dots' 1, kept with focus on hover): with the pointer on the desktop, nothing had
 -- the focus after a close though windows were left, and the next Super+Q did nothing
 local function apply_mode_settings(mode)
     local floating = mode == "floating"
-    local click = floating and dots.setting("windows.focus") ~= "hover"
+    local click = floating and dots.setting("windows.focus") == "click"
     hl.config({ cursor = { no_warps = floating },
                 input = { follow_mouse = click and 2 or 1, focus_on_close = click and 2 or 1 } })
 end

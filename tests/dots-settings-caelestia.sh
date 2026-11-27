@@ -84,6 +84,21 @@ saved[scale] = "1.75"
 json.dump(saved, open(ds.SETTINGS, "w"))
 assert offered() == ["", "1", "1.25", "1.5", "1.6", "1.75", "2"], f"the scale set no longer offered: {offered()}"
 assert json.loads(run("get", scale)) == "1.75", "the scale set read as the default"
+# HDR offered only for a screen that takes it (its EDID: a CTA-861 block's HDR static metadata with PQ, here DP-2's;
+# DP-1's lists only SDR)
+os.makedirs(f"{t}/sys/class/drm/card0-DP-1"); os.makedirs(f"{t}/sys/class/drm/card0-DP-2")
+def edid(eotf):
+    cta = bytes([0x02, 0x03, 8, 0, 0xE3, 0x06, eotf, 0x01]) + bytes(120)
+    return bytes(128) + cta
+open(f"{t}/sys/class/drm/card0-DP-1/edid", "wb").write(edid(0x01))
+open(f"{t}/sys/class/drm/card0-DP-2/edid", "wb").write(edid(0x05))
+os.environ["SYSFS"] = f"{t}/sys"
+assert not ds.supports_hdr("DP-1") and ds.supports_hdr("DP-2") and not ds.supports_hdr("DP-9"), "HDR read wrong"
+ds.hyprctl = lambda *a: [{"description": f"Screen {n}", "name": f"DP-{n}", "make": "M", "model": "S", "width": 1920,
+                          "height": 1080, "refreshRate": 60.0, "scale": 1.0} for n in (1, 2)] if a[0] == "monitors" else []
+keys = [s["key"] for g in ds.screens_groups() for s in g["settings"]]
+assert "screens.Screen 2.hdr" in keys and "screens.Screen 1.hdr" not in keys, keys
+del os.environ["SYSFS"]
 # A screen with no description (a VM's, with no EDID): listed all the same, its settings by its connector's name, as
 # user/monitors.lua reads them. None from Hyprland said as that, not as no Hyprland session
 ds.hyprctl = lambda *a: [{"description": "", "name": "Virtual-1", "make": "", "model": "", "serial": "", "width": 2258,

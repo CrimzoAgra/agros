@@ -42,7 +42,7 @@
                   "label": "Hover"
                 }
               ],
-              "default": "click",
+              "default": "hover",
               "apply": "hypr"
             },
             {

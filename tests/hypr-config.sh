@@ -1508,9 +1508,12 @@ focus_load() {
     [[ -z $2 ]] || echo "$2" >"$t/home/.local/state/window-mode"
     (cd "$t" && HOME=$t/home XDG_RUNTIME_DIR=$t/run HYPRLAND_INSTANCE_SIGNATURE=test lua focus.lua stub.lua 2>&1 | tail -1)
 }
-[[ $(focus_load '' '') == "2 2" ]] || fail "focus on a click: a closed window's focus not to the one used before: $(focus_load '' '')"
+[[ $(focus_load 'return { ["windows.focus"] = "click" }' '') == "2 2" ]] ||
+    fail "focus on a click: a closed window's focus not to the one used before: $(focus_load 'return { ["windows.focus"] = "click" }' '')"
 [[ $(focus_load 'return { ["windows.focus"] = "hover" }' '') == "1 1" ]] ||
     fail "focus on hover: not as Caelestia has it: $(focus_load 'return { ["windows.focus"] = "hover" }' '')"
+# (none chosen: on hover, the Settings app's default)
+[[ $(focus_load '' '') == "1 1" ]] || fail "focus not on hover by default: $(focus_load '' '')"
 [[ $(focus_load '' tiling) == "1 1" ]] || fail "tiling: not as Caelestia has it: $(focus_load '' tiling)"
 rm -f "$t/home/.local/state/window-mode"
 

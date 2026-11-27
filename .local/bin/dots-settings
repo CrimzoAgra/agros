@@ -39,10 +39,11 @@ shown; "from": "caelestia-options" lists every one of them, by area. Saved in Ca
 which Caelestia watches: they apply at once. The default is AgrOS's own value where it ships one (/etc/skel), else
 Caelestia's. caelestia-vars.<variable>: one of Caelestia's Hyprland variables (gaps, borders...), through
 hypr-vars.lua like its shortcuts. "from": "screens" lists the connected screens' settings (screens.<description>.mode,
-scale, position, enabled, by its connector's name for a screen with no description: screens.Virtual-1.mode;
+scale, position, enabled, hdr (a screen that takes it), by its connector's name for a screen with no description: screens.Virtual-1.mode;
 screens.main), read by user/monitors.lua; "from": "binds" the shortcuts no setting changes
 (Hyprland's list of binds), to show and to find clashes with."""
 import fcntl
+import glob
 import hashlib
 import json
 import math
@@ -602,6 +603,28 @@ def screen_id(m):
     return m.get("description") or m.get("name") or ""
 
 
+def supports_hdr(name):
+    """Whether the screen on connector <name> takes HDR: its EDID's CTA-861 extension with an HDR static metadata block
+    listing PQ (SMPTE ST 2084), as Hyprland reads it (it doesn't say so itself). SYSFS: another /sys, the tests'"""
+    for path in glob.glob(f"{os.environ.get('SYSFS', '/sys')}/class/drm/card*-{name}/edid"):
+        try:
+            with open(path, "rb") as f:
+                edid = f.read()
+        except OSError:
+            continue
+        for i in range(128, len(edid) - 127, 128):
+            block = edid[i:i + 128]
+            if block[0] != 0x02:  # (not a CTA-861 extension)
+                continue
+            j, end = 4, block[2] or 4  # (its data blocks: from byte 4 to its first detailed timing)
+            while j < min(end, 127):
+                tag, size = block[j] >> 5, block[j] & 0x1F
+                if tag == 7 and size >= 2 and block[j + 1] == 6:  # (extended tag 6: HDR static metadata)
+                    return bool(block[j + 2] & 0x04)  # (its EOTFs: bit 2, PQ)
+                j += 1 + size
+    return False
+
+
 def screens_groups():
     """The connected screens' settings (on or off ones), by screen_id: one machine's own screens, so its serial too (two
     of one model each have theirs). Read by user/monitors.lua; empty means as AgrOS sets it"""
@@ -635,6 +658,12 @@ def screens_groups():
              "options": [{"value": "", "label": "Landscape"}, {"value": "1", "label": "Portrait"},
                          {"value": "2", "label": "Landscape (flipped)"},
                          {"value": "3", "label": "Portrait (flipped)"}]},
+            # (only where the screen takes it: HDR set on one that doesn't shows wrong colours)
+            *([{"key": f"screens.{d}.hdr", "label": "HDR", "type": "choice", "default": "", "apply": "hypr",
+                "description": "Automatic: the desktop in SDR, switched to HDR while a fullscreen game or video in HDR"
+                               " asks for it. Always: the whole desktop in HDR (10-bit), its SDR colours shown in it.",
+                "options": [{"value": "", "label": "Automatic"}, {"value": "on", "label": "Always"}]}]
+              if supports_hdr(m["name"]) else []),
             # (checked here: a typo reached Hyprland's monitor rule)
             {"key": f"screens.{d}.position", "label": "Position", "type": "text", "default": "", "apply": "hypr",
              "placeholder": "Automatic", "pattern": r"(\d+x\d+)?", "format": "whole pixels as WxH, like 1920x0",
