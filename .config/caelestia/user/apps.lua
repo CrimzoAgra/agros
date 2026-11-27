@@ -195,7 +195,9 @@ function dots.mark_exclusive(win)
     dots.exclusive_fullscreen[win.address] = true
     hl.dispatch(hl.dsp.window.tag({ tag = "+exclusive_fs", window = "address:" .. win.address }))
 end
-hl.window_rule({ match = { tag = "exclusive_fs" }, rounding = 0, border_size = 0, no_shadow = true })
+-- (and the pointer kept inside it by Hyprland itself, as Windows does: crossing.lua's hold only worked over the gap
+-- between screens, and with screens touching Hyprland took the pointer across first. Let go while a button is held)
+hl.window_rule({ match = { tag = "exclusive_fs" }, rounding = 0, border_size = 0, no_shadow = true, confine_pointer = true })
 -- ...and unmarked once it shows it isn't any more: switched to borderless in its own settings, it stays fullscreen
 -- without the focus (an exclusive one drops it within milliseconds); looked at 300 ms after another window got it
 local function unmark_exclusive(address)
@@ -214,6 +216,18 @@ hl.on("window.active", function(win)
         end
     end
 end)
+-- (switched to windowed: out of fullscreen and smaller than its screen a moment later, focused or not)
+hl.on("window.fullscreen", function(win)
+    if not (win and dots.exclusive_fullscreen[win.address] and (win.fullscreen or 0) < 2 and hl.timer) then return end
+    local address = win.address
+    hl.timer(function()
+        local g = hl.get_window("address:" .. address)
+        if g and dots.exclusive_fullscreen[address] and (g.fullscreen or 0) < 2 and g.workspace and (g.workspace.id or 0) > 0
+            and dots.covers_screen and not dots.covers_screen(g) then
+            unmark_exclusive(address)
+        end
+    end, { timeout = 300, type = "oneshot" })
+end)
 hl.on("window.fullscreen", function(win)
     if not (win and (win.fullscreen or 0) < 2 and win.workspace and (win.workspace.id or 0) > 0 and dots.is_game(win)) then
         return
@@ -225,14 +239,11 @@ hl.on("window.fullscreen", function(win)
         dots.mark_exclusive(win)
     end
 end)
--- (marks from before a config load cleared: the list above starts empty again)
-if not dots.verifying then
-    for _, w in ipairs(hl.get_windows() or {}) do
-        for _, t in ipairs(w.tags or {}) do
-            if t:gsub("%*$", "") == "exclusive_fs" then
-                hl.dispatch(hl.dsp.window.tag({ tag = "-exclusive_fs", window = "address:" .. w.address }))
-            end
-        end
+-- (marks from before a config load kept: the list above starts empty, the windows' tags outlast it, as "maximised"
+-- does. Losing them, the next push at the screen's edge left the game, which went dark)
+for _, w in ipairs(hl.get_windows() or {}) do
+    for _, t in ipairs(w.tags or {}) do
+        if t:gsub("%*$", "") == "exclusive_fs" then dots.exclusive_fullscreen[w.address] = true end
     end
 end
 hl.on("window.close", function(win) if win then dots.exclusive_fullscreen[win.address] = nil end end)

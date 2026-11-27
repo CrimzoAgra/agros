@@ -168,7 +168,8 @@ local function tick()
         and ((w.fullscreen or 0) ~= 0 or w.size.x >= was.w - 1 and w.size.y >= was.h - 1) then
         return
     end
-    if w and w.fullscreen and w.fullscreen ~= 0 then
+    -- (games only: an ordinary fullscreen window, a video, keeps the keyboard as the pointer goes, as anywhere else)
+    if w and (w.fullscreen or 0) >= 2 and dots.is_game and dots.is_game(w) then
         if jump > 1 then return end
         -- (a game keeps the pointer inside its window while it has the focus, and Hyprland put it straight back: the
         -- focus to the other screen first)

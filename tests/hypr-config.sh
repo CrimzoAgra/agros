@@ -1026,6 +1026,35 @@ game.tags = { "game*" }
 check("a game leaving fullscreen while focused: not exclusive", exclusive_after(game), false)
 check("...not tagged", tagged(), false)
 check("a game minimised to a hidden workspace: not exclusive", exclusive_after(other, { id = -98, name = "special:minimised-1" }), false)
+-- ...unmarked once switched to windowed in its settings (out of fullscreen, smaller than its screen); not for a drop
+-- that still covers the screen
+local function windowed_after(size)
+    exclusive_after(other)
+    WINDOWS, ACTIVE, game.size, game.fullscreen = { game, other }, game, size, 0
+    fire("window.fullscreen", game)
+    local got = dots.exclusive_fullscreen[game.address] == true
+    WINDOWS, ACTIVE, game.size = {}, nil, { x = 1920, y = 1080 }
+    return got
+end
+check("an exclusive game switched to windowed: unmarked", windowed_after({ x = 1280, y = 720 }), false)
+check("...dropping fullscreen still over its screen: stays marked", windowed_after({ x = 1920, y = 1080 }), true)
+-- A pinned window (picture in picture) focused over a game: the game not minimised for it
+local pip = { address = "0xpip2", class = "mpv", workspace = ws(1), fullscreen = 0, floating = true, pinned = true, tags = {} }
+game.address, game.fullscreen = "0xunder", 2
+WINDOWS = { game, pip }
+check("a pinned window over a fullscreen game: not taken for an app over it", dots.game_under(pip) == nil, true)
+pip.pinned = false
+check("...an unpinned one: is", dots.game_under(pip) == game, true)
+WINDOWS, game.fullscreen = {}, 0
+-- A minimised app brought back over a fullscreen game (the dock, the restore key): the game minimised for it, as for
+-- one focused over it (restore() moved it back first, so the focus on its hidden workspace didn't count)
+local app = { address = "0xback", class = "foot", workspace = ws(-98, "special:minimised-1"), fullscreen = 0, floating = true,
+              tags = {}, size = { x = 800, y = 600 }, at = { x = 10, y = 10 }, monitor = SCREENS[1] }
+game.address, game.workspace, game.fullscreen = "0xbehind", ws(1), 2
+WINDOWS, ACTIVE = { game, app }, app
+fire("window.active", app)
+check("a minimised app brought back over a fullscreen game: the game minimised", game.workspace.name, "special:minimised-1")
+WINDOWS, ACTIVE, game.workspace = {}, nil, ws(1)
 -- ...unmarked once it stays fullscreen without the focus (switched to borderless in its settings); not while it drops
 -- it as an exclusive one does
 local function unmarked_after(full)
@@ -1539,6 +1568,13 @@ for _, fn in ipairs(handlers["window.open"] or {}) do fn(menu) end
 check("an X11 menu: left where it is", result().x, nil)
 hl.dispatch = hdispatch
 for _, e in ipairs(config_errors) do error("config error " .. e, 0) end
+-- (last, as it loads the config again) An exclusive game's mark kept through a config load, from its window's tag
+WINDOWS = { { address = "0xkept", class = "steam_app_1", workspace = ws(1), fullscreen = 2, tags = { "game*", "exclusive_fs" } } }
+for name in pairs(package.loaded) do
+    if name == "hypr-user" or name:match("^user%.") then package.loaded[name] = nil end
+end
+require("hypr-user")
+check("a config load: an exclusive game's mark kept from its tag", dots.exclusive_fullscreen["0xkept"] == true, true)
 L
 out=$(cd "$t" && HOME=$t/home PLUGIN=1 XDG_RUNTIME_DIR=$t/run HYPRLAND_INSTANCE_SIGNATURE=test lua drag.lua stub.lua 2>&1)     || fail "window drags: $out"
 # The title bar's buttons and double click act on their own window, as the patched plugin names it: one gone by the

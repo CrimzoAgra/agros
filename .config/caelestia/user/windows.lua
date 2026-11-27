@@ -1032,8 +1032,10 @@ local function covers_screen(w)
     local mw, mh = screen_size(m)
     return w.size.x >= mw - 1 and w.size.y >= mh - 1
 end
+dots.covers_screen = covers_screen
 function dots.game_under(win)
-    if not (win and win.workspace and (win.workspace.id or 0) >= 1) then return nil end
+    -- (not a pinned one, picture in picture: it's meant to stay over the game)
+    if not (win and win.workspace and (win.workspace.id or 0) >= 1) or win.pinned then return nil end
     if dots.is_game and dots.is_game(win) or dots.started_for_game and dots.started_for_game(win.pid) then return nil end
     for _, t in ipairs(win.tags or {}) do
         if t:find("^xwl_popup") then return nil end
@@ -1049,6 +1051,9 @@ end
 -- Also an app already open, focused over the game (the dock, the bar, the Super menu bringing its window forward)
 local function off_game(win, opened)
     if restoring then return end
+    -- (as it is now: a minimised window brought back was focused on its hidden workspace, moved back by restore()
+    -- before this, and was never taken for one over the game)
+    win = win and by_address(win.address) or win
     local game = dots.game_under(win)
     if not game then return end
     dots.window_fades(false)
