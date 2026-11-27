@@ -1066,13 +1066,16 @@ hl.on("window.active", function(win) off_game(win) end)
 local out_of_fullscreen = {}
 -- (gone with its window: Hyprland gives a closed window's address to a new one, which would be made fullscreen)
 hl.on("window.close", function(win) if win then out_of_fullscreen[win.address] = nil end end)
+-- (out of it to maximised too: a game under Wine's Wayland driver came back from Alt+Tab maximised, inside the bar and
+-- the border, and one maximised doesn't cover its screen)
 hl.on("window.fullscreen", function(win)
-    if win and (win.fullscreen or 0) == 0 and dots.is_game and dots.is_game(win) then out_of_fullscreen[win.address] = true end
+    if win and (win.fullscreen or 0) < 2 and dots.is_game and dots.is_game(win) then out_of_fullscreen[win.address] = true end
 end)
 hl.on("window.active", function(win)
     if not (win and out_of_fullscreen[win.address]) then return end
     out_of_fullscreen[win.address] = nil
-    if (win.fullscreen or 0) == 0 and win.workspace and (win.workspace.id or 0) > 0 and covers_screen(win) then
+    local full = win.fullscreen or 0
+    if full < 2 and win.workspace and (win.workspace.id or 0) > 0 and (full == 1 or covers_screen(win)) then
         hl.dispatch(hl.dsp.window.fullscreen({ mode = "fullscreen", action = "set", window = win }))
     end
 end)

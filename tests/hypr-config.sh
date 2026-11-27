@@ -865,6 +865,20 @@ check("a game out of fullscreen, gone back to: fullscreen again", back_to(nil, t
 check("a game made smaller: stays a window", back_to({ x = 1280, y = 720 }, true), false)
 check("a game that never left fullscreen: nothing", back_to(nil, false), false)
 check("found out of fullscreen at a config load: fullscreen again", back_to(nil, false, true), true)
+-- ...and one that left fullscreen for maximised (inside the bar and border: it doesn't cover the screen)
+game.fullscreen = 1
+local function back_maximised()
+    game.size, game.workspace, game.address = { x = 1890, y = 1030 }, ws(1), "0xmax"
+    WINDOWS, sent = { game }, {}
+    fire("window.fullscreen", game)
+    sent = {}
+    fire("window.active", game)
+    local full = false
+    for _, d in ipairs(sent) do if d[1] == "window.fullscreen" and (d[2] or {}).action == "set" then full = true end end
+    sent, WINDOWS, game.fullscreen = {}, {}, 0
+    return full
+end
+check("a game out of fullscreen to maximised, gone back to: fullscreen again", back_maximised(), true)
 -- ...but not once it closed: a new window given its address isn't made fullscreen
 game.address, WINDOWS = "0xreused", { game }
 game.fullscreen = 0
