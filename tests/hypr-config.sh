@@ -47,6 +47,7 @@ local plugin = os.getenv("PLUGIN") == "1"
 handlers, binds, config_errors, hidden_rules, unset_gestures, WINDOW_RULES = {}, {}, {}, {}, {}, {}
 -- CONFIG: what hl.get_config answers (the blur setting window peek turns off and back); HELD_TIMERS: timers queued
 -- there while HOLD_TIMERS is on (else run at once); PEEK_TAGS: window peek's tag dispatches, in order
+WINDOW_RULE_EFFECTS = " allows_input animation border_color border_size center confine_pointer content decorate dim_around float focus_on_activate force_rgbx fullscreen fullscreen_state group idle_inhibit immediate keep_aspect_ratio maximize max_size min_size monitor move nearest_neighbor no_anim no_auto_hdr no_blur no_close_for no_dim no_focus no_follow_mouse no_glow no_initial_focus no_max_size no_screen_share no_shadow no_shortcuts_inhibit no_vrr no_wobble no_xdg_drags opacity opaque persistent_size pin pseudo render_unfocused rounding rounding_power scrolling_width scroll_mouse scroll_touchpad size stay_focused suppress_event sync_fullscreen tag tile tonemap workspace xray "
 CONFIG, HELD_TIMERS, PEEK_TAGS, TIMER_SETS = { ["decoration.blur.ignore_opacity"] = true }, {}, {}, {}
 BIND_ACTIONS, MONITOR_RULES, FOCUS, ENV = {}, {}, 1, {}
 -- SESSION_ENV: what was put in the user's systemd and D-Bus environments (never the real ones: a test run in a VMware VM
@@ -188,6 +189,13 @@ hl = {
     end,
     window_rule = function(r)
         check(type(r.match) == "table", "hl.window_rule: no match")
+        -- (Hyprland 0.57's window rule effects, src/desktop/rule/windowRule/WindowRuleEffectContainer.cpp: any other
+        -- field is a config error, no_rounding was; a plugin's own, "plugin:field", left to it)
+        for k in pairs(r) do
+            check(k == "match" or k == "name" or k == "enabled" or tostring(k):find(":", 1, true)
+                or WINDOW_RULE_EFFECTS:find(" " .. k .. " ", 1, true),
+                "hl.window_rule: unknown field " .. tostring(k))
+        end
         -- Caelestia's tags with effects (its rules.lua) come before this config: tagged from here, they never apply
         local tag = tostring(r.tag or ""):match("^%+(.+)$")
         check(not (tag and (tag == "opaque" or tag:match("^float"))), "a window tagged " .. tostring(tag) .. " after Caelestia's rule for it")

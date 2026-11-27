@@ -195,7 +195,7 @@ function dots.mark_exclusive(win)
     dots.exclusive_fullscreen[win.address] = true
     hl.dispatch(hl.dsp.window.tag({ tag = "+exclusive_fs", window = "address:" .. win.address }))
 end
-hl.window_rule({ match = { tag = "exclusive_fs" }, no_rounding = true, border_size = 0, no_shadow = true })
+hl.window_rule({ match = { tag = "exclusive_fs" }, rounding = 0, border_size = 0, no_shadow = true })
 hl.on("window.fullscreen", function(win)
     if not (win and (win.fullscreen or 0) < 2 and win.workspace and (win.workspace.id or 0) > 0 and dots.is_game(win)) then
         return
