@@ -2545,7 +2545,7 @@ def power_menu():
         // (with an update waiting, its top right corner cut away as a square, rounded like its corners, and the update's
         // mark in that space, filled like the icons. Its colour and its hover and press layer
         // have that outline; its icon doesn't change)
-        readonly property real notch: width * 0.42
+        readonly property real notch: width * 0.32
         readonly property color fillColour: disabled ? disabledColour : internalChecked ? activeColour : inactiveColour
 
         color: updates ? "transparent" : fillColour
