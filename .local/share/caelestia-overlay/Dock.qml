@@ -412,7 +412,11 @@ ClippingRectangle {
                     opacity: (modelData.wins?.length && modelData.wins.every(t => t.workspace?.name?.startsWith("special:minimised")) ? 0.5 : 1) * grown  // all minimised: dimmed
                     height: (modelData.sep ? Tokens.spacing.medium : width) * grown
                     z: dragged ? 10 : 0
-                    scale: (dragged ? 1.12 : 1) * (0.4 + 0.6 * grown)
+                    // (only the drag's lift animated here: the size following grown, itself animated, through a
+                    // second animation chased it, restarted each frame, and the icons sized up well after the bar
+                    // had slid in)
+                    property real lift: dragged ? 1.12 : 1
+                    scale: lift * (0.4 + 0.6 * grown)
 
                     Behavior on grown {
                         Anim {}
@@ -428,7 +432,7 @@ ClippingRectangle {
                         }
                     }
 
-                    Behavior on scale {
+                    Behavior on lift {
                         Anim {}
                     }
 
