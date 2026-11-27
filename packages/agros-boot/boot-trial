@@ -8,6 +8,8 @@
 #   boot-trial watch            each boot (agros-boot-trial.service): a boot GRUB counted (agros.trial on its line) waits
 #                               for the login screen (4 min, else the PC restarts), then for the desktop once someone logs
 #                               in (Hyprland with Caelestia's shell)
+#   boot-trial pending          exit 0 while the boots after the last update aren't confirmed (said why): the shutdown's
+#                               install waits, else its snapshot of a failing system replaced the one to come back to
 #   boot-trial disarm           the count cleared
 # GRUB's counting entry takes one off as it boots (01_agros-trial: 2, 1, 0) and at 0 boots the snapshot, which
 # boot-rollback (in the boot image) makes the system. A boot that crashes (panic=10: restarts) or hangs before here
@@ -37,7 +39,7 @@ poll=${BOOT_TRIAL_POLL:-2} step=2
 say() { echo "boot-trial: $*"; }
 get() { grub-editenv "$env" list 2>/dev/null | sed -n "s/^$1=//p"; }
 set_() { grub-editenv "$env" set "$@"; }
-disarm() { [[ -z $env ]] || rm -f "$env"; }
+disarm() { [[ -z $env || ! -e $env ]] || rm -f "$env" || say "GRUB's file can't be cleared ($env): the boots are still counted"; }
 
 arm() {
     local snap=${1:?usage: boot-trial arm <snapshot>} boot=${BOOT_TRIAL_BOOT:-/boot} kernel root rel uuid args f
@@ -65,6 +67,8 @@ arm() {
     grep -q 'usr/lib/agros/boot-rollback' <<<"$(lsinitcpio -l "$snap/boot/${images[-1]}" 2>/dev/null)" ||
         { say "the snapshot's boot image has no boot-rollback: not armed"; return 1; }
     args=$(sed -E 's/(^| )(BOOT_IMAGE|agros\.rollback)=[^ ]*//g; s/(^| )agros\.trial( |$)/\1/g; s/^ +//; s/ +$//' <<<"$cmdline")
+    # (this boot's options, from before the update: panic=10 added where they lack one, as boot-video-mode has it now)
+    [[ " $args " == *" panic="* ]] || args="$args panic=10"
     mkdir -p "$(dirname "$env")" && grub-editenv "$env" create &&
         set_ agros_trial=2 "agros_uuid=$uuid" "agros_root=$root" "agros_snap=$rel" "agros_kernel=$kernel" \
             "agros_initrds=${images[*]}" "agros_args=$args" &&
@@ -123,12 +127,14 @@ watch() {
         1 | 0)
             # (a boot GRUB counted: its counting entry's, agros.trial on its line)
             [[ " $cmdline " == *" agros.trial "* ]] || return 0
+            # (a desktop already open counts: the login screen came and went between two looks, or its text fallback)
             for ((n = 0; ; n++)); do
                 grep -qE '^greeter +qs -p /etc/greetd/' <<<"$(procs)" && break
+                [[ -z $(sessions) ]] || break
                 ((n * step < 240)) || restart "the login screen didn't come up"
                 sleep "$poll"
             done
-            set_ agros_trial=greeter
+            set_ agros_trial=greeter || say "the login screen is up, but GRUB's file can't be written: the next boots are still counted"
             say "the login screen is up" ;;
         greeter) ;;
         # (2: a boot not through the counting entry, picked from the menu, isn't watched)
@@ -158,9 +164,19 @@ watch() {
     done
 }
 
+# pending: the boots after the last update still watched (exit 0, said why), not yet confirmed
+pending() {
+    [[ -n $env && -f $env ]] || return 1
+    case $(get agros_trial) in
+        1 | 0 | greeter | rollback) echo "the boots after the last update aren't confirmed yet (the desktop hasn't come up)" ;;
+        *) return 1 ;;
+    esac
+}
+
 case ${1:-} in
     arm) arm "${2:-}" ;;
+    pending) pending ;;
     watch) watch ;;
     disarm) disarm ;;
-    *) echo "usage: boot-trial arm <snapshot> | watch | disarm" >&2; exit 2 ;;
+    *) echo "usage: boot-trial arm <snapshot> | watch | pending | disarm" >&2; exit 2 ;;
 esac

@@ -58,7 +58,7 @@ mkdir -p "$(dirname "$BOOT_TRIAL_ENV")"; grub-editenv "$BOOT_TRIAL_ENV" create; 
 "$bt" arm "$t/snap" >/dev/null || fail "not armed"
 [[ $(get agros_trial) == 2 && $(get agros_uuid) == 1234-abcd && $(get agros_root) == @ && $(get agros_snap) == @/.snapshots/5/snapshot &&
     $(get agros_kernel) == vmlinuz-linux-cachyos && $(get agros_initrds) == "amd-ucode.img initramfs-linux-cachyos.img" &&
-    $(get agros_args) == "root=UUID=1234-abcd rw rootflags=defaults,subvol=/@ quiet" && -z $(get agros_desk) ]] ||
+    $(get agros_args) == "root=UUID=1234-abcd rw rootflags=defaults,subvol=/@ quiet panic=10" && -z $(get agros_desk) ]] ||
     fail "armed wrong: $(grub-editenv "$BOOT_TRIAL_ENV" list)"
 # Not armed (and an older one cleared): GRUB's menu without the count; a login screen not AgrOS's; a snapshot whose boot
 # image has no boot-rollback; a boot image missing from the snapshot
@@ -73,6 +73,23 @@ echo 'usr/lib/agros/boot-rollback' >"$t/image"; rm "$t/snap/boot/amd-ucode.img"
 "$bt" arm "$t/snap" >/dev/null && fail "armed for a snapshot without the microcode"
 touch "$t/snap/boot/amd-ucode.img"
 [[ ! -e $BOOT_TRIAL_ENV ]] || fail "a file left where it wasn't armed"
+
+# pending (the shutdown's install waits on it): while the count runs or the desktop isn't confirmed; not when armed
+# and not yet booted, nor with nothing armed
+"$bt" arm "$t/snap" >/dev/null
+"$bt" pending >/dev/null && fail "pending before a boot was counted"
+for c in 1 0 greeter rollback; do
+    grub-editenv "$BOOT_TRIAL_ENV" set "agros_trial=$c"
+    "$bt" pending >/dev/null || fail "not pending at $c"
+done
+"$bt" disarm; "$bt" pending >/dev/null && fail "pending with nothing armed"
+
+# A desktop already open when the login screen is looked for (it came and went between two looks): taken as up, the
+# desktop watched, never restarted under it
+armed 1
+timeline "0=20 $me Hyprland" "3=20 $me Hyprland;21 $me qs -c caelestia"
+watch
+[[ ! -e $BOOT_TRIAL_ENV && ! -e $t/calls ]] || fail "an open desktop restarted for no login screen seen: $(cat "$t/calls" 2>/dev/null)"
 
 # A boot GRUB didn't count (picked from the menu: no agros.trial): not watched, the count left
 armed 1; timeline

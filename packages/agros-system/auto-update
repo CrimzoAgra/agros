@@ -146,6 +146,17 @@ rollback_hold() {
     (($(date +%s) < until)) || return 1
     echo "the update before $(date -d "$day $time UTC" '+%F %H:%M') failed to boot, and the system from before it came back ($snap): the system's updates wait until $(date -d "@$until" '+%F %H:%M')"
 }
+# trial_pending: the boots after the last update still watched, not yet confirmed (agros-boot's boot-trial pending: said
+# why). Nothing installed meanwhile: a snapshot of the failing system would take the place of the one to come back to
+trial_pending() { [[ -x /usr/lib/agros/boot-trial ]] && /usr/lib/agros/boot-trial pending; }
+# watch_boots: the next boots watched (boot-trial): the login screen and the desktop not coming up, the PC restarts,
+# and after a second try the system from the snapshot taken before the install ($pre) comes back by itself. No snapshot
+# to come back to: an older update's watch cleared, never left to bring back one from before this
+watch_boots() {
+    [[ -x /usr/lib/agros/boot-trial ]] || return 0
+    if [[ ${pre:-} =~ ^[0-9]+$ ]]; then /usr/lib/agros/boot-trial arm "/.snapshots/$pre/snapshot" || true
+    else /usr/lib/agros/boot-trial disarm; fi
+}
 # The boot's AUR builds (auto-update-aur: what they are, and how they went)
 aur=$au/aur
 
@@ -297,6 +308,7 @@ if [[ ${1:-} == --install ]]; then
     unfinished() { local e; e=$(plain 2>/dev/null <"$au/download-failed"); echo "the boot's download didn't finish${e:+ ($e)}"; }
     # (nor in the days after an update was rolled back: the restored system has that download, ready, in it)
     ! hold=$(rollback_hold) || { echo "$hold: nothing installed"; exit 0; }
+    ! hold=$(trial_pending) || { echo "$hold: nothing installed"; exit 0; }
     [[ -e $db/complete || -s $db/keyrings ]] || skip "$(unfinished)"
     # (nor while something else using pacman holds its lock: its lists would change under it)
     ! holder=$(held) || skip "something using pacman still ran ($holder)"
@@ -560,16 +572,12 @@ if [[ ${1:-} == --install ]]; then
         ((${#conflicted[@]})) || result failed "$(grep -m1 '^error:' "$prev/out")"
         say "The update failed: it's tried again at the next shutdown"
         restore
+        # (watched too: pacman may have got part of it in before it failed)
+        watch_boots
         exit 1
     fi
     result ok
-    # The next boots watched (agros-boot's boot-trial): the login screen and the desktop not coming up, the PC restarts,
-    # and after a second try the system from the snapshot above comes back by itself
-    # (no snapshot to come back to: an older update's watch cleared, never left to bring back one from before this)
-    if [[ -x /usr/lib/agros/boot-trial ]]; then
-        if [[ $pre =~ ^[0-9]+$ ]]; then /usr/lib/agros/boot-trial arm "/.snapshots/$pre/snapshot" || true
-        else /usr/lib/agros/boot-trial disarm; fi
-    fi
+    watch_boots
     say "Updates are underway (100%)"
     # (the Qt the shells were rebuilt for, or needed no rebuild for: Updates' update-apps doesn't rebuild them again)
     [[ $target != *qt6-* ]] || /usr/lib/agros/bin/update-kinds --qt-now >"$au/qt-built"
@@ -713,7 +721,8 @@ if ((synced)); then
     # (made as pacman makes it, the file created only where there's none: these lists' lock is their own, and the
     # install writes what's installed), then this started again with it, at most once. That lock already there
     # (pacman or Updates running), the install failing or needing more than itself: said, this goes on as it is
-    if [[ -z ${AGROS_SELF_UPDATED:-} ]]; then
+    # (not while the last update's boots are watched: installed now, a rollback wouldn't take it back)
+    if [[ -z ${AGROS_SELF_UPDATED:-} ]] && ! trial_pending >/dev/null; then
         mapfile -t first < <(/usr/lib/agros/bin/update-first --dbpath "$db")
         if ((${#first[@]})) && ! (set -C; : >"$pacdb/db.lck") 2>/dev/null; then
             echo "AgrOS's update code not updated first (${first[*]#agros/}): pacman's lock is taken, at shutdown with the rest"

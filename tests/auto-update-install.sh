@@ -41,8 +41,8 @@ sed -e "s|/var/lib/auto-update|$t/au|g" -e "s|/var/lib/pacman|$t/pac|g" -e "s|/v
     -e "s|/var/lib/agros/|$t/agros/|g" -e "s|/usr/share/pacman/keyrings/agros.gpg|$t/agros.gpg|g" \
     -e "s|/usr/share/agros/retired|$t/retired|g" -e "s|/usr/lib/agros/boot-trial|$t/boot-trial|g" \
     "$au/auto-update" >"$t/auto-update"
-# (agros-boot's boot-trial: noted)
-printf '#!/bin/sh\necho "boot-trial $*" >>%s/calls\n' "$t" >"$t/boot-trial"; chmod +x "$t/boot-trial"
+# (agros-boot's boot-trial: noted; pending only with $TRIAL_PENDING, said)
+printf '#!/bin/sh\nif [ "$1" = pending ]; then [ -n "$TRIAL_PENDING" ] && echo "not confirmed yet"; exit $?; fi\necho "boot-trial $*" >>%s/calls\n' "$t" >"$t/boot-trial"; chmod +x "$t/boot-trial"
 sed -e "s|/var/lib/auto-update|$t/au|g" -e "s|/usr/lib/agros/auto-update-aur|$t/auto-update-aur|g" \
     -e "s|/usr/lib/agros/bin/|$here/.local/bin/|g" "$au/auto-update-aur" >"$t/auto-update-aur"
 grep -q -- '--install' "$t/auto-update" || fail "auto-update has no --install"
@@ -219,6 +219,11 @@ grep -q "^pacman -Su .*(SNAP_PAC_SKIP=y)" "$t/calls" || fail "snap-pac's snapsho
 [[ ! -e $t/au/installing && ! -e $t/au/prev ]] || fail "an install that went fine left its marks"
 # ...and the boots after it watched, this snapshot to come back if they fail (agros-boot's boot-trial)
 grep -qx "boot-trial arm /.snapshots/42/snapshot" "$t/calls" || fail "the boots after the install not watched: $(cat "$t/calls")"
+# The last update's boots not confirmed yet (boot-trial pending): nothing installed, so its snapshot stays the one to
+# come back to
+lists; : >"$t/calls"
+TRIAL_PENDING=1 "$t/auto-update" --install >/dev/null || fail "the install while the boots are watched failed"
+[[ ! -s $t/calls ]] && grep -q "not confirmed yet: nothing installed" "$t/log" || fail "installed while the boots are watched: $(cat "$t/calls")"
 # An update rolled back (boot-rollback's note, a day ago): the restored system's ready download not installed, and the
 # boot downloads nothing for the system, until 3 days after it (7 after a second in a row)
 lists; : >"$t/calls"
@@ -287,9 +292,11 @@ grep -qx 'pacman -Rns --noconfirm -- qview (SNAP_PAC_SKIP=y)' "$t/calls" ||
 rm "$t/retired"
 
 # A failed install: pacman's lists back as they were (not newer than its packages), and written down with pacman's reason
-lists
+lists; : >"$t/calls"
 PACMAN_RC=1 "$t/auto-update" --install && fail "a failed install reported success"
 [[ $(cat "$t/pac/sync/core.db") == old ]] || fail "pacman's package lists not put back after a failed install"
+# (its boots watched all the same: pacman may have got part of it in)
+grep -qx "boot-trial arm /.snapshots/42/snapshot" "$t/calls" || fail "the boots after a failed install not watched: $(cat "$t/calls")"
 [[ $(res) == "failed "*"error: boom" ]] || fail "a failed install not written down: $(res)"
 
 # A new Qt: held back (the lists back as they were), said as held

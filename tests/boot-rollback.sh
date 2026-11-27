@@ -16,6 +16,8 @@ stub btrfs "case \"\$2\" in
     delete) rm -rf \"\$3\" ;;
 esac"
 stub find "while read -r rel; do [[ -d \$1/\$rel ]] && printf '%s\\0' \"\$1/\$rel\"; done <$t/subs"
+# (systemctl: the restart after giving up, noted)
+stub systemctl "echo \"systemctl \$*\" >>$t/calls"
 export PATH=$t/bin:$PATH
 run() { "$here/packages/agros-boot/boot-rollback"; }
 # A root (@, "new": the update's) with its snapshots and machines, snapshot 5 ("old", with the empty folders a
@@ -35,6 +37,7 @@ out=$(run)
     fail "the snapshot not made the root: $out"
 broken=("$top"/@.agros-broken-*)
 [[ ${#broken[@]} == 1 && $(cat "${broken[0]}/version") == new && ! -e $top/@.agros-new ]] || fail "the update's root not kept beside: $out"
+[[ ! -e $t/calls ]] || fail "restarted after a rollback that went through: $(cat "$t/calls")"
 read -r _ _ snap id n <"$top/@/var/lib/auto-update/rolled-back"
 [[ $snap == @/.snapshots/5/snapshot && $id == "$(cat /proc/sys/kernel/random/boot_id)" && $n == 1 ]] ||
     fail "not written down: $(cat "$top/@/var/lib/auto-update/rolled-back")"
@@ -52,7 +55,8 @@ rmdir "$top/@/.snapshots/5/snapshot/.snapshots"
 printf '%s\n' var/lib/machines .snapshots >"$t/subs"
 out=$(run)
 [[ $(cat "$top/@/version") == new && -d $top/@/var/lib/machines/m1 && -d $top/@/.snapshots/5 && ! -e $top/@.agros-new ]] &&
-    ! compgen -G "$top/@.agros-broken-*" >/dev/null && [[ $out == *"booted as it was"* ]] || fail "a failed rollback not undone: $out"
+    ! compgen -G "$top/@.agros-broken-*" >/dev/null && [[ $out == *"restarts into the system as it was"* && $(cat "$t/calls") == "systemctl --no-block reboot" ]] ||
+    fail "a failed rollback not undone, or the PC not restarted: $out"
 
 # No agros.rollback: nothing done
 fresh

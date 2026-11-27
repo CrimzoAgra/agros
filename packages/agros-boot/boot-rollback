@@ -4,7 +4,7 @@
 # the filesystem's top>) made the system: a writable copy of it in place of the root subvolume (rootflags' subvol=, e.g.
 # @), the root's own subvolumes (/.snapshots, /var/lib/machines...: a snapshot leaves an empty folder for each) moved
 # into it, the root kept beside as <root>.agros-broken-<time>. Then the boot goes on into it. Each step undone if a
-# later one fails: the root as it was, booted as it was. What it did written in the new root's
+# later one fails: the root as it was, and the PC restarted into it. What it did written in the new root's
 # /var/lib/auto-update/rolled-back ("<date> <time> <snapshot> <boot id> <rollbacks in a row>", UTC: the boot image has
 # no time zone), for boot-trial and agros-check, and the update's hold (auto-update)
 # (BOOT_ROLLBACK_CMDLINE, BOOT_ROLLBACK_TOP: the tests', the filesystem's top already there, nothing mounted)
@@ -13,31 +13,34 @@ word() { tr ' ' '\n' <<<"$cmdline" | sed -n "s/^$1=//p" | tail -1; }
 snap=$(word agros.rollback) uuid=$(word root) flags=$(word rootflags) dev=
 [[ -n $snap ]] || exit 0
 say() { echo "boot-rollback: $*"; }
+# give_up <why>: the root left as it was, and the PC restarted: GRUB booted the snapshot's older kernel, whose modules
+# the updated root doesn't have (no graphics driver, maybe no network). The next boot is the updated system whole (its
+# count is "rollback" now: boot-trial says it couldn't be brought back)
+give_up() { say "$1: the PC restarts into the system as it was"; systemctl --no-block reboot; exit 0; }
 # (the root's device: root=UUID=<uuid>, as GRUB writes it, or a device's path)
 case $uuid in UUID=*) dev=/dev/disk/by-uuid/${uuid#UUID=} ;; *) dev=$uuid ;; esac
 root=$(tr ',' '\n' <<<"$flags" | sed -n 's/^subvol=//p' | tail -1) root=${root#/}
-[[ -n $root && $snap != "$root" && $snap != */../* ]] || { say "no root subvolume to bring $snap back over"; exit 0; }
+[[ -n $root && $snap != "$root" && $snap != */../* ]] || give_up "no root subvolume to bring $snap back over"
 top=${BOOT_ROLLBACK_TOP:-/run/agros-top}
 if [[ -z ${BOOT_ROLLBACK_TOP:-} ]]; then
     mkdir -p "$top" && mount -t btrfs -o subvolid=5 "$dev" "$top" ||
-        { say "the filesystem couldn't be mounted: booted as it was"; exit 0; }
+        give_up "the filesystem couldn't be mounted"
     trap 'umount "$top"' EXIT
 fi
-[[ -d $top/$snap && -d $top/$root ]] || { say "$snap or $root not there: booted as it was"; exit 0; }
+[[ -d $top/$snap && -d $top/$root ]] || give_up "$snap or $root not there"
 # shortcut: the old roots kept beside (<root>.agros-broken-<time>) are never taken out, one a rollback; delete them by
 # hand (btrfs subvolume delete) if rollbacks ever become common
 stamp=$(date +%Y%m%d-%H%M%S)
 new=$top/$root.agros-new broken=$top/$root.agros-broken-$stamp
 # (a copy left by a try cut off)
-[[ ! -e $new ]] || btrfs subvolume delete "$new" >/dev/null || { say "$new left from before can't be removed"; exit 0; }
-btrfs subvolume snapshot "$top/$snap" "$new" >/dev/null || { say "the snapshot couldn't be copied: booted as it was"; exit 0; }
+[[ ! -e $new ]] || btrfs subvolume delete "$new" >/dev/null || give_up "$new left from before can't be removed"
+btrfs subvolume snapshot "$top/$snap" "$new" >/dev/null || give_up "the snapshot couldn't be copied"
 moved=()
 undo() {
     local m
     for m in "${moved[@]}"; do mv "$new/$m" "$top/$root/$m" && mkdir -p "$new/$m"; done
     btrfs subvolume delete "$new" >/dev/null
-    say "$1: booted as it was"
-    exit 0
+    give_up "$1"
 }
 # The root's own subvolumes (/.snapshots, /var/lib/machines...): in the copy each is an empty folder of btrfs's own
 # (inode 2), put in its place where the root has it as a subvolume
@@ -52,7 +55,7 @@ done < <(find "$new" -mindepth 1 -type d -inum 2 -empty -print0 2>/dev/null)
     undo "the snapshots weren't found to move"
 # The two swapped in one step (no moment without a root), the update's then renamed aside; two renames where the
 # filesystem can't exchange them
-if mv --exchange "$new" "$top/$root" 2>/dev/null; then
+if mv -T --exchange "$new" "$top/$root" 2>/dev/null; then
     mv "$new" "$broken" || broken=$new
 else
     mv "$top/$root" "$broken" || undo "the root couldn't be moved aside"

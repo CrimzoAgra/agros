@@ -1470,7 +1470,10 @@ brings each change; nothing to run by hand).
   install (`auto-update`, after a good install) runs `boot-trial arm` with the snapshot taken before it (none: an older
   update's watch cleared): GRUB's environment file on the EFI partition (`/EFI/agros/trial.env`: GRUB can't write one
   on Btrfs) gets a count of 2, the filesystem, the root's and the snapshot's subvolumes, the kernel, its boot images
-  (the CPU's microcode first) and this boot's options. It isn't armed where GRUB's menu doesn't count (no
+  (the CPU's microcode first) and this boot's options (`panic=10` added where they lack it). While the count runs or
+  the desktop isn't confirmed (`boot-trial pending`), the shutdown's install waits, and so does the boot's install of
+  AgrOS's own update code: a snapshot of a failing system would take the place of the one to come back to. A failed
+  install is watched too (pacman may have got part of it in). It isn't armed where GRUB's menu doesn't count (no
   `01_agros-trial` in it), where the login screen isn't AgrOS's (greetd's `caelestia-greeter`: a text login would
   never pass), nor where the snapshot can't boot by itself (a separate `/boot`, a boot image missing, or none with
   `boot-rollback` in it: `lsinitcpio`). GRUB's `/etc/grub.d/01_agros-trial` makes the menu's first entry, while it
@@ -1480,7 +1483,8 @@ brings each change; nothing to run by hand).
   path>`. A kernel that crashes restarts the PC after 10 s (`panic=10`, beside the quiet boot's options in
   `boot-video-mode`), so that counts too; a boot that hangs needs the reset button once (CachyOS turns the hardware
   watchdog off). `agros-boot-trial.service` (`boot-trial watch`, after the EFI partition's mount) then, on a counted
-  boot, waits for the login screen (the greeter's Quickshell, 4 min: else it restarts the PC) and stops the count
+  boot, waits for the login screen (the greeter's Quickshell, or a desktop already open; 4 min: else it restarts the
+  PC) and stops the count
   ("greeter"), then watches the desktop once someone logs in: Caelestia's shell running for 40 s clears it all. The
   desktop failing is counted apart, the first time tried once more, the second setting the count to 0: a session
   without its shell 3 min in is told (Hyprland's own notification) and never restarted under its apps, the next
@@ -1488,8 +1492,9 @@ brings each change; nothing to run by hand).
   its name a moment, not counted) restart the PC. A failure GRUB's file can't take clears it instead. `boot-rollback`,
   in the boot image (the `agros-snapshot-overlay` hook, `agros-boot-rollback.service`, before the root's mounted): a
   writable copy of the snapshot, the root's own subvolumes (`/.snapshots`, `/var/lib/machines`...: the empty folders
-  btrfs leaves for them in the copy, inode 2) moved into it, swapped with the root in one step (`mv --exchange`; two
-  renames where it can't), the old root kept as `<root>.agros-broken-<time>`, every step undone if a later one fails.
+  btrfs leaves for them in the copy, inode 2) moved into it, swapped with the root in one step (`mv -T --exchange`;
+  two renames where it can't), the old root kept as `<root>.agros-broken-<time>`, every step undone if a later one
+  fails, and then the PC restarted into the updated system whole (the snapshot's older kernel has no modules there).
   It writes `/var/lib/auto-update/rolled-back` (its time UTC: the boot image has no time zone), by which `agros-check`
   says so (for a week) and `auto-update` holds the system's updates (3 days, 7 after a second in a row; the download
   the restored system has ready isn't installed). The next update that boots fine takes the note away. agros-boot's
